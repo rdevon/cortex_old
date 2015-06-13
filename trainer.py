@@ -1,0 +1,159 @@
+'''
+Main training module.
+'''
+
+import matplotlib
+matplotlib.use('Agg')
+from matplotlib import pylab as plt
+
+import argparse
+import gru
+import importlib
+from monitor import Monitor
+import numpy as np
+import op
+import time
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+from theano import tensor as T
+from tools import check_bad_nums
+from tools import itemlist
+from tools import flatten_dict
+
+import logging
+try:
+    import logger
+    logger = logger.setup_custom_logger('nmt', logging.ERROR)
+except ImportError:
+    logger = logging.getLogger(__name__)
+
+
+def get_grad(optimizer, costs, tparams, inps=None, outs=None,
+             exclude_params=[], consider_constant=[], updates=[],
+             weight_noise_amount=0.0):
+
+    if inps is None:
+        raise ValueError()
+    if outs is None:
+        raise ValueError()
+
+    inps = inps.values()
+
+    outs = flatten_dict(outs)
+
+    out_keys = outs.keys()
+    outs = outs.values()
+
+    known_grads = costs.pop('known_grads')
+    cost = costs.pop('cost')
+    cost_keys = costs.keys()
+    extra_costs = costs.values()
+
+    # pop noise parameters since we dont need their grads
+    keys_to_pop = [key for key in tparams.keys() if 'noise' in key]
+    noise_params = dict([(key, tparams.pop(key)) for key in keys_to_pop])
+
+    # add noise here and pass to optimizers extra_ups
+    trng = RandomStreams(np.random.randint(int(1e6)))
+    noise_updates = [(p, trng.normal(p.get_value().shape, avg=0,
+                                     std=weight_noise_amount, dtype=p.dtype))
+                     for p in noise_params.values()]
+    updates.update(noise_updates)
+
+    grads = T.grad(cost, wrt=itemlist(tparams), known_grads=known_grads,
+                   consider_constant=consider_constant)
+
+    lr = T.scalar(name='lr')
+    f_grad_shared, f_grad_updates = eval('op.' + optimizer)(
+        lr, tparams, grads, inps, cost,
+        extra_ups=updates,
+        extra_outs=outs + extra_costs,
+        exclude_params=exclude_params)
+
+    return f_grad_shared, f_grad_updates, ['cost'] + out_keys + cost_keys
+
+
+def train(experiment_file, **kwargs):
+    if experiment_file.split('.')[-1] == 'py':
+        experiment_file = experiment_file[:-3]
+
+    logger.info('Loading experiment %s' % experiment_file)
+    experiment = importlib.import_module(experiment_file)
+    hyperparams = experiment.default_hyperparams
+    for k in kwargs.keys():
+        assert k in hyperparams.keys()
+    hyperparams.update(**kwargs)
+
+    lrate = hyperparams['learning_rate']
+    optimizer = hyperparams['optimizer']
+    epochs = hyperparams['epochs']
+    display_interval = hyperparams['display_interval']
+
+    logger.info('Fetching model')
+    model = experiment.get_model()
+    data = model.pop('data')
+
+    logger.info('Calculating costs')
+    costs = experiment.get_costs(**model)
+
+    logger.info('Getting gradient functions')
+    f_grad_shared, f_update, cost_keys = get_grad(optimizer, costs, **model)
+
+    logger.info('Initializing monitors')
+    monitor = Monitor(model['tparams'])
+    for k in cost_keys:
+        if 'cost' in k or 'energy' in k or 'reward' in k:
+            monitor.add_monitor(k)
+
+    try:
+        logger.info('Training')
+        for e in xrange(epochs):
+            ud_start = time.time()
+
+            s = 0
+            while True:
+                try:
+                    inps = data['train'].next()
+                except StopIteration:
+                    monitor.disp(e)
+                    break
+
+                rvals = f_grad_shared(*inps)
+                rval_dict = dict((k, r) for k, r in zip(cost_keys, rvals))
+                monitor.append_stats(**{k: v for k, v in rval_dict.iteritems()
+                                        if 'cost' in k or 'energy' in k or 'reward' in k})
+                if display_interval is not None and s == display_interval:
+                    s = 0
+                    monitor.disp(e)
+                else:
+                    s += 1
+
+                check_bad_nums(rval_dict, data['train'].count)
+
+                f_update(lrate)
+
+            ud = time.time() - ud_start
+
+    except KeyboardInterrupt:
+        logger.info('Training interrupted')
+
+
+def make_argument_parser():
+    '''
+    Arg parser for simple runner.
+    '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('experiment', help='Experiment module')
+    parser.add_argument('-v', '--verbose', action='store_true')
+    parser.add_argument('--hyperparams', default=None,
+                        help=('Comma separated list of '
+                              '<key>:<value> pairs'))
+
+    return parser
+
+if __name__ == '__main__':
+    parser = make_argument_parser()
+    args = parser.parse_args()
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+        logger.info('Verbose logging')
+    train(args.experiment)
