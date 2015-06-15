@@ -256,6 +256,7 @@ class GenStochasticGRU(GenerativeGRU):
 
     def sample_x(self, x, z, zp, mask, HX, bx, sigmas, *params):
         p = T.nnet.sigmoid(T.dot(z, HX) + bx)
+        '''
         y = T.switch(mask, 1., x).astype(floatX)
         h_ = T.zeros_like(z).astype(floatX)
         _, _, h, _ = self.step_slice(y, p, h_, z, *params)
@@ -265,34 +266,37 @@ class GenStochasticGRU(GenerativeGRU):
         _, _, h, _ = self.step_slice(y, p, h_, z, *params)
         q2 = gaussian(zp, h, sigmas)
 
-        prob = (p.prod() * q1.prod() /
-                (p.prod() * q1.prod() + (1. - p.prod()) * q2.prod())).astype(floatX)
+        prob =
         return T.switch(mask, self.trng.binomial(p=prob, size=x.shape, n=1,
-                                                 dtype=x.dtype), x), prob
+                                                 dtype=x.dtype), x), prob, x, p, q1, q2
+        '''
+        sample = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
+        x = T.set_subtensor(x[1:-1], sample[1:-1])
+        return x, p
 
     def sample_z(self, z, z_, zp, x_, x, mask, l, HX, bx, sigmas, *params):
         h_ = T.zeros_like(z_)
         p_ = T.zeros_like(x_)
 
         _, _, h, _ = self.step_slice(x_, p_, h_, z_, *params)
-        log_prob_1 = log_gaussian(z, h, sigmas).sum()
+        log_prob_1 = log_gaussian(z, h, sigmas).mean()
 
         _, _, hp, _ = self.step_slice(x, p_, h, z, *params)
-        log_prob_2 = log_gaussian(zp, hp, sigmas).sum()
+        log_prob_2 = log_gaussian(zp, hp, sigmas).mean()
 
         y = T.dot(z, HX) + bx
-        log_prob_3 = - x * T.nnet.softplus(y) - (1 - x) * T.nnet.softplus(-y).sum()
+        log_prob_3 = (- x * T.nnet.softplus(y) - (1 - x) * T.nnet.softplus(-y)).mean()
 
         log_prob = log_prob_1 + log_prob_2 + log_prob_3
-        grads = theano.grad(log_prob.mean(), wrt=z,
+        grads = theano.grad(log_prob, wrt=z,
                             consider_constant=[z_, zp, x_, x, h_, p_])
 
-        return (z + l * mask * sigmas * grads).astype(floatX), h
+        return (z + l * grads).astype(floatX), h, log_prob, z_, zp, x_
 
     def sample_zx(self, z, z_, zp, x_, x, x_mask, z_mask, l, HX, bx, sigmas, *params):
-        z, h = self.sample_z(z, z_, zp, x_, x, z_mask, l, HX, bx, sigmas, *params)
+        z, h, lp, z_, zp, x_ = self.sample_z(z, z_, zp, x_, x, z_mask, l, HX, bx, sigmas, *params)
         x, p = self.sample_x(x, z, zp, x_mask, HX, bx, sigmas, *params)
-        return x, z, h, p
+        return x, z, p, h, lp, z_, zp, x_
 
     def step_infer(self, x, z, l, HX, bx, sigmas, *params):
         def shift_left(y):

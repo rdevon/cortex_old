@@ -15,10 +15,10 @@ f_clip = lambda x, y, z: T.clip(x, y, 1.)
 pi = theano.shared(np.pi).astype('float32')
 
 def gaussian(x, mu, s):
-    return T.exp(-(x - mu)**2 / (2 * s)**2) / T.sqrt(s * T.sqrt(2 * pi)).astype('float32')
+    return T.exp(-(x - mu)**2 / (2 * s)**2) / (s * T.sqrt(2 * pi)).astype('float32')
 
-def log_gaussian(x, mu, s):
-    return -(x - mu)**2 / (2 * s)**2 - T.log(T.sqrt(2 * pi)).astype('float32')
+def log_gaussian(x, mu, sq_sig):
+    return -(x - mu)**2 / (4 * sq_sig) - 2 * T.log(sq_sig + 1e-7) - T.sqrt(2 * pi).astype('float32')
 
 def check_bad_nums(rval_dict, i):
     bad_nums = OrderedDict()
