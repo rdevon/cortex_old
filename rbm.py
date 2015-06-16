@@ -42,7 +42,7 @@ class RBM(Layer):
             p = T.nnet.sigmoid(T.dot(z, W.T) + b)
         else:
             p = T.nnet.sigmoid(T.dot(q, W.T) + b)
-        return x * T.log(p + 1e-7) + (1 - x) * T.log(1. - p + 1e-7)
+        return (x * T.log(p + 1e-7) + (1 - x) * T.log(1. - p + 1e-7)).sum(axis=1)
 
     def energy(self, x):
         n_steps = x.shape[0]

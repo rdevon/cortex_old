@@ -7,6 +7,7 @@ matplotlib.use('Agg')
 from matplotlib import pylab as plt
 
 import argparse
+from collections import OrderedDict
 import gru
 import importlib
 from monitor import Monitor
@@ -31,10 +32,19 @@ def get_grad(optimizer, costs, tparams, inps=None, outs=None,
              exclude_params=[], consider_constant=[], updates=[],
              weight_noise_amount=0.0):
 
+    exclude_params = [tparams[ep] for ep in exclude_params]
+
     if inps is None:
         raise ValueError()
     if outs is None:
         raise ValueError()
+    logger.info('Parameters are: %s' % tparams.keys())
+    logger.info('The following params are excluded from learning: %s'
+                % exclude_params)
+    logger.info('The following variables are constant in learning gradient: %s'
+                % consider_constant)
+
+    #consider_constant = [tparams[cc] for cc in consider_constant]
 
     inps = inps.values()
 
@@ -59,6 +69,8 @@ def get_grad(optimizer, costs, tparams, inps=None, outs=None,
                      for p in noise_params.values()]
     updates.update(noise_updates)
 
+    tparams = OrderedDict((k, v) for k, v in tparams.iteritems()
+        if v not in exclude_params)
     grads = T.grad(cost, wrt=itemlist(tparams), known_grads=known_grads,
                    consider_constant=consider_constant)
 

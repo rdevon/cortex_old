@@ -19,6 +19,7 @@ class Layer(object):
     def __init__(self, name):
         self.name = name
         self.params = None
+        self.excludes = []
 
     def set_tparams(self):
         if self.params is None:
@@ -29,6 +30,9 @@ class Layer(object):
             tparams[tools._p(self.name, kk)] = tp
             self.__dict__[kk] = tp
         return tparams
+
+    def get_excludes(self):
+        return [tools._p(self.name, e) for e in self.excludes]
 
     def __call__(self, state_below):
         raise NotImplementedError()
@@ -85,3 +89,103 @@ class Softmax(Layer):
     def __call__(self, input_):
         y_hat = theano.tensor.nnet.softmax(input_)
         return OrderedDict(y_hat=y_hat), theano.OrderedUpdates()
+
+
+class Baseline(Layer):
+    def __init__(self, name='baseline', rate=0.1):
+        self.rate = np.float32(rate)
+        super(Baseline, self).__init__(name)
+        self.set_params()
+
+    def set_params(self):
+        c = np.float32(0.)
+        var = np.float32(0.)
+
+        self.params = OrderedDict(c=c, var=var)
+        self.excludes=['c', 'var']
+
+    def __call__(self, input_):
+        b = input_.mean()
+        v = input_.std()
+
+        new_c = T.switch(T.eq(self.c, 0.),
+                         b,
+                         (np.float32(1.) - self.rate) * self.c + self.rate * b)
+        new_var = T.switch(T.eq(self.var, 0.),
+                           v,
+                           (np.float32(1.) - self.rate) * self.var + self.rate * v)
+
+        updates = [(self.c, new_c), (self.var, new_var)]
+
+        input_centered = (
+            (input_ - new_c) / T.maximum(1., T.sqrt(new_var)))
+
+        input_ = T.zeros_like(input_) + input_
+
+        outs = OrderedDict(
+            x=input_,
+            x_centered=input_centered,
+            c=new_c,
+            var=new_var
+        )
+        return outs, updates
+
+class BaselineWithInput(Baseline):
+    def __init__(self, dims_in, rate=0.1, name='baseline_with_input'):
+        if len(dims_in) < 1:
+            raise ValueError('One or more dims_in needed, %d provided'
+                             % len(dims_in))
+        self.dims_in = dims_in
+        super(BaselineWithInput, self).__init__(name=name, rate=rate)
+
+    def set_params(self):
+        super(BaselineWithInput, self).set_params()
+        for i, dim_in in enumerate(self.dims_in):
+            w = np.zeros((dim_in, 1)).astype('float32')
+            k = 'w%d' % i
+            self.params[k] = w
+
+    def __call__(self, input_, *xs):
+        '''
+        Maybe unclear: input_ is the variable to be baselined, xs are the
+        actual inputs.
+        '''
+        b = input_.mean()
+        v = input_.std()
+
+        new_c = T.switch(T.eq(self.c, 0.),
+                         b,
+                         (np.float32(1.) - self.rate) * self.c + self.rate * b)
+        new_var = T.switch(T.eq(self.var, 0.),
+                           v,
+                           (np.float32(1.) - self.rate) * self.var + self.rate * v)
+
+        updates = [(self.c, new_c), (self.var, new_var)]
+
+        if len(xs) != len(self.dims_in):
+            raise ValueError('Number of (external) inputs for baseline must'
+                             ' match parameters')
+        def _step_accum(y, x, W):
+            y += x.dot(W)
+            return y
+        ws = []
+        for i in xrange(len(xs)):
+            # Maybe not the most pythonic way...
+            ws.append(self.__dict__['w%d' % i])
+
+        idb = T.sum([x.dot(W) for x, W in zip(xs, ws)])
+
+        input_centered = (
+            (input_ - idb - new_c) / T.maximum(1., T.sqrt(new_var)))
+        input_ = T.zeros_like(input_) + input_
+
+        outs = OrderedDict(
+            x=input_,
+            x_centered=input_centered,
+            c=new_c,
+            var=new_var,
+            idb=idb
+        )
+
+        return outs, updates
+

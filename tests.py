@@ -12,6 +12,8 @@ from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from gru import CondGenGRU
+from layers import BaselineWithInput
+from layers import FFN
 from mnist import mnist_iterator
 from rbm import RBM
 from trainer import get_grad
@@ -78,3 +80,38 @@ def test_simple():
 
     fn = theano.function([X0, XT], outs[rbm.name]['log_p'])
     print fn(*inps)
+
+def test_baseline():
+    X0 = T.matrix('x0', dtype=floatX)
+    XT = T.matrix('xT', dtype=floatX)
+
+    train = mnist_iterator(batch_size=20, mode='train')
+    x, _ = train.next()
+    x0 = x[:10]
+    xT = x[10:]
+
+    a = theano.shared(x0)
+    b = theano.shared(xT)
+    ab = T.concatenate([a[None, :, :], b[None, :, :]])
+
+
+    def step(x, y):
+        return x + y
+
+    out, update = theano.scan(step, sequences=[ab, ab], strict=True)
+    print out.shape.eval()
+
+    inps = [x0, xT]
+    baseline = BaselineWithInput((train.dim, train.dim))
+    baseline.set_tparams()
+
+    ffn = FFN(train.dim, 10)
+    ffn.set_tparams()
+    outs, updates = ffn(X0)
+
+    z = outs['z']
+    outs_bl, updates_bl = baseline(z, X0, XT)
+    updates.update(updates_bl)
+
+    fn = theano.function([X0, XT], outs_bl['x_centered'], updates=updates)
+    print fn(x0, xT)

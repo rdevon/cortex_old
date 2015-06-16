@@ -17,8 +17,8 @@ pi = theano.shared(np.pi).astype('float32')
 def gaussian(x, mu, s):
     return T.exp(-(x - mu)**2 / (2 * s)**2) / (s * T.sqrt(2 * pi)).astype('float32')
 
-def log_gaussian(x, mu, sq_sig):
-    return -(x - mu)**2 / (4 * sq_sig) - 2 * T.log(sq_sig + 1e-7) - T.sqrt(2 * pi).astype('float32')
+def log_gaussian(x, mu, s):
+    return -(x - mu)**2 / (2 * s**2) - T.log(s + 1e-7) - T.sqrt(2 * pi).astype('float32')
 
 def check_bad_nums(rval_dict, i):
     bad_nums = OrderedDict()
@@ -56,7 +56,7 @@ def unzip(zipped):
 
 # get the list of parameters: Note that tparams must be OrderedDict
 def itemlist(tparams):
-    return [vv for kk, vv in tparams.iteritems()]
+    return tparams.values()
 
 # make prefix-appended name
 def _p(pp, name):
