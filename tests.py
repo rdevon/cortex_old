@@ -93,8 +93,22 @@ def test_simple():
     print fn(*inps)
 
     fn = theano.function([X0, XT], outs[baseline.name]['x_centered'])
-    print fn(*inps)
 
+    print fn(*inps)
+    idb = outs[baseline.name]['idb']
+    c = outs[baseline.name]['c']
+    idb_cost = ((reward[:, None] - idb - c)**2).mean()
+
+    fn = theano.function([X0, XT], idb_cost)
+    print fn(x0, xT)
+
+    centered_reward = outs[baseline.name]['x_centered']
+    fn = theano.function([X0, XT], centered_reward.shape)
+    print fn(x0, xT)
+
+    base_cost = -(energy_p + centered_reward * energy_q).mean()
+    fn = theano.function([X0, XT], base_cost)
+    print fn(x0, xT)
     assert False
 
 def test_baseline():

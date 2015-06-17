@@ -177,7 +177,7 @@ class BaselineWithInput(Baseline):
         idb.name = 'idb'
         input_ = T.zeros_like(input_) + input_
         input_centered = (
-            (input_[:, None] - idb - new_c) / T.maximum(1., T.sqrt(new_var)))
+            (input_[:, None] - idb - new_c) / T.maximum(1., T.sqrt(new_var))).flatten()
 
         outs = OrderedDict(
             x=input_,
