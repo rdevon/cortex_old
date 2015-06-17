@@ -156,6 +156,7 @@ class BaselineWithInput(Baseline):
         new_c = T.switch(T.eq(self.c, 0.),
                          b,
                          (np.float32(1.) - self.rate) * self.c + self.rate * b)
+        new_c.name = 'new_c'
         new_var = T.switch(T.eq(self.var, 0.),
                            v,
                            (np.float32(1.) - self.rate) * self.var + self.rate * v)
@@ -165,19 +166,18 @@ class BaselineWithInput(Baseline):
         if len(xs) != len(self.dims_in):
             raise ValueError('Number of (external) inputs for baseline must'
                              ' match parameters')
-        def _step_accum(y, x, W):
-            y += x.dot(W)
-            return y
+
         ws = []
         for i in xrange(len(xs)):
             # Maybe not the most pythonic way...
             ws.append(self.__dict__['w%d' % i])
 
-        idb = T.sum([x.dot(W) for x, W in zip(xs, ws)])
-
-        input_centered = (
-            (input_ - idb - new_c) / T.maximum(1., T.sqrt(new_var)))
+        idb = T.sum([x.dot(W) for x, W in zip(xs, ws)], axis=0)
+        #idb = xs[0].dot(ws[0]) + xs[1].dot(ws[1])
+        idb.name = 'idb'
         input_ = T.zeros_like(input_) + input_
+        input_centered = (
+            (input_[:, None] - idb - new_c) / T.maximum(1., T.sqrt(new_var)))
 
         outs = OrderedDict(
             x=input_,
@@ -188,4 +188,3 @@ class BaselineWithInput(Baseline):
         )
 
         return outs, updates
-

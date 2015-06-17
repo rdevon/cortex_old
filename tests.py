@@ -24,18 +24,21 @@ floatX = theano.config.floatX
 
 def test_main_model():
     import model as experiment
-    model = experiment.get_model()
-    data = model.pop('data')
-    costs = experiment.get_costs(**model)
-    f_grad_shared, f_update, cost_keys = get_grad('sgd', costs, **model)
 
     train = mnist_iterator(batch_size=2, mode='train')
     (x0, xT), _ = train.next()
     x0 = x0.reshape(1, train.dim)
     xT = xT.reshape(1, train.dim)
     inps = [x0, xT]
+
+    model = experiment.get_model()
+    data = model.pop('data')
+    costs = experiment.get_costs(**model)
+
+    f_grad_shared, f_update, cost_keys = get_grad('sgd', costs, **model)
+
     rval = f_grad_shared(*inps)
-    print rval
+
     assert False
 
 def test_simple():
@@ -55,9 +58,11 @@ def test_simple():
 
     rnn = CondGenGRU(dim_in, dim_r, trng=trng, stochastic=False)
     rbm = RBM(dim_in, dim_g, trng=trng, stochastic=False)
+    baseline = BaselineWithInput((train.dim, train.dim))
 
     tparams = rnn.set_tparams()
     tparams.update(rbm.set_tparams())
+    tparams.update(baseline.set_tparams())
 
     outs = OrderedDict()
     outs_rnn, updates = rnn(X0, XT, reversed=True, n_steps=n_steps)
@@ -67,45 +72,52 @@ def test_simple():
     outs[rbm.name] = outs_rbm
     updates.update(updates_rbm)
 
+    q = outs[rnn.name]['p']
+    samples = outs[rnn.name]['x']
+    energy_q = (samples * T.log(q + 1e-7) + (1. - samples) * T.log(1. - q + 1e-7)).sum(axis=(0, 2))
+    outs[rnn.name]['log_p'] = energy_q
+    energy_p = outs[rbm.name]['log_p']
+    reward = (energy_p - energy_q)
+
+    outs_baseline, updates_baseline = baseline(reward, X0, XT)
+    outs[baseline.name] = outs_baseline
+    updates.update(updates_baseline)
+
     xs, _ = train.next()
     x0 = xs[:batch_size]
     xT = xs[batch_size:]
 
     inps = [x0, xT]
 
-    fn = theano.function([X0, XT], outs[rnn.name]['x'].shape)
+    fn = theano.function([X0, XT], reward.shape)
     print fn(*inps)
 
-    print 'here'
-
-    fn = theano.function([X0, XT], outs[rbm.name]['log_p'])
+    fn = theano.function([X0, XT], outs[baseline.name]['x_centered'])
     print fn(*inps)
+
+    assert False
 
 def test_baseline():
     X0 = T.matrix('x0', dtype=floatX)
     XT = T.matrix('xT', dtype=floatX)
 
-    train = mnist_iterator(batch_size=20, mode='train')
+    train = mnist_iterator(batch_size=26, mode='train')
     x, _ = train.next()
-    x0 = x[:10]
-    xT = x[10:]
-
-    a = theano.shared(x0)
-    b = theano.shared(xT)
-    ab = T.concatenate([a[None, :, :], b[None, :, :]])
-
-
-    def step(x, y):
-        return x + y
-
-    out, update = theano.scan(step, sequences=[ab, ab], strict=True)
-    print out.shape.eval()
+    x0 = x[:13]
+    xT = x[13:]
 
     inps = [x0, xT]
+
     baseline = BaselineWithInput((train.dim, train.dim))
     baseline.set_tparams()
 
-    ffn = FFN(train.dim, 10)
+    A = X0.dot(baseline.w0) + XT.dot(baseline.w1)
+
+    fn = theano.function([X0, XT], A)
+    a = fn(x0, xT)
+    print a, a.shape
+
+    ffn = FFN(train.dim, 11)
     ffn.set_tparams()
     outs, updates = ffn(X0)
 
