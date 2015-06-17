@@ -64,7 +64,7 @@ class RBM(Layer):
             strict=True
         )
 
-        return OrderedDict(log_p=rval.sum(axis=0)), updates
+        return OrderedDict(log_p=rval), updates
 
     def step_slice(self, x_, h_, W, b, c):
         q = T.nnet.sigmoid(T.dot(x_, W) + c)

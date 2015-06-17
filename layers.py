@@ -131,17 +131,18 @@ class Baseline(Layer):
         return outs, updates
 
 class BaselineWithInput(Baseline):
-    def __init__(self, dims_in, rate=0.1, name='baseline_with_input'):
+    def __init__(self, dims_in, dim_out, rate=0.1, name='baseline_with_input'):
         if len(dims_in) < 1:
             raise ValueError('One or more dims_in needed, %d provided'
                              % len(dims_in))
         self.dims_in = dims_in
+        self.dim_out = dim_out
         super(BaselineWithInput, self).__init__(name=name, rate=rate)
 
     def set_params(self):
         super(BaselineWithInput, self).set_params()
         for i, dim_in in enumerate(self.dims_in):
-            w = np.zeros((dim_in, 1)).astype('float32')
+            w = np.zeros((dim_in, self.dim_out)).astype('float32')
             k = 'w%d' % i
             self.params[k] = w
 
@@ -172,12 +173,11 @@ class BaselineWithInput(Baseline):
             # Maybe not the most pythonic way...
             ws.append(self.__dict__['w%d' % i])
 
-        idb = T.sum([x.dot(W) for x, W in zip(xs, ws)], axis=0)
-        #idb = xs[0].dot(ws[0]) + xs[1].dot(ws[1])
+        idb = T.sum([x.dot(W) for x, W in zip(xs, ws)], axis=0).T
         idb.name = 'idb'
         input_ = T.zeros_like(input_) + input_
         input_centered = (
-            (input_[:, None] - idb - new_c) / T.maximum(1., T.sqrt(new_var))).flatten()
+            (input_ - idb - new_c) / T.maximum(1., T.sqrt(new_var)))
 
         outs = OrderedDict(
             x=input_,

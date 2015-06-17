@@ -58,7 +58,7 @@ def test_simple():
 
     rnn = CondGenGRU(dim_in, dim_r, trng=trng, stochastic=False)
     rbm = RBM(dim_in, dim_g, trng=trng, stochastic=False)
-    baseline = BaselineWithInput((train.dim, train.dim))
+    baseline = BaselineWithInput((train.dim, train.dim), n_steps + 1)
 
     tparams = rnn.set_tparams()
     tparams.update(rbm.set_tparams())
@@ -97,7 +97,7 @@ def test_simple():
     print fn(*inps)
     idb = outs[baseline.name]['idb']
     c = outs[baseline.name]['c']
-    idb_cost = ((reward[:, None] - idb - c)**2).mean()
+    idb_cost = ((reward - idb - c)**2).mean()
 
     fn = theano.function([X0, XT], idb_cost)
     print fn(x0, xT)
