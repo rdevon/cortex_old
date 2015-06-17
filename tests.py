@@ -4,13 +4,14 @@ Module for testing infrastructure
 
 
 from collections import OrderedDict
-import numpy
+import numpy as np
 import pprint
 import theano
 from theano import function
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
+from gru import GRU
 from gru import CondGenGRU
 from layers import BaselineWithInput
 from layers import FFN
@@ -141,3 +142,22 @@ def test_baseline():
 
     fn = theano.function([X0, XT], outs_bl['x_centered'], updates=updates)
     print fn(x0, xT)
+
+def test_mask(batch_size=11):
+    train = mnist_iterator(batch_size=batch_size, mode='train')
+    x, _ = train.next()
+    x = np.concatenate([x, np.zeros_like(x)]).astype('float32')
+    x = x.reshape((x.shape[0], 1, x.shape[1]))
+    mask = np.zeros((x.shape[0], 1)).astype('float32')
+    print mask.shape, x.shape
+    mask[:batch_size] = 1.
+
+    X = T.tensor3('X')
+    M = T.matrix('M')
+
+    rnn = GRU(train.dim, 7)
+    rnn.set_tparams()
+    outs, updates = rnn(X, M)
+
+    fn = theano.function([X, M], outs['h'])
+    print fn(x, mask)

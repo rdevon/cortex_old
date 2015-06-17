@@ -124,23 +124,27 @@ class GRU(RNN):
         u = T.nnet.sigmoid(RNN._slice(preact, 1, self.dim_h))
         return r, u
 
-    def step_slice(self, x_, xx_, h_, U, Ux, b, bx):
-        preact = self.recurrent_step(T.dot(h_, U), x_, b)
+    def step_slice(self, m_, x_, xx_, h_, U, Ux, b, bx):
+        preact = T.dot(h_, U) + x_ + b
         r, u = self.get_gates(preact)
         preactx = T.dot(h_, Ux) * r + xx_ + bx
         h = T.tanh(preactx)
         h = u * h_ + (1. - u) * h
+        h = m_[:, None] * h + (1. - m_)[:, None] * h_
         return h
 
-    def __call__(self, state_below):
+    def __call__(self, state_below, mask=None):
         n_steps = state_below.shape[0]
         n_samples = state_below.shape[1]
 
+        if mask is None:
+            mask = T.alloc(1., n_steps, 1).astype(floatX)
+
         x, x_ = self.set_inputs(state_below)
 
-        seqs = [x, x_]
+        seqs = [mask, x, x_]
         outputs_info = [T.alloc(0., n_samples, self.dim_h)]
-        non_seqs = [U, Ux, b, bx]
+        non_seqs = [self.U, self.Ux, self.b, self.bx]
 
         rval, updates = theano.scan(self.step_slice,
                                     sequences=seqs,
