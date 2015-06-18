@@ -15,6 +15,8 @@ from tools import gaussian
 from tools import log_gaussian
 
 
+norm_weight = tools.norm_weight
+ortho_weight = tools.ortho_weight
 floatX = 'float32'#theano.config.floatX
 
 def raise_type_error(o, t):
@@ -92,8 +94,6 @@ class GRU(RNN):
         self.set_params()
 
     def set_params(self):
-        norm_weight = tools.norm_weight
-        ortho_weight = tools.ortho_weight
         W = np.concatenate([norm_weight(self.dim_in, self.dim_h),
                             norm_weight(self.dim_in, self.dim_h)], axis=1)
         b = np.zeros((2 * self.dim_h,)).astype(floatX)
@@ -124,10 +124,13 @@ class GRU(RNN):
         u = T.nnet.sigmoid(RNN._slice(preact, 1, self.dim_h))
         return r, u
 
-    def step_slice(self, m_, x_, xx_, h_, U, Ux, b, bx):
-        preact = T.dot(h_, U) + x_ + b
+    def get_non_seqs(self):
+        return [self.U, self.Ux]
+
+    def step_slice(self, m_, x_, xx_, h_, U, Ux):
+        preact = T.dot(h_, U) + x_
         r, u = self.get_gates(preact)
-        preactx = T.dot(h_, Ux) * r + xx_ + bx
+        preactx = T.dot(h_, Ux) * r + xx_
         h = T.tanh(preactx)
         h = u * h_ + (1. - u) * h
         h = m_[:, None] * h + (1. - m_)[:, None] * h_
@@ -144,7 +147,7 @@ class GRU(RNN):
 
         seqs = [mask, x, x_]
         outputs_info = [T.alloc(0., n_samples, self.dim_h)]
-        non_seqs = [self.U, self.Ux, self.b, self.bx]
+        non_seqs = self.get_non_seqs()
 
         rval, updates = theano.scan(self.step_slice,
                                     sequences=seqs,
@@ -158,6 +161,90 @@ class GRU(RNN):
         return OrderedDict(h=rval), updates
 
 
+class HeirarchalGRU(GRU):
+    def __init__(self, dim_in, dim_h, dim_s, weight_noise=False,
+                 name='hiero_gru'):
+        self.dim_s = dim_s
+        super(HeirarchalGRU, self).__init__(dim_in, dim_h, name=name)
+
+    def set_params(self):
+        super(HeirarchalGRU, self).set_params()
+        Ws = np.concatenate([norm_weight(self.dim_h, self.dim_s),
+                            norm_weight(self.dim_h, self.dim_s)], axis=1)
+        bs = np.zeros((2 * self.dim_s,)).astype(floatX)
+        Us = np.concatenate([ortho_weight(self.dim_s),
+                            ortho_weight(self.dim_s)], axis=1)
+        Wxs = norm_weight(self.dim_h, self.dim_s)
+        Uxs = ortho_weight(self.dim_s)
+        bxs = np.zeros((self.dim_s,)).astype(floatX)
+
+        self.params.update(Ws=Ws, bs=bs, Us=Us, Wxs=Wxs, Uxs=Uxs, bxs=bxs)
+
+        if self.weight_noise:
+            Ws_noise = (Ws * 0).astype(floatX)
+            Us_noise = (Us * 0).astype(floatX)
+            Wxs_noise = (Wxs * 0).astype(floatX)
+            Uxs_noise = (Uxs * 0).astype(floatX)
+            self.params.update(Ws_noise=Ws_noise, Us_noise=Us_noise,
+                               Wxs_noise=Wxs_noise, Uxs_noise=Uxs_noise)
+
+    def step_slice_lower(self, m_, x_, xx_, h_, U, Ux):
+        # Here we just kill the previous state if the previous token was eof
+        # where the mask was 0.
+        h_ = m * h_
+        preact = T.dot(h_, U) + x_
+        r, u = self.get_gates(preact)
+        preactx = T.dot(h_, Ux) * r + xx_
+        h = T.tanh(preactx)
+        h = u * h_ + (1. - u) * h
+        return h
+
+    def __call__(self, state_below, mask=None):
+        n_steps = state_below.shape[0]
+        n_samples = state_below.shape[1]
+
+        if mask is None:
+            mask = T.neq(state_below, 0.).astype(floatX)
+
+        x, x_ = self.set_inputs(state_below)
+
+        mask_r = T.roll(mask, 1, axis=0)
+        mask_n = T.eq(mask, 0.).astype(floatX)
+
+        seqs = [mask_r, x, x_]
+        outputs_info = [T.alloc(0., n_samples, self.dim_h)]
+        non_seqs = self.get_non_seqs()
+
+        h, updates = theano.scan(self.step_slice_lower,
+                                    sequences=seqs,
+                                    outputs_info=outputs_info,
+                                    non_sequences=non_seqs,
+                                    name=tools._p(self.name, '_layers'),
+                                    n_steps=n_steps,
+                                    profile=tools.profile,
+                                    strict=True)
+
+        Ws = self.Ws + self.Ws_noise if self.weight_noise else self.Ws
+        Wxs = self.Wxs + self.Wxs_noise if self.weight_noise else self.Wxs
+        x = h.dot(Ws) + self.bs
+        x_ = h.dot(Wxs) + self.bxs
+
+        seqs = [mask_n, x, x_]
+        outputs_info = [T.alloc(0., n_samples, self.dim_s)]
+        non_seqs = [self.Us, self.Uxs]
+
+        rval, updates = theano.scan(self.step_slice,
+                                    sequences=seqs,
+                                    outputs_info=outputs_info,
+                                    non_sequences=non_seqs,
+                                    name=tools._p(self.name, '_layers'),
+                                    n_steps=n_steps,
+                                    profile=tools.profile,
+                                    strict=True)
+
+        return OrderedDict(h=h, hs=rval), updates
+
+
 class GenerativeGRU(GRU):
     def __init__(self, dim_in, dim_h, weight_noise=False, name='gen_gru'):
         super(GenerativeGRU, self).__init__(dim_in, dim_h, name=name)
@@ -167,8 +254,6 @@ class GenerativeGRU(GRU):
         self.set_params()
 
     def set_params(self):
-        norm_weight = tools.norm_weight
-        ortho_weight = tools.ortho_weight
         XHa = np.concatenate([norm_weight(self.dim_in, self.dim_h),
                              norm_weight(self.dim_in, self.dim_h)], axis=1)
         bha = np.zeros((2 * self.dim_h,)).astype(floatX)

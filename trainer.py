@@ -13,7 +13,10 @@ import importlib
 from monitor import Monitor
 import numpy as np
 import op
+import os
+from os import path
 import time
+import theano
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as T
 from tools import check_bad_nums
@@ -84,7 +87,7 @@ def get_grad(optimizer, costs, tparams, inps=None, outs=None,
     return f_grad_shared, f_grad_updates, ['cost'] + out_keys + cost_keys
 
 
-def train(experiment_file, **kwargs):
+def train(experiment_file, out_path=None, **kwargs):
     if experiment_file.split('.')[-1] == 'py':
         experiment_file = experiment_file[:-3]
 
@@ -108,11 +111,11 @@ def train(experiment_file, **kwargs):
     costs = experiment.get_costs(**model)
 
     logger.info('Getting gradient functions')
-    f_grad_shared, f_update, cost_keys = get_grad(optimizer, costs, **model)
+    f_grad_shared, f_update, keys = get_grad(optimizer, costs, **model)
 
     logger.info('Initializing monitors')
     monitor = Monitor(model['tparams'])
-    for k in cost_keys:
+    for k in keys:
         if 'cost' in k or 'energy' in k or 'reward' in k:
             monitor.add_monitor(k)
 
@@ -122,6 +125,7 @@ def train(experiment_file, **kwargs):
             ud_start = time.time()
 
             s = 0
+            i = 0
             while True:
                 try:
                     inps = data['train'].next()
@@ -130,12 +134,17 @@ def train(experiment_file, **kwargs):
                     break
 
                 rvals = f_grad_shared(*inps)
-                rval_dict = dict((k, r) for k, r in zip(cost_keys, rvals))
+                rval_dict = dict((k, r) for k, r in zip(keys, rvals))
                 monitor.append_stats(**{k: v for k, v in rval_dict.iteritems()
                                         if 'cost' in k or 'energy' in k or 'reward' in k})
                 if display_interval is not None and s == display_interval:
                     s = 0
                     monitor.disp(e)
+                    if out_path is not None:
+                        samples = rval_dict['cond_gen_gru_x']
+                        data['train'].dataset.save_images(samples,
+                            path.join(out_path, 'samples_%d.png' % i))
+                        i += 1
                 else:
                     s += 1
 
@@ -159,6 +168,8 @@ def make_argument_parser():
     parser.add_argument('--hyperparams', default=None,
                         help=('Comma separated list of '
                               '<key>:<value> pairs'))
+    parser.add_argument('-o', '--out_dir', default=None,
+                        help='output directory for files')
 
     return parser
 
@@ -168,4 +179,10 @@ if __name__ == '__main__':
     if args.verbose:
         logger.setLevel(logging.DEBUG)
         logger.info('Verbose logging')
-    train(args.experiment)
+    if args.out_dir is not None:
+        if path.isfile(args.out_dir):
+            raise ValueError('Out path is a file')
+        if not path.isdir(args.out_dir):
+            os.mkdir(args.out_dir)
+
+    train(args.experiment, out_path=args.out_dir)

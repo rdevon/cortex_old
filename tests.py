@@ -5,6 +5,7 @@ Module for testing infrastructure
 
 from collections import OrderedDict
 import numpy as np
+from os import path
 import pprint
 import theano
 from theano import function
@@ -53,6 +54,10 @@ def test_simple():
     X0 = T.matrix('x0', dtype=floatX)
     XT = T.matrix('x0', dtype=floatX)
 
+    xs, _ = train.next()
+    x0 = xs[:batch_size]
+    xT = xs[batch_size:]
+
     trng = RandomStreams(6 * 10 * 2015)
 
     dim_in = train.dim
@@ -75,6 +80,11 @@ def test_simple():
 
     q = outs[rnn.name]['p']
     samples = outs[rnn.name]['x']
+
+    fn = theano.function([X0, XT], samples)
+    s = fn(x0, xT)
+
+    train.save_images(s, path.join('/Users/devon/tmp/', 'test_samples.png'))
     energy_q = (samples * T.log(q + 1e-7) + (1. - samples) * T.log(1. - q + 1e-7)).sum(axis=(0, 2))
     outs[rnn.name]['log_p'] = energy_q
     energy_p = outs[rbm.name]['log_p']
@@ -83,10 +93,6 @@ def test_simple():
     outs_baseline, updates_baseline = baseline(reward, X0, XT)
     outs[baseline.name] = outs_baseline
     updates.update(updates_baseline)
-
-    xs, _ = train.next()
-    x0 = xs[:batch_size]
-    xT = xs[batch_size:]
 
     inps = [x0, xT]
 

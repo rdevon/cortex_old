@@ -62,6 +62,7 @@ class mnist_iterator:
 
     def save_images(self, x, imgfile, transpose=False):
         tshape = x.shape[0], x.shape[1]
+        x = x.reshape((x.shape[0] * x.shape[1], x.shape[2]))
         image = self.show(x.T, tshape, transpose=transpose)
         print 'Saving to ', imgfile
         image.save(imgfile)
