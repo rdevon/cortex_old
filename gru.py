@@ -178,7 +178,11 @@ class HeirarchalGRU(GRU):
         Uxs = ortho_weight(self.dim_s)
         bxs = np.zeros((self.dim_s,)).astype(floatX)
 
-        self.params.update(Ws=Ws, bs=bs, Us=Us, Wxs=Wxs, Uxs=Uxs, bxs=bxs)
+        Wo = norm_weight(self.dim_s, 1).astype(floatX)
+        bo = np.float32(0.)
+
+        self.params.update(Ws=Ws, bs=bs, Us=Us, Wxs=Wxs, Uxs=Uxs, bxs=bxs,
+                           Wo=Wo, bo=bo)
 
         if self.weight_noise:
             Ws_noise = (Ws * 0).astype(floatX)
@@ -188,12 +192,34 @@ class HeirarchalGRU(GRU):
             self.params.update(Ws_noise=Ws_noise, Us_noise=Us_noise,
                                Wxs_noise=Wxs_noise, Uxs_noise=Uxs_noise)
 
+    def get_gates_lower(self, preact):
+        r = T.nnet.sigmoid(RNN._slice(preact, 0, self.dim_h))
+        u = T.nnet.sigmoid(RNN._slice(preact, 1, self.dim_h))
+        return r, u
+
+    def get_gates_upper(self, preact):
+        r = T.nnet.sigmoid(RNN._slice(preact, 0, self.dim_s))
+        u = T.nnet.sigmoid(RNN._slice(preact, 1, self.dim_s))
+        return r, u
+
+    def step_slice_upper(self, m_, x_, xx_, h_, U, Ux, Wo, bo):
+        preact = T.dot(h_, U) + x_
+        r, u = self.get_gates_upper(preact)
+        preactx = T.dot(h_, Ux) * r + xx_
+        h = T.tanh(preactx)
+        h = u * h_ + (1. - u) * h
+        h = m_[:, None] * h + (1. - m_)[:, None] * h_
+
+        o = h.dot(Wo) + bo
+
+        return h, o
+
     def step_slice_lower(self, m_, x_, xx_, h_, U, Ux):
         # Here we just kill the previous state if the previous token was eof
         # where the mask was 0.
-        h_ = m * h_
+        h_ = m_[:, None] * h_
         preact = T.dot(h_, U) + x_
-        r, u = self.get_gates(preact)
+        r, u = self.get_gates_lower(preact)
         preactx = T.dot(h_, Ux) * r + xx_
         h = T.tanh(preactx)
         h = u * h_ + (1. - u) * h
@@ -204,7 +230,8 @@ class HeirarchalGRU(GRU):
         n_samples = state_below.shape[1]
 
         if mask is None:
-            mask = T.neq(state_below, 0.).astype(floatX)
+            #mask = T.neq(state_below[0], 1.).astype(floatX).dimshuffle((1, 0))
+            mask = T.neq(state_below[:, :, 0], 1).astype(floatX)
 
         x, x_ = self.set_inputs(state_below)
 
@@ -224,16 +251,17 @@ class HeirarchalGRU(GRU):
                                     profile=tools.profile,
                                     strict=True)
 
+
         Ws = self.Ws + self.Ws_noise if self.weight_noise else self.Ws
         Wxs = self.Wxs + self.Wxs_noise if self.weight_noise else self.Wxs
         x = h.dot(Ws) + self.bs
         x_ = h.dot(Wxs) + self.bxs
 
         seqs = [mask_n, x, x_]
-        outputs_info = [T.alloc(0., n_samples, self.dim_s)]
-        non_seqs = [self.Us, self.Uxs]
+        outputs_info = [T.alloc(0., n_samples, self.dim_s), None]
+        non_seqs = [self.Us, self.Uxs, self.Wo, self.bo]
 
-        rval, updates = theano.scan(self.step_slice,
+        (hs, o), updates = theano.scan(self.step_slice_upper,
                                     sequences=seqs,
                                     outputs_info=outputs_info,
                                     non_sequences=non_seqs,
@@ -242,7 +270,7 @@ class HeirarchalGRU(GRU):
                                     profile=tools.profile,
                                     strict=True)
 
-        return OrderedDict(h=h, hs=rval), updates
+        return OrderedDict(h=h, hs=hs, o=o), updates
 
 
 class GenerativeGRU(GRU):
