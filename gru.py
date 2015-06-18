@@ -270,7 +270,7 @@ class HeirarchalGRU(GRU):
                                     profile=tools.profile,
                                     strict=True)
 
-        return OrderedDict(h=h, hs=hs, o=o), updates
+        return OrderedDict(h=h, hs=hs, o=o, mask=mask), updates
 
 
 class GenerativeGRU(GRU):
