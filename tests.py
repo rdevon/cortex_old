@@ -14,12 +14,14 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from gru import GRU
 from gru import CondGenGRU
+from gru import HeirarchalGRU
 from layers import BaselineWithInput
 from layers import FFN
 from mnist import mnist_iterator
 from rbm import RBM
 from trainer import get_grad
 from trainer import train
+from twitter_api import TwitterFeed
 
 
 floatX = theano.config.floatX
@@ -167,3 +169,22 @@ def test_mask(batch_size=11):
 
     fn = theano.function([X, M], outs['h'])
     print fn(x, mask)
+
+def test_heirarchal_gru(batch_size=1, dim_h=11, dim_s=7):
+    train = TwitterFeed()
+    x, _ = train.next()
+    X = T.tensor3('X')
+    rnn = HeirarchalGRU(train.dim, dim_h, dim_s)
+    rnn.set_tparams()
+    outs, updates = rnn(X)
+
+    fn = theano.function([X], [outs['h'], outs['hs'], outs['o']])
+    out = fn(x)
+    a = np.array(np.where(x[:, 0, :] == 1.)[1].tolist()[0])[:30]
+    print zip(a, out[0][:30, 0, 0], out[1][:30, 0, 0])
+
+    print x[:, :, 0].shape
+    print a
+    print out[2][:30, 0]
+
+    assert False

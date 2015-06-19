@@ -141,7 +141,7 @@ def train(experiment_file, out_path=None, **kwargs):
                     s = 0
                     monitor.disp(e)
                     if out_path is not None:
-                        samples = rval_dict['cond_gen_gru_x']
+                        samples = rval_dict['cond_gen_gru_p']
                         data['train'].dataset.save_images(samples,
                             path.join(out_path, 'samples_%d.png' % i))
                         i += 1
