@@ -60,3 +60,4 @@ target/
 obj/all_status.pkl
 obj/all_status_500.pkl
 obj/users_500.pkl
+obj/all_status.pkl
