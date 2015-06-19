@@ -87,8 +87,40 @@ class Softmax(Layer):
         super(Softmax, self).__init__(name)
 
     def __call__(self, input_):
-        y_hat = theano.tensor.nnet.softmax(input_)
+        y_hat = T.nnet.softmax(input_)
         return OrderedDict(y_hat=y_hat), theano.OrderedUpdates()
+
+    def err(self, y_hat, Y):
+        err = (Y * (1 - y_hat) + (1 - Y) * y_hat).mean()
+        return err
+
+    def zero_one_loss(self, y_hat, Y):
+        y_hat = self.take_argmax(y_hat)
+        y = self.take_argmax(Y)
+        return T.mean(T.neq(y_hat, y))
+
+    def take_argmax(self, var):
+        """Takes argmax along 1st axis if tensor variable is matrix."""
+        if var.ndim == 2:
+            return T.argmax(var, axis=1)
+        elif var.ndim == 1:
+            return var
+        else:
+            raise ValueError("Un-recognized shape for Softmax::"
+                             "zero-one-loss, taking argmax!")
+
+
+class Logistic(Layer):
+    def __init__(self, name='logistic'):
+        super(Logistic, self).__init__(name)
+
+    def __call__(self, input_):
+        y_hat = T.nnet.sigmoid(input_)
+        return OrderedDict(y_hat=y_hat), theano.OrderedUpdates()
+
+    def err(self, y_hat, Y):
+        err = (Y * (1 - y_hat) + (1 - Y) * y_hat).mean()
+        return err
 
 
 class Baseline(Layer):
