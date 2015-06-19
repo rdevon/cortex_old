@@ -230,7 +230,6 @@ class HeirarchalGRU(GRU):
         n_samples = state_below.shape[1]
 
         if mask is None:
-            #mask = T.neq(state_below[0], 1.).astype(floatX).dimshuffle((1, 0))
             mask = T.neq(state_below[:, :, 0], 1).astype(floatX)
 
         x, x_ = self.set_inputs(state_below)
