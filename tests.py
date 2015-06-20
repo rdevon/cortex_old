@@ -17,6 +17,7 @@ from gru import CondGenGRU
 from gru import HeirarchalGRU
 from layers import BaselineWithInput
 from layers import FFN
+from layers import Logistic
 from mnist import mnist_iterator
 from rbm import RBM
 from trainer import get_grad
@@ -172,19 +173,39 @@ def test_mask(batch_size=11):
 
 def test_heirarchal_gru(batch_size=1, dim_h=11, dim_s=7):
     train = TwitterFeed()
-    x, _ = train.next()
+    x, r = train.next()
     X = T.tensor3('X')
     rnn = HeirarchalGRU(train.dim, dim_h, dim_s)
     rnn.set_tparams()
     outs, updates = rnn(X)
 
-    fn = theano.function([X], [outs['h'], outs['hs'], outs['o']])
-    out = fn(x)
-    a = np.array(np.where(x[:, 0, :] == 1.)[1].tolist()[0])[:30]
-    print zip(a, out[0][:30, 0, 0], out[1][:30, 0, 0])
+    #fn = theano.function([X], [outs['h'], outs['hs'], outs['o']])
+    #out = fn(x)
+    #a = np.array(np.where(x[:, 0, :] == 1.)[1].tolist()[0])[:30]
+    #print zip(a, out[0][:30, 0, 0], out[1][:30, 0, 0])
 
-    print x[:, :, 0].shape
-    print a
-    print out[2][:30, 0]
+    logistic = Logistic()
+    outs_l, _ = logistic(outs['o'])
+    r_hat = outs_l['y_hat']
+    mask = outs['mask']
+
+    fn = theano.function([X], [r_hat, mask])
+    r_hat, mask = fn(x)
+    print ((r_hat[:, :, 0] - r) * (1 - mask)).sum() / r_hat.shape[0].asfloat()
+
+    #print x[:, :, 0].shape
+    #print a
+    #print out[2][:30, 0]
+
+    assert False
+
+def test_rbm(batch_size=7, n_steps=11, dim_in=17, dim_h=13):
+    trng = RandomStreams(6 * 10 * 2015)
+    rbm = RBM(dim_in, dim_h, trng=trng)
+    rbm.set_tparams()
+
+    outs, updates = rbm(n_steps, n_chains=batch_size)
+    fn = theano.function([], outs['x'], updates=updates)
+    print fn()
 
     assert False

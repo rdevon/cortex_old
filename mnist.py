@@ -9,7 +9,7 @@ def get_iter(inf=False, batch_size=128):
 
 class mnist_iterator:
     def __init__(self, batch_size=128, data_file='/Users/devon/Data/mnist.pkl.gz',
-                 mode='train', shuffle=True, inf=False):
+                 mode='train', shuffle=True, inf=False, repeat=1):
         # load MNIST
         with gzip.open(data_file, 'rb') as f:
             x = cPickle.load(f)
@@ -36,6 +36,7 @@ class mnist_iterator:
         self.bs = batch_size
 
         self.inf = inf
+        self.repeat = repeat
 
         # randomize
         if shuffle:
@@ -54,11 +55,17 @@ class mnist_iterator:
             if not self.inf:
                 raise StopIteration
 
-        cbatch = (self.X[cpos:cpos+self.bs], self.O[cpos:cpos+self.bs])
+        x = self.X[cpos:cpos+self.bs]
+        y = self.O[cpos:cpos+self.bs]
+        x = np.concatenate([x for _ in xrange(self.repeat)], axis=0)
+        y = np.concatenate([y for _ in xrange(self.repeat)], axis=0)
+
+        cbatch = (x, y)
+
         if cpos + self.pos >= self.n:
             self.pos = -1
 
-        return cbatch[0], cbatch[1]
+        return cbatch
 
     def save_images(self, x, imgfile, transpose=False):
         tshape = x.shape[0], x.shape[1]
