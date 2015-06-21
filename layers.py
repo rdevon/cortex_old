@@ -137,12 +137,12 @@ class Baseline(Layer):
         self.excludes=['c', 'var']
 
     def __call__(self, input_):
-        b = input_.mean()
+        c = input_.mean()
         v = input_.std()
 
         new_c = T.switch(T.eq(self.c, 0.),
-                         b,
-                         (np.float32(1.) - self.rate) * self.c + self.rate * b)
+                         c,
+                         (np.float32(1.) - self.rate) * self.c + self.rate * c)
         new_var = T.switch(T.eq(self.var, 0.),
                            v,
                            (np.float32(1.) - self.rate) * self.var + self.rate * v)
@@ -183,12 +183,12 @@ class BaselineWithInput(Baseline):
         Maybe unclear: input_ is the variable to be baselined, xs are the
         actual inputs.
         '''
-        b = input_.mean()
+        c = input_.mean()
         v = input_.std()
 
         new_c = T.switch(T.eq(self.c, 0.),
-                         b,
-                         (np.float32(1.) - self.rate) * self.c + self.rate * b)
+                         c,
+                         (np.float32(1.) - self.rate) * self.c + self.rate * c)
         new_c.name = 'new_c'
         new_var = T.switch(T.eq(self.var, 0.),
                            v,

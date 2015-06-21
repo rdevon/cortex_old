@@ -205,7 +205,7 @@ def test_rbm(batch_size=7, n_steps=11, dim_in=17, dim_h=13):
     rbm.set_tparams()
 
     outs, updates = rbm(n_steps, n_chains=batch_size)
-    fn = theano.function([], outs['x'], updates=updates)
+    fn = theano.function([], [outs['x'], outs['h'], outs['p'], outs['q']], updates=updates)
     print fn()
 
     assert False

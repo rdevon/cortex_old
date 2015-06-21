@@ -62,8 +62,10 @@ class mnist_iterator:
 
         cbatch = (x, y)
 
-        if cpos + self.pos >= self.n:
+        if cpos + self.bs >= self.n:
             self.pos = -1
+        else:
+            self.pos += self.bs
 
         return cbatch
 
@@ -71,7 +73,7 @@ class mnist_iterator:
         tshape = x.shape[0], x.shape[1]
         x = x.reshape((x.shape[0] * x.shape[1], x.shape[2]))
         image = self.show(x.T, tshape, transpose=transpose)
-        print 'Saving to ', imgfile
+        #print 'Saving to ', imgfile
         image.save(imgfile)
 
     def show(self, image, tshape, transpose=False):

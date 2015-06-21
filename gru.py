@@ -536,6 +536,31 @@ class CondGenGRU(GenerativeGRU):
         Wx0b = norm_weight(self.dim_in, self.dim_h)
         self.params.update(Wx0a=Wx0a, Wx0b=Wx0b)
 
+    def step_energy(self, x, q, e_):
+        e = (x * T.log(q + 1e-7) + (1. - x) * T.log(1. - q + 1e-7)).sum(axis=1)
+        return e_ + e, e
+
+    def energy(self, x, q):
+        n_steps = x.shape[0] - 1
+        x = x[1:]
+        q = q[1:]
+        seqs = [x, q]
+        outputs_info = [T.alloc(0., x.shape[1]).astype(floatX), None]
+        non_seqs = []
+
+        rval, updates = rval, updates = theano.scan(
+            self.step_energy,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=tools._p(self.name, '_layers'),
+            n_steps=n_steps,
+            profile=tools.profile,
+            strict=True
+        )
+
+        return OrderedDict(acc_log_p=rval[0], log_p=rval[1]), updates
+
     def step_slice(self, x_, p_, h_, x0, XHa, Ura, bha, XHb, Urb, bhb, HX, bx,
                    Wx0a, Wx0b):
 
@@ -552,8 +577,8 @@ class CondGenGRU(GenerativeGRU):
             x = p
         return x, p, h
 
-    def __call__(self, x0, xT, reversed=True, n_steps=10):
-        if reversed:
+    def __call__(self, x0, xT, reverse=True, n_steps=10):
+        if reverse:
             x_temp = x0
             x0 = xT
             xT = x_temp
@@ -588,7 +613,7 @@ class CondGenGRU(GenerativeGRU):
         h = tools.concatenate([h0[:, None, :].dimshuffle(1, 0, 2), h])
         x = T.set_subtensor(x[-1], xT)
 
-        if reversed:
+        if reverse:
             x = x[::-1]
             p = p[::-1]
             h = h[::-1]
