@@ -42,15 +42,16 @@ class RBM(Layer):
             p = T.nnet.sigmoid(T.dot(z, W.T) + b)
         else:
             p = T.nnet.sigmoid(T.dot(q, W.T) + b)
-        return e_ + (x * T.log(p + 1e-7) + (1. - x) * T.log(1. - p + 1e-7)).sum(axis=1)
+        e = (x * T.log(p + 1e-7) + (1. - x) * T.log(1. - p + 1e-7)).sum(axis=1)
+        return e_ + e, e
 
     def energy(self, x):
-        n_steps = x.shape[0]
-        x_s = T.zeros_like(x)
-        x_s = T.set_subtensor(x_s[:-1], x[1:])
+        n_steps = x.shape[0] - 1
+        x_s = x[1:]
+        x = x[:-1]
 
         seqs = [x, x_s]
-        outputs_info = [T.alloc(0., x.shape[1]).astype(floatX)]
+        outputs_info = [T.alloc(0., x.shape[1]).astype(floatX), None]
         non_seqs = [self.W, self.b, self.c]
 
         rval, updates = theano.scan(
@@ -64,7 +65,7 @@ class RBM(Layer):
             strict=True
         )
 
-        return OrderedDict(log_p=rval), updates
+        return OrderedDict(acc_log_p=rval[0], log_p=rval[1]), updates
 
     def step_slice(self, x_, h_, p_, q_, W, b, c):
         q = T.nnet.sigmoid(T.dot(x_, W) + c)
@@ -92,11 +93,11 @@ class RBM(Layer):
                                     n=1, dtype=floatX)
         else:
             assert n_chains is not None
-            p0 = T.alloc(.5, n_chains, self.dim_h).astype(floatX)
-            x0 = self.trng.binomial(p=self.b,
+            p0 = T.alloc(.5, n_chains, self.dim_in).astype(floatX)
+            x0 = self.trng.binomial(p=0.5,
                                     size=(n_chains, self.dim_in),
                                     n=1, dtype=floatX)
-            q0 = T.nnet.sigmoid(T.dot(x0, self.W.T) + self.c)
+            q0 = T.nnet.sigmoid(T.dot(x0, self.W) + self.c)
             h0 = self.trng.binomial(p=q0,
                                     size=(n_chains, self.dim_h),
                                     n=1, dtype=floatX)
