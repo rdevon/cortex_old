@@ -517,6 +517,11 @@ class GenStochasticGRU(GenerativeGRU):
         return OrderedDict(x=x, p=p, h=h, z=z, x0=x0, p0=p0, h0=h0, z0=z0), updates
 
 
+class SimpleInferGRU(GRU):
+    def __init__(self):
+        pass
+
+
 class CondGenGRU(GenerativeGRU):
     def __init__(self, dim_in, dim_h, weight_noise=False, name='cond_gen_gru',
                  trng=None, stochastic=True):
