@@ -105,6 +105,7 @@ def train(experiment_file, out_path=None, **kwargs):
     logger.info('Calculating costs')
     costs = experiment.get_costs(**model)
     v_costs = experiment.get_costs(inps=model['inps'], outs=model['vouts'])
+    v_costs.pop('known_grads')
 
     logger.info('Getting gradient functions')
     f_grad_shared, f_update = get_grad(optimizer, costs, **model)
@@ -133,7 +134,7 @@ def train(experiment_file, out_path=None, **kwargs):
                     break
 
                 monitor.update(*inps)
-                #rvals = f_grad_shared(*inps)
+                rvals = f_grad_shared(*inps)
                 #rval_dict = dict((k, r) for k, r in zip(keys, rvals))
                 #monitor.append_stats(**{k: v for k, v in rval_dict.iteritems()
                 #                        if 'cost' in k or 'energy' in k or 'reward' in k})
