@@ -162,9 +162,14 @@ class GRU(RNN):
 
 
 class HeirarchalGRU(GRU):
-    def __init__(self, dim_in, dim_h, dim_s, weight_noise=False,
-                 name='hiero_gru'):
+    def __init__(self, dim_in, dim_h, dim_s, weight_noise=False, dropout=False,
+                 trng=None, name='hiero_gru'):
         self.dim_s = dim_s
+        self.dropout = dropout
+        if self.dropout and trng is None:
+            self.trng = RandomStreams(1234)
+        else:
+            self.trng = trng
         super(HeirarchalGRU, self).__init__(dim_in, dim_h, name=name)
 
     def set_params(self):
@@ -225,7 +230,7 @@ class HeirarchalGRU(GRU):
         h = u * h_ + (1. - u) * h
         return h
 
-    def __call__(self, state_below, mask=None):
+    def __call__(self, state_below, mask=None, suppress_noise=False):
         n_steps = state_below.shape[0]
         n_samples = state_below.shape[1]
 
@@ -250,11 +255,20 @@ class HeirarchalGRU(GRU):
                                     profile=tools.profile,
                                     strict=True)
 
-
-        Ws = self.Ws + self.Ws_noise if self.weight_noise else self.Ws
-        Wxs = self.Wxs + self.Wxs_noise if self.weight_noise else self.Wxs
+        if self.weight_noise and not suppress_noise:
+            Ws = self.Ws + self.Ws_noise
+            Wxs = self.Wxs + self.Wxs_noise
+        else:
+            Ws = self.Ws
+            Wxs = self.Wxs
         x = h.dot(Ws) + self.bs
         x_ = h.dot(Wxs) + self.bxs
+
+        if self.dropout and not suppress_noise:
+            x_d = self.trng.binomial(x_.shape, p=1-self.dropout, n=1,
+                                     dtype=x_.dtype)
+            x = x * T.concatenate([x_d, x_d], axis=2) / (1 - self.dropout)
+            x_ = x_ * x_d / (1 - self.dropout)
 
         seqs = [mask_n, x, x_]
         outputs_info = [T.alloc(0., n_samples, self.dim_s), None]
