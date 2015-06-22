@@ -31,61 +31,56 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 
-def get_grad(optimizer, costs, tparams, inps=None, outs=None,
-             exclude_params=[], consider_constant=[], updates=[],
-             weight_noise_amount=0.0):
-
-    exclude_params = [tparams[ep] for ep in exclude_params]
+def get_grad(optimizer, costs, tparams, inps=None, exclude_params=[],
+             consider_constant=[], updates=[], weight_noise_amount=0.,
+             **kwargs):
 
     if inps is None:
         raise ValueError()
-    if outs is None:
-        raise ValueError()
+
+    exclude_params = [tparams[ep] for ep in exclude_params]
+
     logger.info('Parameters are: %s' % tparams.keys())
     logger.info('The following params are excluded from learning: %s'
                 % exclude_params)
     logger.info('The following variables are constant in learning gradient: %s'
                 % consider_constant)
 
-    #consider_constant = [tparams[cc] for cc in consider_constant]
-
     inps = inps.values()
-
-    outs = flatten_dict(outs)
-
-    out_keys = outs.keys()
-    outs = outs.values()
 
     known_grads = costs.pop('known_grads')
     cost = costs.pop('cost')
-    cost_keys = costs.keys()
-    extra_costs = costs.values()
 
     # pop noise parameters since we dont need their grads
-    keys_to_pop = [key for key in tparams.keys() if 'noise' in key]
-    noise_params = dict([(key, tparams.pop(key)) for key in keys_to_pop])
+    _tparams = OrderedDict((k, v) for k, v in tparams.iteritems())
+    keys_to_pop = [key for key in _tparams.keys() if 'noise' in key]
+    noise_params = dict([(key, _tparams.pop(key)) for key in keys_to_pop])
 
     # add noise here and pass to optimizers extra_ups
-    trng = RandomStreams(np.random.randint(int(1e6)))
-    noise_updates = [(p, trng.normal(p.get_value().shape, avg=0,
+    #trng = RandomStreams(np.random.randint(int(1e6)))
+    trng = RandomStreams(505)
+    noise_updates = [(p, trng.normal(p.shape, avg=0.,
                                      std=weight_noise_amount, dtype=p.dtype))
                      for p in noise_params.values()]
     updates.update(noise_updates)
 
-    tparams = OrderedDict((k, v) for k, v in tparams.iteritems()
-        if v not in exclude_params)
-    grads = T.grad(cost, wrt=itemlist(tparams), known_grads=known_grads,
+    grads = T.grad(cost, wrt=itemlist(_tparams), known_grads=known_grads,
                    consider_constant=consider_constant)
 
     lr = T.scalar(name='lr')
+
     f_grad_shared, f_grad_updates = eval('op.' + optimizer)(
-        lr, tparams, grads, inps, cost,
-        extra_ups=updates,
-        extra_outs=outs + extra_costs,
+        lr, _tparams, grads, inps, cost, extra_ups=updates,
         exclude_params=exclude_params)
 
-    return f_grad_shared, f_grad_updates, ['cost'] + out_keys + cost_keys
+    return f_grad_shared, f_grad_updates
 
+def make_fn(inps, d):
+    d = flatten_dict(d)
+    keys = d.keys()
+    values = d.values()
+    fn = theano.function(inps.values(), values, on_unused_input='warn')
+    return lambda *inps: dict((k, v) for k, v in zip(keys, fn(*inps)))
 
 def train(experiment_file, out_path=None, **kwargs):
     if experiment_file.split('.')[-1] == 'py':
@@ -101,23 +96,27 @@ def train(experiment_file, out_path=None, **kwargs):
     lrate = hyperparams['learning_rate']
     optimizer = hyperparams['optimizer']
     epochs = hyperparams['epochs']
-    display_interval = hyperparams['display_interval']
+    display_interval = hyperparams['disp_freq']
 
     logger.info('Fetching model')
-    model = experiment.get_model()
+    model = experiment.get_model(**hyperparams)
     data = model.pop('data')
 
     logger.info('Calculating costs')
     costs = experiment.get_costs(**model)
+    v_costs = experiment.get_costs(inps=model['inps'], outs=model['vouts'])
 
     logger.info('Getting gradient functions')
-    f_grad_shared, f_update, keys = get_grad(optimizer, costs, **model)
+    f_grad_shared, f_update = get_grad(optimizer, costs, **model)
+
+    logger.info('Getting validation functions')
+    cost_fn = make_fn(model['inps'], v_costs)
+    err_fn = make_fn(model['inps'], model['errs'])
+    out_fn = make_fn(model['inps'], model['vouts'])
 
     logger.info('Initializing monitors')
-    monitor = Monitor(model['tparams'])
-    for k in keys:
-        if 'cost' in k or 'energy' in k or 'reward' in k:
-            monitor.add_monitor(k)
+    monitor = Monitor(model['tparams'], data, cost_fn, err_fn, out_fn,
+                      early_stopping=False, hyperparams=hyperparams)
 
     try:
         logger.info('Training')
@@ -130,30 +129,41 @@ def train(experiment_file, out_path=None, **kwargs):
                 try:
                     inps = data['train'].next()
                 except StopIteration:
-                    monitor.disp(e)
+                    monitor.disp(e, data['train'].count)
                     break
 
-                rvals = f_grad_shared(*inps)
-                rval_dict = dict((k, r) for k, r in zip(keys, rvals))
-                monitor.append_stats(**{k: v for k, v in rval_dict.iteritems()
-                                        if 'cost' in k or 'energy' in k or 'reward' in k})
+                monitor.update(*inps)
+                #rvals = f_grad_shared(*inps)
+                #rval_dict = dict((k, r) for k, r in zip(keys, rvals))
+                #monitor.append_stats(**{k: v for k, v in rval_dict.iteritems()
+                #                        if 'cost' in k or 'energy' in k or 'reward' in k})
                 if display_interval is not None and s == display_interval:
                     s = 0
-                    monitor.disp(e)
+                    monitor.disp(e, data['train'].count)
                     if out_path is not None:
+                        save_images = data['train'].dataset.save_images
                         rnn_samples = rval_dict['cond_gen_gru_x'][:, :10]
-                        data['train'].dataset.save_images(
+                        rnn_probs = rval_dict['cond_gen_gru_p'][:, :10]
+                        save_images(
                             rnn_samples,
                             path.join(out_path, 'rnn_samples_%d.png' % (i % 20)))
+                        save_images(
+                            rnn_probs,
+                            path.join(out_path, 'rnn_probs_%d.png' % (i % 20)))
+
                         rbm_samples = rval_dict['rbm_x']
-                        data['train'].dataset.save_images(
+                        rbm_probs = rval_dict['rbm_p']
+                        save_images(
                             rbm_samples,
                             path.join(out_path, 'rbm_samples_%d.png' % (i % 20)))
+                        save_images(
+                            rbm_probs,
+                            path.join(out_path, 'rbm_probs_%d.png' % (i % 20)))
                         i += 1
                 else:
                     s += 1
 
-                check_bad_nums(rval_dict, data['train'].count)
+                #check_bad_nums(rval_dict, data['train'].count)
 
                 f_update(lrate)
 
