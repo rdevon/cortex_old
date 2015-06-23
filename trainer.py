@@ -63,7 +63,6 @@ def get_grad(optimizer, costs, tparams, inps=None, exclude_params=[],
                                      std=weight_noise_amount, dtype=p.dtype))
                      for p in noise_params.values()]
     updates.update(noise_updates)
-
     grads = T.grad(cost, wrt=itemlist(_tparams), known_grads=known_grads,
                    consider_constant=consider_constant)
 
