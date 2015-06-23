@@ -207,7 +207,7 @@ class HeirarchalGRU(GRU):
         u = T.nnet.sigmoid(RNN._slice(preact, 1, self.dim_s))
         return r, u
 
-    def step_slice_upper(self, m_, x_, xx_, h_, U, Ux, Wo, bo):
+    def step_slice_upper(self, m_, x_, xx_, h_, U, Ux, Wo, bo, suppress_noise):
         preact = T.dot(h_, U) + x_
         r, u = self.get_gates_upper(preact)
         preactx = T.dot(h_, Ux) * r + xx_
@@ -216,6 +216,11 @@ class HeirarchalGRU(GRU):
         h = m_[:, None] * h + (1. - m_)[:, None] * h_
 
         o = h.dot(Wo) + bo
+
+        if self.dropout and not suppress_noise:
+            o_d = self.trng.binomial(o.shape, p=1-self.dropout, n=1,
+                                     dtype=o.dtype)
+            o = o * o_d / (1 - self.dropout)
 
         return h, o
 
@@ -272,7 +277,8 @@ class HeirarchalGRU(GRU):
 
         seqs = [mask_n, x, x_]
         outputs_info = [T.alloc(0., n_samples, self.dim_s), None]
-        non_seqs = [self.Us, self.Uxs, self.Wo, self.bo]
+        suppress_noise = 1 if suppress_noise else 0
+        non_seqs = [self.Us, self.Uxs, self.Wo, self.bo, suppress_noise]
 
         (hs, o), updates = theano.scan(self.step_slice_upper,
                                     sequences=seqs,
@@ -531,9 +537,57 @@ class GenStochasticGRU(GenerativeGRU):
         return OrderedDict(x=x, p=p, h=h, z=z, x0=x0, p0=p0, h0=h0, z0=z0), updates
 
 
-class SimpleInferGRU(GRU):
-    def __init__(self):
-        pass
+class SimpleInferGRU(GenerativeGRU):
+    def __init__(self, dim_in, dim_h, name='simple_inference_gru',
+                 trng=None, stochastic=True):
+        self.stochastic = stochastic
+        if trng is None:
+            self.trng = RandomStreams(6 * 10 * 2015)
+        else:
+            self.trng = trng
+        super(SimpleInferGRU, self).__init__(weight_noise=weight_noise,
+                                             name=name)
+
+    def set_params(self):
+        super(SimpleInferGRU, self).set_params()
+
+    def move_h(self, h, h_, x_, x, l, HX, bx, *params):
+        h_ = T.zeros_like(z_)
+        p_ = T.zeros_like(x_)
+
+        _, _, h, _ = self.step_slice(x_, p_, h_, z_, *params)
+        log_prob_1 = log_gaussian(z, h, sigmas).mean()
+
+        _, _, hp, _ = self.step_slice(x, p_, h, z, *params)
+        log_prob_2 = log_gaussian(zp, hp, sigmas).mean()
+
+        y = T.dot(z, HX) + bx
+        log_prob_3 = (- x * T.nnet.softplus(y) - (1 - x) * T.nnet.softplus(-y)).mean()
+
+        log_prob = log_prob_1 + log_prob_2 + log_prob_3
+        grads = theano.grad(log_prob, wrt=z,
+                            consider_constant=[z_, zp, x_, x, h_, p_])
+
+        return (z + l * grads).astype(floatX), h, log_prob, z_, zp, x_
+
+    def step_infer(self, x, z, l, HX, bx, sigmas, *params):
+        def _shift_left(y):
+            y_s = T.zeros_like(y)
+            y_s = T.set_subtensor(y_s[:-1], y[1:])
+            return y
+
+        def _shift_right(y):
+            y_s = T.zeros_like(y)
+            y_s = T.set_subtensor(y_s[1:], y[:-1])
+            return y
+
+        z_ = _shift_right(z)
+        zp = _shift_left(z)
+        x_ = _shift_right(x)
+        xp = _shift_left(x)
+
+        return self.sample_zx(z, z_, zp, x_, x, x_mask, z_mask, l, HX, bx,
+                              sigmas, *params)
 
 
 class CondGenGRU(GenerativeGRU):
@@ -544,8 +598,8 @@ class CondGenGRU(GenerativeGRU):
             self.trng = RandomStreams(6 * 10 * 2015)
         else:
             self.trng = trng
-        super(CondGenGRU, self).__init__(dim_in, dim_h, weight_noise=weight_noise,
-                                         name=name)
+        super(CondGenGRU, self).__init__(dim_in, dim_h,
+                                         weight_noise=weight_noise, name=name)
 
     def set_params(self):
         norm_weight = tools.norm_weight
