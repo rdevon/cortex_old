@@ -40,7 +40,8 @@ class Monitor(object):
             self.stats['valid'] = OrderedDict()
         if data['test'] is not None and data['test'].dataset is not None:
             self.stats['test'] = OrderedDict()
-
+        self.err_fn = err_fn
+        
         if self.early_stopping:
             raise NotImplementedError('Need to fix this!')
             assert self.hyperparams is not None, "Specify hyper parameters!"
@@ -62,6 +63,18 @@ class Monitor(object):
     def update(self, *inps):
 
         train_c, train_e, train_o = self.get_stats(*inps)
+        #r_hat = train_o['logistic_y_hat']
+        #a_max = np.argmax(r_hat)
+        #target_value = r_hat[a_max]
+        #max_v = a_max
+        #for i in range(a_max,len(r_hat)):
+        #    if(target_value==r_hat[i]):
+        #        max_v = i
+        #train_tweets = self.data['train'].next_tweet
+        #train_tweets = train_tweets[a_max:max_v][:]
+        #self.data['train'].detokenize(train_tweets)
+
+
         check_bad_nums(dict((k, v) for k, v in train_c.iteritems()),
                        self.data['train'].count)
 
