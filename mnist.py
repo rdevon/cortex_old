@@ -9,7 +9,8 @@ def get_iter(inf=False, batch_size=128):
 
 class mnist_iterator:
     def __init__(self, batch_size=128, data_file='/Users/devon/Data/mnist.pkl.gz',
-                 mode='train', shuffle=True, inf=False, repeat=1):
+                 restrict_digits=None, mode='train', shuffle=True, inf=False,
+                 repeat=1):
         # load MNIST
         with gzip.open(data_file, 'rb') as f:
             x = cPickle.load(f)
@@ -20,15 +21,34 @@ class mnist_iterator:
         elif mode == 'valid':
             X = np.float32(x[1][0])
             Y = np.float32(x[1][1])
-        else:
+        elif model == 'test':
             X = np.float32(x[2][0])
             Y = np.float32(x[2][1])
-        n_classes = 10
+        else:
+            raise ValueError()
+
+        if restrict_digits is None:
+            n_classes = 10
+        else:
+            n_classes = len(restrict_digits)
 
         O = np.zeros((X.shape[0], n_classes), dtype='float32')
-        for idx in xrange(X.shape[1]):
-            O[idx, Y[idx]] = 1.;
+        if restrict_digits is None:
+            for idx in xrange(X.shape[0]):
+                O[idx, Y[idx]] = 1.;
+        else:
+            new_X = []
+            i = 0
+            for j in xrange(X.shape[0]):
+                if Y[j] in restrict_digits:
+                    new_X.append(X[j])
+                    c_idx = restrict_digits.index(Y[j])
+                    O[i, c_idx] = 1.;
+                    i += 1
+            X = np.float32(new_X)
 
+        self.restict_digits = restrict_digits
+        self.shuffle = shuffle
         self.n = X.shape[0]
         self.dim = X.shape[1]
 
@@ -38,20 +58,28 @@ class mnist_iterator:
         self.inf = inf
         self.repeat = repeat
 
+        self.X = X
+        self.O = O
+
         # randomize
-        if shuffle:
-            rnd_idx = np.random.permutation(np.arange(0, X.shape[0], 1));
-            self.X = X[rnd_idx, :];
-            self.O = O[rnd_idx, :];
+        if self.shuffle:
+            self.randomize()
 
     def __iter__(self):
         return self
+
+    def randomize(self):
+        rnd_idx = np.random.permutation(np.arange(0, self.X.shape[0], 1));
+        self.X = self.X[rnd_idx, :];
+        self.O = self.O[rnd_idx, :];
 
     def next(self):
         cpos = self.pos
         if cpos == -1:
             # reset
             self.pos = 0
+            if self.shuffle:
+                self.randomize()
             if not self.inf:
                 raise StopIteration
 
