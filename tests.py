@@ -12,14 +12,16 @@ from theano import function
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from gru import GRU
 from gru import CondGenGRU
+from gru import GRU
 from gru import HeirarchalGRU
+from gru import SimpleInferGRU
 from layers import BaselineWithInput
 from layers import FFN
 from layers import Logistic
 from mnist import mnist_iterator
 from rbm import RBM
+from tools import itemlist
 from trainer import get_grad
 from trainer import train
 from twitter_api import TwitterFeed
@@ -55,7 +57,7 @@ def test_simple():
     train = mnist_iterator(batch_size=2 * batch_size, mode='train')
 
     X0 = T.matrix('x0', dtype=floatX)
-    XT = T.matrix('x0', dtype=floatX)
+    XT = T.matrix('xT', dtype=floatX)
 
     xs, _ = train.next()
     x0 = xs[:batch_size]
@@ -207,5 +209,61 @@ def test_rbm(batch_size=7, n_steps=11, dim_in=17, dim_h=13):
     outs, updates = rbm(n_steps, n_chains=batch_size)
     fn = theano.function([], [outs['x'], outs['h'], outs['p'], outs['q']], updates=updates)
     print fn()
+
+    assert False
+
+def test_inference(batch_size=1, dim_h=100, l=.1):
+    import op
+    train = mnist_iterator(batch_size=2*batch_size, mode='train')
+    dim_in = train.dim
+
+    X = T.tensor3('x', dtype=floatX)
+
+    trng = RandomStreams(6 * 23 * 2015)
+    rnn = SimpleInferGRU(dim_in, dim_h, trng=trng)
+    tparams = rnn.set_tparams()
+    mask = T.alloc(1., X.shape[0]).astype('float32')
+    #(x_hats, energies), updates = rnn.inference(X, mask, l,
+    #                                            n_inference_steps=1000)
+    XO, updates = rnn.inference(X, mask, l, n_inference_steps=1000)
+    #grads = T.grad(energies[-1], wrt=itemlist(tparams))
+    #lr = T.scalar(name='lr')
+    #optimizer = 'rmsprop'
+
+    x, _ = train.next()
+    x = x[:, None, :].astype(floatX)
+    fn = theano.function([X], [XO, mask], updates=updates)
+    #theano.printing.debugprint(energies[0])
+    x0, m = fn(x)
+    print m
+    #print es
+    train.save_images(x0, '/Users/devon/tmp/grad_sampler.png')
+    assert False
+
+    f_grad_shared, f_grad_updates = eval('op.' + optimizer)(
+        lr, tparams, grads, [X], energies[-1],
+        extra_ups=updates,
+        extra_outs=[])
+
+    print 'Actually running'
+    learning_rate = 0.1
+    for e in xrange(10):
+        x, _ = train.next()
+        x = x[:, None, :].astype(floatX)
+        rval = f_grad_shared(x)
+        r = False
+        for k, out in zip(['energy'], rval):
+            if np.any(np.isnan(out)):
+                print k, 'nan'
+                r = True
+            elif np.any(np.isinf(out)):
+                print k, 'inf'
+                r = True
+        if r:
+            return
+        if e % 10 == 0:
+            print e, rval[0]
+
+        f_grad_updates(learning_rate)
 
     assert False
