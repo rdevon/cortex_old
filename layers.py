@@ -134,34 +134,34 @@ class Baseline(Layer):
         self.set_params()
 
     def set_params(self):
-        c = np.float32(0.)
+        m = np.float32(0.)
         var = np.float32(0.)
 
-        self.params = OrderedDict(c=c, var=var)
-        self.excludes=['c', 'var']
+        self.params = OrderedDict(m=m, var=var)
+        self.excludes=['m', 'var']
 
     def __call__(self, input_):
-        c = input_.mean()
+        m = input_.mean()
         v = input_.std()
 
-        new_c = T.switch(T.eq(self.c, 0.),
-                         c,
-                         (np.float32(1.) - self.rate) * self.c + self.rate * c)
+        new_m = T.switch(T.eq(self.m, 0.),
+                         m,
+                         (np.float32(1.) - self.rate) * self.m + self.rate * m)
         new_var = T.switch(T.eq(self.var, 0.),
                            v,
                            (np.float32(1.) - self.rate) * self.var + self.rate * v)
 
-        updates = [(self.c, new_c), (self.var, new_var)]
+        updates = [(self.m, new_m), (self.var, new_var)]
 
         input_centered = (
-            (input_ - new_c) / T.maximum(1., T.sqrt(new_var)))
+            (input_ - new_m) / T.maximum(1., T.sqrt(new_var)))
 
         input_ = T.zeros_like(input_) + input_
 
         outs = OrderedDict(
             x=input_,
             x_centered=input_centered,
-            c=new_c,
+            m=new_m,
             var=new_var
         )
         return outs, updates
@@ -187,19 +187,19 @@ class BaselineWithInput(Baseline):
         Maybe unclear: input_ is the variable to be baselined, xs are the
         actual inputs.
         '''
-        c = input_.mean()
+        m = input_.mean()
         v = input_.std()
 
-        new_c = T.switch(T.eq(self.c, 0.),
-                         c,
-                         (np.float32(1.) - self.rate) * self.c + self.rate * c)
-        new_c.name = 'new_c'
+        new_m = T.switch(T.eq(self.m, 0.),
+                         m,
+                         (np.float32(1.) - self.rate) * self.m + self.rate * m)
+        new_m.name = 'new_m'
         new_var = T.switch(T.eq(self.var, 0.),
                            v,
                            (np.float32(1.) - self.rate) * self.var + self.rate * v)
 
         if update_params:
-            updates = [(self.c, new_c), (self.var, new_var)]
+            updates = [(self.m, new_m), (self.var, new_var)]
         else:
             updates = theano.OrderedUpdates()
 
@@ -216,12 +216,12 @@ class BaselineWithInput(Baseline):
         idb.name = 'idb'
         input_ = T.zeros_like(input_) + input_
         input_centered = (
-            (input_ - idb - new_c) / T.maximum(1., T.sqrt(new_var)))
+            (input_ - idb - new_m) / T.maximum(1., T.sqrt(new_var)))
 
         outs = OrderedDict(
             x=input_,
             x_centered=input_centered,
-            c=new_c,
+            m=new_m,
             var=new_var,
             idb=idb
         )

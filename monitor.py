@@ -61,7 +61,6 @@ class Monitor(object):
         return self.cost_fn(*inps), self.err_fn(*inps), self.out_fn(*inps)
 
     def update(self, *inps):
-
         train_c, train_e, train_o = self.get_stats(*inps)
         #r_hat = train_o['logistic_y_hat']
         #a_max = np.argmax(r_hat)
@@ -128,6 +127,7 @@ class Monitor(object):
                 self.d[p]['max'].append(p_max)
                 self.d[p]['min'].append(p_min)
                 self.d[p]['std'].append(p_std)
+        return train_c, train_e, train_o
 
     def add_monitor(self, k, extra=False):
         if extra:

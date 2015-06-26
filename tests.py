@@ -53,30 +53,31 @@ def test_simple():
     dim_g = 13
     batch_size = 3
     n_steps = 7
+    n_reps = 5
 
-    train = mnist_iterator(batch_size=2 * batch_size, mode='train')
+    train = mnist_iterator(batch_size=2 * batch_size, mode='train', repeat=n_reps)
 
-    X0 = T.matrix('x0', dtype=floatX)
-    XT = T.matrix('xT', dtype=floatX)
+    X = T.matrix('x', dtype='float32')
+    X0 = X[:batch_size * n_reps]
+    XT = X[batch_size * n_reps:][::-1]
 
     xs, _ = train.next()
-    x0 = xs[:batch_size]
-    xT = xs[batch_size:]
 
     trng = RandomStreams(6 * 10 * 2015)
 
     dim_in = train.dim
 
-    rnn = CondGenGRU(dim_in, dim_r, trng=trng, stochastic=False)
-    rbm = RBM(dim_in, dim_g, trng=trng, stochastic=False)
-    baseline = BaselineWithInput((train.dim, train.dim), n_steps + 1)
+    rnn = CondGenGRU(dim_in, dim_r, trng=trng)
+    rbm = RBM(dim_in, dim_g, trng=trng, param_file='rbm_model.yaml', learn=False)
+    baseline = layers.BaselineWithInput((dim_in, dim_in), n_steps,
+        name='reward_baseline')
 
     tparams = rnn.set_tparams()
     tparams.update(rbm.set_tparams())
     tparams.update(baseline.set_tparams())
 
     outs = OrderedDict()
-    outs_rnn, updates = rnn(X0, XT, reversed=True, n_steps=n_steps)
+    outs_rnn, updates = rnn(X0, XT, reverse=True, n_steps=n_steps)
     outs[rnn.name] = outs_rnn
 
     outs_rbm, updates_rbm = rbm.energy(outs[rnn.name]['x'])
@@ -84,43 +85,51 @@ def test_simple():
     updates.update(updates_rbm)
 
     q = outs[rnn.name]['p']
-    samples = outs[rnn.name]['x']
+    x = outs[rnn.name]['x']
 
-    fn = theano.function([X0, XT], samples)
-    s = fn(x0, xT)
-
+    fn = theano.function([X], x)
+    s = fn(xs)
     train.save_images(s, path.join('/Users/devon/tmp/', 'test_samples.png'))
-    energy_q = (samples * T.log(q + 1e-7) + (1. - samples) * T.log(1. - q + 1e-7)).sum(axis=(0, 2))
-    outs[rnn.name]['log_p'] = energy_q
-    energy_p = outs[rbm.name]['log_p']
-    reward = (energy_p - energy_q)
 
-    outs_baseline, updates_baseline = baseline(reward, X0, XT)
+    outs_rnn_e, updates_rnn_e = rnn.energy(x, q)
+    outs[rnn.name].update(outs_rnn_e)
+    updates.update(updates_rnn_e)
+
+    acc_log_q = outs[rnn.name]['acc_log_p']
+    acc_log_p = outs[rbm.name]['acc_log_p']
+    reward = (acc_log_p - acc_log_q)
+
+    outs_baseline, updates_baseline = baseline(reward, True, X0, XT)
     outs[baseline.name] = outs_baseline
     updates.update(updates_baseline)
 
-    inps = [x0, xT]
+    inps = [xs]
 
-    fn = theano.function([X0, XT], reward.shape)
+    fn = theano.function([X], reward.shape)
     print fn(*inps)
 
-    fn = theano.function([X0, XT], outs[baseline.name]['x_centered'])
+    fn = theano.function([X], outs[baseline.name]['x_centered'])
 
     print fn(*inps)
     idb = outs[baseline.name]['idb']
-    c = outs[baseline.name]['c']
-    idb_cost = ((reward - idb - c)**2).mean()
+    m = outs[baseline.name]['m']
+    var = outs[baseline.name]['var']
+    reward0 = outs[baseline.name]['x']
+    idb_cost = (((reward0 - idb - m) / T.maximum(1., T.sqrt(var)))**2).mean()
 
-    fn = theano.function([X0, XT], idb_cost)
-    print fn(x0, xT)
+    fn = theano.function([X], idb_cost)
+    print fn(*inps)
 
     centered_reward = outs[baseline.name]['x_centered']
-    fn = theano.function([X0, XT], centered_reward.shape)
-    print fn(x0, xT)
+    fn = theano.function([X], centered_reward.shape)
+    print fn(*inps)
 
-    base_cost = -(energy_p + centered_reward * energy_q).mean()
-    fn = theano.function([X0, XT], base_cost)
-    print fn(x0, xT)
+    log_q = outs['cond_gen_gru']['log_p']
+    log_p = outs['rbm']['log_p']
+
+    base_cost = -(log_p + centered_reward * log_q).mean()
+    fn = theano.function([X], base_cost, updates=updates)
+    print fn(*inps)
     assert False
 
 def test_baseline():
