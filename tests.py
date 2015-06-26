@@ -212,7 +212,7 @@ def test_rbm(batch_size=7, n_steps=11, dim_in=17, dim_h=13):
 
     assert False
 
-def test_inference(batch_size=1, dim_h=100, l=.1):
+def test_inference(batch_size=1, dim_h=10, l=.1):
     import op
     train = mnist_iterator(batch_size=2*batch_size, mode='train')
     dim_in = train.dim
@@ -222,23 +222,32 @@ def test_inference(batch_size=1, dim_h=100, l=.1):
     trng = RandomStreams(6 * 23 * 2015)
     rnn = SimpleInferGRU(dim_in, dim_h, trng=trng)
     tparams = rnn.set_tparams()
-    mask = T.alloc(1., X.shape[0]).astype('float32')
+    mask = T.alloc(1., 2).astype('float32')
     #(x_hats, energies), updates = rnn.inference(X, mask, l,
     #                                            n_inference_steps=1000)
-    XO, updates = rnn.inference(X, mask, l, n_inference_steps=1000)
-    #grads = T.grad(energies[-1], wrt=itemlist(tparams))
-    #lr = T.scalar(name='lr')
-    #optimizer = 'rmsprop'
+    (x_hats, energies), updates = rnn.inference(X, mask, l, n_inference_steps=10)
+    grads = T.grad(energies[-1], wrt=itemlist(tparams))
+
+    lr = T.scalar(name='lr')
+    optimizer = 'rmsprop'
+
+    #chain, updates_s = rnn.sample(X)
+    #updates.update(updates_s)
 
     x, _ = train.next()
-    x = x[:, None, :].astype(floatX)
-    fn = theano.function([X], [XO, mask], updates=updates)
-    #theano.printing.debugprint(energies[0])
-    x0, m = fn(x)
-    print m
-    #print es
-    train.save_images(x0, '/Users/devon/tmp/grad_sampler.png')
+    x = x.reshape(2, batch_size, x.shape[1]).astype(floatX)
+    fn = theano.function([X], [x_hats] + grads, updates=updates)
+    print fn(x)
     assert False
+    '''
+    fn = theano.function([X], [XO, h], updates=updates)
+    #theano.printing.debugprint(energies[0])
+    xo, h = fn(x)
+    print xo.shape
+    print h.shape
+    #print es
+    #train.save_images(x0, '/Users/devon/tmp/grad_sampler.png')
+    '''
 
     f_grad_shared, f_grad_updates = eval('op.' + optimizer)(
         lr, tparams, grads, [X], energies[-1],

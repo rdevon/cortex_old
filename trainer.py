@@ -74,11 +74,14 @@ def get_grad(optimizer, costs, tparams, inps=None, exclude_params=[],
 
     return f_grad_shared, f_grad_updates
 
-def make_fn(inps, d):
+def make_fn(inps, d, updates=None):
+    if updates is None:
+        updates = theano.OrderedUpdates()
     d = flatten_dict(d)
     keys = d.keys()
     values = d.values()
-    fn = theano.function(inps.values(), values, on_unused_input='warn')
+    fn = theano.function(inps.values(), values, on_unused_input='warn',
+                         updates=updates)
     return lambda *inps: dict((k, v) for k, v in zip(keys, fn(*inps)))
 
 def train(experiment_file, out_path=None, **kwargs):
@@ -110,7 +113,7 @@ def train(experiment_file, out_path=None, **kwargs):
     f_grad_shared, f_update = get_grad(optimizer, costs, **model)
 
     logger.info('Getting validation functions')
-    cost_fn = make_fn(model['inps'], v_costs)
+    cost_fn = make_fn(model['inps'], v_costs, updates=model['vupdates'])
     err_fn = make_fn(model['inps'], model['errs'])
     out_fn = make_fn(model['inps'], model['vouts'])
 

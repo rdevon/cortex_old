@@ -556,15 +556,6 @@ class SimpleInferGRU(GenerativeGRU):
         return -(x * T.log(p + 1e-7) +
                 (1 - x) * T.log(1 - p + 1e-7)).sum(axis=x.ndim - 1).mean()
 
-    def move_h(self, x_, x, h_, h, l, HX, bx, *params):
-        p_ = T.zeros_like(x_)
-        _, _, h_hat = self.step_slice(1., x, x_, p_, h_, *params)
-        h_hat = T.set_subtensor(h_hat[0], h[0])
-        p = T.nnet.sigmoid(T.dot(h_hat, HX) + bx)
-        energy = self.energy(x, p)
-        grads = theano.grad(energy, wrt=h_hat, consider_constant=[x])
-        return (h_hat - l * grads).astype(floatX)
-
     def step_slice(self, m, xx, x_, p_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
         preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
         r, u = self.get_gates(preact)
@@ -576,15 +567,34 @@ class SimpleInferGRU(GenerativeGRU):
         x = (1. - m) * x_p + m * xx
         return x, p, h
 
-    def step_sample(self, x_, p_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
-        preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
+    def step_h(self, x, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
+        preact = T.dot(h_, Ura) + T.dot(x, XHa) + bha
         r, u = self.get_gates(preact)
-        preactx = T.dot(h_, Urb) * r + T.dot(x_, XHb) + bhb
+        preactx = T.dot(h_, Urb) * r + T.dot(x, XHb) + bhb
         h = T.tanh(preactx)
         h = u * h_ + (1. - u) * h
+        return h
+
+    #def move_h(self, x_, x, h_, h, l, HX, bx, *params):
+        #p_ = T.zeros_like(x_)
+        #_, _, h_hat = self.step_slice(1., x, x_, p_, h_, *params)
+        #h_hat = T.set_subtensor(h_hat[0], h[0])
+        #p = T.nnet.sigmoid(T.dot(h_hat, HX) + bx)
+        #energy = self.energy(x, p)
+        #grads = theano.grad(energy, wrt=h_hat, consider_constant=[x])
+        #return (h_hat - l * grads).astype(floatX)
+
+    def move_h(self, h, x, l, HX, bx, *params):
+        h0 = h[0]
+        h1 = self.step_h(x[0], h0, *params)
+        h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
-        x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
-        return x, p, h
+        energy = self.energy(x, p)
+        grad = theano.grad(energy, wrt=h0, consider_constant=[x])
+        h0 = h0 - l * grad
+        h1 = self.step_h(x[0], h0, *params)
+        h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
+        return h
 
     def move_h_single(self, h, x, l, HX, bx):
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
@@ -592,58 +602,16 @@ class SimpleInferGRU(GenerativeGRU):
         grads = theano.grad(energy, wrt=h, consider_constant=[x])
         return (h - l * grads).astype(floatX), p
 
-    def sample(self, x0=None, l=0.1, n_steps=100, n_samples=1,
-               n_inference_steps=1000):
-        if x0 is None:
-            x0 = self.trng.binomial(p=0.5, size=(n_samples, self.dim_in), n=1,
-                                    dtype=floatX)
-        h0 = self.trng.normal(size=(x0.shape[0], self.dim_h), avg=0., std=1.,
-                              dtype=x0.dtype)
-
-        seqs = []
-        outputs_info = [h0, None]
-        non_seqs = [x0, l, self.HX, self.bx]
-
-        (hs, ps), updates = theano.scan(
-            self.move_h_single,
-            sequences=seqs,
-            outputs_info=outputs_info,
-            non_sequences=non_seqs,
-            name=tools._p(self.name, 'sample_init'),
-            n_steps=n_inference_steps,
-            profile=tools.profile,
-            strict=True
-        )
-
-        h0 = hs[-1]
-        p0 = ps[-1]
-
-        seqs = []
-        outputs_info = [x0, p0, h0]
-        non_seqs = self.get_non_seqs()
-
-        (xs, ps, hs), updates = theano.scan(
-            self.step_sample,
-            sequences=seqs,
-            outputs_info=outputs_info,
-            non_sequences=non_seqs,
-            name=tools._p(self.name, 'sample_chains'),
-            n_steps=n_steps,
-            profile=tools.profile,
-            strict=True
-        )
-
-        return xs, updates
-
     def step_infer(self, h, m, x, l, HX, bx, *params):
         def _shift_right(y):
             y_s = T.zeros_like(y)
             y_s = T.set_subtensor(y_s[1:], y[:-1])
             return y
 
-        h_ = _shift_right(h)
-        x_ = _shift_right(x)
-        h = self.move_h(x_, x, h_, h, l, HX, bx, *params)
+        #h_ = _shift_right(h)
+        #x_ = _shift_right(x)
+        #h = self.move_h(x_, x, h_, h, l, HX, bx, *params)
+        h = self.move_h(h, x, l, HX, bx, *params)
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
         x_hat = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
         #x = m * x + (1. - m) * x_hat
@@ -691,6 +659,60 @@ class SimpleInferGRU(GenerativeGRU):
         )
         updates.update(updates_2)
         return (x_hats, energies), updates
+
+    def step_sample(self, x_, p_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
+        preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
+        r, u = self.get_gates(preact)
+        preactx = T.dot(h_, Urb) * r + T.dot(x_, XHb) + bhb
+        h = T.tanh(preactx)
+        h = u * h_ + (1. - u) * h
+        p = T.nnet.sigmoid(T.dot(h, HX) + bx)
+        x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
+        return x, p, h
+
+    def sample(self, x0=None, l=0.1, n_steps=100, n_samples=1,
+               n_inference_steps=1000):
+        if x0 is None:
+            x0 = self.trng.binomial(p=0.5, size=(n_samples, self.dim_in), n=1,
+                                    dtype=floatX)
+        h0 = self.trng.normal(size=(x0.shape[0], self.dim_h), avg=0., std=1.,
+                              dtype=x0.dtype)
+
+        seqs = []
+        outputs_info = [h0, None]
+        non_seqs = [x0, l, self.HX, self.bx]
+
+        (hs, ps), updates = theano.scan(
+            self.move_h_single,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=tools._p(self.name, 'sample_init'),
+            n_steps=n_inference_steps,
+            profile=tools.profile,
+            strict=True
+        )
+
+        h0 = hs[-1]
+        p0 = ps[-1]
+
+        seqs = []
+        outputs_info = [x0, p0, h0]
+        non_seqs = self.get_non_seqs()
+
+        (xs, ps, hs), updates_2 = theano.scan(
+            self.step_sample,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=tools._p(self.name, 'sample_chains'),
+            n_steps=n_steps,
+            profile=tools.profile,
+            strict=True
+        )
+        updates.update(updates_2)
+
+        return xs, updates
 
 class CondGenGRU(GenerativeGRU):
     def __init__(self, dim_in, dim_h, weight_noise=False, name='cond_gen_gru',

@@ -16,10 +16,11 @@ floatX = theano.config.floatX
 
 
 class Layer(object):
-    def __init__(self, name):
+    def __init__(self, name='', learn=True):
         self.name = name
         self.params = None
         self.excludes = []
+        self.learn = learn
 
     def set_tparams(self):
         if self.params is None:
@@ -32,7 +33,10 @@ class Layer(object):
         return tparams
 
     def get_excludes(self):
-        return [tools._p(self.name, e) for e in self.excludes]
+        if self.learn:
+            return [tools._p(self.name, e) for e in self.excludes]
+        else:
+            return [tools._p(self.name, k) for k in self.params.keys()]
 
     def __call__(self, state_below):
         raise NotImplementedError()
@@ -178,7 +182,7 @@ class BaselineWithInput(Baseline):
             k = 'w%d' % i
             self.params[k] = w
 
-    def __call__(self, input_, *xs):
+    def __call__(self, input_, update_params, *xs):
         '''
         Maybe unclear: input_ is the variable to be baselined, xs are the
         actual inputs.
@@ -194,7 +198,10 @@ class BaselineWithInput(Baseline):
                            v,
                            (np.float32(1.) - self.rate) * self.var + self.rate * v)
 
-        updates = [(self.c, new_c), (self.var, new_var)]
+        if update_params:
+            updates = [(self.c, new_c), (self.var, new_var)]
+        else:
+            updates = theano.OrderedUpdates()
 
         if len(xs) != len(self.dims_in):
             raise ValueError('Number of (external) inputs for baseline must'
