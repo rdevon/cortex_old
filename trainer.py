@@ -31,9 +31,9 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 
-def get_grad(optimizer, costs, tparams, inps=None, exclude_params=[],
-             consider_constant=[], updates=[], weight_noise_amount=0.,
-             **kwargs):
+def get_grad(optimizer, costs, tparams, inps=None, outs=None,
+             vouts=None, exclude_params=[], consider_constant=[], updates=[],
+             weight_noise_amount=0., **kwargs):
 
     if inps is None:
         raise ValueError()
@@ -46,10 +46,15 @@ def get_grad(optimizer, costs, tparams, inps=None, exclude_params=[],
     logger.info('The following variables are constant in learning gradient: %s'
                 % consider_constant)
 
-    inps = inps.values()
-
     known_grads = costs.pop('known_grads')
     cost = costs.pop('cost')
+
+    inps = inps.values()
+    if vouts is None and outs is not None:
+        extra_outs = flatten_dict(costs).values() + flatten_dict(outs).values()
+    else:
+        extra_outs = []
+
 
     # pop noise parameters since we dont need their grads
     _tparams = OrderedDict((k, v) for k, v in tparams.iteritems())
@@ -70,7 +75,7 @@ def get_grad(optimizer, costs, tparams, inps=None, exclude_params=[],
 
     f_grad_shared, f_grad_updates = eval('op.' + optimizer)(
         lr, _tparams, grads, inps, cost, extra_ups=updates,
-        exclude_params=exclude_params)
+        extra_outs=extra_outs, exclude_params=exclude_params)
 
     return f_grad_shared, f_grad_updates
 
@@ -83,6 +88,10 @@ def make_fn(inps, d, updates=None):
     fn = theano.function(inps.values(), values, on_unused_input='warn',
                          updates=updates)
     return lambda *inps: dict((k, v) for k, v in zip(keys, fn(*inps)))
+
+def make_fn_given_fgrad(keys, start_idx):
+    return lambda *outs: dict((k, v)
+        for k, v in zip(keys, outs[start_idx, start_idx + len(keys)]))
 
 def train(experiment_file, out_path=None, **kwargs):
     if experiment_file.split('.')[-1] == 'py':
@@ -106,16 +115,23 @@ def train(experiment_file, out_path=None, **kwargs):
 
     logger.info('Calculating costs')
     costs = experiment.get_costs(**model)
-    v_costs = experiment.get_costs(inps=model['inps'], outs=model['vouts'])
-    v_costs.pop('known_grads')
 
     logger.info('Getting gradient functions')
     f_grad_shared, f_update = get_grad(optimizer, costs, **model)
 
     logger.info('Getting validation functions')
-    cost_fn = make_fn(model['inps'], v_costs, updates=model['vupdates'])
-    err_fn = make_fn(model['inps'], model['errs'])
-    out_fn = make_fn(model['inps'], model['vouts'])
+    if model.get('vouts', False) and model['vouts'] is not None:
+        v_costs = experiment.get_costs(inps=model['inps'], outs=model['vouts'])
+        v_costs.pop('known_grads')
+        cost_fn = make_fn(model['inps'], v_costs, updates=model['vupdates'])
+        err_fn = make_fn(model['inps'], model['errs'])
+        out_fn = make_fn(model['inps'], model['vouts'])
+        valid_graph = True
+    else:
+        cost_fn = make_fn_given_fgrad(['cost'] + costs.keys(), 0)
+        err_fn = make_fn_given_fgrad([], 0)
+        out_fn = make_fn_given_fgrad(model['outs'].keys(), len(costs))
+        valid_graph = False
 
     logger.info('Initializing monitors')
     monitor = Monitor(model['tparams'], data, cost_fn, err_fn, out_fn,
@@ -135,8 +151,12 @@ def train(experiment_file, out_path=None, **kwargs):
                     monitor.disp(e, data['train'].count)
                     break
 
-                monitor.update(*inps)
-                rvals = f_grad_shared(*inps)
+                outs = f_grad_shared(*inps)
+                if valid_graph:
+                    train_c, train_e, train_o = monitor.update(*inps)
+                else:
+                    train_c, train_e, train_o = monitor.update(*outs)
+
                 #rval_dict = dict((k, r) for k, r in zip(keys, rvals))
                 #monitor.append_stats(**{k: v for k, v in rval_dict.iteritems()
                 #                        if 'cost' in k or 'energy' in k or 'reward' in k})
@@ -145,8 +165,8 @@ def train(experiment_file, out_path=None, **kwargs):
                     monitor.disp(e, data['train'].count)
                     if out_path is not None:
                         save_images = data['train'].dataset.save_images
-                        rnn_samples = rval_dict['cond_gen_gru_x'][:, :10]
-                        rnn_probs = rval_dict['cond_gen_gru_p'][:, :10]
+                        rnn_samples = train_o['cond_gen_gru_x'][:, :10]
+                        rnn_probs = train_o['cond_gen_gru_p'][:, :10]
                         save_images(
                             rnn_samples,
                             path.join(out_path, 'rnn_samples_%d.png' % (i % 20)))
@@ -154,8 +174,8 @@ def train(experiment_file, out_path=None, **kwargs):
                             rnn_probs,
                             path.join(out_path, 'rnn_probs_%d.png' % (i % 20)))
 
-                        rbm_samples = rval_dict['rbm_x']
-                        rbm_probs = rval_dict['rbm_p']
+                        rbm_samples = train_o['rbm_x']
+                        rbm_probs = train_o['rbm_p']
                         save_images(
                             rbm_samples,
                             path.join(out_path, 'rbm_samples_%d.png' % (i % 20)))

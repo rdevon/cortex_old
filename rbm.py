@@ -43,9 +43,9 @@ class RBM(Layer):
             c = np.zeros((self.dim_h,)).astype(floatX)
         else:
             params = self._load(param_file)
-            W = params['W']
-            b = params['b']
-            c = params['c']
+            W = params['W'].astype(floatX)
+            b = params['b'].astype(floatX)
+            c = params['c'].astype(floatX)
 
         self.params = OrderedDict(W=W, b=b, c=c)
 

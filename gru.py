@@ -554,7 +554,11 @@ class SimpleInferGRU(GenerativeGRU):
 
     def energy(self, x, p):
         return -(x * T.log(p + 1e-7) +
-                (1 - x) * T.log(1 - p + 1e-7)).sum(axis=x.ndim - 1).mean()
+                (1 - x) * T.log(1 - p + 1e-7)).sum(axis=(0, 2))
+
+    def energy_single(self, x, p):
+        return -(x * T.log(p + 1e-7) +
+                (1 - x) * T.log(1 - p + 1e-7)).sum(axis=0).mean()
 
     def step_slice(self, m, xx, x_, p_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
         preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
@@ -589,7 +593,7 @@ class SimpleInferGRU(GenerativeGRU):
         h1 = self.step_h(x[0], h0, *params)
         h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
-        energy = self.energy(x, p)
+        energy = self.energy(x, p).mean()
         grad = theano.grad(energy, wrt=h0, consider_constant=[x])
         h0 = h0 - l * grad
         h1 = self.step_h(x[0], h0, *params)
@@ -598,7 +602,7 @@ class SimpleInferGRU(GenerativeGRU):
 
     def move_h_single(self, h, x, l, HX, bx):
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
-        energy = self.energy(x, p)
+        energy = self.energy_single(x, p)
         grads = theano.grad(energy, wrt=h, consider_constant=[x])
         return (h - l * grads).astype(floatX), p
 
