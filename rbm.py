@@ -7,15 +7,19 @@ import numpy as np
 import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+import yaml
 
 from layers import Layer
 import tools
 
 
 floatX = theano.config.floatX
+norm_weight = tools.norm_weight
+ortho_weight = tools.ortho_weight
 
 class RBM(Layer):
-    def __init__(self, dim_in, dim_h, name='rbm', trng=None, stochastic=True):
+    def __init__(self, dim_in, dim_h, name='rbm', trng=None, stochastic=True,
+                 param_file=None, learn=True):
         self.stochastic = stochastic
         self.dim_in = dim_in
         self.dim_h = dim_h
@@ -23,15 +27,25 @@ class RBM(Layer):
             self.trng = RandomStreams(6 * 10 * 2015)
         else:
             self.trng = trng
-        super(RBM, self).__init__(name)
-        self.set_params()
+        super(RBM, self).__init__(name=name, learn=learn)
+        self.set_params(param_file=param_file)
 
-    def set_params(self):
-        norm_weight = tools.norm_weight
-        ortho_weight = tools.ortho_weight
-        W = norm_weight(self.dim_in, self.dim_h)
-        b = np.zeros((self.dim_in,)).astype(floatX)
-        c = np.zeros((self.dim_h,)).astype(floatX)
+    def _load(self, param_file):
+        param_dict = yaml.load(open(param_file, 'r'))
+        params = OrderedDict((k, np.load(v))
+            for k, v in param_dict['params'].iteritems())
+        return params
+
+    def set_params(self, param_file=None):
+        if param_file is None:
+            W = norm_weight(self.dim_in, self.dim_h)
+            b = np.zeros((self.dim_in,)).astype(floatX)
+            c = np.zeros((self.dim_h,)).astype(floatX)
+        else:
+            params = self._load(param_file)
+            W = params['W']
+            b = params['b']
+            c = params['c']
 
         self.params = OrderedDict(W=W, b=b, c=c)
 
