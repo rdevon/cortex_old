@@ -78,6 +78,7 @@ class mnist_iterator:
         if cpos == -1:
             # reset
             self.pos = 0
+            cpos = self.pos
             if self.shuffle:
                 self.randomize()
             if not self.inf:
@@ -87,10 +88,9 @@ class mnist_iterator:
         y = self.O[cpos:cpos+self.bs]
         x = np.concatenate([x for _ in xrange(self.repeat)], axis=0)
         y = np.concatenate([y for _ in xrange(self.repeat)], axis=0)
-
         cbatch = (x, y)
 
-        if cpos + self.bs >= self.n:
+        if cpos + 2 * self.bs >= self.n:
             self.pos = -1
         else:
             self.pos += self.bs
