@@ -161,6 +161,101 @@ class GRU(RNN):
         return OrderedDict(h=rval), updates
 
 
+class GRUWithOutput(GRU):
+    def __init__(self, dim_in, dim_h, dim_o, window, convolve_time=False,
+                 weight_noise=False, weight_scale=0.01, name='gru_w_output',
+                 dropout=False, trng=None, rng=None):
+        self.dim_o = dim_o
+        self.window = window
+        self.convolve_time = convolve_time
+        self.dropout = dropout
+        if self.dropout and trng is None:
+            self.trng = RandomStreams(1234)
+        else:
+            self.trng = trng
+
+        if rng is None:
+            rng = tools.rng_
+        self.rng = rng
+
+        super(GRUWithOutput, self).__init__(dim_in, dim_h, name=name,
+                                            weight_noise=weight_noise,
+                                            weight_scale=weight_scale)
+
+    def set_params(self):
+        super(GRUWithOutput, self).set_params()
+        Wo = tools.norm_weight(self.dim_h, self.dim_o * self.window,
+                               rng=self.rng)
+        bo = np.zeros((self.dim_o * self.window,)).astype(floatX)
+
+        self.params.update(OrderedDict(Wo=Wo, bo=bo))
+
+        if self.convolve_time:
+            vn = np.ones(self.window).astype(floatX) / 3
+            vp = np.ones(self.window).astype(floatX) / 3
+            vo = np.ones(self.window).astype(floatX) / 3
+            self.params.update(OrderedDict(vn=vn, vp=vp, vo=vo))
+
+        if self.weight_noise:
+            Wo_noise = (Wo * 0).astype('float32')
+            self.params.update(Wo_noise=Wo_noise)
+
+    def step_slice(self, x_, xx_, h_, U, Ux, Wo, bo):
+        preact = self.recurrent_step(T.dot(h_, U), x_)
+        r, u = self.get_gates(preact)
+        preactx = T.dot(h_, Ux) * r + xx_
+        h = T.tanh(preactx)
+        h = u * h_ + (1. - u) * h
+        o = T.dot(h, Wo) + bo
+        return h, o
+
+    def __call__(self, state_below, suppress_noise=False):
+        n_steps = state_below.shape[0]
+        n_samples = state_below.shape[1]
+
+        x, x_ = self.set_inputs(state_below)
+
+        if self.weight_noise and not suppress_noise:
+            U = self.U + self.U_noise
+            Ux = self.Ux + self.Ux_noise
+            Wo = self.Wo + self.Wo_noise
+        else:
+            U = self.U
+            Ux = self.Ux
+            Wo = self.Wo
+
+        seqs = [x, x_]
+        outputs_info = [T.alloc(0., n_samples, self.dim_h), None]
+        non_seqs = [U, Ux, Wo, self.bo]
+
+        (h, out), updates = theano.scan(self.step_slice,
+                                        sequences=seqs,
+                                        outputs_info=outputs_info,
+                                        non_sequences=non_seqs,
+                                        name=tools._p(self.name, '_layers'),
+                                        n_steps=n_steps,
+                                        profile=tools.profile,
+                                        strict=True)
+
+        if self.dropout and not suppress_noise:
+            o_d = self.trng.binomial(out.shape, p=1-self.dropout, n=1,
+                                     dtype=out.dtype)
+            out = out * o_d / (1 - self.dropout)
+
+        if self.convolve_time:
+            o_shifted_plus = T.zeros_like(out)
+            o_shifted_minus = T.zeros_like(out)
+            o_shifted_plus = T.set_subtensor(o_shifted_plus[1:], out[:-1])
+            o_shifted_minus = T.set_subtensor(o_shifted_minus[:-1], out[1:])
+            out = (o_shifted_minus.dimshuffle(2, 1, 0) * self.vn
+                   + out.dimshuffle(2, 1, 0) * self.vo
+                   + o_shifted_plus.dimshuffle(2, 1, 0) * self.vp
+                   ).dimshuffle(2, 1, 0)
+
+        return OrderedDict(h=h, o=out.sum(axis=0).reshape(
+            (out.shape[1], n_steps, self.dim_o)).dimshuffle(1, 0, 2)), updates
+
+
 class HeirarchalGRU(GRU):
     def __init__(self, dim_in, dim_h, dim_s, weight_noise=False, dropout=False,
                  trng=None, name='hiero_gru'):
@@ -290,6 +385,77 @@ class HeirarchalGRU(GRU):
                                     strict=True)
 
         return OrderedDict(h=h, hs=hs, o=o, mask=mask), updates
+
+
+class HeirarchalGRUWO(GRU):
+    def __init__(self, dim_in, dim_h, dim_out, weight_noise=False, dropout=False,
+                 trng=None, name='hiero_gru'):
+        self.dropout = dropout
+        self.dim_out = dim_out
+        if self.dropout and trng is None:
+            self.trng = RandomStreams(1234)
+        else:
+            self.trng = trng
+        super(HeirarchalGRUWO, self).__init__(dim_in, dim_h, name=name)
+
+    def set_params(self):
+        super(HeirarchalGRUWO, self).set_params()
+
+        Wo = norm_weight(self.dim_h, self.dim_out).astype(floatX)
+        bo = np.float32(0.)
+
+        self.params.update(Wo=Wo, bo=bo)
+
+        if self.weight_noise:
+            Wo_noise = (Wo * 0).astype(floatX)
+            self.params.update(Wo_noise=Wo_noise)
+
+    def step_slice(self, m_, x_, xx_, h_, U, Ux):
+        # Here we just kill the previous state if the previous token was eof
+        # where the mask was 0.
+        h_ = m_[:, None] * h_
+        preact = T.dot(h_, U) + x_
+        r, u = self.get_gates(preact)
+        preactx = T.dot(h_, Ux) * r + xx_
+        h = T.tanh(preactx)
+        h = u * h_ + (1. - u) * h
+        o = h.dot(Wo) + bo
+
+        if self.dropout and not suppress_noise:
+            o_d = self.trng.binomial(o.shape, p=1-self.dropout, n=1,
+                                     dtype=o.dtype)
+            o = o * o_d / (1 - self.dropout)
+
+        return h, o
+
+    def __call__(self, state_below, mask=None, suppress_noise=False):
+        n_steps = state_below.shape[0]
+        n_samples = state_below.shape[1]
+
+        if mask is None:
+            mask = T.neq(state_below[:, :, 0], 1).astype(floatX)
+
+        x, x_ = self.set_inputs(state_below)
+
+        mask_r = T.roll(mask, 1, axis=0)
+        mask_n = T.eq(mask, 0.).astype(floatX)
+
+        seqs = [mask_r, x, x_]
+        outputs_info = [T.alloc(0., n_samples, self.dim_h), None]
+        non_seqs = self.get_non_seqs()
+
+        (h, o), updates = theano.scan(self.step_slice,
+                                    sequences=seqs,
+                                    outputs_info=outputs_info,
+                                    non_sequences=non_seqs,
+                                    name=tools._p(self.name, '_layers'),
+                                    n_steps=n_steps,
+                                    profile=tools.profile,
+                                    strict=True)
+
+        o = T.alloc()
+
+        return OrderedDict(h=h, o=o, mask=mask), updates
 
 
 class GenerativeGRU(GRU):
@@ -539,8 +705,9 @@ class GenStochasticGRU(GenerativeGRU):
 
 class SimpleInferGRU(GenerativeGRU):
     def __init__(self, dim_in, dim_h, name='simple_inference_gru',
-                 weight_noise=False, trng=None, stochastic=True):
+                 weight_noise=False, trng=None, stochastic=True, rate=0.1):
         self.stochastic = stochastic
+        self.rate = rate
         if trng is None:
             self.trng = RandomStreams(6 * 10 * 2015)
         else:
@@ -551,6 +718,9 @@ class SimpleInferGRU(GenerativeGRU):
 
     def set_params(self):
         super(SimpleInferGRU, self).set_params()
+        h0 = np.zeros((self.dim_h, )).astype(floatX)
+        self.params.update(h0=h0)
+        self.excludes = ['h0']
 
     def energy(self, x, p):
         return -(x * T.log(p + 1e-7) +
@@ -626,8 +796,8 @@ class SimpleInferGRU(GenerativeGRU):
     def inference(self, x, mask, l, n_inference_steps=1):
         x0 = x[0]
         p0 = T.zeros_like(x0) + x0
-        h0 = self.trng.normal(size=(x0.shape[0], self.dim_h), avg=0., std=1.,
-                              dtype=x0.dtype)
+        #h0 = T.log(T.dot(T.log(p0 / (1 - p0 + 1e-7) + 1e-7) - self.bx, self.HX.T))
+        h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
 
         seqs = [mask[1:], x[1:]]
         outputs_info = [x0, p0, h0]
@@ -662,6 +832,10 @@ class SimpleInferGRU(GenerativeGRU):
             strict=True
         )
         updates.update(updates_2)
+
+        h0_mean = hs[-1].mean(axis=(0, 1))
+        new_h = (1. - self.rate) * h0_mean + self.rate * h0_mean
+        updates += [(self.h0, new_h)]
         return (x_hats, energies), updates
 
     def step_sample(self, x_, p_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
@@ -679,8 +853,7 @@ class SimpleInferGRU(GenerativeGRU):
         if x0 is None:
             x0 = self.trng.binomial(p=0.5, size=(n_samples, self.dim_in), n=1,
                                     dtype=floatX)
-        h0 = self.trng.normal(size=(x0.shape[0], self.dim_h), avg=0., std=1.,
-                              dtype=x0.dtype)
+        h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
 
         seqs = []
         outputs_info = [h0, None]

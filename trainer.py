@@ -91,7 +91,7 @@ def make_fn(inps, d, updates=None):
 
 def make_fn_given_fgrad(keys, start_idx):
     return lambda *outs: dict((k, v)
-        for k, v in zip(keys, outs[start_idx, start_idx + len(keys)]))
+        for k, v in zip(keys, outs[start_idx: start_idx + len(keys)]))
 
 def train(experiment_file, out_path=None, **kwargs):
     if experiment_file.split('.')[-1] == 'py':
@@ -128,9 +128,11 @@ def train(experiment_file, out_path=None, **kwargs):
         out_fn = make_fn(model['inps'], model['vouts'])
         valid_graph = True
     else:
-        cost_fn = make_fn_given_fgrad(['cost'] + costs.keys(), 0)
+        cost_fn = make_fn_given_fgrad(['cost'] + flatten_dict(costs).keys(), 0)
         err_fn = make_fn_given_fgrad([], 0)
-        out_fn = make_fn_given_fgrad(model['outs'].keys(), len(costs))
+        out_fn = make_fn_given_fgrad(flatten_dict(model['outs']).keys(),
+                                     len(costs) + 1)
+
         valid_graph = False
 
     logger.info('Initializing monitors')
@@ -156,7 +158,6 @@ def train(experiment_file, out_path=None, **kwargs):
                     train_c, train_e, train_o = monitor.update(*inps)
                 else:
                     train_c, train_e, train_o = monitor.update(*outs)
-
                 #rval_dict = dict((k, r) for k, r in zip(keys, rvals))
                 #monitor.append_stats(**{k: v for k, v in rval_dict.iteritems()
                 #                        if 'cost' in k or 'energy' in k or 'reward' in k})
@@ -167,6 +168,8 @@ def train(experiment_file, out_path=None, **kwargs):
                         save_images = data['train'].dataset.save_images
                         rnn_samples = train_o['cond_gen_gru_x'][:, :10]
                         rnn_probs = train_o['cond_gen_gru_p'][:, :10]
+                        print rnn_samples.shape
+                        print rnn_probs.shape
                         save_images(
                             rnn_samples,
                             path.join(out_path, 'rnn_samples_%d.png' % (i % 20)))
