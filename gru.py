@@ -720,7 +720,6 @@ class SimpleInferGRU(GenerativeGRU):
         super(SimpleInferGRU, self).set_params()
         h0 = np.zeros((self.dim_h, )).astype(floatX)
         self.params.update(h0=h0)
-        self.excludes = ['h0']
 
     def energy(self, x, p):
         return -(x * T.log(p + 1e-7) +

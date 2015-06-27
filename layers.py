@@ -138,7 +138,6 @@ class Baseline(Layer):
         var = np.float32(0.)
 
         self.params = OrderedDict(m=m, var=var)
-        self.excludes=['m', 'var']
 
     def __call__(self, input_):
         m = input_.mean()
