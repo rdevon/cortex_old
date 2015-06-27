@@ -889,7 +889,7 @@ class SimpleInferGRU(GenerativeGRU):
         )
         updates.update(updates_2)
 
-        return xs, updates
+        return (xs, ps), updates
 
 class CondGenGRU(GenerativeGRU):
     def __init__(self, dim_in, dim_h, weight_noise=False, name='cond_gen_gru',

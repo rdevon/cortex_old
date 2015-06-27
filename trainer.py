@@ -168,8 +168,6 @@ def train(experiment_file, out_path=None, **kwargs):
                         save_images = data['train'].dataset.save_images
                         rnn_samples = train_o['cond_gen_gru_x'][:, :10]
                         rnn_probs = train_o['cond_gen_gru_p'][:, :10]
-                        print rnn_samples.shape
-                        print rnn_probs.shape
                         save_images(
                             rnn_samples,
                             path.join(out_path, 'rnn_samples_%d.png' % (i % 20)))

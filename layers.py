@@ -190,12 +190,10 @@ class BaselineWithInput(Baseline):
         m = input_.mean()
         v = input_.std()
 
-        new_m = T.switch(T.eq(self.m, 0.),
-                         m,
+        new_m = T.switch(T.eq(self.m, 0.), m + self.m,
                          (np.float32(1.) - self.rate) * self.m + self.rate * m)
         new_m.name = 'new_m'
-        new_var = T.switch(T.eq(self.var, 0.),
-                           v,
+        new_var = T.switch(T.eq(self.var, 0.), v + self.var,
                            (np.float32(1.) - self.rate) * self.var + self.rate * v)
 
         if update_params:
@@ -213,17 +211,64 @@ class BaselineWithInput(Baseline):
             ws.append(self.__dict__['w%d' % i])
 
         idb = T.sum([x.dot(W) for x, W in zip(xs, ws)], axis=0).T
-        idb.name = 'idb'
-        input_ = T.zeros_like(input_) + input_
+        idb_c = T.zeros_like(idb) + idb
         input_centered = (
-            (input_ - idb - new_m) / T.maximum(1., T.sqrt(new_var)))
+            (input_ - idb_c - new_m) / T.maximum(1., T.sqrt(new_var)))
+        input_ = T.zeros_like(input_) + input_
 
         outs = OrderedDict(
-            x=input_,
+            x_c=input_,
             x_centered=input_centered,
             m=new_m,
             var=new_var,
-            idb=idb
+            idb=idb,
+            idb_c=idb_c
+        )
+
+        return outs, updates
+
+class ScalingWithInput(Layer):
+    def __init__(self, dims_in, dim_out, name='scaling_with_input'):
+        if len(dims_in) < 1:
+            raise ValueError('One or more dims_in needed, %d provided'
+                             % len(dims_in))
+        self.dims_in = dims_in
+        self.dim_out = dim_out
+        super(ScalingWithInput, self).__init__(name=name)
+        self.set_params()
+
+    def set_params(self):
+        for i, dim_in in enumerate(self.dims_in):
+            w = np.zeros((dim_in, self.dim_out)).astype('float32')
+            k = 'w%d' % i
+            self.params[k] = w
+
+    def __call__(self, input_, *xs):
+        '''
+        Maybe unclear: input_ is the variable to be scaled, xs are the
+        actual inputs.
+        '''
+        updates = theano.OrderedUpdates()
+
+        if len(xs) != len(self.dims_in):
+            raise ValueError('Number of (external) inputs for baseline must'
+                             ' match parameters')
+
+        ws = []
+        for i in xrange(len(xs)):
+            # Maybe not the most pythonic way...
+            ws.append(self.__dict__['w%d' % i])
+
+        ids = T.sum([x.dot(W) for x, W in zip(xs, ws)], axis=0).T
+        ids_c = T.zeros_like(ids) + ids
+        input_scaled = input_ / ids_c
+        input_ = T.zeros_like(input_) + input_
+
+        outs = OrderedDict(
+            x_c=input_,
+            x_scaled=input_scaled,
+            ids=ids,
+            ids_c=ids_c
         )
 
         return outs, updates
