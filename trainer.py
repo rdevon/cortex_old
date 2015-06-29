@@ -148,6 +148,7 @@ def train(experiment_file, out_path=None, **kwargs):
             s = 0
             i = 0
             while True:
+                atime = time.time()
                 try:
                     inps = data['train'].next()
                 except StopIteration:
@@ -159,12 +160,11 @@ def train(experiment_file, out_path=None, **kwargs):
                     train_c, train_e, train_o = monitor.update(*inps)
                 else:
                     train_c, train_e, train_o = monitor.update(*outs)
-                #rval_dict = dict((k, r) for k, r in zip(keys, rvals))
-                #monitor.append_stats(**{k: v for k, v in rval_dict.iteritems()
-                #                        if 'cost' in k or 'energy' in k or 'reward' in k})
+
+                btime = time.time()
                 if display_interval is not None and s == display_interval:
                     s = 0
-                    monitor.disp(e, data['train'].count)
+                    monitor.disp(e, data['train'].count, btime - atime)
                     if out_path is not None:
                         save_images = data['train'].dataset.save_images
                         rnn_samples = train_o['cond_gen_gru_x'][:, :10]

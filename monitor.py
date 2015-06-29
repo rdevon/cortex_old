@@ -175,8 +175,8 @@ class Monitor(object):
         plt.savefig(self.savefile)
         plt.close()
 
-    def disp(self, epoch, num):
-        s = 'Epoch %d | ' % epoch
+    def disp(self, epoch, num, update_time):
+        s = 'Epoch %d | Update time: %.5f |' % (epoch, update_time)
         for dataset, stats in self.stats.iteritems():
             if dataset == 'train':
                 tag = ''
