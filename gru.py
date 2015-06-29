@@ -112,9 +112,13 @@ class GRU(RNN):
             self.params.update(W_noise=W_noise, U_noise=U_noise,
                                Wx_noise=Wx_noise, Ux_noise=Ux_noise)
 
-    def set_inputs(self, state_below):
-        W = self.W + self.W_noise if self.weight_noise else self.W
-        Wx = self.Wx + self.Wx_noise if self.weight_noise else self.Wx
+    def set_inputs(self, state_below, suppress_noise=False):
+        if self.weight_noise and not suppress_noise:
+            W = self.W + self.W_noise
+            Wx = self.Wx + self.Wx_noise
+        else:
+            W = self.W
+            Wx = self.Wx
         x = T.dot(state_below, W) + self.b
         x_ = T.dot(state_below, Wx) + self.bx
         return x, x_
@@ -258,9 +262,11 @@ class GRUWithOutput(GRU):
 
 class HeirarchalGRU(GRU):
     def __init__(self, dim_in, dim_h, dim_s, weight_noise=False, dropout=False,
-                 trng=None, name='hiero_gru'):
+                 top_fb=False, bottom_fb=False, trng=None, name='hiero_gru'):
         self.dim_s = dim_s
         self.dropout = dropout
+        self.top_fb = top_fb
+        self.bottom_fb = bottom_fb
         if self.dropout and trng is None:
             self.trng = RandomStreams(1234)
         else:
@@ -274,11 +280,20 @@ class HeirarchalGRU(GRU):
         bs = np.zeros((2 * self.dim_s,)).astype(floatX)
         Us = np.concatenate([ortho_weight(self.dim_s),
                             ortho_weight(self.dim_s)], axis=1)
-        Wxs = norm_weight(self.dim_h, self.dim_s)
+
+        if self.bottom_fb:
+            dim_in = 2 * self.dim_h
+        else:
+            dim_in = self.dim_h
+        Wxs = norm_weight(dim_in, self.dim_s)
         Uxs = ortho_weight(self.dim_s)
         bxs = np.zeros((self.dim_s,)).astype(floatX)
 
-        Wo = norm_weight(self.dim_s, 1).astype(floatX)
+        if self.top_fb:
+            dim_in = 2 * self.dim_s
+        else:
+            dim_in = self.dim_s
+        Wo = norm_weight(dim_in, 1).astype(floatX)
         bo = np.float32(0.)
 
         self.params.update(Ws=Ws, bs=bs, Us=Us, Wxs=Wxs, Uxs=Uxs, bxs=bxs,
@@ -302,22 +317,14 @@ class HeirarchalGRU(GRU):
         u = T.nnet.sigmoid(RNN._slice(preact, 1, self.dim_s))
         return r, u
 
-    def step_slice_upper(self, m_, x_, xx_, h_, U, Ux, Wo, bo, suppress_noise):
+    def step_slice_upper(self, m_, x_, xx_, h_, U, Ux):
         preact = T.dot(h_, U) + x_
         r, u = self.get_gates_upper(preact)
         preactx = T.dot(h_, Ux) * r + xx_
         h = T.tanh(preactx)
         h = u * h_ + (1. - u) * h
         h = m_[:, None] * h + (1. - m_)[:, None] * h_
-
-        o = h.dot(Wo) + bo
-
-        if self.dropout and not suppress_noise:
-            o_d = self.trng.binomial(o.shape, p=1-self.dropout, n=1,
-                                     dtype=o.dtype)
-            o = o * o_d / (1 - self.dropout)
-
-        return h, o
+        return h
 
     def step_slice_lower(self, m_, x_, xx_, h_, U, Ux):
         # Here we just kill the previous state if the previous token was eof
@@ -330,6 +337,16 @@ class HeirarchalGRU(GRU):
         h = u * h_ + (1. - u) * h
         return h
 
+    def step_out(self, h, Wo, bo, suppress_noise):
+        o = h.dot(Wo) + bo
+
+        if self.dropout and not suppress_noise:
+            o_d = self.trng.binomial(o.shape, p=1-self.dropout, n=1,
+                                     dtype=o.dtype)
+            o = o * o_d / (1 - self.dropout)
+
+        return o
+
     def __call__(self, state_below, mask=None, suppress_noise=False):
         n_steps = state_below.shape[0]
         n_samples = state_below.shape[1]
@@ -337,7 +354,7 @@ class HeirarchalGRU(GRU):
         if mask is None:
             mask = T.neq(state_below[:, :, 0], 1).astype(floatX)
 
-        x, x_ = self.set_inputs(state_below)
+        x, x_ = self.set_inputs(state_below, suppress_noise=suppress_noise)
 
         mask_r = T.roll(mask, 1, axis=0)
         mask_n = T.eq(mask, 0.).astype(floatX)
@@ -355,6 +372,21 @@ class HeirarchalGRU(GRU):
                                     profile=tools.profile,
                                     strict=True)
 
+        if self.bottom_fb:
+            mask_r = T.roll(mask[::-1], 1, axis=0)
+            seqs = [mask_r, x[::-1], x_[::-1]]
+            outputs_info = [T.alloc(0., n_samples, self.dim_h)]
+            h_r, updates_r = theano.scan(self.step_slice_lower,
+                                    sequences=seqs,
+                                    outputs_info=outputs_info,
+                                    non_sequences=non_seqs,
+                                    name=tools._p(self.name, '_layers_r'),
+                                    n_steps=n_steps,
+                                    profile=tools.profile,
+                                    strict=True)
+            h = T.concatenate([h, h_r[::-1]], axis=2)
+            updates.update(updates_r)
+
         if self.weight_noise and not suppress_noise:
             Ws = self.Ws + self.Ws_noise
             Wxs = self.Wxs + self.Wxs_noise
@@ -371,18 +403,47 @@ class HeirarchalGRU(GRU):
             x_ = x_ * x_d / (1 - self.dropout)
 
         seqs = [mask_n, x, x_]
-        outputs_info = [T.alloc(0., n_samples, self.dim_s), None]
-        suppress_noise = 1 if suppress_noise else 0
-        non_seqs = [self.Us, self.Uxs, self.Wo, self.bo, suppress_noise]
+        outputs_info = [T.alloc(0., n_samples, self.dim_s)]
+        non_seqs = [self.Us, self.Uxs]
 
-        (hs, o), updates = theano.scan(self.step_slice_upper,
+        hs, updates = theano.scan(self.step_slice_upper,
                                     sequences=seqs,
                                     outputs_info=outputs_info,
                                     non_sequences=non_seqs,
-                                    name=tools._p(self.name, '_layers'),
+                                    name=tools._p(self.name, '_top_layers'),
                                     n_steps=n_steps,
                                     profile=tools.profile,
                                     strict=True)
+
+        if self.top_fb:
+            seqs = [mask_n[::-1], x[::-1], x_[::-1]]
+            outputs_info = [T.alloc(0., n_samples, self.dim_s)]
+            non_seqs = [self.Us, self.Uxs]
+
+            hs_r, updates_r = theano.scan(self.step_slice_upper,
+                                        sequences=seqs,
+                                        outputs_info=outputs_info,
+                                        non_sequences=non_seqs,
+                                        name=tools._p(self.name, '_top_layers_r'),
+                                        n_steps=n_steps,
+                                        profile=tools.profile,
+                                        strict=True)
+            hs = T.concatenate([hs, hs_r[::-1]], axis=2)
+            updates.update(updates_r)
+
+        seqs = [hs]
+        outputs_info = [None]
+        suppress_noise = 1 if suppress_noise else 0
+        non_seqs = [self.Wo, self.bo, suppress_noise]
+
+        o, updates_o = theano.scan(self.step_out,
+                                    sequences=seqs,
+                                    outputs_info=outputs_info,
+                                    non_sequences=non_seqs,
+                                    name=tools._p(self.name, '_out'),
+                                    profile=tools.profile,
+                                    strict=True)
+        updates.update(updates_o)
 
         return OrderedDict(h=h, hs=hs, o=o, mask=mask), updates
 
@@ -453,7 +514,10 @@ class HeirarchalGRUWO(GRU):
                                     profile=tools.profile,
                                     strict=True)
 
-        o = T.alloc()
+        n_outs = mask_n.sum().astype('int64')
+
+        o = T.alloc(0, state_below.shape[0], n_outs, o.shape[2]).astype(floatX)
+        o = T.set_subtensor(o, )
 
         return OrderedDict(h=h, o=o, mask=mask), updates
 
@@ -790,7 +854,7 @@ class SimpleInferGRU(GenerativeGRU):
         #x = m * x + (1. - m) * x_hat
         energy = self.energy(x, p)
 
-        return h, x_hat, energy
+        return h, x_hat, p, energy
 
     def inference(self, x, mask, l, n_inference_steps=1):
         x0 = x[0]
@@ -803,7 +867,7 @@ class SimpleInferGRU(GenerativeGRU):
         non_seqs = self.get_non_seqs()
 
         n_steps = x.shape[0] - 1
-        (x, p, h), updates = theano.scan(
+        (x1, p, h), updates = theano.scan(
             self.step_slice,
             sequences=seqs,
             outputs_info=outputs_info,
@@ -813,14 +877,16 @@ class SimpleInferGRU(GenerativeGRU):
             profile=tools.profile,
             strict=True
         )
-        x = T.concatenate([x0[None, :, :], x], axis=0)
+        x = T.concatenate([x0[None, :, :], x1], axis=0)
         h = T.concatenate([h0[None, :, :], h], axis=0)
         updates = theano.OrderedUpdates(updates)
         seqs = []
-        outputs_info = [h, None, None]
-        non_seqs = [mask, x, l, self.HX, self.bx] + self.get_non_seqs()
+        outputs_info = [h, None, None, None]
+        x0_n = x0 * self.trng.binomial(p=0.5, size=x0.shape, n=1, dtype=x0.dtype)
+        x_n = T.concatenate([x0_n[None, :, :], x1], axis=0)
+        non_seqs = [mask, x_n, l, self.HX, self.bx] + self.get_non_seqs()
 
-        (hs, x_hats, energies), updates_2 = theano.scan(
+        (hs, x_hats, ps, energies), updates_2 = theano.scan(
             self.step_infer,
             sequences=seqs,
             outputs_info=outputs_info,
@@ -832,10 +898,11 @@ class SimpleInferGRU(GenerativeGRU):
         )
         updates.update(updates_2)
 
+        energy = self.energy(x, ps[-1])
         h0_mean = hs[-1].mean(axis=(0, 1))
         new_h = (1. - self.rate) * h0_mean + self.rate * h0_mean
         updates += [(self.h0, new_h)]
-        return (x_hats, energies), updates
+        return (x_hats, energy), updates
 
     def step_sample(self, x_, p_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
         preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha

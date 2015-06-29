@@ -59,8 +59,6 @@ def get_grad(optimizer, costs, tparams, inps=None, outs=None,
     _tparams = OrderedDict((k, v)
         for k, v in tparams.iteritems()
         if v not in updates.keys())
-    print _tparams
-    print updates
     keys_to_pop = [key for key in _tparams.keys() if 'noise' in key]
     noise_params = dict([(key, _tparams.pop(key)) for key in keys_to_pop])
 
