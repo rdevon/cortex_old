@@ -152,7 +152,8 @@ def train(experiment_file, out_path=None, **kwargs):
                 try:
                     inps = data['train'].next()
                 except StopIteration:
-                    monitor.disp(e, data['train'].count)
+                    btime = time.time()
+                    monitor.disp(e, data['train'].count,btime-atime)
                     break
 
                 outs = f_grad_shared(*inps)
