@@ -445,12 +445,12 @@ class HeirarchalGRU(GRU):
                                     strict=True)
         updates.update(updates_o)
 
-        return OrderedDict(h=h, hs=hs, o=o, mask=mask), updates
+        return OrderedDict(h=h, hs=hs, o=o, mask=mask, mask_n=mask_n), updates
 
 
 class HeirarchalGRUWO(GRU):
     def __init__(self, dim_in, dim_h, dim_out, weight_noise=False, dropout=False,
-                 trng=None, name='hiero_gru'):
+                 trng=None, name='heiro_gru_wo'):
         self.dropout = dropout
         self.dim_out = dim_out
         if self.dropout and trng is None:
@@ -471,7 +471,7 @@ class HeirarchalGRUWO(GRU):
             Wo_noise = (Wo * 0).astype(floatX)
             self.params.update(Wo_noise=Wo_noise)
 
-    def step_slice(self, m_, x_, xx_, h_, U, Ux):
+    def step_slice(self, m_, x_, xx_, h_, U, Ux, Wo, bo):
         # Here we just kill the previous state if the previous token was eof
         # where the mask was 0.
         h_ = m_[:, None] * h_
@@ -503,7 +503,7 @@ class HeirarchalGRUWO(GRU):
 
         seqs = [mask_r, x, x_]
         outputs_info = [T.alloc(0., n_samples, self.dim_h), None]
-        non_seqs = self.get_non_seqs()
+        non_seqs = self.get_non_seqs() + [self.Wo, self.bo]
 
         (h, o), updates = theano.scan(self.step_slice,
                                     sequences=seqs,
@@ -514,12 +514,12 @@ class HeirarchalGRUWO(GRU):
                                     profile=tools.profile,
                                     strict=True)
 
-        n_outs = mask_n.sum().astype('int64')
+        n_outs = mask_n[1:].sum().astype('int64')
 
-        o = T.alloc(0, state_below.shape[0], n_outs, o.shape[2]).astype(floatX)
-        o = T.set_subtensor(o, )
+        o = mask_n[1:].compress(o, axis=0).dimshuffle(1, 0, 2).reshape(
+            (o.shape[1], n_outs * self.dim_out))
 
-        return OrderedDict(h=h, o=o, mask=mask), updates
+        return OrderedDict(h=h, o=o, mask=mask, mask_n=mask_n), updates
 
 
 class GenerativeGRU(GRU):

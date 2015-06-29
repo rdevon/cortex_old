@@ -198,10 +198,12 @@ def test_heirarchal_gru(batch_size=1, dim_h=11, dim_s=7):
     logistic = Logistic()
     outs_l, _ = logistic(outs['o'])
     r_hat = outs_l['y_hat']
-    mask = outs['mask']
+    mask_n = outs['mask_n']
 
-    fn = theano.function([X], [r_hat, mask])
+    fn = theano.function([X], [r_hat, mask_n])
     r_hat, mask = fn(x)
+    print mask
+    print r_hat
     print ((r_hat[:, :, 0] - r) * (1 - mask)).sum() / r_hat.shape[0].asfloat()
 
     #print x[:, :, 0].shape
