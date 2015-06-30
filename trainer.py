@@ -152,7 +152,8 @@ def train(experiment_file, out_path=None, **kwargs):
                 try:
                     inps = data['train'].next()
                 except StopIteration:
-                    monitor.disp(e, data['train'].count)
+                    btime = time.time()
+                    monitor.disp(e, data['train'].count,btime-atime)
                     break
 
                 outs = f_grad_shared(*inps)
@@ -164,7 +165,7 @@ def train(experiment_file, out_path=None, **kwargs):
                 btime = time.time()
                 if display_interval is not None and s == display_interval:
                     s = 0
-                    monitor.disp(e, data['train'].count, btime - atime)
+                    monitor.disp(e, 1, btime - atime)
                     if out_path is not None:
                         save_images = data['train'].dataset.save_images
                         rnn_samples = train_o['cond_gen_gru_x'][:, :10]

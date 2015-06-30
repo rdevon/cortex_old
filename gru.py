@@ -347,17 +347,19 @@ class HeirarchalGRU(GRU):
 
         return o
 
-    def __call__(self, state_below, mask=None, suppress_noise=False):
+    def __call__(self, state_below, mask_f=None, suppress_noise=False):
         n_steps = state_below.shape[0]
         n_samples = state_below.shape[1]
 
-        if mask is None:
-            mask = T.neq(state_below[:, :, 0], 1).astype(floatX)
-
-        x, x_ = self.set_inputs(state_below, suppress_noise=suppress_noise)
-
+        mask = T.neq(state_below[:, :, 0], 1).astype(floatX)
+        if mask_f is not None:
+            mask = mask * mask_f
         mask_r = T.roll(mask, 1, axis=0)
         mask_n = T.eq(mask, 0.).astype(floatX)
+        if mask_f is not None:
+            mask_n = mask_n * mask_f
+
+        x, x_ = self.set_inputs(state_below, suppress_noise=suppress_noise)
 
         seqs = [mask_r, x, x_]
         outputs_info = [T.alloc(0., n_samples, self.dim_h)]
@@ -489,17 +491,20 @@ class HeirarchalGRUWO(GRU):
 
         return h, o
 
-    def __call__(self, state_below, mask=None, suppress_noise=False):
+    def __call__(self, state_below, mask_f=None, suppress_noise=False):
         n_steps = state_below.shape[0]
         n_samples = state_below.shape[1]
 
-        if mask is None:
-            mask = T.neq(state_below[:, :, 0], 1).astype(floatX)
+        mask = T.neq(state_below[:, :, 0], 1).astype(floatX)
+        if mask_f is not None:
+            mask = mask * mask_f
+        mask_r = T.roll(mask, 1, axis=0)
+        mask_n = T.eq(mask, 0.).astype(floatX)
+        if mask_f is not None:
+            mask_n = mask_n * mask_f
 
         x, x_ = self.set_inputs(state_below)
 
-        mask_r = T.roll(mask, 1, axis=0)
-        mask_n = T.eq(mask, 0.).astype(floatX)
 
         seqs = [mask_r, x, x_]
         outputs_info = [T.alloc(0., n_samples, self.dim_h), None]
@@ -514,10 +519,16 @@ class HeirarchalGRUWO(GRU):
                                     profile=tools.profile,
                                     strict=True)
 
-        n_outs = mask_n[1:].sum().astype('int64')
+        def step_compress(mask, out):
+            n_outs = mask.sum().astype('int64')
+            return mask.compress(out, axis=0).flatten()
 
-        o = mask_n[1:].compress(o, axis=0).dimshuffle(1, 0, 2).reshape(
-            (o.shape[1], n_outs * self.dim_out))
+        o, _ = theano.scan(
+            step_compress,
+            sequences=[mask_n[1:].T, o.dimshuffle(1, 0, 2)],
+            outputs_info=[None],
+            strict=True
+        )
 
         return OrderedDict(h=h, o=o, mask=mask, mask_n=mask_n), updates
 

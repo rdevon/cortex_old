@@ -287,3 +287,86 @@ def test_inference(batch_size=1, dim_h=10, l=.1):
         f_grad_updates(learning_rate)
 
     assert False
+
+def test_twitter_batches():
+    from tweet_rnn_model import get_model
+    model = get_model()
+    train = model['data']['train']
+    x, r, m = train.next()
+    print x.shape, r.shape, m.shape
+
+    mask = model['outs']['hiero_gru']['mask']
+    r_hat = model['outs']['logistic']['y_hat'][:, :, 0]
+    X = model['inps']['x']
+    R = model['inps']['r']
+    M = model['inps']['m']
+    updates = model['updates']
+    threshold = 0.3
+
+    mask = 1 - mask[1:]
+    r_hat = r_hat[1:]
+    R_ = R[1:]
+
+    n_total = T.floor(threshold * mask.sum(axis=0).astype('float32')).astype('int64')
+    #fn = theano.function([X, M], [mask, r_hat, n_total])
+
+    #print fn(x, m)
+    #assert False
+    GT_ids = T.argsort(R_ * mask, axis=0)
+    RH_ids = T.argsort(r_hat * mask, axis=0)
+
+    fn = theano.function([X, R, M], [mask.shape, RH_ids.shape, GT_ids.shape, r_hat.shape, R_.shape], updates=updates)
+    print fn(x, r, m)
+    #assert False
+
+    def step(a, idx, n):
+        b = T.zeros_like(a)
+        idx = idx[-n:]
+        return T.set_subtensor(b[idx], 1.)
+
+    mask_gt, _ = theano.scan(
+        step,
+        sequences=[mask.T, GT_ids.T, n_total],
+        outputs_info=[None],
+        non_sequences=[],
+        name='top_step',
+        strict=True)
+
+    mask_r, _ = theano.scan(
+        step,
+        sequences=[mask.T, RH_ids.T, n_total],
+        outputs_info=[None],
+        non_sequences=[],
+        name='top_step',
+        strict=True)
+
+    mask_final = mask_gt * mask_r
+    acc = (mask_final.sum(axis=1).astype('float32') / n_total.astype('float32')).mean()
+
+    fn = theano.function([X, R, M], [mask_final.shape, acc], updates=updates)
+    print fn(x, r, m)
+    assert False
+
+    return acc
+
+def test_heir_wo():
+    from twitter_rnn_ffn import get_model
+    model = get_model()
+    train = model['data']['train']
+    x, r, m = train.next()
+
+    mask = model['outs']['heiro_gru_wo']['mask']
+    h = model['outs']['heiro_gru_wo']['h']
+    mask_n = model['outs']['heiro_gru_wo']['mask_n']
+
+    o = model['outs']['heiro_gru_wo']['o']
+
+    #o_c = mask_n[1:].compress(o, axis=0)#.dimshuffle(1, 0, 2)
+    X = model['inps']['x']
+    R = model['inps']['r']
+    M = model['inps']['m']
+    updates = model['updates']
+
+    fn = theano.function([X, M], [h.shape, o.shape])
+    print fn(x, m)
+    assert False
