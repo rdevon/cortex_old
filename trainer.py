@@ -124,20 +124,22 @@ def train(experiment_file, out_path=None, **kwargs):
     if model.get('vouts', False) and model['vouts'] is not None:
         v_costs = experiment.get_costs(inps=model['inps'], outs=model['vouts'])
         v_costs.pop('known_grads')
+        samplers = experiment.get_samplers(inps=model['inps'], outs=model['vouts'])
         cost_fn = make_fn(model['inps'], v_costs, updates=model['vupdates'])
         err_fn = make_fn(model['inps'], model['errs'])
         out_fn = make_fn(model['inps'], model['vouts'])
+        sample_fn = make_fn(model['inps'], samplers)
         valid_graph = True
     else:
         cost_fn = make_fn_given_fgrad(['cost'] + flatten_dict(costs).keys(), 0)
         err_fn = make_fn_given_fgrad([], 0)
         out_fn = make_fn_given_fgrad(flatten_dict(model['outs']).keys(),
                                      len(costs) + 1)
-
+        sample_fn = None
         valid_graph = False
 
     logger.info('Initializing monitors')
-    monitor = Monitor(model['tparams'], data, cost_fn, err_fn, out_fn,
+    monitor = Monitor(model['tparams'], data, cost_fn, err_fn, out_fn, sample_fn,
                       early_stopping=False, hyperparams=hyperparams)
 
     try:
