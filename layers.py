@@ -91,7 +91,14 @@ class Softmax(Layer):
         super(Softmax, self).__init__(name)
 
     def __call__(self, input_):
+        if input_.ndim == 3:
+            reshape = input_.shape
+            input_ = input_.reshape((input_.shape[0] * input_.shape[1], input_.shape[2]))
+        else:
+            reshape = False
         y_hat = T.nnet.softmax(input_)
+        if reshape:
+            y_hat = y_hat.reshape(reshape)
         return OrderedDict(y_hat=y_hat), theano.OrderedUpdates()
 
     def err(self, y_hat, Y):

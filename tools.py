@@ -8,6 +8,9 @@ import theano
 from theano import tensor as T
 
 
+random_seed = 0xeffe
+rng_ = np.random.RandomState(random_seed)
+
 profile = False
 
 f_clip = lambda x, y, z: T.clip(x, y, 1.)
@@ -62,20 +65,23 @@ def itemlist(tparams):
 def _p(pp, name):
     return '%s_%s'%(pp, name)
 
-# some utilities
-def ortho_weight(ndim):
-    W = np.random.randn(ndim, ndim)
+def ortho_weight(ndim, rng=None):
+    if not rng:
+        rng = rng_
+    W = rng.randn(ndim, ndim)
     u, s, v = np.linalg.svd(W)
     return u.astype('float32')
 
-def norm_weight(nin, nout=None, scale=0.01, ortho=True):
-    if nout == None:
+def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
+    if not rng:
+        rng = rng_
+    if nout is None:
         nout = nin
     if nout == nin and ortho:
-        W = ortho_weight(nin)
+        W = ortho_weight(nin, rng=rng)
     else:
-        W = scale * np.random.randn(nin, nout)
-    return W.astype('float32')
+        W = scale * rng.randn(nin, nout)
+    return W.astype('float32')# some utilities
 
 def tanh(x):
     return T.tanh(x)
