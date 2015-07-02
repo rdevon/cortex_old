@@ -370,3 +370,21 @@ def test_heir_wo():
     fn = theano.function([X, M], [h.shape, o.shape])
     print fn(x, m)
     assert False
+
+def test_tweet_gen():
+    from tweet_gen_model import get_model
+    model = get_model()
+    train = model['data']['train']
+    x, m = train.next()
+
+    X = model['inps']['x']
+    M = model['inps']['m']
+    updates = model['updates']
+    z = model['outs']['logit']['z']
+    y = model['outs']['logit']['y']
+    X_hat = model['outs']['softmax']['y_hat']
+
+    fn = theano.function([X, M], [X_hat.shape, X.shape], updates=updates)
+
+    print fn(x, m)
+    assert False

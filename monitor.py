@@ -38,7 +38,7 @@ class Monitor(object):
 
         self.stats = OrderedDict(train=OrderedDict())
         self.samples = OrderedDict(train=OrderedDict())
-        if data['valid'].dataset is not None:
+        if data['valid'] is not None and data['valid'].dataset is not None:
             self.stats['valid'] = OrderedDict()
             self.samples['valid'] = OrderedDict()
         if data['test'] is not None and data['test'].dataset is not None:

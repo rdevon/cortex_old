@@ -88,21 +88,41 @@ class StackedRNN(RNN):
 
 
 class GRU(RNN):
-    def __init__(self, dim_in, dim_h, weight_noise=False, name='gru'):
-        super(GRU, self).__init__(dim_in, dim_h, name)
+    def __init__(self, dim_in, dim_h, weight_noise=False, weight_scale=0.01,
+                 learn_h0=False, name='gru', rng=None):
         self.weight_noise = weight_noise
+        self.weight_scale = weight_scale
+        self.learn_h0 = learn_h0
+
+        if rng is None:
+            rng = tools.rng_
+        self.rng = rng
+
+        super(GRU, self).__init__(dim_in, dim_h, name=name)
         self.set_params()
 
     def set_params(self):
-        W = np.concatenate([norm_weight(self.dim_in, self.dim_h),
-                            norm_weight(self.dim_in, self.dim_h)], axis=1)
+        norm_weight = tools.norm_weight
+        ortho_weight = tools.ortho_weight
+        W = np.concatenate([norm_weight(self.dim_in, self.dim_h,
+                                        scale=self.weight_scale,
+                                        rng=self.rng),
+                            norm_weight(self.dim_in, self.dim_h,
+                                        scale=self.weight_scale,
+                                        rng=self.rng)], axis=1)
         b = np.zeros((2 * self.dim_h,)).astype(floatX)
         U = np.concatenate([ortho_weight(self.dim_h),
                             ortho_weight(self.dim_h)], axis=1)
-        Wx = norm_weight(self.dim_in, self.dim_h)
-        Ux = ortho_weight(self.dim_h)
+        Wx = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
+                         rng=self.rng)
+        Ux = ortho_weight(self.dim_h, rng=self.rng)
         bx = np.zeros((self.dim_h,)).astype(floatX)
         self.params = OrderedDict(W=W, b=b, U=U, Wx=Wx, Ux=Ux, bx=bx)
+
+        if self.learn_h0:
+            W0 = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
+                             rng=self.rng)
+            self.params.update(W0=W0)
 
         if self.weight_noise:
             W_noise = (W * 0).astype(floatX)
@@ -111,6 +131,9 @@ class GRU(RNN):
             Ux_noise = (Ux * 0).astype(floatX)
             self.params.update(W_noise=W_noise, U_noise=U_noise,
                                Wx_noise=Wx_noise, Ux_noise=Ux_noise)
+            if self.learn_h0:
+                W0_noise = (W0 * 0).astype(floatX)
+                self.params.update(W0_noise=W0_noise)
 
     def set_inputs(self, state_below, suppress_noise=False):
         if self.weight_noise and not suppress_noise:
@@ -166,7 +189,7 @@ class GRU(RNN):
 
 
 class GRUWithOutput(GRU):
-    def __init__(self, dim_in, dim_h, dim_o, window, convolve_time=False,
+    def __init__(self, dim_in, dim_h, dim_o, window=1, convolve_time=False,
                  weight_noise=False, weight_scale=0.01, name='gru_w_output',
                  dropout=False, trng=None, rng=None):
         self.dim_o = dim_o
@@ -204,20 +227,24 @@ class GRUWithOutput(GRU):
             Wo_noise = (Wo * 0).astype('float32')
             self.params.update(Wo_noise=Wo_noise)
 
-    def step_slice(self, x_, xx_, h_, U, Ux, Wo, bo):
+    def step_slice(self, m_, x_, xx_, h_, U, Ux, Wo, bo):
         preact = self.recurrent_step(T.dot(h_, U), x_)
         r, u = self.get_gates(preact)
         preactx = T.dot(h_, Ux) * r + xx_
         h = T.tanh(preactx)
         h = u * h_ + (1. - u) * h
+        h = m_[:, None] * h + (1 - m_)[:, None] * h_
         o = T.dot(h, Wo) + bo
+
         return h, o
 
-    def __call__(self, state_below, suppress_noise=False):
+    def __call__(self, state_below, mask=None, suppress_noise=False):
         n_steps = state_below.shape[0]
         n_samples = state_below.shape[1]
 
-        x, x_ = self.set_inputs(state_below)
+        x, x_ = self.set_inputs(state_below, suppress_noise=suppress_noise)
+        if mask is None:
+            mask = T.alloc(1., state_below.shape[0], state_below.shape[1])
 
         if self.weight_noise and not suppress_noise:
             U = self.U + self.U_noise
@@ -228,7 +255,7 @@ class GRUWithOutput(GRU):
             Ux = self.Ux
             Wo = self.Wo
 
-        seqs = [x, x_]
+        seqs = [mask, x, x_]
         outputs_info = [T.alloc(0., n_samples, self.dim_h), None]
         non_seqs = [U, Ux, Wo, self.bo]
 
@@ -256,8 +283,7 @@ class GRUWithOutput(GRU):
                    + o_shifted_plus.dimshuffle(2, 1, 0) * self.vp
                    ).dimshuffle(2, 1, 0)
 
-        return OrderedDict(h=h, o=out.sum(axis=0).reshape(
-            (out.shape[1], n_steps, self.dim_o)).dimshuffle(1, 0, 2)), updates
+        return OrderedDict(h=h, o=out), updates
 
 
 class HeirarchalGRU(GRU):
