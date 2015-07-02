@@ -723,7 +723,6 @@ class GenStochasticGRU(GenerativeGRU):
     def get_energy(self, x, z):
         pass
 
-
     def step_slice(self, x_, p_, h_, z_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx, sigmas):
         preact = T.dot(z_, Ura) + T.dot(x_, XHa) + bha
         r, u = self.get_gates(preact)

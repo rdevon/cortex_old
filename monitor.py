@@ -23,23 +23,27 @@ class Monitor(object):
         - config_<timestamp>.pkl : model hyper parameters
         - timing_<timestamp>.pkl : monitoring channel timings
     """
-    def __init__(self, tparams, data, cost_fn, err_fn, out_fn,
+    def __init__(self, tparams, data, cost_fn, err_fn, out_fn, sample_fn=None,
                  first_order_stats=False, savefile='monitors.png',
                  early_stopping=False, hyperparams=None):
         self.__dict__.update(locals())
         del self.self
 
         self.timestamp = int(time.time())
+        self.sample_fn = sample_fn
 
         self.param_keys = [k for k in tparams]
         self.params = dict((k, {'mean': [], 'max': [], 'min': [], 'std': []})
                            for k in self.param_keys)
 
         self.stats = OrderedDict(train=OrderedDict())
-        if data['valid'] is not None and data['valid'].dataset is not None:
+        self.samples = OrderedDict(train=OrderedDict())
+        if data['valid'].dataset is not None:
             self.stats['valid'] = OrderedDict()
+            self.samples['valid'] = OrderedDict()
         if data['test'] is not None and data['test'].dataset is not None:
             self.stats['test'] = OrderedDict()
+            self.samples['test'] = OrderedDict()
         self.err_fn = err_fn
 
         if self.early_stopping:
@@ -85,6 +89,9 @@ class Monitor(object):
         #print inps[1]
         #print train_o['softmax_y_hat']
 
+        if self.sample_fn:
+            self.samples['train'] = self.sample_fn(*inps)
+
         if self.data['valid'] is not None and self.data['valid'].dataset is not None:
             try:
                 inps = self.data['valid'].next()
@@ -105,6 +112,9 @@ class Monitor(object):
                 raise NotImplementedError('Need to fix!')
                 self._track_current_model(valid_errs)
 
+            if self.sample_fn:
+                self.samples['valid'] = self.sample_fn(*inps)
+
         if self.data['test'] is not None and self.data['test'].dataset is not None:
             try:
                 inps = self.data['test'].next()
@@ -115,6 +125,8 @@ class Monitor(object):
             #    self._validate(self.data['test'])
             self.append_stats('test', test_c)
             self.append_stats('test', test_e)
+            if self.sample_fn:
+                self.samples['test'] = self.sample_fn(*inps)
 
         # TODO: add grad norms and param norms here
         if self.first_order_stats:
@@ -185,6 +197,10 @@ class Monitor(object):
             for k, v in stats.iteritems():
                 s += '%s%s: %.5f | ' % (tag, k, np.array(v[-num:]).mean())
         print s
+        for dataset, samples in self.samples.iteritems():
+            print '%s-----------------' % dataset
+            for k, v in samples.iteritems():
+                print '  %s: %s' % (k, v)
 
     def report(self):
         """Reports according to the best validation error score."""
