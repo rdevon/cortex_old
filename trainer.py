@@ -124,11 +124,12 @@ def train(experiment_file, out_path=None, **kwargs):
     if model.get('vouts', False) and model['vouts'] is not None:
         v_costs = experiment.get_costs(inps=model['inps'], outs=model['vouts'])
         v_costs.pop('known_grads')
-        samplers = experiment.get_samplers(inps=model['inps'], outs=model['vouts'])
+        samplers = experiment.get_samplers(inps=model['inps'], outs=model['vouts'],
+                                           dataset=data['train'].dataset)
         cost_fn = make_fn(model['inps'], v_costs, updates=model['vupdates'])
         err_fn = make_fn(model['inps'], model['errs'])
-        out_fn = make_fn(model['inps'], model['vouts'])
-        sample_fn = make_fn(model['inps'], samplers)
+        out_fn = make_fn(model['inps'], model['vouts'], updates=model['vupdates'])
+        sample_fn = make_fn(model['inps'], samplers, updates=model['vupdates'])
         valid_graph = True
     else:
         cost_fn = make_fn_given_fgrad(['cost'] + flatten_dict(costs).keys(), 0)
@@ -139,8 +140,9 @@ def train(experiment_file, out_path=None, **kwargs):
         valid_graph = False
 
     logger.info('Initializing monitors')
-    monitor = Monitor(model['tparams'], data, cost_fn, err_fn, out_fn, sample_fn,
-                      early_stopping=False, hyperparams=hyperparams)
+    monitor = Monitor(model['tparams'], data, cost_fn, err_fn, out_fn,
+                      sample_fn, name=model['name'], early_stopping=False,
+                      hyperparams=hyperparams)
 
     try:
         logger.info('Training')
@@ -166,8 +168,8 @@ def train(experiment_file, out_path=None, **kwargs):
 
                 btime = time.time()
                 if display_interval is not None and s == display_interval:
+                    monitor.disp(e, s, btime - atime)
                     s = 0
-                    monitor.disp(e, 1, btime - atime)
                     if out_path is not None:
                         save_images = data['train'].dataset.save_images
                         rnn_samples = train_o['cond_gen_gru_x'][:, :10]
@@ -199,6 +201,9 @@ def train(experiment_file, out_path=None, **kwargs):
 
     except KeyboardInterrupt:
         logger.info('Training interrupted')
+
+    logger.info('Saving model')
+    monitor.save_best_model()
 
 
 def make_argument_parser():

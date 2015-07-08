@@ -23,14 +23,13 @@ class Monitor(object):
         - config_<timestamp>.pkl : model hyper parameters
         - timing_<timestamp>.pkl : monitoring channel timings
     """
-    def __init__(self, tparams, data, cost_fn, err_fn, out_fn, sample_fn=None,
-                 first_order_stats=False, savefile='monitors.png',
+    def __init__(self, tparams, data, cost_fn, err_fn, out_fn, name='model',
+                 sample_fn=None, first_order_stats=False, savefile='monitors.png',
                  early_stopping=False, hyperparams=None):
         self.__dict__.update(locals())
         del self.self
 
         self.timestamp = int(time.time())
-        self.sample_fn = sample_fn
 
         self.param_keys = [k for k in tparams]
         self.params = dict((k, {'mean': [], 'max': [], 'min': [], 'std': []})
@@ -188,18 +187,20 @@ class Monitor(object):
         plt.close()
 
     def disp(self, epoch, num, update_time):
-        s = 'Epoch %d | Update time: %.5f | ' % (epoch, update_time)
+        s = 'Epoch %d | sample %d | Update time: %.5f | ' % (epoch, num, update_time)
         for dataset, stats in self.stats.iteritems():
             if dataset == 'train':
                 tag = ''
             else:
                 tag = dataset + '_'
             for k, v in stats.iteritems():
-                s += '%s%s: %.5f | ' % (tag, k, np.array(v[-num:]).mean())
+                s += '%s%s: %.5f | ' % (tag, k, v[-1])
         print s
         for dataset, samples in self.samples.iteritems():
             print '%s-----------------' % dataset
             for k, v in samples.iteritems():
+                if k in ['gt', 'es', 'xs']:
+                    v = self.data['train'].dataset.translate(v)
                 print '  %s: %s' % (k, v)
 
     def report(self):
@@ -236,8 +237,10 @@ class Monitor(object):
                         self.err_keys[i], timestamp))
                 np.savez(outfile, **self.best_models[i])
         else:
-            outfile = os.path.join(outdir, 'model_{}.npz'.format(timestamp))
-            np.savezi(outfile, **{(k, v.get_value())
+            outfile = os.path.join(outdir,
+                                   '{name}_{t}.npz'.format(name=self.name,
+                                                           t=timestamp))
+            np.savez(outfile, **{(k, v.get_value())
                                   for k, v in self.tparams.items()})
 
         # save timings and model config
