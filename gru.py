@@ -235,7 +235,6 @@ class GRUWithOutput(GRU):
         h = u * h_ + (1. - u) * h
         h = m_[:, None] * h + (1 - m_)[:, None] * h_
         o = T.dot(h, Wo) + bo
-
         return h, o
 
     def __call__(self, state_below, mask=None, suppress_noise=False):
@@ -805,9 +804,11 @@ class GenStochasticGRU(GenerativeGRU):
 
 class SimpleInferGRU(GenerativeGRU):
     def __init__(self, dim_in, dim_h, name='simple_inference_gru',
-                 weight_noise=False, trng=None, stochastic=True, rate=0.1):
+                 h0_mode='average', weight_noise=False, trng=None,
+                 stochastic=True, rate=0.1):
         self.stochastic = stochastic
         self.rate = rate
+        self.h0_mode = h0_mode
         if trng is None:
             self.trng = RandomStreams(6 * 10 * 2015)
         else:
@@ -818,8 +819,22 @@ class SimpleInferGRU(GenerativeGRU):
 
     def set_params(self):
         super(SimpleInferGRU, self).set_params()
-        h0 = np.zeros((self.dim_h, )).astype(floatX)
-        self.params.update(h0=h0)
+
+        k = np.int64(0)
+        self.params.update(k=k)
+
+        if self.h0_mode == 'average':
+            h0 = np.zeros((self.dim_h, )).astype(floatX)
+            self.params.update(h0=h0)
+        elif self.h0_mode == 'ffn':
+            W0 = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
+                             rng=self.rng)
+            U0 = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
+                             rng=self.rng)
+            b0 = np.zeros((self.dim_h,)).astype('float32')
+            self.params.update(W0=W0, U0=U0, b0=b0)
+        else:
+            raise ValueError(self.h0_mode)
 
     def energy(self, x, p):
         return -(x * T.log(p + 1e-7) +
@@ -857,17 +872,14 @@ class SimpleInferGRU(GenerativeGRU):
         #grads = theano.grad(energy, wrt=h_hat, consider_constant=[x])
         #return (h_hat - l * grads).astype(floatX)
 
-    def move_h(self, h, x, l, HX, bx, *params):
-        h0 = h[0]
+    def move_h(self, h0, x, l, HX, bx, *params):
         h1 = self.step_h(x[0], h0, *params)
         h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
         energy = self.energy(x, p).mean()
         grad = theano.grad(energy, wrt=h0, consider_constant=[x])
         h0 = h0 - l * grad
-        h1 = self.step_h(x[0], h0, *params)
-        h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
-        return h
+        return h0
 
     def move_h_single(self, h, x, l, HX, bx):
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
@@ -875,54 +887,63 @@ class SimpleInferGRU(GenerativeGRU):
         grads = theano.grad(energy, wrt=h, consider_constant=[x])
         return (h - l * grads).astype(floatX), p
 
-    def step_infer(self, h, m, x, l, HX, bx, *params):
-        def _shift_right(y):
-            y_s = T.zeros_like(y)
-            y_s = T.set_subtensor(y_s[1:], y[:-1])
-            return y
-
-        #h_ = _shift_right(h)
-        #x_ = _shift_right(x)
-        #h = self.move_h(x_, x, h_, h, l, HX, bx, *params)
-        h = self.move_h(h, x, l, HX, bx, *params)
+    def step_infer(self, h0, m, x, l, HX, bx, *params):
+        h0 = self.move_h(h0, x, l, HX, bx, *params)
+        h1 = self.step_h(x[0], h0, *params)
+        h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
         x_hat = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
-        #x = m * x + (1. - m) * x_hat
         energy = self.energy(x, p)
 
-        return h, x_hat, p, energy
+        return h0, x_hat, p, energy
 
-    def inference(self, x, mask, l, n_inference_steps=1):
+    def inference(self, x, mask, l, n_inference_steps=1, max_k=10):
+        # Initializing the variables
         x0 = x[0]
-        p0 = T.zeros_like(x0) + x0
-        #h0 = T.log(T.dot(T.log(p0 / (1 - p0 + 1e-7) + 1e-7) - self.bx, self.HX.T))
-        h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
+        x1 = x[1]
+        #x0_n = x0 * self.trng.binomial(p=0.1, size=x0.shape, n=1, dtype=x0.dtype)
+        #x_n = T.concatenate([x0_n[None, :, :], x1[None, :, :]], axis=0)
 
-        seqs = [mask[1:], x[1:]]
+        if self.h0_mode == 'average':
+            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
+        elif self.h0_mode == 'ffn':
+            h0 = T.dot(x0, self.W0) + T.dot(x1, self.U0) + self.b0
+
+        p0 = T.nnet.sigmoid(T.dot(h0, self.HX) + self.bx)
+
+        seqs = []
         outputs_info = [x0, p0, h0]
         non_seqs = self.get_non_seqs()
 
-        n_steps = x.shape[0] - 1
-        (x1, p, h), updates = theano.scan(
-            self.step_slice,
+        (xs, ps, hs), updates = theano.scan(
+            self.step_sample,
             sequences=seqs,
             outputs_info=outputs_info,
             non_sequences=non_seqs,
-            name=tools._p(self.name, 'rnn_ff'),
-            n_steps=n_steps,
+            name=tools._p(self.name, 'sample_init'),
+            n_steps=max_k,
             profile=tools.profile,
             strict=True
         )
-        x = T.concatenate([x0[None, :, :], x1], axis=0)
-        h = T.concatenate([h0[None, :, :], h], axis=0)
-        updates = theano.OrderedUpdates(updates)
+
+        xs = T.concatenate([x0[None, :, :], xs], axis=0)
+        hs = T.concatenate([h0[None, :, :], hs], axis=0)
+
+        x0 = xs[self.k]
+        h0 = hs[self.k]
+
+        x_n = T.concatenate([x0[None, :, :], x1[None, :, :]], axis=0)
+
+        h1 = self.step_h(x[0], h0, *self.get_non_seqs())
+        h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
+        p = T.nnet.sigmoid(T.dot(h, self.HX) + self.bx)
+        x_hat = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
+
         seqs = []
-        outputs_info = [h, None, None, None]
-        x0_n = x0 * self.trng.binomial(p=0.5, size=x0.shape, n=1, dtype=x0.dtype)
-        x_n = T.concatenate([x0_n[None, :, :], x1], axis=0)
+        outputs_info = [h0, None, None, None]
         non_seqs = [mask, x_n, l, self.HX, self.bx] + self.get_non_seqs()
 
-        (hs, x_hats, ps, energies), updates_2 = theano.scan(
+        (h0s, x_hats, ps, energies), updates_2 = theano.scan(
             self.step_infer,
             sequences=seqs,
             outputs_info=outputs_info,
@@ -934,11 +955,18 @@ class SimpleInferGRU(GenerativeGRU):
         )
         updates.update(updates_2)
 
+        h0s = T.concatenate([h0[None, :, :], h0s], axis=0)
+        x_hats = T.concatenate([x[None, :, :, :],
+                                x_hat[None, :, :, :],
+                                x_hats], axis=0)
         energy = self.energy(x, ps[-1])
-        h0_mean = hs[-1].mean(axis=(0, 1))
-        new_h = (1. - self.rate) * h0_mean + self.rate * h0_mean
-        updates += [(self.h0, new_h)]
-        return (x_hats, energy), updates
+
+        if self.h0_mode == 'average':
+            h0_mean = h0s[-1].mean(axis=0)
+            new_h = (1. - self.rate) * h0_mean + self.rate * h0_mean
+            updates += [(self.h0, new_h)]
+
+        return (x_hats, h0s, energy), updates
 
     def step_sample(self, x_, p_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
         preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
@@ -950,12 +978,16 @@ class SimpleInferGRU(GenerativeGRU):
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
         return x, p, h
 
-    def sample(self, x0=None, l=0.1, n_steps=100, n_samples=1,
-               n_inference_steps=1000):
+    def sample(self, x0=None, l=0.01, n_steps=100, n_samples=1,
+               n_inference_steps=100):
         if x0 is None:
             x0 = self.trng.binomial(p=0.5, size=(n_samples, self.dim_in), n=1,
                                     dtype=floatX)
-        h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
+
+        if self.h0_mode == 'average':
+            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
+        elif self.h0_mode == 'ffn':
+            h0 = T.dot(x0, self.W0) + T.dot(x0, self.U0) + self.b0
 
         seqs = []
         outputs_info = [h0, None]
@@ -990,6 +1022,9 @@ class SimpleInferGRU(GenerativeGRU):
             strict=True
         )
         updates.update(updates_2)
+
+        xs = T.concatenate([x0[None, :, :], xs], axis=0)
+        ps = T.concatenate([p0[None, :, :], ps], axis=0)
 
         return (xs, ps), updates
 
