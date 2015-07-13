@@ -141,8 +141,7 @@ def train(experiment_file, out_path=None, **kwargs):
 
     logger.info('Initializing monitors')
     monitor = Monitor(model['tparams'], data, cost_fn, err_fn, out_fn,
-                      sample_fn, name=model['name'], early_stopping=False,
-                      hyperparams=hyperparams)
+                      sample_fn, early_stopping=False, hyperparams=hyperparams)
 
     try:
         logger.info('Training')
