@@ -130,6 +130,7 @@ def train(experiment_file, out_path=None, **kwargs):
         err_fn = make_fn(model['inps'], model['errs'])
         out_fn = make_fn(model['inps'], model['vouts'], updates=model['vupdates'])
         sample_fn = make_fn(model['inps'], samplers, updates=model['vupdates'])
+	print 'sf', sample_fn
         valid_graph = True
     else:
         cost_fn = make_fn_given_fgrad(['cost'] + flatten_dict(costs).keys(), 0)
@@ -141,8 +142,9 @@ def train(experiment_file, out_path=None, **kwargs):
 
     logger.info('Initializing monitors')
     monitor = Monitor(model['tparams'], data, cost_fn, err_fn, out_fn,
-                      sample_fn, early_stopping=False, hyperparams=hyperparams)
-
+                      sample_fn=sample_fn, early_stopping=False, hyperparams=hyperparams)
+    print 'Testing save'
+    monitor.save_best_model()
     try:
         logger.info('Training')
         for e in xrange(epochs):
@@ -156,9 +158,8 @@ def train(experiment_file, out_path=None, **kwargs):
                     inps = data['train'].next()
                 except StopIteration:
                     btime = time.time()
-                    monitor.disp(e, 1,btime-atime)
+                    monitor.disp(e, 1, btime - atime)
                     break
-
                 outs = f_grad_shared(*inps)
                 if valid_graph:
                     train_c, train_e, train_o = monitor.update(*inps)
@@ -195,7 +196,8 @@ def train(experiment_file, out_path=None, **kwargs):
                 #check_bad_nums(rval_dict, data['train'].count)
 
                 f_update(lrate)
-
+            
+            monitor.save_best_model()
             ud = time.time() - ud_start
 
     except KeyboardInterrupt:

@@ -26,7 +26,9 @@ class Monitor(object):
     def __init__(self, tparams, data, cost_fn, err_fn, out_fn, name='model',
                  sample_fn=None, first_order_stats=False, savefile='monitors.png',
                  early_stopping=False, hyperparams=None):
+
         self.__dict__.update(locals())
+	print self.sample_fn
         del self.self
 
         self.timestamp = int(time.time())
@@ -88,7 +90,7 @@ class Monitor(object):
         #print inps[1]
         #print train_o['softmax_y_hat']
 
-        if self.sample_fn:
+        if self.sample_fn is not None:
             self.samples['train'] = self.sample_fn(*inps)
 
         if self.data['valid'] is not None and self.data['valid'].dataset is not None:
@@ -111,7 +113,7 @@ class Monitor(object):
                 raise NotImplementedError('Need to fix!')
                 self._track_current_model(valid_errs)
 
-            if self.sample_fn:
+            if self.sample_fn is not None:
                 self.samples['valid'] = self.sample_fn(*inps)
 
         if self.data['test'] is not None and self.data['test'].dataset is not None:
@@ -124,7 +126,7 @@ class Monitor(object):
             #    self._validate(self.data['test'])
             self.append_stats('test', test_c)
             self.append_stats('test', test_e)
-            if self.sample_fn:
+            if self.sample_fn is not None:
                 self.samples['test'] = self.sample_fn(*inps)
 
         # TODO: add grad norms and param norms here
@@ -240,15 +242,15 @@ class Monitor(object):
             outfile = os.path.join(outdir,
                                    '{name}_{t}.npz'.format(name=self.name,
                                                            t=timestamp))
-            np.savez(outfile, **{(k, v.get_value())
-                                  for k, v in self.tparams.items()})
+            np.savez(outfile, **dict((k, v.get_value())
+                                  for k, v in self.tparams.items()))
 
         # save timings and model config
-        pkl.dump([self.costs, self.errs], open(
-            os.path.join(outdir, 'timing_{}.pkl'.format(timestamp)), 'w'))
-        pkl.dump(hparams, open(
-            os.path.join(outdir, 'config_{}.pkl'.format(timestamp)), 'w'))
-        signal.signal(signal.SIGINT, s)
+        #pkl.dump([self.costs, self.errs], open(
+        #    os.path.join(outdir, 'timing_{}.pkl'.format(timestamp)), 'w'))
+        #pkl.dump(hparams, open(
+        #    os.path.join(outdir, 'config_{}.pkl'.format(timestamp)), 'w'))
+        #signal.signal(signal.SIGINT, s)
 
     def _track_current_model(self, errs):
         """Keep track of best model and record it if necessary."""
