@@ -166,9 +166,8 @@ def train(experiment_file, out_path=None, **kwargs):
                     train_c, train_e, train_o = monitor.update(*outs)
 
                 btime = time.time()
-                if display_interval is not None and s == display_interval:
+                if display_interval is not None and s % display_interval == 0:
                     monitor.disp(e, s, btime - atime)
-                    s = 0
                     if out_path is not None:
                         save_images = data['train'].dataset.save_images
                         rnn_samples = train_o['cond_gen_gru_x'][:, :10]
@@ -189,8 +188,11 @@ def train(experiment_file, out_path=None, **kwargs):
                             rbm_probs,
                             path.join(out_path, 'rbm_probs_%d.png' % (i % 20)))
                         i += 1
-                else:
-                    s += 1
+
+                if s % 10000 == 0:
+                    print 'Saving'
+                    monitor.save_best_model()
+                s += 1
 
                 #check_bad_nums(rval_dict, data['train'].count)
 
