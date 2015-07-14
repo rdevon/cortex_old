@@ -647,13 +647,30 @@ class GenerativeGRU(GRU):
 
 class GenGRU(GenerativeGRU):
     def __init__(self, dim_in, dim_h, weight_noise=False, name='gen_gru',
-                 trng=None):
+                 h0_mode='average', rate=0.1, trng=None):
         if weight_noise:
             raise NotImplementedError()
+
+        self.h0_mode = h0_mode
+        self.rate = rate
 
         self.weight_noise = weight_noise
         super(GenGRU, self).__init__(dim_in, dim_h, weight_noise=weight_noise,
                                      trng=trng, name=name)
+
+    def set_params(self):
+        super(GenGRU, self).set_params()
+
+        if self.h0_mode == 'average':
+            h0 = np.zeros((self.dim_h,)).astype(floatX)
+            self.params.update(h0=h0)
+        elif self.h0_mode == 'ffn':
+            W0 = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
+                             rng=self.rng)
+            b0 = np.zeros((self.dim_h,)).astype('float32')
+            self.params.update(W0=W0, b0=b0)
+        elif self.h0_mode is not None:
+            raise ValueError(self.h0_mode)
 
     def set_inputs(self, state_below, suppress_noise=False):
         if self.weight_noise and not suppress_noise:
@@ -670,10 +687,13 @@ class GenGRU(GenerativeGRU):
         preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
         r, u = self.get_gates(preact)
         preactx = T.dot(h_, Urb) * r + T.dot(x_, XHb) + bhb
+
         h = T.tanh(preactx)
-        h = u * h_ + (1. - u) * h
+        h = u * h + (1. - u) * h_
+
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
+
         return x, p, h
 
     def sample(self, x0=None, n_samples=10, n_steps=10):
@@ -682,10 +702,17 @@ class GenGRU(GenerativeGRU):
         if x0 is None:
             x0 = self.trng.binomial(size=(n_samples, dim_in), p=0.5, n=1, dtype='float32')
             p0 = T.unbroadcast(T.alloc(0.5, n_samples, dim_in), 0)
-            h0 = T.nnet.tanh(T.dot(x0, XHa) + bha)
         else:
             p0 = T.zeros_like(x0) + x0
+
+        if self.h0_mode == 'average':
+            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
+        elif self.h0_mode == 'ffn':
+            h0 = T.dot(x0, self.W0) + self.b0
+        elif self.h0_mode is None:
             h0 = T.alloc(0., n_samples, self.dim_h)
+        else:
+            raise ValueError(self.h0_mode)
 
         seqs = []
         outputs_info = [x0, p0, h0]
@@ -699,6 +726,7 @@ class GenGRU(GenerativeGRU):
                                     n_steps=n_steps,
                                     profile=tools.profile,
                                     strict=True)
+
         x = tools.concatenate([x0[None, :, :], x])
         p = tools.concatenate([p0[None, :, :], p])
         h = tools.concatenate([h0[None, :, :], h])
@@ -709,14 +737,19 @@ class GenGRU(GenerativeGRU):
         preact = T.dot(h_, Ura) + x_
         r, u = self.get_gates(preact)
         preactx = T.dot(h_, Urb) * r + xx_
+
         h = T.tanh(preactx)
-        h = u * h_ + (1. - u) * h
+        h = u * h + (1. - u) * h_
         h = m_[:, None] * h + (1. - m_)[:, None] * h_
+
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
+
         return h, x, p
 
     def __call__(self, state_below, mask=None):
+        state_below = state_below * (1 - self.trng.binomial(
+            p=0.1, size=state_below.shape, n=1, dtype=state_below.dtype))
         n_steps = state_below.shape[0]
         n_samples = state_below.shape[1]
 
@@ -725,8 +758,17 @@ class GenGRU(GenerativeGRU):
 
         x, x_ = self.set_inputs(state_below)
 
+        if self.h0_mode == 'average':
+            h0 = T.alloc(0., state_below[0].shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
+        elif self.h0_mode == 'ffn':
+            h0 = T.dot(state_below[0], self.W0) + self.b0
+        elif self.h0_mode is None:
+            h0 = T.alloc(0., n_samples, self.dim_h)
+        else:
+            raise ValueError(self.h0_mode)
+
         seqs = [mask, x, x_]
-        outputs_info = [T.alloc(0., n_samples, self.dim_h), None, None]
+        outputs_info = [h0, None, None]
         non_seqs = [self.Ura, self.Urb, self.HX, self.bx]
 
         (h, x, p), updates = theano.scan(self.step_slice,
@@ -737,6 +779,11 @@ class GenGRU(GenerativeGRU):
                                     n_steps=n_steps,
                                     profile=tools.profile,
                                     strict=True)
+
+        if self.h0_mode == 'average':
+            h0_mean = h.mean(axis=(0, 1))
+            new_h = (1. - self.rate) * self.h0 + self.rate * h0_mean
+            updates += [(self.h0, new_h)]
 
         return OrderedDict(h=h, x=x, p=p), updates
 
@@ -1056,7 +1103,7 @@ class SimpleInferGRU(GenerativeGRU):
 
         if self.h0_mode == 'average':
             h0_mean = h0s[-1].mean(axis=0)
-            new_h = (1. - self.rate) * h0_mean + self.rate * h0_mean
+            new_h = (1. - self.rate) * self.h0 + self.rate * h0_mean
             updates += [(self.h0, new_h)]
 
         return (x_hats, h0s, energy), updates
