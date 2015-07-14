@@ -28,7 +28,7 @@ class Monitor(object):
                  early_stopping=False, hyperparams=None):
 
         self.__dict__.update(locals())
-	print self.sample_fn
+        print self.sample_fn
         del self.self
 
         self.timestamp = int(time.time())
