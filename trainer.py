@@ -195,8 +195,8 @@ def train(experiment_file, out_path=None, **kwargs):
                 #check_bad_nums(rval_dict, data['train'].count)
 
                 f_update(lrate)
-                print 'Saving'
-                monitor.save_best_model()
+            print 'Saving'
+            monitor.save_best_model()
             ud = time.time() - ud_start
 
     except KeyboardInterrupt:
