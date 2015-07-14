@@ -154,10 +154,6 @@ def train(experiment_file, out_path=None, **kwargs):
             while True:
                 atime = time.time()
                 try:
-                    if i == 1:
-                        monitor.disp(e, 1, btime - atime)
-                        break
-
                     inps = data['train'].next()
                 except StopIteration:
                     btime = time.time()
