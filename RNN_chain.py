@@ -8,6 +8,8 @@ from matplotlib import animation
 from matplotlib import pylab as plt
 import numpy as np
 import os
+from os import path
+import sys
 from sys import stdout
 import theano
 from theano import tensor as T
@@ -119,7 +121,7 @@ def energy_function(model, mode='rnn'):
 
     return theano.function([x0, x1], energy)
 
-def test(batch_size=20, dim_h=500, save_graphs=False, mode='rnn'):
+def test(batch_size=20, dim_h=500, save_graphs=False, mode='rnn', out_path=''):
     train = mnist_iterator(batch_size=batch_size, mode='train', inf=True,
                            out_mode='model_chains')
 
@@ -203,23 +205,22 @@ def test(batch_size=20, dim_h=500, save_graphs=False, mode='rnn'):
                 print ('%d: cost: %.5f | energy: %.5f | prob: %.5f | '
                        'h_mean: %.5f | h_abs_mean: %.5f | h_std_mean: %.5f | '
                        'h_diff: %.5f'
-                       % (e, rval[0], rval[1], np.exp(-rval[1]), rval[4], rval[5], rval[6], rval[7]))
+                       % (e, rval[0], rval[1], np.exp(-rval[1]), rval[4],
+                          rval[5], rval[6], rval[7]))
             if e % 10 == 0:
                 idx = np.random.randint(rval[2].shape[1])
                 sample = np.concatenate([x[:, idx, :][None, :, :],
                                         rval[2][:, idx, :][None, :, :]], axis=0)
-                train.save_images(sample, '/Users/devon/tmp/chain_sampler2.png')
+                train.save_images(sample, path.join(out_path, 'chain_sampler2.png'))
                 sample_chain = rval[3]
-                train.save_images(sample_chain, '/Users/devon/tmp/chain_chain2.png')
-                train.save_images(x, '/Users/devon/tmp/input_chain2.png')
-                #prob_chain = rval[3]
-                #train.save_images(prob_chain, '/Users/devon/tmp/grad_probs.png')
+                train.save_images(sample_chain, path.join(out_path, 'chain_chain2.png'))
+                train.save_images(x, path.join('input_chain2.png'))
 
             f_grad_updates(learning_rate)
     except KeyboardInterrupt:
         print 'Training interrupted'
 
-    outfile = os.path.join('/Users/devon/tmp/',
+    outfile = os.path.join(out_path,
                            'rnn_chain_model_{}.npz'.format(int(time.time())))
 
     print 'Saving'
@@ -227,4 +228,5 @@ def test(batch_size=20, dim_h=500, save_graphs=False, mode='rnn'):
     print 'Done saving. Bye bye.'
 
 if __name__ == '__main__':
-    test()
+    out_path = sys.argv[1]
+    test(out_path=out_path)
