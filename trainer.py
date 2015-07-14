@@ -130,7 +130,6 @@ def train(experiment_file, out_path=None, **kwargs):
         err_fn = make_fn(model['inps'], model['errs'])
         out_fn = make_fn(model['inps'], model['vouts'], updates=model['vupdates'])
         sample_fn = make_fn(model['inps'], samplers, updates=model['vupdates'])
-	print 'sf', sample_fn
         valid_graph = True
     else:
         cost_fn = make_fn_given_fgrad(['cost'] + flatten_dict(costs).keys(), 0)
@@ -155,6 +154,10 @@ def train(experiment_file, out_path=None, **kwargs):
             while True:
                 atime = time.time()
                 try:
+                    if i == 1:
+                        monitor.disp(e, 1, btime - atime)
+                        break
+
                     inps = data['train'].next()
                 except StopIteration:
                     btime = time.time()
@@ -196,8 +199,8 @@ def train(experiment_file, out_path=None, **kwargs):
                 #check_bad_nums(rval_dict, data['train'].count)
 
                 f_update(lrate)
-            
-            monitor.save_best_model()
+                print 'Saving'
+                monitor.save_best_model()
             ud = time.time() - ud_start
 
     except KeyboardInterrupt:
