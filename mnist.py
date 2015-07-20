@@ -1,7 +1,5 @@
 import cPickle
 import gzip
-import igraph
-from igraph import Graph
 import multiprocessing as mp
 import numpy as np
 import PIL
