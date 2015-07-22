@@ -17,7 +17,7 @@ from matplotlib import pylab as plt
 
 class SimpleMonitor(object):
     def __init__(self, *args):
-        self.d = dict()
+        self.d = OrderedDict()
 
     def update(self, **kwargs):
         for k, v in kwargs.iteritems():
@@ -29,7 +29,7 @@ class SimpleMonitor(object):
     def display(self, e):
         s = 'Samples: %d' % e
         for k, v in self.d.iteritems():
-            s += ' | {key}: {value}'.format(key=k, value=v[-1])
+            s += ' | %s: %.5f' % (k, v[-1])
         print s
 
     def save(self, out_path):
