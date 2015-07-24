@@ -2,6 +2,7 @@
 Module for monitor class.
 '''
 import matplotlib
+from matplotlib import pylab as plt
 import numpy as np
 import cPickle as pkl
 import os
@@ -12,6 +13,43 @@ from collections import OrderedDict
 from tools import check_bad_nums
 matplotlib.use('Agg')
 from matplotlib import pylab as plt
+
+
+class SimpleMonitor(object):
+    def __init__(self, *args):
+        self.d = OrderedDict()
+
+    def update(self, **kwargs):
+        for k, v in kwargs.iteritems():
+            if not self.d.get(k, False):
+                self.d[k] = [v]
+            else:
+                self.d[k].append(v)
+
+    def display(self, e):
+        s = 'Samples: %d' % e
+        for k, v in self.d.iteritems():
+            s += ' | %s: %.5f' % (k, v[-1])
+        print s
+
+    def save(self, out_path):
+        plt.clf()
+        x = 2
+        y = ((len(self.d) - 1) // 2) + 1
+        fig, axes = plt.subplots(y, x)
+        fig.set_size_inches(10, 10)
+        fig.patch.set_alpha(.1)
+
+        for j, (k, v) in enumerate(self.d.iteritems()):
+            ax = axes[j // x, j % x]
+            ax.plot(v, label=k)
+            ax.set_title(k)
+            ax.legend()
+            ax.patch.set_alpha(0.5)
+
+        plt.tight_layout()
+        plt.savefig(out_path, facecolor=fig.get_facecolor(), edgecolor='none', transparent=True)
+        plt.close()
 
 
 class Monitor(object):

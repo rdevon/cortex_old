@@ -1,7 +1,5 @@
 import cPickle
 import gzip
-import igraph
-from igraph import Graph
 import multiprocessing as mp
 import numpy as np
 import PIL
@@ -126,19 +124,21 @@ class mnist_iterator:
             if not self.inf:
                 raise StopIteration
 
-        pairs = [self.pairs[i] for i in xrange(cpos, cpos + self.bs)]
+        pairs = [self.pairs[i] for i in xrange(cpos, cpos + self.bs)] * self.repeat
 
         if cpos + 2 * self.bs >= len(self.pairs):
             self.pos = -1
         else:
             self.pos += self.bs
 
-        x = np.zeros((2, self.bs, self.dim)).astype('float32')
+        x = np.zeros((2, self.bs * self.repeat, self.dim)).astype('float32')
+        y = []
         for i, p in enumerate(pairs):
             x[0, i] = self.X[p[0]]
             x[1, i] = self.X[p[1]]
+            y.append((np.argmax(self.O[p[0]]), np.argmax(self.O[p[1]])))
 
-        return x, None
+        return x, y, pairs
 
     def _next_chains(self):
         assert self.chain is not None
@@ -202,7 +202,13 @@ class mnist_iterator:
         last_batch, _ = self._next()
         data[0] = last_batch
 
-        energies = np.zeros((self.bs,))
+        energies = np.zeros((self.bs, self.bs))
+
+        for i, x in enumerate(batch):
+            for j, y in enumerate(batch):
+                if i != j:
+                    energies[i, j] = self.f_energy(x, y)
+
         for y in xrange(1, self.chain_length):
             last_batch = data[y - 1]
             batch, _ = self._next()
@@ -258,6 +264,8 @@ class mnist_iterator:
         return x, y
 
     def save_images(self, x, imgfile, transpose=False):
+        if len(x.shape) == 2:
+            x = x.reshape((x.shape[0], 1, x.shape[1]))
         tshape = x.shape[0], x.shape[1]
         x = x.reshape((x.shape[0] * x.shape[1], x.shape[2]))
         image = self.show(x.T, tshape, transpose=transpose)
