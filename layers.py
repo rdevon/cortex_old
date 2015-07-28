@@ -180,8 +180,6 @@ class MLP(Layer):
         params = list(params)
 
         for l in xrange(self.n_layers):
-            W = params.pop(0)
-            b = params.pop(0)
 
             if self.weight_noise:
                 W_noise = params.pop(0)
