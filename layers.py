@@ -121,14 +121,19 @@ class MLP(Layer):
         self.params = OrderedDict()
 
         for l in xrange(self.n_layers):
-            if l == self.n_layers - 1:
-                dim = self.dim_out
+            if l == 0:
+                dim_in = self.dim_in
             else:
-                dim = self.dim_h
+                dim_in = self.dim_h
 
-            W = tools.norm_weight(self.dim_in, dim,
+            if l == self.n_layers - 1:
+                dim_out = self.dim_out
+            else:
+                dim_out = self.dim_h
+
+            W = tools.norm_weight(dim_in, dim_out,
                                   scale=self.weight_scale, ortho=False)
-            b = np.zeros((dim,)).astype(floatX)
+            b = np.zeros((dim_out,)).astype(floatX)
 
             self.params['W_%d' % l] = W
             self.params['b_%d' % l] = b
@@ -180,6 +185,8 @@ class MLP(Layer):
         params = list(params)
 
         for l in xrange(self.n_layers):
+            W = params.pop(0)
+            b = params.pop(0)
 
             if self.weight_noise:
                 W_noise = params.pop(0)
