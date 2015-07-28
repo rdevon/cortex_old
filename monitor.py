@@ -29,7 +29,7 @@ class SimpleMonitor(object):
     def display(self, e):
         s = 'Samples: %d' % e
         for k, v in self.d.iteritems():
-            s += ' | %s: %.5f' % (k, v[-1])
+            s += ' | %s: %.3f' % (k, v[-1])
         print s
 
     def save(self, out_path):

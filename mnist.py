@@ -52,8 +52,12 @@ class mnist_iterator:
         elif self.mode == 'multi_chains':
             self.next = self._next_multi_chains
             self.chains = np.load('chains.npy').tolist()
-            self.chain_length = len(self.chains[0])
-            random.shuffle(self.chains)
+            self.chain_offset = 0
+            self.chain_idx = []
+            for i, chain in enumerate(self.chains):
+                self.chain_idx += [(i, j)
+                    for j in range(0, (len(chain) - 2 * self.chain_length), self.chain_length)]
+            random.shuffle(self.chain_idx)
         elif self.mode == 'model_chains':
             self.next = self._next_model_chains
         else:
@@ -172,19 +176,25 @@ class mnist_iterator:
         assert self.chains is not None
         cpos = self.pos
         if cpos == -1:
+            print 'EOE'
             # reset
             self.pos = 0
             cpos = self.pos
             if self.shuffle:
-                for chain in self.chains:
-                    random.shuffle(chain)
-                random.shuffle(self.chains)
+                random.shuffle(self.chain_idx)
+                self.chain_offset = random.randint(0, self.chain_length)
             if not self.inf:
                 raise StopIteration
+        ijs = [(i, j) for i, j in [self.chain_idx[k] for k in xrange(cpos, cpos + self.bs)]]
 
-        chains = [self.chains[i] for i in xrange(cpos, cpos + self.bs)]
+        try:
+            chains = [[self.chains[i][j + t + self.chain_offset]
+                       for t in range(self.chain_length)] for i, j in ijs]
+        except IndexError as e:
+            print ijs, self.chain_offset
+            raise e
 
-        if cpos + 2 * self.bs >= len(self.chains):
+        if cpos + 2 * self.bs >= len(self.chain_idx):
             self.pos = -1
         else:
             self.pos += self.bs
