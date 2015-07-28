@@ -86,6 +86,124 @@ class FFN(Layer):
         return OrderedDict(z=z), theano.OrderedUpdates()
 
 
+class MLP(Layer):
+    def __init__(self, dim_in, dim_h, dim_out, n_layers, rng=None, trng=None,
+                 weight_scale=0.1, weight_noise=False, dropout=False,
+                 h_act='T.nnet.sigmoid', out_act='T.nnet.sigmoid',
+                 name='MLP'):
+
+        if rng is None:
+            rng = tools.rng_
+        self.rng = rng
+
+        if trng is None:
+            self.trng = RandomStreams(6 * 10 * 2015)
+        else:
+            self.trng = trng
+
+        self.dim_in = dim_in
+        self.dim_h = dim_h
+        self.dim_out = dim_out
+        self.n_layers = n_layers
+        assert n_layers > 0
+
+        self.weight_scale = weight_scale
+        self.weight_noise = weight_noise
+        self.dropout = dropout
+
+        self.h_act = h_act
+        self.out_act = out_act
+
+        super(MLP, self).__init__(name=name)
+        self.set_params()
+
+    def set_params(self):
+        self.params = OrderedDict()
+
+        for l in xrange(self.n_layers):
+            if l == self.n_layers - 1:
+                dim = self.dim_out
+            else:
+                dim = self.dim_h
+
+            W = tools.norm_weight(self.dim_in, dim,
+                                  scale=self.weight_scale, ortho=False)
+            b = np.zeros((dim,)).astype(floatX)
+
+            self.params['W_%d' % l] = W
+            self.params['b_%d' % l] = b
+
+            if self.weight_noise:
+                W_noise = (W * 0).astype(floatX)
+                self.params['W_%d_noise' % l] = W_noise
+
+    def __call__(self, x):
+        for l in xrange(self.n_layers):
+            W = self.__dict__['W_%d' % l]
+            b = self.__dict__['b_%d' % l]
+
+            if self.weight_noise:
+                W_noise = self.__dict__['W_%d_noise' % l]
+                W = W + W_noise
+
+            if l == self.n_layers - 1:
+                activ = self.out_act
+            else:
+                activ = self.h_act
+
+            x = eval(activ)(T.dot(x, W) + b)
+
+            if self.dropout:
+                if activ == 'T.tanh':
+                    raise NotImplementedError()
+                else:
+                    x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
+                                             dtype=x.dtype)
+                    x = x * x_d / (1 - self.dropout)
+
+        return x
+
+    def get_params(self):
+        params = []
+        for l in xrange(self.n_layers):
+            W = self.__dict__['W_%d' % l]
+            b = self.__dict__['b_%d' % l]
+            params += [W, b]
+
+            if self.weight_noise:
+                W_noise = self.__dict__['W_%d_noise' % l]
+                params += [W_noise]
+
+        return params
+
+    def step_call(self, x, *params):
+        params = list(params)
+
+        for l in xrange(self.n_layers):
+            W = params.pop(0)
+            b = params.pop(0)
+
+            if self.weight_noise:
+                W_noise = params.pop(0)
+                W = W + W_noise
+
+            if l == self.n_layers - 1:
+                activ = self.out_act
+            else:
+                activ = self.h_act
+
+            x = eval(activ)(T.dot(x, W) + b)
+
+            if self.dropout:
+                if activ == 'T.tanh':
+                    raise NotImplementedError()
+                else:
+                    x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
+                                             dtype=x.dtype)
+                    x = x * x_d / (1 - self.dropout)
+        return x
+
+
 class Softmax(Layer):
     def __init__(self, name='softmax'):
         super(Softmax, self).__init__(name)
