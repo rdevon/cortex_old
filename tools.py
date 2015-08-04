@@ -89,6 +89,10 @@ def tanh(x):
 def linear(x):
     return x
 
+def log_mean_exp(x, axis=None):
+    x_max = T.max(x, axis=axis, keepdims=True)
+    return T.log(T.mean(T.exp(x - x_max), axis=axis, keepdims=True)) + x_max
+
 def concatenate(tensor_list, axis=0):
     """
     Alternative implementation of `theano.T.concatenate`.
