@@ -13,6 +13,7 @@ from theano import tensor as T
 
 
 floatX = theano.config.floatX
+pi = theano.shared(np.pi).astype('float32')
 
 
 class Layer(object):
@@ -114,8 +115,37 @@ class MLP(Layer):
         self.h_act = h_act
         self.out_act = out_act
 
+        if out_act == 'T.nnet.sigmoid':
+            self.sample = self._binomial
+            self.neg_log_prob = self._cross_entropy
+        elif out_act == 'lambda x: x':
+            self.sample = self._normal
+            self.neg_log_prob = self._normal_prob
+        else:
+            raise ValueError()
+
         super(MLP, self).__init__(name=name)
         self.set_params()
+
+    def _binomial(self, p, size=None):
+        if size is None:
+            size = p.shape
+        return self.trng.binomial(p=p, size=size, n=1, dtype=p.dtype)
+
+    def _cross_entropy(self, x, p):
+        energy = -(x * T.log(p + 1e-8) +
+                   (1 - x) * T.log(1 - p + 1e-8))
+        energy = energy.sum(axis=energy.ndim-1)
+        return energy
+
+    def _normal(self, mu, log_sigma, size=None):
+        if size is None:
+            size = mu.shape
+        return self.trng.normal(avg=mu, std=sigma)
+
+    def _normal_prob(self, x, mu, log_sigma):
+        energy = -(x - mu)**2 / (2 * T.exp(2 * log_sigma)) - log_sigma - T.log(2 * pi) / 2.
+        return energy
 
     def set_params(self):
         self.params = OrderedDict()
@@ -141,6 +171,12 @@ class MLP(Layer):
             if self.weight_noise:
                 W_noise = (W * 0).astype(floatX)
                 self.params['W_%d_noise' % l] = W_noise
+
+        if self.out_act == 'lambda x: x':
+            Ws = tools.norm_weight(self.dim_h, dim_out,
+                                    scale=self.weight_scale, ortho=False)
+            bs = np.zeros((dim_out,)).astype(floatX)
+            self.params.update(Ws=Ws, bs=bs)
 
     def __call__(self, x):
         for l in xrange(self.n_layers):
@@ -179,9 +215,15 @@ class MLP(Layer):
                 W_noise = self.__dict__['W_%d_noise' % l]
                 params += [W_noise]
 
+        if self.out_act == 'lambda x: x':
+            Ws = self.Ws
+            bs = self.bs
+            params += [Ws, bs]
+
         return params
 
     def step_call(self, x, *params):
+        # Used within scan with `get_params`
         params = list(params)
 
         for l in xrange(self.n_layers):

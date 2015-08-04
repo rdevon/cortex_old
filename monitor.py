@@ -29,7 +29,11 @@ class SimpleMonitor(object):
     def display(self, e):
         s = 'Samples: %d' % e
         for k, v in self.d.iteritems():
-            s += ' | %s: %.3f' % (k, v[-1])
+            try:
+                s += ' | %s: %.3f' % (k, v[-1])
+            except TypeError as e:
+                print 'Error: %s, %s' % (k, v[-1])
+                raise e
         print s
 
     def save(self, out_path):
