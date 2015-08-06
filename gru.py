@@ -7,6 +7,8 @@ from collections import OrderedDict
 from layers import FFN
 from layers import Layer
 import numpy as np
+from rnn import RNN
+from rnn import GenRNN
 import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
@@ -24,23 +26,6 @@ def raise_type_error(o, t):
 
 pi = theano.shared(np.pi).astype(floatX)
 
-
-class RNN(Layer):
-
-    def __init__(self, dim_in, dim_h, name='rnn'):
-        self.dim_in = dim_in
-        self.dim_h = dim_h
-        super(RNN, self).__init__(name)
-
-    def recurrent_step(self, *xs):
-        preact = T.sum(xs, axis=0)
-        return preact
-
-    @staticmethod
-    def _slice(_x, n, dim):
-        if _x.ndim == 3:
-            return _x[:, :, n*dim:(n+1)*dim]
-        return _x[:, n*dim:(n+1)*dim]
 
 class StackedRNN(RNN):
     def __init__(self, name='stacked_rnn', forward_backward=True, *rnns):
@@ -645,14 +630,15 @@ class GenerativeGRU(GRU):
         return OrderedDict(x=x, p=p, h=h, x0=x0, p0=p0, h0=h0), updates
 
 
-class GenGRU(GenerativeGRU):
+class GenGRU(GenerativeGRU, GenRNN):
     def __init__(self, dim_in, dim_h, weight_noise=False, name='gen_gru',
-                 h0_mode='average', rate=0.1, trng=None):
+                 h0_mode='average', rate=0.1, trng=None, condition_on_x=False):
         if weight_noise:
             raise NotImplementedError()
 
         self.h0_mode = h0_mode
         self.rate = rate
+        self.condition_on_x = condition_on_x
 
         self.weight_noise = weight_noise
         super(GenGRU, self).__init__(dim_in, dim_h, weight_noise=weight_noise,
@@ -660,6 +646,10 @@ class GenGRU(GenerativeGRU):
 
     def set_params(self):
         super(GenGRU, self).set_params()
+
+        if self.condition_on_x:
+            XX = norm_weight(self.dim_in, self.dim_in)
+            self.params.update(XX=XX)
 
         if self.h0_mode == 'average':
             h0 = np.zeros((self.dim_h,)).astype(floatX)
@@ -672,18 +662,16 @@ class GenGRU(GenerativeGRU):
         elif self.h0_mode is not None:
             raise ValueError(self.h0_mode)
 
-    def set_inputs(self, state_below, suppress_noise=False):
-        if self.weight_noise and not suppress_noise:
-            XHa = self.XHa + self.XHa_noise
-            XHb = self.XHb + self.XHb_noise
-        else:
-            XHa = self.XHa
-            XHb = self.XHb
-        x = T.dot(state_below, XHa) + self.bha
-        x_ = T.dot(state_below, XHb) + self.bhb
-        return x, x_
+    def get_params(self):
+        params = [self.XHa, self.Ura, self.bha, self.XHb, self.Urb, self.bhb,
+                  self.HX, self.bx]
+        if self.condition_on_x:
+            params.append(self.XX)
+        return params
 
-    def step_sample(self, x_, p_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
+    def step_sample(self, h_, x_, *params):
+        XHa, Ura, bha, XHb, Urb, bhb, HX, bx = params[:8]
+
         preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
         r, u = self.get_gates(preact)
         preactx = T.dot(h_, Urb) * r + T.dot(x_, XHb) + bhb
@@ -691,101 +679,42 @@ class GenGRU(GenerativeGRU):
         h = T.tanh(preactx)
         h = u * h + (1. - u) * h_
 
-        p = T.nnet.sigmoid(T.dot(h, HX) + bx)
+        preact = T.dot(h, HX) + bx
+        if self.condition_on_x:
+            XX = params[9]
+            preact += T.dot(x_, XX)
+        p = T.nnet.sigmoid(preact)
+
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
 
-        return x, p, h
+        return h, x, p
 
-    def sample(self, x0=None, n_samples=10, n_steps=10):
-        dim_in, dim_h = self.XHa.shape
+    def step_slice(self, m_, x_, h_, *params):
+        XHa, Ura, bha, XHb, Urb, bhb, HX, bx = params[:8]
 
-        if x0 is None:
-            x0 = self.trng.binomial(size=(n_samples, dim_in), p=0.5, n=1, dtype='float32')
-            p0 = T.unbroadcast(T.alloc(0.5, n_samples, dim_in), 0)
-        else:
-            p0 = T.zeros_like(x0) + x0
-
-        if self.h0_mode == 'average':
-            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
-        elif self.h0_mode == 'ffn':
-            h0 = T.dot(x0, self.W0) + self.b0
-        elif self.h0_mode is None:
-            h0 = T.alloc(0., n_samples, self.dim_h)
-        else:
-            raise ValueError(self.h0_mode)
-
-        seqs = []
-        outputs_info = [x0, p0, h0]
-        non_seqs = self.get_non_seqs()
-
-        (x, p, h), updates = theano.scan(self.step_sample,
-                                    sequences=seqs,
-                                    outputs_info=outputs_info,
-                                    non_sequences=non_seqs,
-                                    name=tools._p(self.name, '_sampling'),
-                                    n_steps=n_steps,
-                                    profile=tools.profile,
-                                    strict=True)
-
-        x = tools.concatenate([x0[None, :, :], x])
-        p = tools.concatenate([p0[None, :, :], p])
-        h = tools.concatenate([h0[None, :, :], h])
-
-        return OrderedDict(x=x, p=p, h=h, x0=x0, p0=p0, h0=h0), updates
-
-    def step_slice(self, m_, x_, xx_, h_, Ura, Urb, HX, bx):
-        preact = T.dot(h_, Ura) + x_
+        preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
         r, u = self.get_gates(preact)
-        preactx = T.dot(h_, Urb) * r + xx_
+        preactx = T.dot(h_, Urb) * r + T.dot(x_, XHb) + bhb
 
         h = T.tanh(preactx)
         h = u * h + (1. - u) * h_
         h = m_[:, None] * h + (1. - m_)[:, None] * h_
 
-        p = T.nnet.sigmoid(T.dot(h, HX) + bx)
+        preact = T.dot(h, HX) + bx
+        if self.condition_on_x:
+            XX = params[9]
+            preact += T.dot(x_, XX)
+        p = T.nnet.sigmoid(preact)
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
 
         return h, x, p
 
     def __call__(self, state_below, mask=None):
-        state_below = state_below * (1 - self.trng.binomial(
-            p=0.1, size=state_below.shape, n=1, dtype=state_below.dtype))
-        n_steps = state_below.shape[0]
-        n_samples = state_below.shape[1]
+        return GenRNN.__call__(self, state_below, mask=mask)
 
-        if mask is None:
-            mask = T.alloc(1., n_steps, 1).astype(floatX)
+    def sample(self, x0=None, n_samples=10, n_steps=10):
+        return GenRNN.sample(self, x0=x0, n_samples=n_samples, n_steps=n_steps)
 
-        x, x_ = self.set_inputs(state_below)
-
-        if self.h0_mode == 'average':
-            h0 = T.alloc(0., state_below[0].shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
-        elif self.h0_mode == 'ffn':
-            h0 = T.dot(state_below[0], self.W0) + self.b0
-        elif self.h0_mode is None:
-            h0 = T.alloc(0., n_samples, self.dim_h)
-        else:
-            raise ValueError(self.h0_mode)
-
-        seqs = [mask, x, x_]
-        outputs_info = [h0, None, None]
-        non_seqs = [self.Ura, self.Urb, self.HX, self.bx]
-
-        (h, x, p), updates = theano.scan(self.step_slice,
-                                    sequences=seqs,
-                                    outputs_info=outputs_info,
-                                    non_sequences=non_seqs,
-                                    name=tools._p(self.name, '_layers'),
-                                    n_steps=n_steps,
-                                    profile=tools.profile,
-                                    strict=True)
-
-        if self.h0_mode == 'average':
-            h0_mean = h.mean(axis=(0, 1))
-            new_h = (1. - self.rate) * self.h0 + self.rate * h0_mean
-            updates += [(self.h0, new_h)]
-
-        return OrderedDict(h=h, x=x, p=p), updates
 
 class GenStochasticGRU(GenerativeGRU):
     def __init__(self, dim_in, dim_h, weight_noise=False, name='gen_stoch_gru',

@@ -23,6 +23,21 @@ def gaussian(x, mu, s):
 def log_gaussian(x, mu, s):
     return -(x - mu)**2 / (2 * s**2) - T.log(s + 1e-7) - T.sqrt(2 * pi).astype('float32')
 
+def load_model(model, model_file):
+    print 'Loading model from %s' % model_file
+    pretrained_model = np.load(model_file)
+
+    for k, v in model.params.iteritems():
+        try:
+            pretrained_v = pretrained_model[
+                '{name}_{key}'.format(name=model.name, key=k)]
+            print 'Found %s' % k
+            model.params[k] = pretrained_v
+        except KeyError:
+            print '{} not found'.format(k)
+
+    return model
+
 def check_bad_nums(rval_dict, i):
     bad_nums = OrderedDict()
     for k, rval in rval_dict.iteritems():
@@ -91,7 +106,7 @@ def linear(x):
 
 def log_mean_exp(x, axis=None):
     x_max = T.max(x, axis=axis, keepdims=True)
-    return T.log(T.mean(T.exp(x - x_max), axis=axis, keepdims=True)) + x_max
+    return T.log(T.mean(T.exp(x - x_max), axis=axis, keepdims=True) + 1e-7) + x_max
 
 def concatenate(tensor_list, axis=0):
     """

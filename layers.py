@@ -133,8 +133,8 @@ class MLP(Layer):
         return self.trng.binomial(p=p, size=size, n=1, dtype=p.dtype)
 
     def _cross_entropy(self, x, p):
-        energy = -(x * T.log(p + 1e-8) +
-                   (1 - x) * T.log(1 - p + 1e-8))
+        energy = -(x * T.log(p + 1e-7) +
+                   (1 - x) * T.log(1 - p + 1e-7))
         energy = energy.sum(axis=energy.ndim-1)
         return energy
 

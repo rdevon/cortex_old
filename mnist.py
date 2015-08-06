@@ -2,6 +2,7 @@ import cPickle
 import gzip
 import multiprocessing as mp
 import numpy as np
+from os import path
 import PIL
 import random
 import sys
@@ -18,7 +19,7 @@ class mnist_iterator:
     def __init__(self, batch_size=128, data_file='/Users/devon/Data/mnist.pkl.gz',
                  restrict_digits=None, mode='train', shuffle=True, inf=False,
                  out_mode='', repeat=1, chain_length=20, reset_chains=False,
-                 chain_build_batch=100, stop=None):
+                 chain_build_batch=100, stop=None, out_path=None, chain_stride=None):
         # load MNIST
         with gzip.open(data_file, 'rb') as f:
             x = cPickle.load(f)
@@ -45,6 +46,11 @@ class mnist_iterator:
         self.mode = out_mode
         self.chains_build_batch = chain_build_batch
         self.reset_chains = reset_chains
+        self.out_path = out_path
+        if chain_stride is None:
+            self.chain_stride = self.chain_length
+        else:
+            self.chain_stride = chain_stride
 
         if restrict_digits is None:
             n_classes = 10
@@ -352,15 +358,18 @@ class mnist_iterator:
             x_p = None
             h_p = np.random.normal(loc=0, scale=1, size=(self.bs, self.dim_h)).astype('float32')
             self._build_chains2(x_p=x_p, h_p=h_p)
+            if self.out_path:
+                self.save_images(self._load_chains(), path.join(self.out_path, 'training_chain.png'))
+
         chains = [[chain[j] for j in xrange(cpos, cpos+self.chain_length)]
             for chain in self.chains]
 
         x = self._load_chains(chains=chains)
 
-        if cpos + 2 * self.chain_length >= self.n:
+        if cpos + self.chain_stride + self.chain_length > self.n:
             self.chain_pos = -1
         else:
-            self.chain_pos += self.chain_length
+            self.chain_pos += self.chain_stride
 
         return x, None
 
