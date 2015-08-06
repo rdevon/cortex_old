@@ -4,7 +4,6 @@ Module for RNN layers
 
 import copy
 from collections import OrderedDict
-from gru import RNN
 from layers import FFN
 from layers import Layer
 import numpy as np
@@ -18,12 +17,30 @@ from tools import log_gaussian
 
 norm_weight = tools.norm_weight
 ortho_weight = tools.ortho_weight
-floatX = 'float32'#theano.config.floatX
+floatX = 'float32' # theano.config.floatX
 
 def raise_type_error(o, t):
     raise ValueError('%s is not of type %s' % (type(o), t))
 
 pi = theano.shared(np.pi).astype(floatX)
+
+
+class RNN(Layer):
+
+    def __init__(self, dim_in, dim_h, name='rnn'):
+        self.dim_in = dim_in
+        self.dim_h = dim_h
+        super(RNN, self).__init__(name)
+
+    def recurrent_step(self, *xs):
+        preact = T.sum(xs, axis=0)
+        return preact
+
+    @staticmethod
+    def _slice(_x, n, dim):
+        if _x.ndim == 3:
+            return _x[:, :, n*dim:(n+1)*dim]
+        return _x[:, n*dim:(n+1)*dim]
 
 
 class GenerativeRNN(RNN):
@@ -78,12 +95,13 @@ class GenerativeRNN(RNN):
 
 class GenRNN(GenerativeRNN):
     def __init__(self, dim_in, dim_h, weight_noise=False, name='gen_rnn',
-                 h0_mode='average', rate=0.1, trng=None):
+                 h0_mode='average', rate=0.1, trng=None, condition_on_x=False):
         if weight_noise:
             raise NotImplementedError()
 
         self.h0_mode = h0_mode
         self.rate = rate
+        self.condition_on_x = condition_on_x
 
         self.weight_noise = weight_noise
         super(GenRNN, self).__init__(dim_in, dim_h, weight_noise=weight_noise,
@@ -91,6 +109,10 @@ class GenRNN(GenerativeRNN):
 
     def set_params(self):
         super(GenRNN, self).set_params()
+
+        if self.condition_on_x:
+            XX = norm_weight(self.dim_in, self.dim_in)
+            self.params.update(XX=XX)
 
         if self.h0_mode == 'average':
             h0 = np.zeros((self.dim_h,)).astype(floatX)
@@ -103,32 +125,51 @@ class GenRNN(GenerativeRNN):
         elif self.h0_mode is not None:
             raise ValueError(self.h0_mode)
 
-    def step_sample(self, x_, p_, h_, XH, Ur, bh, HX, bx):
+    def get_params(self):
+        params = [self.XH, self.bh, self.Ur, self.HX, self.bx]
+        if self.condition_on_x:
+            params.append(self.XX)
+        return params
+
+    def step_sample(self, h_, x_, *params):
+        XH, bh, Ur, HX, bx = params[:5]
+
         h = T.tanh(T.dot(x_, XH) + T.dot(h_, Ur) + bh)
-        p = T.nnet.sigmoid(T.dot(h, HX) + bx)
+
+        preact = T.dot(h, HX) + bx
+        if self.condition_on_x:
+            XX = params[6]
+            preact += T.dot(x_, XX)
+        p = T.nnet.sigmoid(preact)
+
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
 
-        return x, p, h
+        return h, x, p
 
-    def step_slice(self, m_, x_, h_, Ur, HX, bx):
-        h = T.tanh(T.dot(h_, Ur) + x_)
+    def step_slice(self, m_, x_, h_, *params):
+        XH, bh, Ur, HX, bx = params[:5]
+
+        h = T.tanh(T.dot(h_, Ur) + T.dot(x_, XH) + bh)
         h = m_[:, None] * h + (1. - m_)[:, None] * h_
-        p = T.nnet.sigmoid(T.dot(h, HX) + bx)
+
+        preact = T.dot(h, HX) + bx
+        if self.condition_on_x:
+            XX = params[6]
+            preact += T.dot(x_, XX)
+        p = T.nnet.sigmoid(preact)
+
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
 
         return h, x, p
 
     def sample(self, x0=None, n_samples=10, n_steps=10):
-        dim_in, dim_h = self.XH.shape
-
         if x0 is None:
-            x0 = self.trng.binomial(size=(n_samples, dim_in), p=0.5, n=1, dtype='float32')
-            p0 = T.unbroadcast(T.alloc(0.5, n_samples, dim_in), 0)
-        else:
-            p0 = T.zeros_like(x0) + x0
+            x0 = self.trng.binomial(size=(n_samples, self.dim_in), p=0.5, n=1,
+                                    dtype='float32')
 
         if self.h0_mode == 'average':
-            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
+            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX)
+            h0 += self.h0[None, :]
         elif self.h0_mode == 'ffn':
             h0 = T.dot(x0, self.W0) + self.b0
         elif self.h0_mode is None:
@@ -136,22 +177,25 @@ class GenRNN(GenerativeRNN):
         else:
             raise ValueError(self.h0_mode)
 
-        seqs = []
-        outputs_info = [x0, p0, h0]
-        non_seqs = self.get_non_seqs()
+        p0 = T.zeros_like(x0)
 
-        (x, p, h), updates = theano.scan(self.step_sample,
-                                    sequences=seqs,
-                                    outputs_info=outputs_info,
-                                    non_sequences=non_seqs,
-                                    name=tools._p(self.name, '_sampling'),
-                                    n_steps=n_steps,
-                                    profile=tools.profile,
-                                    strict=True)
+        seqs = []
+        outputs_info = [h0, x0, None]
+        non_seqs = self.get_params()
+
+        (h, x, p), updates = theano.scan(
+            self.step_sample,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=tools._p(self.name, '_sampling'),
+            n_steps=n_steps,
+            profile=tools.profile,
+            strict=True)
 
         x = tools.concatenate([x0[None, :, :], x])
-        p = tools.concatenate([p0[None, :, :], p])
         h = tools.concatenate([h0[None, :, :], h])
+        p = tools.concatenate([p0[None, :, :], p])
 
         return OrderedDict(x=x, p=p, h=h, x0=x0, p0=p0, h0=h0), updates
 
@@ -164,10 +208,9 @@ class GenRNN(GenerativeRNN):
         if mask is None:
             mask = T.alloc(1, n_steps, 1).astype(floatX)
 
-        x = T.dot(state_below, self.XH) + self.bh
-
         if self.h0_mode == 'average':
-            h0 = T.alloc(0., state_below[0].shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
+            h0 = T.alloc(0., state_below[0].shape[0], self.dim_h).astype(floatX)
+            h0 += self.h0[None, :]
         elif self.h0_mode == 'ffn':
             h0 = T.dot(state_below[0], self.W0) + self.b0
         elif self.h0_mode is None:
@@ -175,18 +218,19 @@ class GenRNN(GenerativeRNN):
         else:
             raise ValueError(self.h0_mode)
 
-        seqs = [mask, x]
+        seqs = [mask, state_below]
         outputs_info = [h0, None, None]
-        non_seqs = [self.Ur, self.HX, self.bx]
+        non_seqs = self.get_params()
 
-        (h, x, p), updates = theano.scan(self.step_slice,
-                                        sequences=seqs,
-                                        outputs_info=outputs_info,
-                                        non_sequences=non_seqs,
-                                        name=tools._p(self.name, '_layers'),
-                                        n_steps=n_steps,
-                                        profile=tools.profile,
-                                        strict=True)
+        (h, x, p), updates = theano.scan(
+            self.step_slice,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=tools._p(self.name, '_layers'),
+            n_steps=n_steps,
+            profile=tools.profile,
+            strict=True)
 
         if self.h0_mode == 'average':
             h0_mean = h.mean(axis=(0, 1))
@@ -199,10 +243,11 @@ class GenRNN(GenerativeRNN):
 class SimpleInferRNN(GenerativeRNN):
     def __init__(self, dim_in, dim_h, name='simple_inference_rnn',
                  h0_mode='average', weight_noise=False, trng=None,
-                 stochastic=True, rate=0.1):
+                 x_noise=0.1, stochastic=True, rate=0.1):
         self.stochastic = stochastic
         self.rate = rate
         self.h0_mode = h0_mode
+        self.x_noise = x_noise
 
         if trng is None:
             self.trng = RandomStreams(6 * 10 * 2015)
@@ -229,8 +274,11 @@ class SimpleInferRNN(GenerativeRNN):
                              rng=self.rng)
             b0 = np.zeros((self.dim_h,)).astype('float32')
             self.params.update(W0=W0, U0=U0, b0=b0)
-        else:
-            raise ValueError(self.h0_mode)
+        elif self.h0_mode in ['x1', 'x2']:
+            W0 = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
+                             rng=self.rng)
+            b0 = np.zeros((self.dim_h,)).astype('float32')
+            self.params.update(W0=W0, b0=b0)
 
     def energy(self, x, p):
         return -(x * T.log(p + 1e-7) +
@@ -257,18 +305,19 @@ class SimpleInferRNN(GenerativeRNN):
         h1 = self.step_h(x[0], h0, *params)
         h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
-        energy = (self.energy(x[0], p[0]) + self.energy(x[2], p[2])).mean()
+        energy = self.energy(x, p).sum()
         grad = theano.grad(energy, wrt=h0, consider_constant=[x])
         h0 = h0 - l * grad
         return h0
 
     def move_h_single(self, h, x, l, HX, bx):
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
-        energy = self.energy_single(x, p)
+        energy = self.energy_single(x, p).sum()
         grads = theano.grad(energy, wrt=h, consider_constant=[x])
         return (h - l * grads).astype(floatX), p
 
-    def step_infer(self, h0, m, x, l, HX, bx, *params):
+    def step_infer(self, h0, x, l, HX, bx, *params):
+        x = x * (1 - self.trng.binomial(p=self.x_noise, size=x.shape, n=1, dtype=x.dtype))
         h0 = self.move_h(h0, x, l, HX, bx, *params)
         h1 = self.step_h(x[0], h0, *params)
         h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
@@ -277,26 +326,32 @@ class SimpleInferRNN(GenerativeRNN):
         x_hat = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
         energy = self.energy(x, p)
 
-        return h0, x_hat, p, energy
+        return h0, h1, x_hat, p, energy
 
-    def inference(self, x, mask, l, n_inference_steps=1, max_k=10, mode='noise'):
+    def inference(self, x, l, n_inference_steps=1, max_k=10, noise_mode='noise'):
         # Initializing the variables
         x0 = x[0]
         x1 = x[1]
 
         updates = theano.OrderedUpdates()
-        if mode == 'noise':
-            x0 = x0 * (1 - self.trng.binomial(p=0.1, size=x0.shape, n=1,
+        if noise_mode == 'noise':
+            x0 = x0 * (1 - self.trng.binomial(p=self.x_noise, size=x0.shape, n=1,
                                               dtype=x0.dtype))
             x_n = T.concatenate([x0[None, :, :], x1[None, :, :]], axis=0)
-        if mode == 'noise_all':
-            x_n = x * (1 - self.trng.binomial(p=0.1, size=x.shape, n=1,
+        if noise_mode == 'noise_all':
+            x_n = x * (1 - self.trng.binomial(p=self.x_noise, size=x.shape, n=1,
                                               dtype=x.dtype))
-        elif mode == 'run':
+        elif noise_mode == 'run':
             if self.h0_mode == 'average':
                 h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
+                h0 += self.trng.normal(avg=0, std=0.1, size=(x0.shape[0], self.dim_h), dtype=x0.dtype)
             elif self.h0_mode == 'ffn':
                 h0 = T.dot(x0, self.W0) + T.dot(x0, self.U0) + self.b0
+                h0 += self.trng.normal(avg=0, std=0.1, size=(x0.shape[0], self.dim_h), dtype=x0.dtype)
+            elif self.h0_mode == 'noise':
+                h0 = self.trng.normal(avg=0, std=0.1, size=(x0.shape[0], self.dim_h), dtype=x0.dtype)
+            else:
+                h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX)
 
             p0 = T.nnet.sigmoid(T.dot(h0, self.HX) + self.bx)
 
@@ -318,22 +373,34 @@ class SimpleInferRNN(GenerativeRNN):
             xs = T.concatenate([x0[None, :, :], xs], axis=0)
             x0 = xs[self.k]
             x_n = T.concatenate([x0[None, :, :], x1[None, :, :]], axis=0)
+        else:
+            x_n = T.zeros_like(x) + x
 
         if self.h0_mode == 'average':
             h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
+            h0 += self.trng.normal(avg=0, std=0.1, size=(x0.shape[0], self.dim_h), dtype=x0.dtype)
         elif self.h0_mode == 'ffn':
             h0 = T.dot(x0, self.W0) + T.dot(x1, self.U0) + self.b0
+            h0 += self.trng.normal(avg=0, std=0.1, size=(x0.shape[0], self.dim_h), dtype=x0.dtype)
+        elif self.h0_mode == 'x1':
+            h0 = T.dot(x0, self.W0) + self.b0
+        elif self.h0_mode == 'x2':
+            h0 = T.dot(x1, self.W0) + self.b0
+        elif self.h0_mode == 'noise':
+            h0 = self.trng.normal(avg=0, std=1, size=(x0.shape[0], self.dim_h), dtype=x0.dtype)
+        else:
+            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX)
 
-        h1 = self.step_h(x0, h0, *self.get_non_seqs())
+        h1 = self.step_h(x_n[0], h0, *self.get_non_seqs())
         h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
         p = T.nnet.sigmoid(T.dot(h, self.HX) + self.bx)
         x_hat = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
 
         seqs = []
-        outputs_info = [h0, None, None, None]
-        non_seqs = [mask, x_n, l, self.HX, self.bx] + self.get_non_seqs()
+        outputs_info = [h0, None, None, None, None]
+        non_seqs = [x_n, l, self.HX, self.bx] + self.get_non_seqs()
 
-        (h0s, x_hats, ps, energies), updates_2 = theano.scan(
+        (h0s, h1s, x_hats, ps, energies), updates_2 = theano.scan(
             self.step_infer,
             sequences=seqs,
             outputs_info=outputs_info,
@@ -346,9 +413,14 @@ class SimpleInferRNN(GenerativeRNN):
         updates.update(updates_2)
 
         h0s = T.concatenate([h0[None, :, :], h0s], axis=0)
+        h1s = T.concatenate([h1[None, :, :], h1s], axis=0)
         x_hats = T.concatenate([x[None, :, :, :],
+                                x_n[None, :, :, :],
                                 x_hat[None, :, :, :],
                                 x_hats], axis=0)
+        ps = T.concatenate([x[None, :, :, :],
+                            p[None, :, :, :],
+                            ps], axis=0)
         energy = self.energy(x, ps[-1])
 
         if self.h0_mode == 'average':
@@ -356,7 +428,7 @@ class SimpleInferRNN(GenerativeRNN):
             new_h = (1. - self.rate) * self.h0 + self.rate * h0_mean
             updates += [(self.h0, new_h)]
 
-        return (x_hats, h0s, energy), updates
+        return (x_hats, ps, h0s, h1s, energy), updates
 
     def step_sample(self, x_, p_, h_, XH, Ur, bh, HX, bx):
         h = T.tanh(T.dot(h_, Ur) + T.dot(x_, XH) + bh)
@@ -364,7 +436,7 @@ class SimpleInferRNN(GenerativeRNN):
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
         return x, p, h
 
-    def sample(self, x0=None, x1=None, l=0.01, n_steps=100, n_samples=1,
+    def sample(self, x0=None, x1=None, l=0.01, n_steps=30, n_samples=1,
                n_inference_steps=100):
         if x0 is None:
             x0 = self.trng.binomial(p=0.5, size=(n_samples, self.dim_in), n=1,
@@ -377,14 +449,39 @@ class SimpleInferRNN(GenerativeRNN):
             if x1 is None:
                 x1 = np.zeros(x0) + x0
             h0 = T.dot(x0, self.W0) + T.dot(x1, self.U0) + self.b0
+        elif self.h0_mode == 'noise':
+            h0 = self.trng.normal(avg=0, std=0.1, size=(x0.shape[0], self.dim_h), dtype=x0.dtype)
+        elif self.h0_mode == 'x1':
+            h0 = T.dot(x0, self.W0) + self.b0
+        elif self.h0_mode == 'x2':
+            h0 = T.dot(x1, self.W0) + self.b0
+        else:
+            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX)
+
+        x = T.concatenate([x0[None, :, :], x1[None, :, :]], axis=0)
+
+        seqs = []
+        outputs_info = [h0, None, None, None, None]
+        non_seqs = [x, l, self.HX, self.bx] + self.get_non_seqs()
+
+        (h0s, h1s, x_hats, ps, energies), updates = theano.scan(
+            self.step_infer,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=tools._p(self.name, 'infer'),
+            n_steps=n_inference_steps,
+            profile=tools.profile,
+            strict=True
+        )
 
         p0 = T.zeros_like(x0) + x0
 
         seqs = []
-        outputs_info = [x0, p0, h0]
+        outputs_info = [x0, p0, h0s[-1]]
         non_seqs = self.get_non_seqs()
 
-        (xs, ps, hs), updates = theano.scan(
+        (xs, ps, hs), updates_2 = theano.scan(
             self.step_sample,
             sequences=seqs,
             outputs_info=outputs_info,
@@ -394,6 +491,7 @@ class SimpleInferRNN(GenerativeRNN):
             profile=tools.profile,
             strict=True
         )
+        updates.update(updates_2)
 
         xs = T.concatenate([x0[None, :, :], xs], axis=0)
         ps = T.concatenate([p0[None, :, :], ps], axis=0)
@@ -434,11 +532,14 @@ class OneStepInferRNN(SimpleInferRNN):
         h = T.concatenate([h0[None, :, :], h1[None, :, :], h2[None, :, :]], axis=0)
         p = T.nnet.sigmoid(T.dot(h, HX) + bx)
         energy = self.energy(x, p).mean()
-        grad = theano.grad(energy, wrt=h0, consider_constant=[x])
+        entropy = -(p[1] * T.log(p[1] + 1e-7) + (1. - p[1]) * T.log(1 - p[1] + 1e-7)).sum(axis=1).mean()
+        #entropy = -(p * T.log(p + 1e-7) + (1. - p) * T.log(1 - p + 1e-7)).sum(axis=(0, 2)).mean()
+        cost = energy + entropy
+        grad = theano.grad(cost, wrt=h0, consider_constant=[x])
         h0 = h0 - l * grad
         return h0
 
-    def step_infer(self, h0, x_hat, m, x, l, HX, bx, *params):
+    def step_infer(self, h0, x_hat, x, l, HX, bx, *params):
         x = T.set_subtensor(x[1], x_hat[1])
         h0 = self.move_h(h0, x, l, HX, bx, *params)
         h1 = self.step_h(x[0], h0, *params)
@@ -454,7 +555,7 @@ class OneStepInferRNN(SimpleInferRNN):
 
         return h0, x_hat, p, energy
 
-    def inference(self, x, mask, l, n_inference_steps=1, max_k=10, mode='noise'):
+    def inference(self, x, l, n_inference_steps=1, max_k=10, noise_mode='noise'):
         # Initializing the variables
         x0 = x[0]
         x2 = x[1]
@@ -478,7 +579,9 @@ class OneStepInferRNN(SimpleInferRNN):
                 h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
             elif self.h0_mode == 'ffn':
                 h0 = T.dot(x0, self.W0) + T.dot(x2, self.U0) + self.b0
-            _, x1, _ = self.step_slice(0., x0[None, :, :], x0, x0, h0, *self.get_non_seqs())
+            h1 = T.tanh(T.dot(h0, self.Ur) + T.dot(x0, self.XH) + self.bh)
+            p = T.nnet.sigmoid(T.dot(h1, self.HX) + self.bx)
+            x1 = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
         else:
             raise ValueError()
 
@@ -487,16 +590,16 @@ class OneStepInferRNN(SimpleInferRNN):
                            x2[None, :, :]], axis=0)
 
         updates = theano.OrderedUpdates()
-        if mode == 'noise':
+        if noise_mode == 'noise':
             x0 = x0 * (1 - self.trng.binomial(p=0.1, size=x0.shape, n=1,
                                               dtype=x0.dtype))
             x_n = T.concatenate([x0[None, :, :],
                                  x1[None, :, :],
                                  x2[None, :, :]], axis=0)
-        if mode == 'noise_all':
+        if noise_mode == 'noise_all':
             x_n = x * (1 - self.trng.binomial(p=0.1, size=x.shape, n=1,
                                               dtype=x.dtype))
-        elif mode == 'run':
+        elif noise_mode == 'run':
             if self.h0_mode == 'average':
                 h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
             elif self.h0_mode == 'ffn':
@@ -522,6 +625,8 @@ class OneStepInferRNN(SimpleInferRNN):
             xs = T.concatenate([x0[None, :, :], xs], axis=0)
             x0 = xs[self.k]
             x_n = T.concatenate([x0[None, :, :], x1[None, :, :], x2[None, :, :]], axis=0)
+        else:
+            x_n = T.zeros_like(x) + x
 
         if self.h0_mode == 'average':
             h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
@@ -536,8 +641,8 @@ class OneStepInferRNN(SimpleInferRNN):
         x_hat = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
 
         seqs = []
-        outputs_info = [h0, x_n, None, None]
-        non_seqs = [mask, x_n, l, self.HX, self.bx] + self.get_non_seqs()
+        outputs_info = [h0, T.zeros_like(x_n) + x_n, None, None]
+        non_seqs = [x_n, l, self.HX, self.bx] + self.get_non_seqs()
 
         (h0s, x_hats, ps, energies), updates_2 = theano.scan(
             self.step_infer,
@@ -555,9 +660,11 @@ class OneStepInferRNN(SimpleInferRNN):
         x_f = T.concatenate([x[0][None, :, :], x[2][None, :, :]], axis=0)
         p_f = T.concatenate([ps[-1][0][None, :, :], ps[-1][2][None, :, :]], axis=0)
         energy = self.energy(x_f, p_f)
+        entropy = -(ps[-1,1] * T.log(ps[-1, 1] + 1e-7) + (1. - ps[-1, 1]) * T.log(1 - ps[-1, 1] + 1e-7)).sum(axis=1).mean()
 
         h0s = T.concatenate([h0[None, :, :], h0s], axis=0)
         x_hats = T.concatenate([x[None, :, :, :],
+                                x_n[None, :, :, :],
                                 x_hat[None, :, :, :],
                                 x_hats], axis=0)
         ps = T.concatenate([x[None, :, :, :],
@@ -574,4 +681,4 @@ class OneStepInferRNN(SimpleInferRNN):
             new_x = (1. - self.rate) * self.xi + self.rate * x_mean
             updates += [(self.xi, new_x)]
 
-        return (x_hats, ps, h0s, energy), updates
+        return (x_hats, ps, h0s, energy, entropy), updates
