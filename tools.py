@@ -31,7 +31,7 @@ def load_model(model, model_file):
         try:
             pretrained_v = pretrained_model[
                 '{name}_{key}'.format(name=model.name, key=k)]
-            print 'Found %s' % k
+            print 'Found %s for %s' % (k, model.name)
             model.params[k] = pretrained_v
         except KeyError:
             print '{} not found'.format(k)
