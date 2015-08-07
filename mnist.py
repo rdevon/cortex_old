@@ -36,6 +36,7 @@ class mnist_iterator:
         else:
             raise ValueError()
 
+        self.dims = (28, 28)
         self.f_energy = None
         self.pairs = None
         self.chain = None

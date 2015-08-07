@@ -38,10 +38,10 @@ class SimpleMonitor(object):
 
     def save(self, out_path):
         plt.clf()
-        x = 2
-        y = ((len(self.d) - 1) // 2) + 1
+        y = 2
+        x = ((len(self.d) - 1) // y) + 1
         fig, axes = plt.subplots(y, x)
-        fig.set_size_inches(10, 10)
+        fig.set_size_inches(20, 5)
         fig.patch.set_alpha(.1)
 
         for j, (k, v) in enumerate(self.d.iteritems()):
