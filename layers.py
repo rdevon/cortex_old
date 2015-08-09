@@ -178,7 +178,7 @@ class MLP(Layer):
             bs = np.zeros((dim_out,)).astype(floatX)
             self.params.update(Ws=Ws, bs=bs)
 
-    def __call__(self, x):
+    def __call__(self, x, return_logit=False):
         for l in xrange(self.n_layers):
             W = self.__dict__['W_%d' % l]
             b = self.__dict__['b_%d' % l]
@@ -192,9 +192,13 @@ class MLP(Layer):
             else:
                 activ = self.h_act
 
-            x = eval(activ)(T.dot(x, W) + b)
+            if l == self.n_layers - 1 and return_logit:
+                x = T.dot(x, W) + b
+            else:
+                x = eval(activ)(T.dot(x, W) + b)
 
             if self.dropout:
+                raise NotImplementedError()
                 if activ == 'T.tanh':
                     raise NotImplementedError()
                 else:
@@ -222,7 +226,7 @@ class MLP(Layer):
 
         return params
 
-    def step_call(self, x, *params):
+    def logit(self, x, *params):
         # Used within scan with `get_params`
         params = list(params)
 
@@ -235,13 +239,13 @@ class MLP(Layer):
                 W = W + W_noise
 
             if l == self.n_layers - 1:
-                activ = self.out_act
+                x = T.dot(x, W) + b
             else:
                 activ = self.h_act
-
-            x = eval(activ)(T.dot(x, W) + b)
+                x = eval(activ)(T.dot(x, W) + b)
 
             if self.dropout:
+                raise NotImplementedError()
                 if activ == 'T.tanh':
                     raise NotImplementedError()
                 else:
@@ -249,6 +253,10 @@ class MLP(Layer):
                                              dtype=x.dtype)
                     x = x * x_d / (1 - self.dropout)
         return x
+
+    def step_call(self, x, *params):
+        x = self.logit(x, *params)
+        return eval(self.out_act)(x)
 
 
 class Softmax(Layer):
