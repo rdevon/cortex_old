@@ -2,13 +2,16 @@
 Sampling and inference with LSTM models
 '''
 
+import argparse
 from collections import OrderedDict
+from glob import glob
 import matplotlib
 from matplotlib import animation
 from matplotlib import pylab as plt
 import numpy as np
 import os
 from os import path
+import random
 import sys
 from sys import stdout
 import theano
@@ -18,21 +21,26 @@ import time
 
 from gru import GenGRU
 from rnn import GenRNN
+from horses import Horses
+from horses import SimpleHorses
 from layers import BaselineWithInput
 from mnist import mnist_iterator
 import op
 from tools import itemlist
+from tools import load_model
+
 
 floatX = theano.config.floatX
 
-
-def visualize(model_file, mode='gru'):
+def visualize(model_file, mode='gru', source=None):
+    '''
     train = mnist_iterator(batch_size=1, mode='train', inf=False)
+    '''
+    train = SimpleHorses(batch_size=1, source=source, inf=True)
 
     trng = RandomStreams(6 * 23 * 2015)
     dim_in = train.dim
-    dim_h=500
-    n_inference_steps=30
+    dim_h=200
 
     if mode == 'gru':
         C = GenGRU
@@ -41,51 +49,42 @@ def visualize(model_file, mode='gru'):
     else:
         raise ValueError()
 
-    rnn = C(dim_in, dim_h, trng=trng, h0_mode='ffn')
-
-    pretrained_model = np.load(model_file)
-
-    for k, v in rnn.params.iteritems():
-        try:
-            pretrained_v = pretrained_model[
-                '{name}_{key}'.format(name=rnn.name, key=k)]
-            rnn.params[k] = pretrained_v
-        except KeyError:
-            print '{} not found'.format(k)
+    rnn = C(dim_in, dim_h, trng=trng, h0_mode='ffn', condition_on_x=True)
+    rnn = load_model(rnn, model_file)
 
     tparams = rnn.set_tparams()
 
     X = T.matrix('x', dtype=floatX)
-    p0 = T.zeros_like(X) + X
-    h0 = T.dot(X, rnn.W0) + rnn.b0
+    H = T.matrix('h', dtype=floatX)
 
-    x_s, p_s, h_s = rnn.step_sample(X, p0, h0, *rnn.get_non_seqs())
+    params = rnn.get_params()
+    h_s, x_s, p_s = rnn.step_sample(H, X, *params)
 
-    f_h0 = theano.function([X], [x_s, p_s])
+    f_h0 = theano.function([X, H], [x_s, h_s, p_s])
 
     ps = []
     try:
         x, _ = train.next()
-        x = x
+        h = np.zeros((x.shape[0], rnn.dim_h)).astype('float32')
         s = 0
         while True:
             stdout.write('\rSampling (%d): Press ^c to stop' % s)
             stdout.flush()
-            x, p = f_h0(x)
+            x, h, p = f_h0(x, h)
             ps.append(p)
             s += 1
     except KeyboardInterrupt:
         print 'Exiting'
 
     fig = plt.figure()
-    data = np.zeros((28, 28))
+    data = np.zeros(train.dims)
     im = plt.imshow(data, vmin=0, vmax=1)
 
     def init():
-        im.set_data(np.zeros((28, 28)))
+        im.set_data(np.zeros(train.dims))
 
     def animate(i):
-        data = ps[i].reshape((28, 28))
+        data = ps[i].reshape(train.dims)
         im.set_data(data)
         return im
 
@@ -114,16 +113,34 @@ def binary_energy(x0, x1, model, mode='rnn'):
     energy = (-x1 * T.log(p + 1e-7) - (1 - x1) * T.log(1 - p + 1e-7)).sum()
     return energy
 
-def energy_function(model, mode='rnn'):
-    x0 = T.vector('x0', dtype=floatX)
-    x1 = T.vector('x1', dtype=floatX)
-    energy = binary_energy(x0, x1, model, mode=mode)
+def energy_function(model):
+    x = T.matrix('x', dtype=floatX)
+    x_p = T.matrix('x_p', dtype=floatX)
+    h_p = T.matrix('h_p', dtype=floatX)
 
-    return theano.function([x0, x1], energy)
+    x_e = T.alloc(0., x_p.shape[0], x.shape[0], x.shape[1]).astype(floatX) + x[None, :, :]
 
-def test(batch_size=20, dim_h=500, save_graphs=False, mode='rnn', out_path=''):
+    params = model.get_params()
+    h, x_s, p = model.step_sample(h_p, x_p, *params)
+    p = T.alloc(0., p.shape[0], x.shape[0], x.shape[1]).astype(floatX) + p[:, None, :]
+
+    energy = -(x_e * T.log(p + 1e-7) + (1 - x_e) * T.log(1 - p + 1e-7)).sum(axis=2)
+
+    return theano.function([x, x_p, h_p], [energy, x_s, h])
+
+def train_model(batch_size=1, dim_h=200, save_graphs=False, mode='gru', out_path='',
+                source=None, load_last=False):
+    '''
     train = mnist_iterator(batch_size=batch_size, mode='train', inf=True,
-                           out_mode='model_chains')
+                           chain_build_batch=1000,
+                           chain_length=17,
+                           out_mode='big_model_chains', stop=5000,
+                           out_path=out_path,
+                           chain_stride=10)
+    '''
+    train = Horses(batch_size=batch_size, source=source, inf=True,
+                   chain_length=17, chains_build_batch=300, out_path=out_path,
+                   chain_stride=3)
 
     dim_in = train.dim
     X = T.tensor3('x', dtype=floatX)
@@ -137,11 +154,14 @@ def test(batch_size=20, dim_h=500, save_graphs=False, mode='rnn', out_path=''):
     else:
         raise ValueError()
 
-    rnn = C(dim_in, dim_h, trng=trng, h0_mode='ffn')
-    tparams = rnn.set_tparams()
-    train.set_f_energy(energy_function(rnn, mode=mode))
+    rnn = C(dim_in, dim_h, trng=trng, h0_mode='ffn', condition_on_x=True)
 
-    mask = T.alloc(1., 2).astype('float32')
+    if load_last:
+        model_file = glob(path.join(out_path, '*.npz'))[-1]
+        rnn = load_model(rnn, model_file)
+
+    tparams = rnn.set_tparams()
+    train.set_f_energy(energy_function, rnn)
 
     X_s = T.zeros_like(X)
     X_s = T.set_subtensor(X_s[1:], X[:-1])
@@ -150,11 +170,8 @@ def test(batch_size=20, dim_h=500, save_graphs=False, mode='rnn', out_path=''):
     p = outs['p']
     x = outs['x']
 
-    consider_constant = []
-
     energy = -(X * T.log(p + 1e-7) + (1 - X) * T.log(1 - p + 1e-7)).sum(axis=(0, 2))
     cost = energy.mean()
-
     consider_constant = [x]
 
     if rnn.h0_mode == 'ffn':
@@ -188,7 +205,7 @@ def test(batch_size=20, dim_h=500, save_graphs=False, mode='rnn', out_path=''):
     learning_rate = 0.00001
 
     try:
-        for e in xrange(100000):
+        for e in xrange(1000000):
             x, _ = train.next()
             rval = f_grad_shared(x)
             r = False
@@ -211,10 +228,10 @@ def test(batch_size=20, dim_h=500, save_graphs=False, mode='rnn', out_path=''):
                 idx = np.random.randint(rval[2].shape[1])
                 sample = np.concatenate([x[:, idx, :][None, :, :],
                                         rval[2][:, idx, :][None, :, :]], axis=0)
-                train.save_images(sample, path.join(out_path, 'chain_sampler2.png'))
+                train.save_images(sample, path.join(out_path, 'inference_chain.png'))
                 sample_chain = rval[3]
-                train.save_images(sample_chain, path.join(out_path, 'chain_chain2.png'))
-                train.save_images(x, path.join('input_chain2.png'))
+                train.save_images(sample_chain, path.join(out_path, 'samples.png'))
+                train.save_images(x, path.join(out_path, 'input_samples.png'))
 
             f_grad_updates(learning_rate)
     except KeyboardInterrupt:
@@ -227,6 +244,21 @@ def test(batch_size=20, dim_h=500, save_graphs=False, mode='rnn', out_path=''):
     np.savez(outfile, **dict((k, v.get_value()) for k, v in tparams.items()))
     print 'Done saving. Bye bye.'
 
+def make_argument_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('source', default=None)
+    parser.add_argument('-o', '--out_path', default=None)
+    parser.add_argument('-l', '--load_last', action='store_true')
+    return parser
+
 if __name__ == '__main__':
-    out_path = sys.argv[1]
-    test(out_path=out_path)
+    parser = make_argument_parser()
+    args = parser.parse_args()
+
+    out_path = args.out_path
+    if path.isfile(out_path):
+        raise ValueError()
+    elif not path.isdir(out_path):
+        os.mkdir(path.abspath(out_path))
+
+    train_model(out_path=args.out_path, load_last=args.load_last, source=args.source)
