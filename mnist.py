@@ -405,9 +405,17 @@ class mnist_iterator:
 
         return x, y
 
-    def save_images(self, x, imgfile, transpose=False):
+    def save_images(self, x, imgfile, transpose=False, x_limit=None):
         if len(x.shape) == 2:
             x = x.reshape((x.shape[0], 1, x.shape[1]))
+
+        if x_limit is not None and x.shape[0] > x_limit:
+            x = np.concatenate([x, np.zeros((x_limit - x.shape[0] % x_limit,
+                                             x.shape[1],
+                                             x.shape[2])).astype('float32')],
+                axis=0)
+            x = x.reshape((x_limit, x.shape[0] * x.shape[1] // x_limit, x.shape[2]))
+
         tshape = x.shape[0], x.shape[1]
         x = x.reshape((x.shape[0] * x.shape[1], x.shape[2]))
         image = self.show(x.T, tshape, transpose=transpose)

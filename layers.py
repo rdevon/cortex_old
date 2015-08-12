@@ -4,6 +4,7 @@ Module for general layers
 import numpy as np
 import theano
 import tools
+from tools import log_mean_exp
 
 from collections import OrderedDict
 import numpy as np
@@ -41,6 +42,54 @@ class Layer(object):
 
     def __call__(self, state_below):
         raise NotImplementedError()
+
+
+class ParzenEstimator(Layer):
+    def __init__(self, dim, name='parzen'):
+        self.dim = dim
+        super(ParzenEstimator, self).__init__(name=name)
+
+    def set_params(self, samples, x):
+        sigma = self.get_sigma(samples, x).astype('float32')
+        self.params = OrderedDict(sigma=sigma)
+
+    def get_sigma(self, samples, xs):
+        sigma = np.zeros((samples.shape[-1],))
+        for x in xs:
+            dx = (samples - x[None, :]) ** 2
+            sigma += T.sqrt(dx / np.log(np.sqrt(2 * pi))).mean(axis=(0))
+        return sigma / float(xs.shape[0])
+
+    def __call__(self, samples, x):
+        z = T.log(self.sigma * T.sqrt(2 * pi)).sum()
+        d_s = (samples[:, None, :] - x[None, :, :]) / self.sigma[None, None, :]
+        e = log_mean_exp((-.5 * d_s ** 2).sum(axis=2), axis=0)
+        return (e - z).mean()
+
+
+class Scheduler(Layer):
+    '''
+    Class for tensor constant scheduling.
+    This can be used to schedule updates to tensor parameters, such as learning rates given
+    the epoch.
+    '''
+    def __init__(self, rate=1, method='lambda x: 2 * x', name='scheduler'):
+        self.rate = rate
+        self.switch = T.constant(0)
+        self.method = method
+        super(Scheduler, self).__init__(name=name)
+
+    def set_params(self):
+        counter = 0
+        self.params = OrderedDict(counter=counter)
+
+    def update(self):
+        self.counter = T.switch(T.ge(self.counter, self.rate), 0, self.counter + 1)
+        self.switch = T.switch(T.ge(self.counter, 0), 1, 0)
+
+    def __call__(self, x):
+        x = T.switch(self.switch, eval(method)(x), x)
+        return x
 
 
 class FFN(Layer):
@@ -118,9 +167,11 @@ class MLP(Layer):
         if out_act == 'T.nnet.sigmoid':
             self.sample = self._binomial
             self.neg_log_prob = self._cross_entropy
+            self.entropy = self._binary_entropy
         elif out_act == 'lambda x: x':
             self.sample = self._normal
             self.neg_log_prob = self._normal_prob
+            self.entropy = self._normal_entropy
         else:
             raise ValueError()
 
@@ -133,10 +184,15 @@ class MLP(Layer):
         return self.trng.binomial(p=p, size=size, n=1, dtype=p.dtype)
 
     def _cross_entropy(self, x, p):
-        energy = -(x * T.log(p + 1e-7) +
-                   (1 - x) * T.log(1 - p + 1e-7))
+        energy = -(x * T.log(p + 1e-7) + (1 - x) * T.log(1 - p + 1e-7))
+        #energy = T.nnet.binary_crossentropy(x, p)
         energy = energy.sum(axis=energy.ndim-1)
         return energy
+
+    def _binary_entropy(self, p):
+        entropy = -(p * T.log(p + 1e-7) + (1 - p) * T.log(1 - p + 1e-7))
+        entropy = entropy.sum(axis=entropy.ndim-1)
+        return entropy
 
     def _normal(self, mu, log_sigma, size=None):
         if size is None:
@@ -146,6 +202,9 @@ class MLP(Layer):
     def _normal_prob(self, x, mu, log_sigma):
         energy = -(x - mu)**2 / (2 * T.exp(2 * log_sigma)) - log_sigma - T.log(2 * pi) / 2.
         return energy
+
+    def _normal_entropy(self, x, mu, log_sigma):
+        raise NotImplementedError()
 
     def set_params(self):
         self.params = OrderedDict()
@@ -178,7 +237,7 @@ class MLP(Layer):
             bs = np.zeros((dim_out,)).astype(floatX)
             self.params.update(Ws=Ws, bs=bs)
 
-    def __call__(self, x, return_logit=False):
+    def __call__(self, x, return_preact=False):
         for l in xrange(self.n_layers):
             W = self.__dict__['W_%d' % l]
             b = self.__dict__['b_%d' % l]
@@ -192,7 +251,7 @@ class MLP(Layer):
             else:
                 activ = self.h_act
 
-            if l == self.n_layers - 1 and return_logit:
+            if l == self.n_layers - 1 and return_preact:
                 x = T.dot(x, W) + b
             else:
                 x = eval(activ)(T.dot(x, W) + b)
@@ -226,7 +285,7 @@ class MLP(Layer):
 
         return params
 
-    def logit(self, x, *params):
+    def preact(self, x, *params):
         # Used within scan with `get_params`
         params = list(params)
 
@@ -255,7 +314,7 @@ class MLP(Layer):
         return x
 
     def step_call(self, x, *params):
-        x = self.logit(x, *params)
+        x = self.preact(x, *params)
         return eval(self.out_act)(x)
 
 
