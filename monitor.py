@@ -30,7 +30,7 @@ class SimpleMonitor(object):
         s = 'Samples: %d' % e
         for k, v in self.d.iteritems():
             try:
-                s += ' | %s: %.3f' % (k, v[-1])
+                s += ' | %s: %.5f' % (k, v[-1])
             except TypeError as e:
                 print 'Error: %s, %s' % (k, v[-1])
                 raise e

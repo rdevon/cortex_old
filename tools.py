@@ -38,16 +38,15 @@ def load_model(model, model_file):
 
     return model
 
-def check_bad_nums(rval_dict, i):
-    bad_nums = OrderedDict()
-    for k, rval in rval_dict.iteritems():
-        if np.any(np.isnan(rval)):
-            bad_nums[k] = 'Nan'
-        if np.any(np.isinf(rval)):
-            bad_nums[k] = 'Inf'
-    if len(bad_nums.keys()) > 0:
-        raise ValueError('Inf or nans detected at %d: %s'
-                         % (i, bad_nums))
+def check_bad_nums(rvals, names):
+    for k, out in zip(names, rvals):
+        if np.any(np.isnan(out)):
+            print k, 'nan'
+            return True
+        elif np.any(np.isinf(out)):
+            print k, 'inf'
+            return True
+    return False
 
 def flatten_dict(d):
     rval = OrderedDict()
@@ -98,15 +97,29 @@ def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
         W = scale * rng.randn(nin, nout)
     return W.astype('float32')# some utilities
 
+def parzen_estimation(samples, tests, h=1.0):
+    log_p = 0.
+    d = samples.shape[-1]
+    z = d * np.log(h * np.sqrt(2 * np.pi))
+    for test in tests:
+        d_s = (samples - test[None, :]) / h
+        e = log_mean_exp((-.5 * d_s ** 2).sum(axis=1), as_numpy=True, axis=0)
+        log_p += e - z
+    return log_p / float(tests.shape[0])
+
 def tanh(x):
     return T.tanh(x)
 
 def linear(x):
     return x
 
-def log_mean_exp(x, axis=None):
-    x_max = T.max(x, axis=axis, keepdims=True)
-    return T.log(T.mean(T.exp(x - x_max), axis=axis, keepdims=True) + 1e-7) + x_max
+def log_mean_exp(x, axis=None, as_numpy=False):
+    if as_numpy:
+        Te = np
+    else:
+        Te = T
+    x_max = Te.max(x, axis=axis, keepdims=True)
+    return Te.log(Te.mean(Te.exp(x - x_max), axis=axis, keepdims=True) + 1e-7) + x_max
 
 def concatenate(tensor_list, axis=0):
     """
