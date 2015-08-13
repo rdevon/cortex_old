@@ -75,21 +75,19 @@ class Scheduler(Layer):
     '''
     def __init__(self, rate=1, method='lambda x: 2 * x', name='scheduler'):
         self.rate = rate
-        self.switch = T.constant(0)
         self.method = method
         super(Scheduler, self).__init__(name=name)
 
     def set_params(self):
         counter = 0
-        self.params = OrderedDict(counter=counter)
-
-    def update(self):
-        self.counter = T.switch(T.ge(self.counter, self.rate), 0, self.counter + 1)
-        self.switch = T.switch(T.ge(self.counter, 0), 1, 0)
+        self.params = OrderedDict(counter=counter, switch=switch)
 
     def __call__(self, x):
-        x = T.switch(self.switch, eval(method)(x), x)
-        return x
+        counter = T.switch(T.ge(self.counter, self.rate), 0, self.counter + 1)
+        switch = T.switch(T.ge(self.counter, 0), 1, 0)
+        x = T.switch(switch, eval(method)(x), x)
+
+        return OrderedDict(x=x), theano.OrderedUpdates([(self.counter, counter)])
 
 
 class FFN(Layer):
