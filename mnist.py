@@ -16,7 +16,7 @@ def get_iter(inf=False, batch_size=128):
     return mnist_iterator(inf=inf, batch_size=batch_size)
 
 class mnist_iterator:
-    def __init__(self, batch_size=128, data_file='/Users/devon/Data/mnist.pkl.gz',
+    def __init__(self, batch_size=128, data_file='/data/lisa/data/mnist/mnist.pkl.gz',#'/Users/devon/Data/mnist.pkl.gz',
                  restrict_digits=None, mode='train', shuffle=True, inf=False,
                  out_mode='', repeat=1, chain_length=20, reset_chains=False,
                  chain_build_batch=100, stop=None, out_path=None, chain_stride=None):
