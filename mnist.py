@@ -15,8 +15,8 @@ from vis_utils import tile_raster_images
 def get_iter(inf=False, batch_size=128):
     return mnist_iterator(inf=inf, batch_size=batch_size)
 
-class mnist_iterator:
-    def __init__(self, batch_size=128, data_file='/data/lisa/data/mnist/mnist.pkl.gz',#'/Users/devon/Data/mnist.pkl.gz',
+class mnist_iterator(object):
+    def __init__(self, batch_size=128, data_file='/Users/devon/Data/mnist.pkl.gz',
                  restrict_digits=None, mode='train', shuffle=True, inf=False,
                  out_mode='', repeat=1, chain_length=20, reset_chains=False,
                  chain_build_batch=100, stop=None, out_path=None, chain_stride=None):
@@ -24,17 +24,7 @@ class mnist_iterator:
         with gzip.open(data_file, 'rb') as f:
             x = cPickle.load(f)
 
-        if mode == 'train':
-            X = np.float32(x[0][0])
-            Y = np.float32(x[0][1])
-        elif mode == 'valid':
-            X = np.float32(x[1][0])
-            Y = np.float32(x[1][1])
-        elif mode == 'test':
-            X = np.float32(x[2][0])
-            Y = np.float32(x[2][1])
-        else:
-            raise ValueError()
+        X, Y = self.get_data(x, mode)
 
         self.dims = (28, 28)
         self.f_energy = None
@@ -122,6 +112,44 @@ class mnist_iterator:
             print 'Shuffling mnist'
             self.randomize()
 
+    def get_data(self, x, mode):
+        if mode == 'train':
+            X = np.float32(x[0][0])
+            Y = np.float32(x[0][1])
+        elif mode == 'valid':
+            X = np.float32(x[1][0])
+            Y = np.float32(x[1][1])
+        elif mode == 'test':
+            X = np.float32(x[2][0])
+            Y = np.float32(x[2][1])
+        else:
+            raise ValueError()
+
+        return X, Y
+
+    def process(self, X, Y, restrict_digits=None):
+        if restrict_digits is None:
+            n_classes = 10
+        else:
+            n_classes = len(restrict_digits)
+
+        O = np.zeros((X.shape[0], n_classes), dtype='float32')
+        if restrict_digits is None:
+            for idx in xrange(X.shape[0]):
+                O[idx, Y[idx]] = 1.;
+        else:
+            new_X = []
+            i = 0
+            for j in xrange(X.shape[0]):
+                if Y[j] in restrict_digits:
+                    new_X.append(X[j])
+                    c_idx = restrict_digits.index(Y[j])
+                    O[i, c_idx] = 1.;
+                    i += 1
+            X = np.float32(new_X)
+
+        return X, O
+
     def __iter__(self):
         return self
 
@@ -131,11 +159,8 @@ class mnist_iterator:
 
     def randomize(self):
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
-        self.X = self.X[rnd_idx, :];
-        self.O = self.O[rnd_idx, :];
-        if self.counts is not None:
-            counts = self.counts[:]
-            self.counts = [counts[i] for i in rnd_idx]
+        self.X = self.X[rnd_idx, :]
+        self.O = self.O[rnd_idx, :]
 
     def next(self):
         raise NotImplementedError()
@@ -229,15 +254,6 @@ class mnist_iterator:
 
         return x, None
 
-    def _load_chains(self, chains=None):
-        if chains is None:
-            chains = self.chains
-
-        x = np.zeros((len(chains[0]), len(chains), self.dim)).astype('float32')
-        for i, c in enumerate(chains):
-            x[:, i] = self.X[c]
-        return x
-
     def _build_chains(self, length=None, pick_discarded=False, x_p=None, h_p=None):
         if length is None:
             length = self.chain_length
@@ -282,62 +298,6 @@ class mnist_iterator:
         else:
             return
 
-    def _build_chains2(self, x_p=None, h_p=None):
-        print 'Resetting chains'
-        self.randomize()
-
-        n_chains = len(self.chains)
-        n_samples = self.chains_build_batch
-        chain_idx = [range(self.n) for _ in xrange(n_chains)]
-        for c in xrange(n_chains):
-            rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
-            chain_idx[c] = [chain_idx[c][i] for i in rnd_idx]
-
-        counts = [[1 for _ in xrange(self.n)] for _ in xrange(n_chains)]
-        n = self.n
-
-        pos = 0
-        while n > 0:
-            stdout.write('\r%d         ' % n); stdout.flush()
-            x_idx = []
-
-            for c in xrange(n_chains):
-                idx = [j for j in chain_idx[c] if counts[c][j] == 1]
-                x_idx.append([idx[i] for i in range(pos, pos + min(n_samples, n))])
-
-            uniques = np.unique(x_idx).tolist()
-            x = self.X[uniques]
-            wheres = [dict((i, j) for i, j in enumerate(uniques) if j in x_idx[c])
-                for c in xrange(n_chains)]
-
-            if n == self.n:
-                picked_idx = [random.choice(idx) for idx in x_idx]
-            else:
-                assert x_p is not None
-                energies, _, h_p = self.f_energy(x, x_p, h_p)
-                picked_idx = []
-                for c in xrange(n_chains):
-                    idx = wheres[c].keys()
-                    chain_energies = energies[c, idx]
-                    i = np.argmin(chain_energies)
-                    j = wheres[c][idx[i]]
-                    picked_idx.append(j)
-
-            for c in xrange(n_chains):
-                j = picked_idx[c]
-                counts[c][j] = 0
-                chain = self.chains[c]
-                self.chains[c].append(j)
-
-            x_p = self.X[picked_idx]
-            n -= 1
-
-            if pos + n_samples > n:
-                pos = 0
-                for c in xrange(n_chains):
-                    rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
-                    chain_idx[c] = [chain_idx[c][i] for i in rnd_idx]
-
     def _next_model_chains(self):
         assert self.f_energy is not None
 
@@ -345,32 +305,6 @@ class mnist_iterator:
             self.chains = [[] for _ in xrange(self.bs)]
         self._build_chains()
         x = self._load_chains()
-
-        return x, None
-
-    def _next_model_chains_big(self):
-        assert self.f_energy is not None
-
-        cpos = self.chain_pos
-        if cpos == -1 or len(self.chains[0]) == 0:
-            self.chain_pos = 0
-            cpos = self.chain_pos
-            self.chains = [[] for _ in xrange(self.bs)]
-            x_p = None
-            h_p = np.random.normal(loc=0, scale=1, size=(self.bs, self.dim_h)).astype('float32')
-            self._build_chains2(x_p=x_p, h_p=h_p)
-            if self.out_path:
-                self.save_images(self._load_chains(), path.join(self.out_path, 'training_chain.png'))
-
-        chains = [[chain[j] for j in xrange(cpos, cpos+self.chain_length)]
-            for chain in self.chains]
-
-        x = self._load_chains(chains=chains)
-
-        if cpos + self.chain_stride + self.chain_length > self.n:
-            self.chain_pos = -1
-        else:
-            self.chain_pos += self.chain_stride
 
         return x, None
 
@@ -435,6 +369,149 @@ class mnist_iterator:
 
     def translate(self, x):
         return x
+
+
+class MNIST_Chains(mnist_iterator):
+    def __init__(self, batch_size=1, source='/Users/devon/Data/mnist.pkl.gz',
+                 restrict_digits=None, mode='train', shuffle=True,
+                 window=20, chain_length=5000,  chain_build_batch=1000,
+                 stop=None, out_path=None, chain_stride=None):
+        # load MNIST
+
+        with gzip.open(source, 'rb') as f:
+            x = cPickle.load(f)
+
+        X, Y = self.get_data(x, mode)
+
+        self.dims = (28, 28)
+        self.f_energy = None
+        self.chain_length = chain_length
+        self.window = window
+        self.chains_build_batch = chain_build_batch
+        self.bs = batch_size
+
+        self.out_path = out_path
+        if chain_stride is None:
+            self.chain_stride = self.chain_length
+        else:
+            self.chain_stride = chain_stride
+
+        self.shuffle = shuffle
+
+        X, O = self.process(X, Y, restrict_digits)
+
+        if stop is not None:
+            X = X[:stop]
+        self.n, self.dim = X.shape
+        self.chains = [[] for _ in xrange(self.bs)]
+        self.chain_pos = 0
+        self.pos = 0
+
+        self.X = X
+        self.O = O
+
+        if self.shuffle:
+            print 'Shuffling mnist'
+            self.randomize()
+
+    def _load_chains(self, chains=None):
+        if chains is None:
+            chains = self.chains
+
+        x = np.zeros((len(chains[0]), len(chains), self.dim)).astype('float32')
+        for i, c in enumerate(chains):
+            x[:, i] = self.X[c]
+        return x
+
+    def _build_chain(self, x_p=None, h_p=None):
+        n_chains = len(self.chains)
+        l_chain = min(self.chain_length, self.n - self.pos)
+        n_samples = min(self.chains_build_batch, l_chain)
+        chain_idx = [range(l_chain) for _ in xrange(n_chains)]
+
+        print('Resetting chains with length %d and %d samples per query'
+              % (l_chain, n_samples))
+
+        for c in xrange(n_chains):
+            rnd_idx = np.random.permutation(np.arange(0, l_chain, 1))
+            chain_idx[c] = [chain_idx[c][i] for i in rnd_idx]
+
+        counts = [[1 for _ in xrange(l_chain)] for _ in xrange(n_chains)]
+        n = l_chain
+        pos = 0
+
+        while n > 0:
+            stdout.write('\r%d         ' % n); stdout.flush()
+            x_idx = []
+
+            for c in xrange(n_chains):
+                idx = [j for j in chain_idx[c] if counts[c][j] == 1]
+                x_idx.append([idx[i] for i in range(pos, pos + min(n_samples, n))])
+
+            uniques = np.unique(x_idx).tolist()
+            x = self.X[[u + self.pos for u in uniques]]
+            wheres = [dict((i, j) for i, j in enumerate(uniques) if j in x_idx[c])
+                for c in xrange(n_chains)]
+
+            if n == l_chain:
+                picked_idx = [random.choice(idx) for idx in x_idx]
+            else:
+                assert x_p is not None
+                energies, _, h_p = self.f_energy(x, x_p, h_p)
+                picked_idx = []
+                for c in xrange(n_chains):
+                    idx = wheres[c].keys()
+                    chain_energies = energies[c, idx]
+                    i = np.argmin(chain_energies)
+                    j = wheres[c][idx[i]]
+                    picked_idx.append(j)
+
+            for c in xrange(n_chains):
+                j = picked_idx[c]
+                counts[c][j] = 0
+                chain = self.chains[c]
+                self.chains[c].append(j + self.pos)
+
+            x_p = self.X[picked_idx]
+            n -= 1
+
+            if pos + n_samples > n:
+                pos = 0
+                for c in xrange(n_chains):
+                    rnd_idx = np.random.permutation(np.arange(0, l_chain, 1))
+                    chain_idx[c] = [chain_idx[c][i] for i in rnd_idx]
+
+    def next(self):
+        assert self.f_energy is not None
+
+        cpos = self.chain_pos
+        if cpos == -1 or len(self.chains[0]) == 0:
+            self.chain_pos = 0
+            cpos = self.chain_pos
+            self.chains = [[] for _ in xrange(self.bs)]
+            x_p = None
+            h_p = np.random.normal(loc=0, scale=1, size=(self.bs, self.dim_h)).astype('float32')
+            self._build_chain(x_p=x_p, h_p=h_p)
+            if self.out_path:
+                self.save_images(self._load_chains(), path.join(self.out_path, 'training_chain.png'))
+
+            self.pos += self.chain_length
+            if self.pos >= self.n:
+                self.pos = 0
+                self.randomize()
+
+        chains = [[chain[j] for j in xrange(cpos, cpos+self.window)]
+            for chain in self.chains]
+
+        x = self._load_chains(chains=chains)
+
+        if cpos + self.chain_stride + self.window > self.chain_length:
+            self.chain_pos = -1
+        else:
+            self.chain_pos += self.chain_stride
+
+        return x, None
+
 
 def print_graph(mat, ys, thr=0.1, graph_file=None, mode='multilevel'):
     colors = {
