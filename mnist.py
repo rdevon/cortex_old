@@ -16,12 +16,12 @@ def get_iter(inf=False, batch_size=128):
     return mnist_iterator(inf=inf, batch_size=batch_size)
 
 class mnist_iterator(object):
-    def __init__(self, batch_size=128, data_file='/Users/devon/Data/mnist.pkl.gz',
+    def __init__(self, batch_size=128, source='/Users/devon/Data/mnist.pkl.gz',
                  restrict_digits=None, mode='train', shuffle=True, inf=False,
                  out_mode='', repeat=1, chain_length=20, reset_chains=False,
                  chain_build_batch=100, stop=None, out_path=None, chain_stride=None):
         # load MNIST
-        with gzip.open(data_file, 'rb') as f:
+        with gzip.open(source, 'rb') as f:
             x = cPickle.load(f)
 
         X, Y = self.get_data(x, mode)
@@ -357,7 +357,7 @@ class mnist_iterator(object):
         image.save(imgfile)
 
     def show(self, image, tshape, transpose=False):
-        fshape = (28, 28)
+        fshape = self.dims
         if transpose:
             X = image
         else:
@@ -376,8 +376,6 @@ class MNIST_Chains(mnist_iterator):
                  restrict_digits=None, mode='train', shuffle=True,
                  window=20, chain_length=5000,  chain_build_batch=1000,
                  stop=None, out_path=None, chain_stride=None):
-        # load MNIST
-
         with gzip.open(source, 'rb') as f:
             x = cPickle.load(f)
 
@@ -403,6 +401,7 @@ class MNIST_Chains(mnist_iterator):
         if stop is not None:
             X = X[:stop]
         self.n, self.dim = X.shape
+        self.chain_length = min(self.chain_length, self.n)
         self.chains = [[] for _ in xrange(self.bs)]
         self.chain_pos = 0
         self.pos = 0
@@ -429,14 +428,15 @@ class MNIST_Chains(mnist_iterator):
         n_samples = min(self.chains_build_batch, l_chain)
         chain_idx = [range(l_chain) for _ in xrange(n_chains)]
 
-        print('Resetting chains with length %d and %d samples per query'
-              % (l_chain, n_samples))
+        print('Resetting chains with length %d and %d samples per query. '
+              'Position in data is %d'
+              % (l_chain, n_samples, self.pos))
 
         for c in xrange(n_chains):
             rnd_idx = np.random.permutation(np.arange(0, l_chain, 1))
             chain_idx[c] = [chain_idx[c][i] for i in rnd_idx]
 
-        counts = [[1 for _ in xrange(l_chain)] for _ in xrange(n_chains)]
+        counts = [[True for _ in xrange(l_chain)] for _ in xrange(n_chains)]
         n = l_chain
         pos = 0
 
@@ -445,7 +445,7 @@ class MNIST_Chains(mnist_iterator):
             x_idx = []
 
             for c in xrange(n_chains):
-                idx = [j for j in chain_idx[c] if counts[c][j] == 1]
+                idx = [j for j in chain_idx[c] if counts[c][j]]
                 x_idx.append([idx[i] for i in range(pos, pos + min(n_samples, n))])
 
             uniques = np.unique(x_idx).tolist()
@@ -468,11 +468,10 @@ class MNIST_Chains(mnist_iterator):
 
             for c in xrange(n_chains):
                 j = picked_idx[c]
-                counts[c][j] = 0
-                chain = self.chains[c]
+                counts[c][j] = False
                 self.chains[c].append(j + self.pos)
 
-            x_p = self.X[picked_idx]
+            x_p = self.X[[i + self.pos for i in picked_idx]]
             n -= 1
 
             if pos + n_samples > n:
@@ -484,6 +483,7 @@ class MNIST_Chains(mnist_iterator):
     def next(self):
         assert self.f_energy is not None
 
+        chain_length = min(self.chain_length, self.n - self.pos)
         cpos = self.chain_pos
         if cpos == -1 or len(self.chains[0]) == 0:
             self.chain_pos = 0
@@ -492,6 +492,10 @@ class MNIST_Chains(mnist_iterator):
             x_p = None
             h_p = np.random.normal(loc=0, scale=1, size=(self.bs, self.dim_h)).astype('float32')
             self._build_chain(x_p=x_p, h_p=h_p)
+            assert len(np.unique(self.chains[0])) == len(self.chains[0]), (len(np.unique(self.chains[0])), len(self.chains[0]))
+            for i in self.chains[0]:
+                assert i >= self.pos and i < self.pos + self.chain_length
+
             if self.out_path:
                 self.save_images(self._load_chains(), path.join(self.out_path, 'training_chain.png'))
 
@@ -505,7 +509,7 @@ class MNIST_Chains(mnist_iterator):
 
         x = self._load_chains(chains=chains)
 
-        if cpos + self.chain_stride + self.window > self.chain_length:
+        if cpos + self.chain_stride + self.window >= chain_length:
             self.chain_pos = -1
         else:
             self.chain_pos += self.chain_stride

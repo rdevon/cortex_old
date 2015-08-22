@@ -4,8 +4,10 @@ Helper module for NMT
 
 from collections import OrderedDict
 import numpy as np
+import pprint
 import theano
 from theano import tensor as T
+import yaml
 
 
 random_seed = 0xeffe
@@ -23,20 +25,32 @@ def gaussian(x, mu, s):
 def log_gaussian(x, mu, s):
     return -(x - mu)**2 / (2 * s**2) - T.log(s + 1e-7) - T.sqrt(2 * pi).astype('float32')
 
-def load_model(model, model_file):
+def load_experiment(experiment_yaml):
+    print('Loading experiment from %s' % experiment_yaml)
+    exp_dict = yaml.load(open(experiment_yaml))
+    print('Experiment hyperparams: %s' % pprint.pformat(exp_dict))
+    return exp_dict
+
+def load_model(model_file, f_unpack=None):
     print 'Loading model from %s' % model_file
-    pretrained_model = np.load(model_file)
+    params = np.load(model_file)
+
+    model, pretrained_kwargs, kwargs = f_unpack(**dict(params))
+
+    print('Pretrained model has the following parameters: \n%s'
+          % pprint.pformat(pretrained_kwargs.keys()))
 
     for k, v in model.params.iteritems():
         try:
-            pretrained_v = pretrained_model[
+            pretrained_v = pretrained_kwargs[
                 '{name}_{key}'.format(name=model.name, key=k)]
             print 'Found %s for %s' % (k, model.name)
+            assert model.params[k].shape == pretrained_v.shape
             model.params[k] = pretrained_v
         except KeyError:
             print '{} not found'.format(k)
 
-    return model
+    return model, kwargs
 
 def check_bad_nums(rvals, names):
     for k, out in zip(names, rvals):
@@ -95,7 +109,7 @@ def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
         W = ortho_weight(nin, rng=rng)
     else:
         W = scale * rng.randn(nin, nout)
-    return W.astype('float32')# some utilities
+    return W.astype('float32')
 
 def parzen_estimation(samples, tests, h=1.0):
     log_p = 0.
@@ -119,7 +133,7 @@ def log_mean_exp(x, axis=None, as_numpy=False):
     else:
         Te = T
     x_max = Te.max(x, axis=axis, keepdims=True)
-    return Te.log(Te.mean(Te.exp(x - x_max), axis=axis, keepdims=True) + 1e-7) + x_max
+    return Te.log(Te.mean(Te.exp(x - x_max), axis=axis, keepdims=True)) + x_max
 
 def concatenate(tensor_list, axis=0):
     """

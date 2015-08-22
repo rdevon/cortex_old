@@ -95,12 +95,10 @@ class GenerativeRNN(RNN):
 
 class GenRNN(GenerativeRNN):
     def __init__(self, dim_in, dim_h, weight_noise=False, name='gen_rnn',
-                 h0_mode='average', rate=0.1, trng=None, condition_on_x=False):
+                 trng=None, condition_on_x=False):
         if weight_noise:
             raise NotImplementedError()
 
-        self.h0_mode = h0_mode
-        self.rate = rate
         self.condition_on_x = condition_on_x
 
         self.weight_noise = weight_noise
@@ -113,17 +111,6 @@ class GenRNN(GenerativeRNN):
         if self.condition_on_x:
             XX = norm_weight(self.dim_in, self.dim_in)
             self.params.update(XX=XX)
-
-        if self.h0_mode == 'average':
-            h0 = np.zeros((self.dim_h,)).astype(floatX)
-            self.params.update(h0=h0)
-        elif self.h0_mode == 'ffn':
-            W0 = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
-                             rng=self.rng)
-            b0 = np.zeros((self.dim_h,)).astype('float32')
-            self.params.update(W0=W0, b0=b0)
-        elif self.h0_mode is not None:
-            raise ValueError(self.h0_mode)
 
     def get_params(self):
         params = [self.XH, self.bh, self.Ur, self.HX, self.bx]
