@@ -23,6 +23,10 @@ class Layer(object):
         self.params = None
         self.excludes = []
         self.learn = learn
+        self.set_params()
+
+    def set_params(self):
+        raise NotImplementedError()
 
     def set_tparams(self):
         if self.params is None:
@@ -174,22 +178,26 @@ class MLP(Layer):
             raise ValueError()
 
         super(MLP, self).__init__(name=name)
-        self.set_params()
 
     def _binomial(self, p, size=None):
         if size is None:
             size = p.shape
         return self.trng.binomial(p=p, size=size, n=1, dtype=p.dtype)
 
-    def _cross_entropy(self, x, p):
-        energy = -(x * T.log(p + 1e-7) + (1 - x) * T.log(1 - p + 1e-7))
-        #energy = T.nnet.binary_crossentropy(x, p)
-        energy = energy.sum(axis=energy.ndim-1)
+    def _cross_entropy(self, x, p, axis=None):
+        p = T.clip(p, 1e-7, 1.0 - 1e-7)
+        energy = T.nnet.binary_crossentropy(p, x)
+        if axis is None:
+            axis = energy.ndim - 1
+        energy = energy.sum(axis=axis)
         return energy
 
-    def _binary_entropy(self, p):
-        entropy = -(p * T.log(p + 1e-7) + (1 - p) * T.log(1 - p + 1e-7))
-        entropy = entropy.sum(axis=entropy.ndim-1)
+    def _binary_entropy(self, p, axis=None):
+        p = T.clip(p, 1e-7, 1.0 - 1e-7)
+        entropy = T.nnet.binary_crossentropy(p, p)
+        if axis is None:
+            axis = entropy.ndim - 1
+        entropy = entropy.sum(axis=axis)
         return entropy
 
     def _normal(self, mu, log_sigma, size=None):
@@ -230,40 +238,11 @@ class MLP(Layer):
                 self.params['W_%d_noise' % l] = W_noise
 
         if self.out_act == 'lambda x: x':
+            raise NotImplementedError()
             Ws = tools.norm_weight(self.dim_h, dim_out,
                                     scale=self.weight_scale, ortho=False)
             bs = np.zeros((dim_out,)).astype(floatX)
             self.params.update(Ws=Ws, bs=bs)
-
-    def __call__(self, x, return_preact=False):
-        for l in xrange(self.n_layers):
-            W = self.__dict__['W_%d' % l]
-            b = self.__dict__['b_%d' % l]
-
-            if self.weight_noise:
-                W_noise = self.__dict__['W_%d_noise' % l]
-                W = W + W_noise
-
-            if l == self.n_layers - 1:
-                activ = self.out_act
-            else:
-                activ = self.h_act
-
-            if l == self.n_layers - 1 and return_preact:
-                x = T.dot(x, W) + b
-            else:
-                x = eval(activ)(T.dot(x, W) + b)
-
-            if self.dropout:
-                raise NotImplementedError()
-                if activ == 'T.tanh':
-                    raise NotImplementedError()
-                else:
-                    x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
-                                             dtype=x.dtype)
-                    x = x * x_d / (1 - self.dropout)
-
-        return x
 
     def get_params(self):
         params = []
@@ -273,10 +252,12 @@ class MLP(Layer):
             params += [W, b]
 
             if self.weight_noise:
+                raise NotImplementedError()
                 W_noise = self.__dict__['W_%d_noise' % l]
                 params += [W_noise]
 
         if self.out_act == 'lambda x: x':
+            raise NotImplementedError()
             Ws = self.Ws
             bs = self.bs
             params += [Ws, bs]
@@ -309,11 +290,22 @@ class MLP(Layer):
                     x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
                                              dtype=x.dtype)
                     x = x * x_d / (1 - self.dropout)
+
+        assert len(params) == 0
         return x
 
     def step_call(self, x, *params):
         x = self.preact(x, *params)
         return eval(self.out_act)(x)
+
+    def __call__(self, x, return_preact=False):
+        params = self.get_params()
+        if return_preact:
+            x = self.preact(x, *params)
+        else:
+            x = self.step_call(x, *params)
+
+        return x
 
 
 class Softmax(Layer):

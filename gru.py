@@ -104,22 +104,6 @@ class GRU(RNN):
         bx = np.zeros((self.dim_h,)).astype(floatX)
         self.params = OrderedDict(W=W, b=b, U=U, Wx=Wx, Ux=Ux, bx=bx)
 
-        if self.learn_h0:
-            W0 = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
-                             rng=self.rng)
-            self.params.update(W0=W0)
-
-        if self.weight_noise:
-            W_noise = (W * 0).astype(floatX)
-            U_noise = (U * 0).astype(floatX)
-            Wx_noise = (Wx * 0).astype(floatX)
-            Ux_noise = (Ux * 0).astype(floatX)
-            self.params.update(W_noise=W_noise, U_noise=U_noise,
-                               Wx_noise=Wx_noise, Ux_noise=Ux_noise)
-            if self.learn_h0:
-                W0_noise = (W0 * 0).astype(floatX)
-                self.params.update(W0_noise=W0_noise)
-
     def set_inputs(self, state_below, suppress_noise=False):
         if self.weight_noise and not suppress_noise:
             W = self.W + self.W_noise
@@ -545,7 +529,7 @@ class HeirarchalGRUWO(GRU):
 
 class GenerativeGRU(GRU):
     def __init__(self, dim_in, dim_h, weight_noise=False, name='gen_gru',
-                 trng=None):
+                 trng=None, condition_on_x=False):
         if weight_noise:
             raise NotImplementedError()
 
@@ -553,6 +537,8 @@ class GenerativeGRU(GRU):
             self.trng = RandomStreams(6 * 10 * 2015)
         else:
             self.trng = trng
+
+        self.condition_on_x = condition_on_x
 
         self.weight_noise = weight_noise
         super(GenerativeGRU, self).__init__(dim_in, dim_h, name=name)
@@ -630,43 +616,64 @@ class GenerativeGRU(GRU):
         return OrderedDict(x=x, p=p, h=h, x0=x0, p0=p0, h0=h0), updates
 
 
-class GenGRU(GenerativeGRU, GenRNN):
-    def __init__(self, dim_in, dim_h, weight_noise=False, name='gen_gru',
-                 h0_mode='average', rate=0.1, trng=None, condition_on_x=False):
+class GenGRU(Layer):
+    def __init__(self, dim_in, dim_h, weight_noise=False, weight_scale=0.1,
+                 name='gen_gru', rng=None, trng=None, condition_on_x=None):
         if weight_noise:
             raise NotImplementedError()
 
-        self.h0_mode = h0_mode
-        self.rate = rate
+        self.dim_in = dim_in
+        self.dim_h = dim_h
+
         self.condition_on_x = condition_on_x
 
         self.weight_noise = weight_noise
-        super(GenGRU, self).__init__(dim_in, dim_h, weight_noise=weight_noise,
-                                     trng=trng, name=name)
+        self.weight_scale = weight_scale
+
+        if rng is None:
+            rng = tools.rng_
+        self.rng = rng
+
+        if trng is None:
+            self.trng = RandomStreams(random.randint(0, 10000))
+        else:
+            self.trng = trng
+
+        super(GenGRU, self).__init__(name=name)
+
+    def get_gates(self, preact):
+        r = T.nnet.sigmoid(RNN._slice(preact, 0, self.dim_h))
+        u = T.nnet.sigmoid(RNN._slice(preact, 1, self.dim_h))
+        return r, u
 
     def set_params(self):
-        super(GenGRU, self).set_params()
+        XHa = np.concatenate([norm_weight(self.dim_in, self.dim_h),
+                             norm_weight(self.dim_in, self.dim_h)], axis=1)
+        bha = np.zeros((2 * self.dim_h,)).astype(floatX)
+        Ura = np.concatenate([ortho_weight(self.dim_h),
+                              ortho_weight(self.dim_h)], axis=1)
 
-        if self.condition_on_x:
-            XX = norm_weight(self.dim_in, self.dim_in)
-            self.params.update(XX=XX)
+        XHb = norm_weight(self.dim_in, self.dim_h)
+        bhb = np.zeros((self.dim_h,)).astype(floatX)
+        Urb = ortho_weight(self.dim_h)
 
-        if self.h0_mode == 'average':
-            h0 = np.zeros((self.dim_h,)).astype(floatX)
-            self.params.update(h0=h0)
-        elif self.h0_mode == 'ffn':
-            W0 = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
-                             rng=self.rng)
-            b0 = np.zeros((self.dim_h,)).astype('float32')
-            self.params.update(W0=W0, b0=b0)
-        elif self.h0_mode is not None:
-            raise ValueError(self.h0_mode)
+        HX = norm_weight(self.dim_h, self.dim_in)
+        bx = np.zeros((self.dim_in,)).astype(floatX)
+
+        self.params = OrderedDict(XHa=XHa, bha=bha, Ura=Ura, XHb=XHb, bhb=bhb,
+                                  Urb=Urb, HX=HX, bx=bx)
+
+    def set_tparams(self):
+        tparams = super(GenGRU, self).set_tparams()
+        if self.condition_on_x is not None:
+            tparams.update(**self.condition_on_x.set_tparams())
+        return tparams
 
     def get_params(self):
         params = [self.XHa, self.Ura, self.bha, self.XHb, self.Urb, self.bhb,
                   self.HX, self.bx]
         if self.condition_on_x:
-            params.append(self.XX)
+            params += self.condition_on_x.get_params()
         return params
 
     def step_sample(self, h_, x_, *params):
@@ -680,18 +687,13 @@ class GenGRU(GenerativeGRU, GenRNN):
         h = u * h + (1. - u) * h_
 
         preact = T.dot(h, HX) + bx
-        if self.condition_on_x:
-            XX = params[9]
-            preact += T.dot(x_, XX)
+        if self.condition_on_x is not None:
+            preact += self.condition_on_x.preact(x_, *params[8:])
         p = T.nnet.sigmoid(preact)
-
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
-
         return h, x, p
 
-    def step_slice(self, m_, x_, h_, *params):
-        XHa, Ura, bha, XHb, Urb, bhb, HX, bx = params[:8]
-
+    def _step(self, m_, x_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
         preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
         r, u = self.get_gates(preact)
         preactx = T.dot(h_, Urb) * r + T.dot(x_, XHb) + bhb
@@ -700,20 +702,72 @@ class GenGRU(GenerativeGRU, GenRNN):
         h = u * h + (1. - u) * h_
         h = m_[:, None] * h + (1. - m_)[:, None] * h_
 
-        preact = T.dot(h, HX) + bx
-        if self.condition_on_x:
-            XX = params[9]
-            preact += T.dot(x_, XX)
+        return h
+
+    def sample(self, x0=None, h0=None, n_samples=10, n_steps=10):
+        if x0 is None:
+            x0 = self.trng.binomial(size=(n_samples, self.dim_in), p=0.5, n=1,
+                                    dtype='float32')
+        else:
+            x0 = self.trng.binomial(p=x0, size=x0.shape, n=1, dtype=x0.dtype)
+
+        p0 = T.zeros_like(x0) + x0
+
+        if h0 is None:
+            h0 = T.alloc(0., x0.shape[0], self.dim_h)
+
+        seqs = []
+        outputs_info = [h0, x0, None]
+        non_seqs = self.get_params()
+
+        (h, x, p), updates = theano.scan(
+            self.step_sample,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=tools._p(self.name, '_sampling'),
+            n_steps=n_steps,
+            profile=tools.profile,
+            strict=True)
+
+        x = tools.concatenate([x0[None, :, :], x])
+        h = tools.concatenate([h0[None, :, :], h])
+        p = tools.concatenate([p0[None, :, :], p])
+
+        return OrderedDict(x=x, p=p, h=h, x0=x0, p0=p0, h0=h0), updates
+
+    def __call__(self, x, h0=None, mask=None):
+        n_steps = x.shape[0]
+        n_samples = x.shape[1]
+
+        if mask is None:
+            mask = T.alloc(1, n_steps, 1).astype(floatX)
+
+        if h0 is None:
+            h0 = T.alloc(0., n_samples, self.dim_h)
+
+        seqs = [mask, x]
+        outputs_info = [h0]
+        non_seqs = [self.XHa, self.Ura, self.bha, self.XHb, self.Urb, self.bhb,
+                    self.HX, self.bx]
+
+        h, updates = theano.scan(
+            self._step,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=tools._p(self.name, '_layers'),
+            n_steps=n_steps,
+            profile=tools.profile,
+            strict=True)
+
+        preact = T.dot(h, self.HX) + self.bx
+        if self.condition_on_x is not None:
+            preact += self.condition_on_x(x, return_preact=True)
         p = T.nnet.sigmoid(preact)
-        x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
+        y = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
 
-        return h, x, p
-
-    def __call__(self, state_below, mask=None):
-        return GenRNN.__call__(self, state_below, mask=mask)
-
-    def sample(self, x0=None, n_samples=10, n_steps=10):
-        return GenRNN.sample(self, x0=x0, n_samples=n_samples, n_steps=n_steps)
+        return OrderedDict(h=h, y=y, p=p), updates
 
 
 class GenStochasticGRU(GenerativeGRU):
