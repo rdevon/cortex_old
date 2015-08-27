@@ -32,25 +32,44 @@ def load_experiment(experiment_yaml):
     return exp_dict
 
 def load_model(model_file, f_unpack=None):
+    '''
+    Loads pretrained model.
+    '''
+
     print 'Loading model from %s' % model_file
     params = np.load(model_file)
+    models, pretrained_kwargs, kwargs = f_unpack(**dict(params))
 
-    model, pretrained_kwargs, kwargs = f_unpack(**dict(params))
-
-    print('Pretrained model has the following parameters: \n%s'
+    print('Pretrained model(s) has the following parameters: \n%s'
           % pprint.pformat(pretrained_kwargs.keys()))
 
-    for k, v in model.params.iteritems():
-        try:
-            pretrained_v = pretrained_kwargs[
-                '{name}_{key}'.format(name=model.name, key=k)]
-            print 'Found %s for %s' % (k, model.name)
-            assert model.params[k].shape == pretrained_v.shape
-            model.params[k] = pretrained_v
-        except KeyError:
-            print '{} not found'.format(k)
+    model_dict = OrderedDict()
 
-    return model, kwargs
+    for model in models:
+        for k, v in model.params.iteritems():
+            try:
+                pretrained_v = pretrained_kwargs[
+                    '{name}_{key}'.format(name=model.name, key=k)]
+                print 'Found %s for %s' % (k, model.name)
+                assert model.params[k].shape == pretrained_v.shape, (
+                    'Sizes do not match: %s vs %s'
+                    % (model.params[k].shape, pretrained_v.shape)
+                )
+                model.params[k] = pretrained_v
+            except KeyError:
+                pretrained_v = pretrained_kwargs[
+                    '{key}'.format(key=k)]
+                print 'Found %s, but name is ambiguous' % (k)
+                assert model.params[k].shape == pretrained_v.shape, (
+                    'Sizes do not match: %s vs %s'
+                    % (model.params[k].shape, pretrained_v.shape)
+                )
+                model.params[k] = pretrained_v
+            except KeyError:
+                print '{} not found'.format(k)
+        model_dict[model.name] = model
+
+    return model_dict, kwargs
 
 def check_bad_nums(rvals, names):
     for k, out in zip(names, rvals):

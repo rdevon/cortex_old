@@ -375,7 +375,7 @@ class MNIST_Chains(mnist_iterator):
     def __init__(self, batch_size=1, source='/Users/devon/Data/mnist.pkl.gz',
                  restrict_digits=None, mode='train', shuffle=True,
                  window=20, chain_length=5000,  chain_build_batch=1000,
-                 stop=None, out_path=None, chain_stride=None):
+                 stop=None, out_path=None, chain_stride=None, n_chains=1):
         with gzip.open(source, 'rb') as f:
             x = cPickle.load(f)
 
@@ -400,11 +400,14 @@ class MNIST_Chains(mnist_iterator):
 
         if stop is not None:
             X = X[:stop]
+
         self.n, self.dim = X.shape
         self.chain_length = min(self.chain_length, self.n)
-        self.chains = [[] for _ in xrange(self.bs)]
+        self.chains = [[] for _ in xrange(n_chains)]
         self.chain_pos = 0
         self.pos = 0
+        self.chain_idx = range(0, self.chain_length - window, self.chain_stride)
+        self.spos = 0
 
         self.X = X
         self.O = O
@@ -484,117 +487,69 @@ class MNIST_Chains(mnist_iterator):
         assert self.f_energy is not None
 
         chain_length = min(self.chain_length, self.n - self.pos)
+        window = min(self.window, chain_length)
         cpos = self.chain_pos
         if cpos == -1 or len(self.chains[0]) == 0:
+            if self.pos == 0:
+                self.randomize()
+
             self.chain_pos = 0
             cpos = self.chain_pos
-            self.chains = [[] for _ in xrange(self.bs)]
+
+            self.chains = [[] for _ in xrange(len(self.chains))]
+
             x_p = None
-            h_p = np.random.normal(loc=0, scale=1, size=(self.bs, self.dim_h)).astype('float32')
+            h_p = np.random.normal(loc=0, scale=1, size=(len(self.chains), self.dim_h)).astype('float32')
             self._build_chain(x_p=x_p, h_p=h_p)
+
             assert len(np.unique(self.chains[0])) == len(self.chains[0]), (len(np.unique(self.chains[0])), len(self.chains[0]))
             for i in self.chains[0]:
                 assert i >= self.pos and i < self.pos + self.chain_length
 
             if self.out_path:
-                self.save_images(self._load_chains(), path.join(self.out_path, 'training_chain.png'))
+                self.save_images(self._load_chains(), path.join(self.out_path, 'training_chain_%d.png' % self.pos))
 
             self.pos += self.chain_length
             if self.pos >= self.n:
                 self.pos = 0
-                self.randomize()
 
-        chains = [[chain[j] for j in xrange(cpos, cpos+self.window)]
-            for chain in self.chains]
+            self.chain_idx = range(0, chain_length - window + 1, self.chain_stride)
+            random.shuffle(self.chain_idx)
+
+        chains = []
+        for b in xrange(self.bs):
+            try:
+                chains += [
+                    [chain[j] for j in xrange(self.chain_idx[b + cpos],
+                                              self.chain_idx[b + cpos] + window)]
+                    for chain in self.chains]
+            except IndexError as e:
+                print 'len', self.chain_idx
+                print 'b', b
+                print 'cpos', cpos
+                print 'window', window
+                print 'range', range(self.chain_idx[b + cpos], self.chain_idx[b + cpos] + window)
+                print len(self.chains[0])
+                raise e
 
         x = self._load_chains(chains=chains)
 
-        if cpos + self.chain_stride + self.window >= chain_length:
+        if cpos + 2 * self.bs >= len(self.chain_idx):
             self.chain_pos = -1
         else:
-            self.chain_pos += self.chain_stride
+            self.chain_pos += self.bs
 
         return x, None
 
+    def next_simple(self, batch_size=10):
+        cpos = self.spos
+        if cpos + batch_size > self.n:
+            self.spos = 0
+            cpos = self.spos
+            if self.shuffle:
+                self.randomize()
 
-def print_graph(mat, ys, thr=0.1, graph_file=None, mode='multilevel'):
-    colors = {
-        0: 'blue',
-        1: 'red',
-        2: 'orange',
-        3: 'green',
-        4: 'purple',
-        5: 'brown',
-        6: 'white',
-        7: 'yellow',
-        8: 'cyan',
-        9: 'tan',
-        10: 'magenta',
-        11: 'grey',
-        12: 'black'}
+        x = self.X[cpos:cpos+batch_size]
+        self.spos += batch_size
 
-    max_weight = np.max(mat)
-    thr = thr * max_weight
-    wheres = np.where(mat > thr)
-
-    edgelist = []
-    weights = []
-    for x, y in zip(wheres[0], wheres[1]):
-        if x < y:
-            edgelist.append([x, y])
-            weights.append(mat[x, y])
-    weights = weights / np.std(weights)
-    graph = Graph(edgelist, directed=False)
-    graph.vs['label'] = ys
-
-    if mode == 'eigenvector':
-        cl = graph.community_leading_eigenvector(clusters=10)
-    elif mode == 'multilevel':
-        cls = graph.community_multilevel(return_levels=True, weights=weights)
-        cl = list(cls[0])
-
-    print cl
-    print [[ys[c] for c in cls] for cls in cl]
-    for c, g in enumerate(cl):
-        graph.vs(cl[c])['color'] = colors[c % 13]
-
-    igraph.plot(graph, graph_file, weights=weights, edge_width=weights/10, vertex_label_size=8)
-
-counter = None
-
-def init(_counter):
-    global counter
-    counter = _counter
-
-def make_chain((chain, X)):
-    global counter
-    idx = range(50000)
-    random.shuffle(idx)
-    for k in idx:
-        if k != chain[-1] and np.corrcoef(X[chain[-1]], X[k])[0, 1] >= 0.8:
-            chain.append(k)
-        if len(chain) == 10:
-            break
-    if len(chain) == 10:
-        counter.value += 1
-        sys.stdout.write('\r%d' % counter.value); sys.stdout.flush()
-    else:
-        chain = []
-    return chain
-
-def make_chains():
-    m = mnist_iterator(out_mode='chains', batch_size=1)
-    rnd_idx = np.random.permutation(np.arange(0, m.X.shape[0], 1))
-
-    counter = mp.Value('i', 0)
-    p = mp.Pool(100, initializer=init, initargs=(counter, ))
-    try:
-        i = p.map_async(make_chain, [([i], m.X) for i in rnd_idx])
-        i.wait()
-        chains = i.get()
-    except Exception as e:
-        traceback.print_exc(file=sys.stdout)
-    finally:
-        p.terminate()
-        p.join()
-    return chains
+        return x

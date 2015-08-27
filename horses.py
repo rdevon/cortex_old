@@ -33,7 +33,7 @@ class Horses(MNIST_Chains):
     def __init__(self, batch_size=10, source=None,
                  inf=False, chain_length=97, chain_build_batch=97, window=7,
                  stop=None, out_path=None, dims=None, chain_stride=None, shuffle=True,
-                 crop_image=True):
+                 crop_image=True, n_chains=1):
         # load MNIST
         assert source is not None
 
@@ -71,14 +71,29 @@ class Horses(MNIST_Chains):
 
         self.n, self.dim = X.shape
         self.chain_length = min(self.chain_length, self.n)
-        self.chains = [[] for _ in xrange(self.bs)]
+        self.chains = [[] for _ in xrange(n_chains)]
         self.chain_pos = 0
         self.pos = 0
+        self.chain_idx = range(0, self.chain_length - window, self.chain_stride)
+        self.spos = 0
 
         self.X = X
 
         print 'Shuffling horses (neh!)'
         self.randomize()
+
+    def next_simple(self, batch_size=10):
+        cpos = self.spos
+        if cpos + batch_size > self.n:
+            self.spos = 0
+            cpos = self.spos
+            if self.shuffle:
+                self.randomize()
+
+        x = self.X[cpos:cpos+batch_size]
+        self.spos += batch_size
+
+        return x
 
     def randomize(self):
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
