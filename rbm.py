@@ -19,7 +19,7 @@ ortho_weight = tools.ortho_weight
 
 class RBM(Layer):
     def __init__(self, dim_in, dim_h, name='rbm', rng=None, trng=None,
-                 stochastic=True, param_file=None, learn=True):
+                 stochastic=True):
         self.stochastic = stochastic
         self.dim_in = dim_in
         self.dim_h = dim_h
@@ -32,36 +32,25 @@ class RBM(Layer):
             self.trng = RandomStreams(6 * 10 * 2015)
         else:
             self.trng = trng
-        super(RBM, self).__init__(name=name, learn=learn)
-        self.set_params(param_file=param_file)
 
-    def _load(self, param_file):
-        param_dict = yaml.load(open(param_file, 'r'))
-        params = OrderedDict((k, np.load(v))
-            for k, v in param_dict['params'].iteritems())
-        return params
+        super(RBM, self).__init__(name=name)
 
-    def set_params(self, param_file=None):
-        if param_file is None:
-            W = norm_weight(self.dim_in, self.dim_h, rng=self.rng)
-            b = np.zeros((self.dim_in,)).astype(floatX)
-            c = np.zeros((self.dim_h,)).astype(floatX)
-        else:
-            params = self._load(param_file)
-            W = params['W'].astype(floatX)
-            b = params['b'].astype(floatX)
-            c = params['c'].astype(floatX)
+    def set_params(self):
+        W = norm_weight(self.dim_in, self.dim_h, rng=self.rng)
+        b = np.zeros((self.dim_in,)).astype(floatX)
+        c = np.zeros((self.dim_h,)).astype(floatX)
 
         self.params = OrderedDict(W=W, b=b, c=c)
 
-    def step_energy(self, x_, x, e_, W, b, c):
+    def _step_energy(self, x_, x, e_, W, b, c):
         q = T.nnet.sigmoid(T.dot(x_, W) + c)
         if self.stochastic:
             z = self.trng.binomial(p=q, size=q.shape, n=1, dtype=q.dtype)
             p = T.nnet.sigmoid(T.dot(z, W.T) + b)
         else:
             p = T.nnet.sigmoid(T.dot(q, W.T) + b)
-        e = (x * T.log(p + 1e-7) + (1. - x) * T.log(1. - p + 1e-7)).sum(axis=1)
+        e = -(x * T.log(p + 1e-7) + (1. - x) * T.log(1. - p + 1e-7))
+        e = e.sum(axis=e.ndim-1)
         return e_ + e, e
 
     def energy(self, x):
@@ -74,7 +63,7 @@ class RBM(Layer):
         non_seqs = [self.W, self.b, self.c]
 
         rval, updates = theano.scan(
-            self.step_energy,
+            self._step_energy,
             sequences=seqs,
             outputs_info=outputs_info,
             non_sequences=non_seqs,
@@ -84,9 +73,23 @@ class RBM(Layer):
             strict=True
         )
 
-        return OrderedDict(acc_log_p=rval[0], log_p=rval[1]), updates
+        return OrderedDict(acc_neg_log_p=rval[0][-1], neg_log_p=rval[1]), updates
 
-    def step_slice(self, x_, h_, p_, q_, W, b, c):
+    def joint_energy(self, v, h):
+        e = -T.dot(T.dot(h, self.W), v.T) - T.dot(v, self.b) - T.dot(h, self.c)
+        return e
+
+    def raise_estimate(self, x, n_samples=10, K=100):
+        for m in xrange(n_samples):
+            q = T.nnet.sigmoid(T.dot(x, self.W) + self.c)
+            h_k = self.trng.binomial(p=q, size=q.shape, n=1, dtype=q.dtype)
+            energy = self.joint_energy(samples)
+
+            for k in reversed(xrange(K)):
+                code
+
+
+    def _step(self, x_, W, b, c):
         q = T.nnet.sigmoid(T.dot(x_, W) + c)
         h = self.trng.binomial(p=q, size=q.shape, n=1, dtype=q.dtype)
         p = T.nnet.sigmoid(T.dot(h, W.T) + b)
@@ -101,14 +104,13 @@ class RBM(Layer):
             assert n_chains is None
             p0 = T.zeros_like(x0) + x0
             q0 = T.nnet.sigmoid(T.dot(x0, self.W) + self.c)
-            h0 = self.tnrg.binomial(p=q0,
-                                    size=(n_chains, self.dim_h),
+            h0 = self.trng.binomial(p=q0, size=q0.shape,
                                     n=1, dtype=floatX)
         elif h0 is not None:
             q0 = T.zeros_like(h0) + h0
             p0 = T.nnet.sigmoid(T.dot(h0, self.W.T) + self.b)
             x0 = self.trng.binomial(p=p0,
-                                    size=(n_chains, self.dim_in),
+                                    size=(h0.shape[0], self.dim_in),
                                     n=1, dtype=floatX)
         else:
             assert n_chains is not None
@@ -122,11 +124,10 @@ class RBM(Layer):
                                     n=1, dtype=floatX)
 
         seqs = []
-        outputs_info = [x0, h0, p0, q0]
+        outputs_info = [x0, None, None, None]
         non_seqs = [self.W, self.b, self.c]
-
         (x, h, p, q), updates = theano.scan(
-            self.step_slice,
+            self._step,
             sequences=seqs,
             outputs_info=outputs_info,
             non_sequences=non_seqs,

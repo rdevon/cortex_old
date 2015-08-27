@@ -617,14 +617,13 @@ class GenerativeGRU(GRU):
 
 
 class GenGRU(Layer):
-    def __init__(self, dim_in, dim_h, weight_noise=False, weight_scale=0.1,
+    def __init__(self, dim_in, dim_h, weight_noise=False, weight_scale=0.01,
                  name='gen_gru', rng=None, trng=None, condition_on_x=None):
         if weight_noise:
             raise NotImplementedError()
 
         self.dim_in = dim_in
         self.dim_h = dim_h
-
         self.condition_on_x = condition_on_x
 
         self.weight_noise = weight_noise
@@ -672,20 +671,13 @@ class GenGRU(Layer):
     def get_params(self):
         params = [self.XHa, self.Ura, self.bha, self.XHb, self.Urb, self.bhb,
                   self.HX, self.bx]
-        if self.condition_on_x:
+        if self.condition_on_x is not None:
             params += self.condition_on_x.get_params()
         return params
 
     def step_sample(self, h_, x_, *params):
         XHa, Ura, bha, XHb, Urb, bhb, HX, bx = params[:8]
-
-        preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
-        r, u = self.get_gates(preact)
-        preactx = T.dot(h_, Urb) * r + T.dot(x_, XHb) + bhb
-
-        h = T.tanh(preactx)
-        h = u * h + (1. - u) * h_
-
+        h = self._step(x_, h_, XHa, Ura, bha, XHb, Urb, bhb)
         preact = T.dot(h, HX) + bx
         if self.condition_on_x is not None:
             preact += self.condition_on_x.preact(x_, *params[8:])
@@ -693,15 +685,12 @@ class GenGRU(Layer):
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
         return h, x, p
 
-    def _step(self, m_, x_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
+    def _step(self, x_, h_, XHa, Ura, bha, XHb, Urb, bhb):
         preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
         r, u = self.get_gates(preact)
         preactx = T.dot(h_, Urb) * r + T.dot(x_, XHb) + bhb
-
         h = T.tanh(preactx)
         h = u * h + (1. - u) * h_
-        h = m_[:, None] * h + (1. - m_)[:, None] * h_
-
         return h
 
     def sample(self, x0=None, h0=None, n_samples=10, n_steps=10):
@@ -712,9 +701,8 @@ class GenGRU(Layer):
             x0 = self.trng.binomial(p=x0, size=x0.shape, n=1, dtype=x0.dtype)
 
         p0 = T.zeros_like(x0) + x0
-
         if h0 is None:
-            h0 = T.alloc(0., x0.shape[0], self.dim_h)
+            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX)
 
         seqs = []
         outputs_info = [h0, x0, None]
@@ -736,20 +724,106 @@ class GenGRU(Layer):
 
         return OrderedDict(x=x, p=p, h=h, x0=x0, p0=p0, h0=h0), updates
 
-    def __call__(self, x, h0=None, mask=None):
+    def __call__(self, x, h0=None):
         n_steps = x.shape[0]
         n_samples = x.shape[1]
 
-        if mask is None:
-            mask = T.alloc(1, n_steps, 1).astype(floatX)
+        if h0 is None:
+            h0 = T.alloc(0., n_samples, self.dim_h).astype(floatX)
+
+        seqs = [x]
+        outputs_info = [h0]
+        non_seqs = [self.XHa, self.Ura, self.bha, self.XHb, self.Urb, self.bhb]
+
+        h, updates = theano.scan(
+            self._step,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=tools._p(self.name, '_layers'),
+            n_steps=n_steps,
+            profile=tools.profile,
+            strict=True)
+
+        preact = T.dot(h, self.HX) + self.bx
+        if self.condition_on_x is not None:
+            preact += self.condition_on_x(x, return_preact=True)
+        p = T.nnet.sigmoid(preact)
+        y = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
+
+        return OrderedDict(h=h, y=y, p=p), updates
+
+class MultiLayerGRU(Layer):
+    def __init__(self, dim_in, dim_h, n_layers=2,
+                 weight_noise=False, weight_scale=0.01,
+                 condition_on_x=None,
+                 rng=None, trng=None,
+                 name='gen_gru'):
+        if weight_noise:
+            raise NotImplementedError()
+
+        self.dim_in = dim_in
+        self.dim_h = dim_h
+        self.n_layers = n_layers
+        self.condition_on_x = condition_on_x
+
+        self.weight_noise = weight_noise
+        self.weight_scale = weight_scale
+
+        if rng is None:
+            rng = tools.rng_
+        self.rng = rng
+
+        if trng is None:
+            self.trng = RandomStreams(random.randint(0, 10000))
+        else:
+            self.trng = trng
+
+        super(MultiLayerGenGRU, self).__init__(name=name)
+
+        self.layers = []
+        for l in xrange(n_layers):
+            if l == 0:
+                dim_in = self.dim_in
+            else:
+                dim_in = self.dim_h + dim_in
+            rnn = GenGru(dim_in, dim_h, name='gen_gru_%d' % l)
+            self.layers.append(rnn)
+
+    def set_params(self):
+        for rnn in self.layers:
+            rnn.set_params()
+
+    def set_tparams(self):
+        tparams = OrderedDict()
+        for rnn in self.layers:
+            tparams.update(**rnn.set_tparams())
+        return tparams
+
+    def get_params(self):
+        params = []
+        for rnn in self.layers:
+            params += rnn.get_params()
+        return params
+
+    def get_params_level(self, level, *params):
+        start = sum([0] + [len(rnn.get_params()) for rnn in self.layers[:level]])
+        length = len(self.layers[level].get_params())
+        return params[start:start+length]
+
+    def _step(self, x, h_, l, *params):
+        ps = self.get_params_level(l, *params)
+
+    def __call__(self, x, h0s=None):
+        n_steps = x.shape[0]
+        n_samples = x.shape[1]
 
         if h0 is None:
-            h0 = T.alloc(0., n_samples, self.dim_h)
+            h0 = T.alloc(0., n_samples, self.dim_h).astype(floatX)
 
-        seqs = [mask, x]
+        seqs = [x]
         outputs_info = [h0]
-        non_seqs = [self.XHa, self.Ura, self.bha, self.XHb, self.Urb, self.bhb,
-                    self.HX, self.bx]
+        non_seqs = [self.XHa, self.Ura, self.bha, self.XHb, self.Urb, self.bhb]
 
         h, updates = theano.scan(
             self._step,

@@ -170,6 +170,8 @@ class MLP(Layer):
             self.sample = self._binomial
             self.neg_log_prob = self._cross_entropy
             self.entropy = self._binary_entropy
+        elif out_act == 'T.tanh':
+            self.sample = self._centered_binomial
         elif out_act == 'lambda x: x':
             self.sample = self._normal
             self.neg_log_prob = self._normal_prob
@@ -183,6 +185,11 @@ class MLP(Layer):
         if size is None:
             size = p.shape
         return self.trng.binomial(p=p, size=size, n=1, dtype=p.dtype)
+
+    def _centered_binomial(self, p, size=None):
+        if size is None:
+            size = p.shape
+        return 2 * self.trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
 
     def _cross_entropy(self, x, p, axis=None):
         p = T.clip(p, 1e-7, 1.0 - 1e-7)
@@ -356,11 +363,35 @@ class Logistic(Layer):
         return err
 
 
+class Averager(Layer):
+    def __init__(self, shape, name='averager', rate=0.1):
+        self.rate = np.float32(rate)
+        self.shape = shape
+        super(Averager, self).__init__(name)
+
+    def set_params(self):
+        m = np.zeros(self.shape).astype(floatX)
+        self.params = OrderedDict(m=m)
+
+    def __call__(self, x):
+        if x.ndim == 1:
+            m = x
+        elif x.ndim == 2:
+            m = x.mean(axis=0)
+        elif x.ndim == 3:
+            m = x.mean(axis=(0, 1))
+        else:
+            raise ValueError()
+
+        new_m = ((1. - self.rate) * self.m + self.rate * m).astype(floatX)
+        updates = [(self.m, new_m)]
+        return OrderedDict(m=new_m), updates
+
+
 class Baseline(Layer):
     def __init__(self, name='baseline', rate=0.1):
         self.rate = np.float32(rate)
         super(Baseline, self).__init__(name)
-        self.set_params()
 
     def set_params(self):
         m = np.float32(0.)
