@@ -168,21 +168,24 @@ def unpack_rbm(dim_h=None,
         dataset_args=dataset_args
     )
 
-def unpack(batch_size=None,
+def unpack(mode=None,
            dim_h=None,
-           optimizer=None,
-           mode=None,
-           learning_rate=None,
-           x_cond=None,
-           steps=None,
+           h_init=None,
+           mlp_a=None, mlp_b=None, mlp_o=None, mlp_c=None,
            dataset='horses',
            dataset_args=None,
-           h_init=None,
            **model_args):
 
     dataset_args = dataset_args[()]
-    x_cond = x_cond[()]
-    models = []
+
+    if mlp_a is not None:
+        mlp_a = mlp_a[()]
+    if mlp_b is not None:
+        mlp_b = mlp_b[()]
+    if mlp_o is not None:
+        mlp_o = mlp_o[()]
+    if mlp_c is not None:
+        mlp_c = mlp_c[()]
 
     trng = RandomStreams(random.randint(0, 100000))
 
@@ -194,14 +197,29 @@ def unpack(batch_size=None,
     else:
         raise ValueError()
 
-    if x_cond is not None:
-        print 'Found xcond: \n%s' % pprint.pformat(x_cond)
-        condition_on_x  = MLP(dim_in=dim_in, dim_h=x_cond['dim_h'],
-                              dim_out=dim_in, n_layers=x_cond['n_layers'],
-                              h_act=x_cond['h_act'], name='xcond')
-        models.append(condition_on_x)
+    def load_mlp(name, dim_in, dim_out,
+                 dim_h=None, n_layers=None,
+                 **kwargs):
+        out_act = 'T.tanh'
+        mlp = MLP(dim_in, dim_h, dim_out, n_layers, name=name, **kwargs)
+        return mlp
+
+    if mlp_a is not None:
+        MLPa = load_mlp('MLPa', dim_in, 2 * dim_h, **mlp_a)
     else:
-        condition_on_x = None
+        MLPa = None
+    if mlp_b is not None:
+        MLPb = load_mlp('MLPb', dim_in, dim_h, **mlp_b)
+    else:
+        MLPb = None
+    if mlp_o is not None:
+        MLPo = load_mlp('MLPo', dim_h, dim_in, **mlp_o)
+    else:
+        MLPo = None
+    if mlp_c is not None:
+        MLPc = load_mlp('MLPc', dim_in, dim_in, **mlp_c)
+    else:
+        MLPc = None
 
     if mode == 'gru':
         C = GenGRU
@@ -210,25 +228,23 @@ def unpack(batch_size=None,
     else:
         raise ValueError('Mode %s not recognized' % mode)
 
-    rnn = C(dim_in, dim_h, trng=trng, condition_on_x=condition_on_x)
-    models.append(rnn)
+    rnn = C(dim_in, dim_h, MLPa=MLPa, MLPb=MLPb, MLPo=MLPo, MLPc=MLPc)
+    models = [rnn, rnn.MLPa, rnn.MLPb, rnn.MLPo]
+
+    if mlp_c is not None:
+        models.append(rnn.MLPc)
 
     if h_init == 'average':
         averager = Averager((batch_size, dim_h))
         models.append(averager)
     elif h_init == 'mlp':
-        mlp = MLP(dim_in, dim_h, dim_h, 1, out_act='T.tanh')
+        mlp = MLP(dim_in, dim_h, dim_h, 1, out_act='T.tanh', name='MLPh')
         models.append(mlp)
 
     return models, model_args, dict(
-        batch_size=batch_size,
-        optimizer=optimizer,
         mode=mode,
-        dataset=dataset,
-        learning_rate=learning_rate,
-        condition_on_x=condition_on_x,
-        steps=steps,
         h_init=h_init,
+        dataset=dataset,
         dataset_args=dataset_args
     )
 
@@ -359,10 +375,10 @@ def visualize(model_file, out_path=None, interval=1, n_samples=-1, save_movie=Tr
         plt.show()
 
     if out_path is not None and save_movie:
-        train_chain.next()
+        train.next()
         fig = plt.figure()
         data = np.zeros(train.dims)
-        X_tr = train_chain._load_chains()
+        X_tr = train._load_chains()
         im = plt.imshow(data, vmin=0, vmax=1, cmap='Greys_r')
 
         def animate_training_examples(i):
@@ -377,7 +393,7 @@ def visualize(model_file, out_path=None, interval=1, n_samples=-1, save_movie=Tr
                                        init_func=init, frames=X_tr.shape[0],
                                        interval=interval)
 
-        print 'Saving movie'
+        print 'Saving data movie'
         Writer = animation.writers['ffmpeg']
         writer = Writer(fps=15, metadata=dict(artist='Devon Hjelm'), bitrate=1800)
         anim.save(path.join(out_path, 'vis_train_movie.mp4'), writer=writer)
@@ -389,7 +405,7 @@ def energy_function(model):
 
     x_e = T.alloc(0., x_p.shape[0], x.shape[0], x.shape[1]).astype(floatX) + x[None, :, :]
 
-    params = model.get_params()
+    params = model.get_sample_params()
     h, x_s, p = model.step_sample(h_p, x_p, *params)
     p = T.alloc(0., p.shape[0], x.shape[0], x.shape[1]).astype(floatX) + p[:, None, :]
 
@@ -399,9 +415,14 @@ def energy_function(model):
 
 def train_model(save_graphs=False, out_path='', name='',
                 load_last=False, model_to_load=None, save_images=True,
-                source=None, batch_size=1, dim_h=500, optimizer='adam', mode='gru',
-                learning_rate=0.01, x_cond=None, dataset=None, steps=1000,
-                dataset_args=None, noise_input=True, sample=True, h_init='mlp',
+                source=None,
+                learning_rate=0.01, optimizer='adam', batch_size=10, steps=1000,
+                mode='gru',
+                dim_h=500,
+                mlp_a=None, mlp_b=None, mlp_o=None, mlp_c=None,
+                dataset=None, dataset_args=None,
+                noise_input=True, sample=True,
+                h_init='mlp',
                 model_save_freq=100, show_freq=10):
 
     print 'Dataset args: %s' % pprint.pformat(dataset_args)
@@ -428,20 +449,39 @@ def train_model(save_graphs=False, out_path='', name='',
         raise ValueError()
 
     print 'Forming model'
-    condition_on_x = None
+
+    def load_mlp(name, dim_in, dim_out,
+                 dim_h=None, n_layers=None,
+                 **kwargs):
+        out_act = 'T.tanh'
+        mlp = MLP(dim_in, dim_h, dim_out, n_layers, **kwargs)
+        return mlp
+
     if model_to_load is not None:
         models, _ = load_model(model_to_load, unpack)
     elif load_last:
         model_file = glob(path.join(out_path, '*last.npz'))[0]
         models, _ = load_model(model_file, unpack)
     else:
-        if x_cond is not None:
-            condition_on_x = MLP(dim_in=dim_in, dim_h=x_cond['dim_h'],
-                                 dim_out=dim_in, n_layers=x_cond['n_layers'],
-                                 h_act=x_cond['h_act'], name='xcond')
+        if mlp_a is not None:
+            MLPa = load_mlp('MLPa', dim_in, 2 * dim_h, **mlp_a)
         else:
-            condition_on_x = None
-        rnn = C(dim_in, dim_h, trng=trng, condition_on_x=condition_on_x)
+            MLPa = None
+        if mlp_b is not None:
+            MLPb = load_mlp('MLPb', dim_in, dim_h, **mlp_b)
+        else:
+            MLPb = None
+        if mlp_o is not None:
+            MLPo = load_mlp('MLPo', dim_h, dim_in, **mlp_o)
+        else:
+            MLPo = None
+        if mlp_c is not None:
+            MLPc = load_mlp('MLPc', dim_in, dim_in, **mlp_c)
+        else:
+            MLPc = None
+
+        rnn = C(dim_in, dim_h, trng=trng,
+                MLPa=MLPa, MLPb=MLPb, MLPo=MLPo, MLPc=MLPc)
         models = OrderedDict()
         models[rnn.name] = rnn
 
@@ -475,7 +515,9 @@ def train_model(save_graphs=False, out_path='', name='',
             print 'Found pretrained MLP'
             mlp = models['MLP']
         else:
-            mlp = MLP(rnn.dim_in, rnn.dim_h, rnn.dim_h, 1, out_act='T.tanh')
+            mlp = MLP(rnn.dim_in, rnn.dim_h, rnn.dim_h, 1,
+                      out_act='T.tanh',
+                      name='MLPh')
         tparams.update(mlp.set_tparams())
         h0 = mlp(X[0])
 
@@ -556,16 +598,11 @@ def train_model(save_graphs=False, out_path='', name='',
             if e % model_save_freq == 0:
                 temp_file = path.join(out_path, '{name}_temp.npz'.format(name=name))
                 d = dict((k, v.get_value()) for k, v in tparams.items())
-                d.update(batch_size=batch_size,
+                d.update(mode=mode,
                          dim_h=dim_h,
-                         optimizer=optimizer,
-                         mode=mode,
-                         learning_rate=learning_rate,
-                         x_cond=x_cond,
-                         steps=steps,
-                         dataset=dataset,
                          h_init=h_init,
-                         dataset_args=dataset_args)
+                         mlp_a=mlp_a, mlp_b=mlp_b, mlp_o=mlp_o, mlp_c=mlp_c,
+                         dataset=dataset, dataset_args=dataset_args)
                 np.savez(temp_file, **d)
 
             f_grad_updates(learning_rate)
@@ -578,16 +615,11 @@ def train_model(save_graphs=False, out_path='', name='',
 
     print 'Saving the following params: %s' % tparams.keys()
     d = dict((k, v.get_value()) for k, v in tparams.items())
-    d.update(batch_size=batch_size,
+    d.update(mode=mode,
              dim_h=dim_h,
-             optimizer=optimizer,
-             mode=mode,
-             learning_rate=learning_rate,
-             x_cond=x_cond,
-             steps=steps,
-             dataset=dataset,
              h_init=h_init,
-             dataset_args=dataset_args)
+             mlp_a=mlp_a, mlp_b=mlp_b, mlp_o=mlp_o, mlp_c=mlp_c,
+             dataset=dataset, dataset_args=dataset_args)
 
     np.savez(outfile, **d)
     np.savez(last_outfile,  **d)

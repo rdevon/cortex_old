@@ -507,7 +507,8 @@ class MNIST_Chains(mnist_iterator):
                 assert i >= self.pos and i < self.pos + self.chain_length
 
             if self.out_path:
-                self.save_images(self._load_chains(), path.join(self.out_path, 'training_chain_%d.png' % self.pos))
+                self.save_images(self._load_chains(), path.join(self.out_path, 'training_chain_%d.png' % self.pos),
+                                 x_limit=200)
 
             self.pos += self.chain_length
             if self.pos >= self.n:

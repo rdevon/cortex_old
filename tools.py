@@ -5,8 +5,10 @@ Helper module for NMT
 from collections import OrderedDict
 import numpy as np
 import pprint
+import random
 import theano
 from theano import tensor as T
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import yaml
 
 
@@ -18,6 +20,22 @@ profile = False
 f_clip = lambda x, y, z: T.clip(x, y, 1.)
 
 pi = theano.shared(np.pi).astype('float32')
+
+def init_weights(model, weight_noise=False, weight_scale=0.01, dropout=False, **kwargs):
+    model.weight_noise = weight_noise
+    model.weight_scale = weight_scale
+    model.dropout = dropout
+    return kwargs
+
+def init_rngs(model, rng=None, trng=None, **kwargs):
+    if rng is None:
+        rng = rng_
+    model.rng = rng
+    if trng is None:
+        model.trng = RandomStreams(random.randint(0, 10000))
+    else:
+        model.trng = trng
+    return kwargs
 
 def gaussian(x, mu, s):
     return T.exp(-(x - mu)**2 / (2 * s)**2) / (s * T.sqrt(2 * pi)).astype('float32')
@@ -31,14 +49,23 @@ def load_experiment(experiment_yaml):
     print('Experiment hyperparams: %s' % pprint.pformat(exp_dict))
     return exp_dict
 
-def load_model(model_file, f_unpack=None):
+def load_model(model_file, f_unpack=None, **extra_args):
     '''
     Loads pretrained model.
     '''
 
     print 'Loading model from %s' % model_file
     params = np.load(model_file)
-    models, pretrained_kwargs, kwargs = f_unpack(**dict(params))
+    d = dict(params)
+    d.update(**extra_args)
+    for k, v in d.iteritems():
+        try:
+            if v == np.array(None, dtype=object):
+                d[k] = None
+        except ValueError:
+            pass
+
+    models, pretrained_kwargs, kwargs = f_unpack(**d)
 
     print('Pretrained model(s) has the following parameters: \n%s'
           % pprint.pformat(pretrained_kwargs.keys()))

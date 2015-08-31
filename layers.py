@@ -1,16 +1,17 @@
 '''
 Module for general layers
 '''
-import numpy as np
-import theano
-import tools
-from tools import log_mean_exp
 
 from collections import OrderedDict
 import numpy as np
 import theano
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as T
+
+import tools
+from tools import log_mean_exp
+from tools import init_rngs
+from tools import init_weights
 
 
 floatX = theano.config.floatX
@@ -139,29 +140,16 @@ class FFN(Layer):
 
 
 class MLP(Layer):
-    def __init__(self, dim_in, dim_h, dim_out, n_layers, rng=None, trng=None,
-                 weight_scale=0.1, weight_noise=False, dropout=False,
+    def __init__(self, dim_in, dim_h, dim_out, n_layers,
                  h_act='T.nnet.sigmoid', out_act='T.nnet.sigmoid',
-                 name='MLP'):
-
-        if rng is None:
-            rng = tools.rng_
-        self.rng = rng
-
-        if trng is None:
-            self.trng = RandomStreams(6 * 10 * 2015)
-        else:
-            self.trng = trng
+                 name='MLP',
+                 **kwargs):
 
         self.dim_in = dim_in
         self.dim_h = dim_h
         self.dim_out = dim_out
         self.n_layers = n_layers
         assert n_layers > 0
-
-        self.weight_scale = weight_scale
-        self.weight_noise = weight_noise
-        self.dropout = dropout
 
         self.h_act = h_act
         self.out_act = out_act
@@ -179,6 +167,10 @@ class MLP(Layer):
         else:
             raise ValueError()
 
+        kwargs = init_weights(self, **kwargs)
+        kwargs = init_rngs(self, **kwargs)
+
+        assert len(kwargs) == 0, kwargs.keys()
         super(MLP, self).__init__(name=name)
 
     def _binomial(self, p, size=None):
@@ -237,12 +229,13 @@ class MLP(Layer):
                                   scale=self.weight_scale, ortho=False)
             b = np.zeros((dim_out,)).astype(floatX)
 
-            self.params['W_%d' % l] = W
-            self.params['b_%d' % l] = b
+            self.params['W%d' % l] = W
+            self.params['b%d' % l] = b
 
             if self.weight_noise:
+                raise ValueError()
                 W_noise = (W * 0).astype(floatX)
-                self.params['W_%d_noise' % l] = W_noise
+                self.params['W%d_noise' % l] = W_noise
 
         if self.out_act == 'lambda x: x':
             raise NotImplementedError()
@@ -254,13 +247,13 @@ class MLP(Layer):
     def get_params(self):
         params = []
         for l in xrange(self.n_layers):
-            W = self.__dict__['W_%d' % l]
-            b = self.__dict__['b_%d' % l]
+            W = self.__dict__['W%d' % l]
+            b = self.__dict__['b%d' % l]
             params += [W, b]
 
             if self.weight_noise:
                 raise NotImplementedError()
-                W_noise = self.__dict__['W_%d_noise' % l]
+                W_noise = self.__dict__['W%d_noise' % l]
                 params += [W_noise]
 
         if self.out_act == 'lambda x: x':
