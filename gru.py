@@ -4,17 +4,21 @@ Module for GRU layers
 
 import copy
 from collections import OrderedDict
-from layers import FFN
-from layers import Layer
 import numpy as np
-from rnn import RNN
-from rnn import GenRNN
 import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+
+from layers import FFN
+from layers import MLP
+from layers import Layer
+from rnn import RNN
+from rnn import GenRNN
 import tools
 from tools import gaussian
 from tools import log_gaussian
+from tools import init_rngs
+from tools import init_weights
 
 
 norm_weight = tools.norm_weight
@@ -560,16 +564,6 @@ class GenerativeGRU(GRU):
         self.params = OrderedDict(XHa=XHa, bha=bha, Ura=Ura, XHb=XHb, bhb=bhb,
                                   Urb=Urb, HX=HX, bx=bx)
 
-        if self.weight_noise:
-            XHa_noise = (XHa * 0).astype(floatX)
-            Ura_noise = (Ura * 0).astype(floatX)
-            XHb_noise = (XHb * 0).astype(floatX)
-            Urb_noise = (Urb * 0).astype(floatX)
-            HX_noise = (HX * 0).astype(floatX)
-            self.params.update(XHa_noise=XHa_noise, Ura_noise=Ura_noise,
-                               XHb_noise=XHb_noise, Urb_noise=Urb_noise,
-                               HX_noise=HX_noise)
-
     def step_slice(self, x_, p_, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
         preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
         r, u = self.get_gates(preact)
@@ -617,28 +611,26 @@ class GenerativeGRU(GRU):
 
 
 class GenGRU(Layer):
-    def __init__(self, dim_in, dim_h, weight_noise=False, weight_scale=0.01,
-                 name='gen_gru', rng=None, trng=None, condition_on_x=None):
-        if weight_noise:
-            raise NotImplementedError()
+    def __init__(self, dim_in, dim_h,
+                 MLPa=None, MLPb=None, MLPo=None, MLPc=None,
+                 name='gen_gru', **kwargs):
 
         self.dim_in = dim_in
         self.dim_h = dim_h
-        self.condition_on_x = condition_on_x
 
-        self.weight_noise = weight_noise
-        self.weight_scale = weight_scale
+        self.MLPa = MLPa
+        self.MLPb = MLPb
+        self.MLPo = MLPo
+        self.MLPc = MLPc
 
-        if rng is None:
-            rng = tools.rng_
-        self.rng = rng
+        kwargs = init_weights(self, **kwargs)
+        kwargs = init_rngs(self, **kwargs)
 
-        if trng is None:
-            self.trng = RandomStreams(random.randint(0, 10000))
-        else:
-            self.trng = trng
-
+        assert len(kwargs) == 0, kwargs.keys()
         super(GenGRU, self).__init__(name=name)
+
+        if self.weight_noise:
+            raise NotImplementedError()
 
     def get_gates(self, preact):
         r = T.nnet.sigmoid(RNN._slice(preact, 0, self.dim_h))
@@ -646,49 +638,120 @@ class GenGRU(Layer):
         return r, u
 
     def set_params(self):
-        XHa = np.concatenate([norm_weight(self.dim_in, self.dim_h),
-                             norm_weight(self.dim_in, self.dim_h)], axis=1)
-        bha = np.zeros((2 * self.dim_h,)).astype(floatX)
         Ura = np.concatenate([ortho_weight(self.dim_h),
                               ortho_weight(self.dim_h)], axis=1)
-
-        XHb = norm_weight(self.dim_in, self.dim_h)
-        bhb = np.zeros((self.dim_h,)).astype(floatX)
         Urb = ortho_weight(self.dim_h)
 
-        HX = norm_weight(self.dim_h, self.dim_in)
-        bx = np.zeros((self.dim_in,)).astype(floatX)
+        self.params = OrderedDict(Ura=Ura, Urb=Urb)
 
-        self.params = OrderedDict(XHa=XHa, bha=bha, Ura=Ura, XHb=XHb, bhb=bhb,
-                                  Urb=Urb, HX=HX, bx=bx)
+        if self.MLPa is None:
+            self.MLPa = MLP(self.dim_in, 2 * self.dim_h, 2 * self.dim_h, 1,
+                            rng=self.rng, trng=self.trng,
+                            h_act='T.nnet.sigmoid',
+                            out_act='T.tanh',
+                            name='MLPa')
+        else:
+            assert self.MLPa.dim_in == self.dim_in
+            assert self.MLPa.dim_out == 2 * self.dim_h
+            self.MLPa.name = 'MLPa'
+
+        if self.MLPb is None:
+            self.MLPb = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
+                            rng=self.rng, trng=self.trng,
+                            h_act='T.nnet.sigmoid',
+                            out_act='T.tanh',
+                            name='MLPb')
+        else:
+            assert self.MLPb.dim_in == self.dim_in
+            assert self.MLPb.dim_out == self.dim_h
+            self.MLPb.name = 'MLPb'
+
+        if self.MLPo is None:
+            self.MLPo = MLP(self.dim_h, self.dim_h, self.dim_in, 1,
+                            rng=self.rng, trng=self.trng,
+                            h_act='T.nnet.sigmoid',
+                            out_act='T.nnet.sigmoid',
+                            name='MLPo')
+        else:
+            assert self.MLPo.dim_in == self.dim_h
+            assert self.MLPo.dim_out == self.dim_in
+            self.MLPo.name = 'MLPo'
+
+        if self.MLPc is not None:
+            assert self.MLPc.dim_in == self.dim_in
+            assert self.MLPc.dim_out == self.dim_in
+            self.MLPc.name = 'MLPc'
 
     def set_tparams(self):
         tparams = super(GenGRU, self).set_tparams()
-        if self.condition_on_x is not None:
-            tparams.update(**self.condition_on_x.set_tparams())
+        for mlp in [self.MLPa, self.MLPb, self.MLPo]:
+            tparams.update(**mlp.set_tparams())
+
+        if self.MLPc is not None:
+            tparams.update(**self.MLPc.set_tparams())
         return tparams
 
-    def get_params(self):
-        params = [self.XHa, self.Ura, self.bha, self.XHb, self.Urb, self.bhb,
-                  self.HX, self.bx]
-        if self.condition_on_x is not None:
-            params += self.condition_on_x.get_params()
+    def get_sample_params(self):
+        params = [self.Ura, self.Urb]
+        params += self.MLPa.get_params()
+        params += self.MLPb.get_params()
+        params += self.MLPo.get_params()
+        if self.MLPc is not None:
+            params += self.MLPc.get_params()
         return params
 
+    def get_params(self):
+        params = [self.Ura, self.Urb]
+        return params
+
+    def get_recurrent_args(self, *args):
+        return args[:2]
+
+    def get_a_args(self, *args):
+        start = 2
+        length = len(self.MLPa.get_params())
+        return args[start:start+length]
+
+    def get_b_args(self, *args):
+        start = 2 + len(self.MLPa.get_params())
+        length = len(self.MLPb.get_params())
+        return args[start:start+length]
+
+    def get_o_args(self, *args):
+        start = 2 + len(self.MLPa.get_params()) + len(self.MLPb.get_params())
+        length = len(self.MLPo.get_params())
+        return args[start:start+length]
+
+    def get_c_args(self, *args):
+        start = 2 + len(self.MLPa.get_params()) + len(self.MLPb.get_params()) + len(self.MLPo.get_params())
+        length = len(self.MLPc.get_params())
+        return args[start:start+length]
+
     def step_sample(self, h_, x_, *params):
-        XHa, Ura, bha, XHb, Urb, bhb, HX, bx = params[:8]
-        h = self._step(x_, h_, XHa, Ura, bha, XHb, Urb, bhb)
-        preact = T.dot(h, HX) + bx
-        if self.condition_on_x is not None:
-            preact += self.condition_on_x.preact(x_, *params[8:])
+        Ura, Urb = self.get_recurrent_args(*params)
+
+        a_params = self.get_a_args(*params)
+        b_params = self.get_b_args(*params)
+        o_params = self.get_o_args(*params)
+
+        ya = self.MLPa.preact(x_, *a_params)
+        yb = self.MLPb.preact(x_, *b_params)
+
+        h = self._step(ya, yb, h_, Ura, Urb)
+
+        preact = self.MLPo.preact(h, *o_params)
+        if self.MLPc is not None:
+            c_params = self.get_c_args(*params)
+            preact += self.MLPc.preact(x_, *c_params)
+
         p = T.nnet.sigmoid(preact)
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
         return h, x, p
 
-    def _step(self, x_, h_, XHa, Ura, bha, XHb, Urb, bhb):
-        preact = T.dot(h_, Ura) + T.dot(x_, XHa) + bha
+    def _step(self, ya, yb, h_, Ura, Urb):
+        preact = T.dot(h_, Ura) + ya
         r, u = self.get_gates(preact)
-        preactx = T.dot(h_, Urb) * r + T.dot(x_, XHb) + bhb
+        preactx = T.dot(h_, Urb) * r + yb
         h = T.tanh(preactx)
         h = u * h + (1. - u) * h_
         return h
@@ -706,7 +769,7 @@ class GenGRU(Layer):
 
         seqs = []
         outputs_info = [h0, x0, None]
-        non_seqs = self.get_params()
+        non_seqs = self.get_sample_params()
 
         (h, x, p), updates = theano.scan(
             self.step_sample,
@@ -731,9 +794,10 @@ class GenGRU(Layer):
         if h0 is None:
             h0 = T.alloc(0., n_samples, self.dim_h).astype(floatX)
 
-        seqs = [x]
+        seqs = [self.MLPa(x, return_preact=True),
+                self.MLPb(x, return_preact=True)]
         outputs_info = [h0]
-        non_seqs = [self.XHa, self.Ura, self.bha, self.XHb, self.Urb, self.bhb]
+        non_seqs = self.get_params()
 
         h, updates = theano.scan(
             self._step,
@@ -745,9 +809,9 @@ class GenGRU(Layer):
             profile=tools.profile,
             strict=True)
 
-        preact = T.dot(h, self.HX) + self.bx
-        if self.condition_on_x is not None:
-            preact += self.condition_on_x(x, return_preact=True)
+        preact = self.MLPo(h, return_preact=True)
+        if self.MLPc is not None:
+            preact += self.MLPc(x, return_preact=True)
         p = T.nnet.sigmoid(preact)
         y = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
 
