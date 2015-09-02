@@ -79,7 +79,7 @@ class RBM(Layer):
         e = -T.dot(T.dot(h, self.W), v.T) - T.dot(v, self.b) - T.dot(h, self.c)
         return e
 
-    def raise_estimate(self, x, n_samples=10, K=100):
+    def RAISE_estimate(self, x, n_samples=10, K=100):
         for m in xrange(n_samples):
             q = T.nnet.sigmoid(T.dot(x, self.W) + self.c)
             h_k = self.trng.binomial(p=q, size=q.shape, n=1, dtype=q.dtype)

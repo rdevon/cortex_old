@@ -756,6 +756,13 @@ class GenGRU(Layer):
         h = u * h + (1. - u) * h_
         return h
 
+    def energy(self, X, h0=None):
+        outs, updates = self.__call__(X[:-1], h0=h0)
+        p = outs['p']
+        energy = -(X[1:] * T.log(p + 1e-7)
+                   + (1 - X[1:]) * T.log(1 - p + 1e-7)).sum(axis=(0, 2))
+        return energy
+
     def sample(self, x0=None, h0=None, n_samples=10, n_steps=10):
         if x0 is None:
             x0 = self.trng.binomial(size=(n_samples, self.dim_in), p=0.5, n=1,
