@@ -71,13 +71,13 @@ def estimate_parzen(samples, epochs=1000, optimizer='adam',
     log_est = f_par(samples, x_t)
     print 'Parzen log likelihood lower bound: %.5f' % log_est
 
-def lower_bound(model_file, n_samples=10000, sigma=0.2):
+def lower_bound(model_file, n_samples=10000, sigma=0.2, from_chain=False):
 
     models, kwargs = load_model(model_file, unpack)
     dataset_args = kwargs['dataset_args']
     dataset = kwargs['dataset']
 
-    rnn, train, f_h0 = load_model_for_sampling(model_file)
+    rnn, train, test, f_h0 = load_model_for_sampling(model_file)
     params = rnn.get_sample_params()
 
     if dataset == 'mnist':
@@ -96,14 +96,18 @@ def lower_bound(model_file, n_samples=10000, sigma=0.2):
     h_s, x_s, p_s = rnn.step_sample(H, X, *params)
     f_sam = theano.function([X, H], [x_s, h_s, p_s])
 
-    xs = []
-    x = train.next_simple(batch_size=1)
-    h = f_h0(x)
-    while len(xs) < n_samples:
-        x, h, p = f_sam(x, h)
-        xs.append(p)
+    if from_chain:
+        xs = []
+        x = train.next_simple(batch_size=1)
+        h = f_h0(x)
+        while len(xs) < n_samples:
+            x, h, p = f_sam(x, h)
+            xs.append(p)
+        samples = np.array(xs)[:, 0]
+    else:
+        print 'Generating'
+        samples = generate(model_file, n_steps=100, n_samples=n_samples)
 
-    samples = np.array(xs)[:, 0]
     x_v = valid.next_simple(batch_size=n_samples/10)
 
     print 'Finding best sigma by grid search'
@@ -210,15 +214,18 @@ def unpack(mode=None,
     else:
         MLPc = None
 
+    if mode == 'rnn':
+        MLPa = MLPb
+        MLPb = None
+
     if mode == 'gru':
-        C = GenGRU
+        rnn = GenGRU(dim_in, dim_h, MLPa=MLPa, MLPb=MLPb, MLPo=MLPo, MLPc=MLPc)
+        models = [rnn, rnn.MLPa, rnn.MLPb, rnn.MLPo]
     elif mode == 'rnn':
-        C = GenRNN
+        rnn = GenRNN(dim_in, dim_h, MLPa=MLPa, MLPo=MLPo, MLPc=MLPc)
+        models = [rnn, rnn.MLPa, rnn.MLPo]
     else:
         raise ValueError('Mode %s not recognized' % mode)
-
-    rnn = C(dim_in, dim_h, MLPa=MLPa, MLPb=MLPb, MLPo=MLPo, MLPc=MLPc)
-    models = [rnn, rnn.MLPa, rnn.MLPb, rnn.MLPo]
 
     if mlp_c is not None:
         models.append(rnn.MLPc)
@@ -244,12 +251,13 @@ def load_model_for_sampling(model_file):
 
     if dataset == 'mnist':
         train = MNIST_Chains(batch_size=1, mode='train', **dataset_args)
+        test = MNIST_Chains(batch_size=1, mode='test', **dataset_args)
     elif dataset == 'horses':
         train = Horses(batch_size=1, crop_image=True, **dataset_args)
     else:
         raise ValueError()
 
-    rnn = models['gen_gru']
+    rnn = models['gen_{mode}'.format(mode=kwargs['mode'])]
 
     h_init = kwargs['h_init']
     if h_init == 'average':
@@ -269,7 +277,7 @@ def load_model_for_sampling(model_file):
     tparams = rnn.set_tparams()
     train.set_f_energy(energy_function, rnn)
 
-    return rnn, train, f_h0
+    return rnn, train, test, f_h0
 
 def rbm_energy(model_file, rbm_file, n_samples=1000):
     samples = generate_samples(model_file, n_samples=n_samples)
@@ -293,7 +301,7 @@ def rbm_energy(model_file, rbm_file, n_samples=1000):
     return rnn_energy, rbm_energy
 
 def test_mixture(model_file, length=10, n_steps=100, n_samples=100):
-    rnn, dataset, f_h0 = load_model_for_sampling(model_file)
+    rnn, dataset, test, f_h0 = load_model_for_sampling(model_file)
     samples = generate_samples(model_file, n_steps=n_steps, n_samples=n_samples)[1:]
     energies = []
     r_energies = []
@@ -320,7 +328,7 @@ def test_mixture(model_file, length=10, n_steps=100, n_samples=100):
     dataset.save_images(r, '/Users/devon/tmp/test_rrsamples.png')
 
 def get_sample_cross_correlation(model_file, n_steps=100):
-    rnn, dataset, f_h0 = load_model_for_sampling(model_file)
+    rnn, dataset, test, f_h0 = load_model_for_sampling(model_file)
     samples = generate_samples(model_file, n_steps=n_steps, n_samples=1)[1:, 0]
 
     c = np.corrcoef(samples, samples)[:n_steps, n_steps:]
@@ -328,7 +336,36 @@ def get_sample_cross_correlation(model_file, n_steps=100):
     plt.colorbar()
     plt.show()
 
-def test_AIS(model_file, n_samples=1000, M=100, K=10, f_steps=10, T_steps=10):
+def fill_in_the_blank(model_file, n_steps=200, n_samples=40, repeat=1, out_path=None):
+    rnn, train, test, f_h0 = load_model_for_sampling(model_file)
+    params = rnn.get_sample_params()
+
+    X = T.matrix('x', dtype=floatX)
+    H = T.matrix('h', dtype=floatX)
+    h_s, x_s, p_s = rnn.step_sample(H, X, *params)
+    f_sam = theano.function([X, H], [x_s, h_s, p_s])
+
+    x = test.next_simple(batch_size=n_samples)
+    x = np.zeros((repeat, n_samples, x.shape[1])).astype(floatX) + x[None, :, :]
+    x = x.reshape((repeat * n_samples, x.shape[2]))
+    ps = [np.copy(x)]
+    #x[:, x.shape[1] //  2:] = 0
+    #ps.append(x)
+    h = f_h0(x).astype(floatX)
+    x = np.zeros_like(x)
+    #h = f_h0(rnn.rng.binomial(p=0.5, size=(n_samples * repeat, rnn.dim_in), n=1).astype(floatX))
+    for s in xrange(n_steps):
+        x, h, p = f_sam(x, h)
+        ps.append(p)
+        if s % 30 == 0 and s != 0:
+            h = np.zeros_like(h) + f_h0(x)[0][None, :]
+            #h = np.zeros_like(h) + h[0][None, :]
+            #x = np.zeros_like(x)
+            ps.append(np.zeros_like(x))
+
+    train.save_images(np.array(ps), path.join(out_path, 'occulation_samples.png'))
+
+def test_AIS(model_file, n_samples=100, M=100, K=10, f_steps=10, T_steps=10):
     models, kwargs = load_model(model_file, unpack)
     dataset_args = kwargs['dataset_args']
     dataset = kwargs['dataset']
@@ -341,17 +378,15 @@ def test_AIS(model_file, n_samples=1000, M=100, K=10, f_steps=10, T_steps=10):
     else:
         raise ValueError()
 
-    x_t = test.next_simple(batch_size=n_samples)
-
     rnn, dataset, f_h0 = load_model_for_sampling(model_file)
     dataset.randomize()
 
     X = T.matrix('x', dtype=floatX)
     H = T.matrix('h', dtype=floatX)
 
+    x_t = dataset.next_simple(batch_size=n_samples)
+
     out_f, updates_f = rnn.sample(x0=X, h0=H, n_steps=f_steps)
-
-
     f_p = theano.function([X, H], out_f['p'][-1], updates=updates_f)
 
     out_t, updates_t = rnn.sample(x0=X, h0=H, n_steps=T_steps)
@@ -361,29 +396,53 @@ def test_AIS(model_file, n_samples=1000, M=100, K=10, f_steps=10, T_steps=10):
 
     x0 = dataset.next_simple(batch_size=M)
 
-    def px(x, p):
-        return np.exp(-(x * np.log(p + 1e-7) - (1 - x) * np.log(1 - p + 1e-7)).sum(axis=1))
+    def log_px(x, p):
+        return (x * np.log(p + 1e-7) + (1 - x) * np.log(1 - p + 1e-7)).sum(axis=1)
 
     x_t = np.zeros((M,) + x_t.shape) + x_t[None, :, :]
     x_t = x_t.reshape((M * n_samples, x_t.shape[2]))
     p = np.zeros(x_t.shape).astype(floatX) + 0.5
-    f = px(x_t, p)
-    x = rnn.rng.binomial(p=p, size=p.shape, n=1).astype(floatX)
-    w = np.ones((M * n_samples,)).astype(floatX)
+    logf_ = 0. * log_px(x_t, p)
+    x_k = rnn.rng.binomial(p=p, size=p.shape, n=1).astype(floatX)
+    logw = np.zeros((M * n_samples,)).astype(floatX)
 
     for beta in betas[1:]:
-        print beta
-        p = f_p(x, f_h0(x)) ** beta
-        f_ = px(x_t, p)
-        w = w * f_ / f
-        f = f_
-        trans = f_trans(x, f_h0(x)) ** beta
-        x = rnn.rng.binomial(p=trans, size=p.shape, n=1).astype(floatX)
+        #print beta
+        p = f_p(x_k, f_h0(x_k))
+        logf = beta * log_px(x_t, p)
+        logw = logw + logf - logf_
+        print logf.mean(), logf_.mean(), logw.mean()
+        trans = f_trans(x_k, f_h0(x_k)) ** beta
+        x_k = rnn.rng.binomial(p=trans, size=trans.shape, n=1).astype(floatX)
+        p = f_p(x_k, f_h0(x_k))
+        logf_ = beta * log_px(x_t, p)
 
-    print w.mean()
+    logw = log_mean_exp(logw, axis=0, as_numpy=True)
+    print logw.mean()
+
+def generate(model_file, n_steps=20, n_samples=40, out_path=None):
+    rnn, train, test, f_h0 = load_model_for_sampling(model_file)
+    params = rnn.get_sample_params()
+
+    X = T.matrix('x', dtype=floatX)
+    H = T.matrix('h', dtype=floatX)
+    h_s, x_s, p_s = rnn.step_sample(H, X, *params)
+    f_sam = theano.function([X, H], [x_s, h_s, p_s])
+
+    x = rnn.rng.binomial(p=0.5, size=(n_samples, rnn.dim_in), n=1).astype(floatX)
+    ps = [x]
+    h = f_h0(x)
+    for s in xrange(n_steps):
+        x, h, p = f_sam(x, h)
+        ps.append(p)
+
+    if out_path is not None:
+        train.save_images(np.array(ps), path.join(out_path, 'generation_samples.png'))
+    else:
+        return ps[-1]
 
 def generate_samples(model_file, n_steps=1000, n_samples=1):
-    rnn, dataset, f_h0 = load_model_for_sampling(model_file)
+    rnn, dataset, test, f_h0 = load_model_for_sampling(model_file)
 
     X = T.matrix('x', dtype=floatX)
     H = T.matrix('h', dtype=floatX)
@@ -396,9 +455,10 @@ def generate_samples(model_file, n_steps=1000, n_samples=1):
     sample_chain = f_sample(x, h)
     return sample_chain
 
-def visualize(model_file, out_path=None, interval=1, n_samples=-1, save_movie=True,
-              use_data_every=50, use_data_in=False):
-    rnn, train, f_h0 = load_model_for_sampling(model_file)
+def visualize(model_file, out_path=None, interval=1, n_samples=-1,
+              save_movie=True, use_data_every=50, use_data_in=False,
+              save_hiddens=False):
+    rnn, train, test, f_h0 = load_model_for_sampling(model_file)
     params = rnn.get_sample_params()
 
     X = T.matrix('x', dtype=floatX)
@@ -407,6 +467,7 @@ def visualize(model_file, out_path=None, interval=1, n_samples=-1, save_movie=Tr
     f_sam = theano.function([X, H], [x_s, h_s, p_s])
     ps = []
     xs = []
+    hs = []
 
     try:
         x = train.X[:1]
@@ -416,6 +477,7 @@ def visualize(model_file, out_path=None, interval=1, n_samples=-1, save_movie=Tr
             stdout.write('\rSampling (%d): Press ^c to stop' % s)
             stdout.flush()
             x, h, p = f_sam(x, h)
+            hs.append(h)
             xs.append(x)
             if use_data_every > 0 and s % use_data_every == 0:
                 x_n = train.next_simple(20)
@@ -437,6 +499,8 @@ def visualize(model_file, out_path=None, interval=1, n_samples=-1, save_movie=Tr
 
     if out_path is not None:
         train.save_images(np.array(ps), path.join(out_path, 'vis_samples.png'), x_limit=100)
+        if save_hiddens:
+            np.save(path.join(out_path, 'hiddens.npy'), np.array(hs))
 
     fig = plt.figure()
     data = np.zeros(train.dims)
@@ -490,22 +554,39 @@ def energy_function(model):
     x = T.matrix('x', dtype=floatX)
     x_p = T.matrix('x_p', dtype=floatX)
     h_p = T.matrix('h_p', dtype=floatX)
-
     x_e = T.alloc(0., x_p.shape[0], x.shape[0], x.shape[1]).astype(floatX) + x[None, :, :]
 
     params = model.get_sample_params()
     h, x_s, p = model.step_sample(h_p, x_p, *params)
+
     p = T.alloc(0., p.shape[0], x.shape[0], x.shape[1]).astype(floatX) + p[:, None, :]
 
     energy = -(x_e * T.log(p + 1e-7) + (1 - x_e) * T.log(1 - p + 1e-7)).sum(axis=2)
 
     return theano.function([x, x_p, h_p], [energy, x_s, h])
 
+def euclidean_distance(model):
+    '''
+    h_p are dummy variables to keep it working for dataset chain generators.
+    '''
+
+    x = T.matrix('x', dtype=floatX)
+    x_p = T.matrix('x_p', dtype=floatX)
+    h_p = T.matrix('h_p', dtype=floatX)
+    x_e = T.alloc(0., x_p.shape[0], x.shape[0], x.shape[1]).astype(floatX) + x[None, :, :]
+    x_pe = T.alloc(0., x_p.shape[0], x.shape[0], x_p.shape[1]).astype(floatX) + x_p[:, None, :]
+
+    params = model.get_sample_params()
+    distance = (x_e - x_pe) ** 2
+    distance = distance.sum(axis=2)
+    return theano.function([x, x_p, h_p], [distance, x, h_p])
+
 def train_model(save_graphs=False, out_path='', name='',
                 load_last=False, model_to_load=None, save_images=True,
                 source=None,
                 learning_rate=0.01, optimizer='adam', batch_size=10, steps=1000,
                 mode='gru',
+                metric='energy',
                 dim_h=500,
                 mlp_a=None, mlp_b=None, mlp_o=None, mlp_c=None,
                 dataset=None, dataset_args=None,
@@ -551,30 +632,42 @@ def train_model(save_graphs=False, out_path='', name='',
         model_file = glob(path.join(out_path, '*last.npz'))[0]
         models, _ = load_model(model_file, unpack)
     else:
-        if mlp_a is not None:
-            MLPa = load_mlp('MLPa', dim_in, 2 * dim_h, **mlp_a)
-        else:
-            MLPa = None
+        mlps = {}
+        if mode == 'gru':
+            if mlp_a is not None:
+                MLPa = load_mlp('MLPa', dim_in, 2 * dim_h, **mlp_a)
+            else:
+                MLPa = None
+            mlps['MLPa'] = MLPa
+
         if mlp_b is not None:
             MLPb = load_mlp('MLPb', dim_in, dim_h, **mlp_b)
         else:
             MLPb = None
+        if mode == 'gru':
+            mlps['MLPb'] = MLPb
+        else:
+            mlps['MLPa'] = MLPb
+
         if mlp_o is not None:
             MLPo = load_mlp('MLPo', dim_h, dim_in, **mlp_o)
         else:
             MLPo = None
+        mlps['MLPo'] = MLPo
+
         if mlp_c is not None:
             MLPc = load_mlp('MLPc', dim_in, dim_in, **mlp_c)
         else:
             MLPc = None
+        mlps['MLPc'] = MLPc
 
         rnn = C(dim_in, dim_h, trng=trng,
-                MLPa=MLPa, MLPb=MLPb, MLPo=MLPo, MLPc=MLPc)
+                **mlps)
         models = OrderedDict()
         models[rnn.name] = rnn
 
     print 'Getting params...'
-    rnn = models['gen_gru']
+    rnn = models['gen_{mode}'.format(mode=mode)]
     tparams = rnn.set_tparams()
 
     X = trng.binomial(p=X, size=X.shape, n=1, dtype=X.dtype)
@@ -610,7 +703,14 @@ def train_model(save_graphs=False, out_path='', name='',
         h0 = mlp(X[0])
 
     print 'Model params: %s' % tparams.keys()
-    train.set_f_energy(energy_function, rnn)
+    if metric == 'energy':
+        print 'Energy-based metric'
+        train.set_f_energy(energy_function, rnn)
+    elif metric in ['euclidean', 'euclidean_then_energy']:
+        print 'Euclidean-based metic'
+        train.set_f_energy(euclidean_distance, rnn)
+    else:
+        raise ValueError(metric)
 
     outs, updates_1 = rnn(X_s, h0=h0)
     h = outs['h']
@@ -664,17 +764,26 @@ def train_model(save_graphs=False, out_path='', name='',
     print 'Actually running'
 
     try:
-        for e in xrange(steps):
-            x, _ = train.next()
+        e = 0
+        for s in xrange(steps):
+            try:
+                x, _ = train.next()
+            except StopIteration:
+                e += 1
+                print 'Epoch {epoch}'.format(epoch=e)
+                if metric == 'euclidean_then_energy' and e == 2:
+                    print 'Switching to model energy'
+                    train.set_f_energy(energy_function, rnn)
+                continue
             rval = f_grad_shared(x)
 
             if check_bad_nums(rval, ['cost', 'energy', 'h', 'x', 'p']):
                 return
 
-            if e % show_freq == 0:
+            if s % show_freq == 0:
                 print ('%d: cost: %.5f | energy: %.2f | prob: %.2f'
                        % (e, rval[0], rval[1], np.exp(-rval[1])))
-            if e % show_freq == 0:
+            if s % show_freq == 0:
                 idx = np.random.randint(rval[3].shape[1])
                 samples = np.concatenate([x[1:, idx, :][None, :, :],
                                         rval[3][:, idx, :][None, :, :]], axis=0)
@@ -692,7 +801,7 @@ def train_model(save_graphs=False, out_path='', name='',
                         sample_chain,
                         path.join(
                             out_path, '{name}_samples.png'.format(name=name)))
-            if e % model_save_freq == 0:
+            if s % model_save_freq == 0:
                 temp_file = path.join(
                     out_path, '{name}_temp.npz'.format(name=name))
                 d = dict((k, v.get_value()) for k, v in tparams.items())

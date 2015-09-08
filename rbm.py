@@ -42,6 +42,9 @@ class RBM(Layer):
 
         self.params = OrderedDict(W=W, b=b, c=c)
 
+    def get_params(self):
+        return [self.W, self.b, self.c]
+
     def _step_energy(self, x_, x, e_, W, b, c):
         q = T.nnet.sigmoid(T.dot(x_, W) + c)
         if self.stochastic:
@@ -88,7 +91,6 @@ class RBM(Layer):
             for k in reversed(xrange(K)):
                 code
 
-
     def _step(self, x_, W, b, c):
         q = T.nnet.sigmoid(T.dot(x_, W) + c)
         h = self.trng.binomial(p=q, size=q.shape, n=1, dtype=q.dtype)
@@ -97,30 +99,19 @@ class RBM(Layer):
 
         return x, h, p, q
 
-    def __call__(self, n_steps, n_chains=None, x0=None, h0=None):
+    def sample(self, n_steps, n_chains=None, x0=None, h0=None):
         assert x0 is None or h0 is None
 
         if x0 is not None:
             assert n_chains is None
-            p0 = T.zeros_like(x0) + x0
-            q0 = T.nnet.sigmoid(T.dot(x0, self.W) + self.c)
-            h0 = self.trng.binomial(p=q0, size=q0.shape,
-                                    n=1, dtype=floatX)
         elif h0 is not None:
-            q0 = T.zeros_like(h0) + h0
-            p0 = T.nnet.sigmoid(T.dot(h0, self.W.T) + self.b)
             x0 = self.trng.binomial(p=p0,
                                     size=(h0.shape[0], self.dim_in),
                                     n=1, dtype=floatX)
         else:
             assert n_chains is not None
-            p0 = T.alloc(.5, n_chains, self.dim_in).astype(floatX)
             x0 = self.trng.binomial(p=0.5,
                                     size=(n_chains, self.dim_in),
-                                    n=1, dtype=floatX)
-            q0 = T.nnet.sigmoid(T.dot(x0, self.W) + self.c)
-            h0 = self.trng.binomial(p=q0,
-                                    size=(n_chains, self.dim_h),
                                     n=1, dtype=floatX)
 
         seqs = []
@@ -131,13 +122,21 @@ class RBM(Layer):
             sequences=seqs,
             outputs_info=outputs_info,
             non_sequences=non_seqs,
-            name=tools._p(self.name, '_layers'),
+            name=tools._p(self.name, '_sample'),
             n_steps=n_steps,
             profile=tools.profile,
             strict=True
         )
 
         return OrderedDict(x=x, h=h, p=p, q=q), updates
+
+    def __call__(self, x):
+        n_steps = x.shape[0]
+        n_samples = x.shape[1]
+
+        y, h, p, q = self._step(x, *self.get_params())
+
+        return OrderedDict(y=y, h=h, p=p, q=q), updates
 
 
 class GradInferRBM(RBM):

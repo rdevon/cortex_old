@@ -13,6 +13,8 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import tools
 from tools import gaussian
 from tools import log_gaussian
+from tools import init_rngs
+from tools import init_weights
 
 
 norm_weight = tools.norm_weight
@@ -93,82 +95,141 @@ class GenerativeRNN(RNN):
     def __call__(self, *args, **kwargs):
         raise NotImplementedError()
 
-class GenRNN(GenerativeRNN):
-    def __init__(self, dim_in, dim_h, weight_noise=False, name='gen_rnn',
-                 trng=None, condition_on_x=False):
-        if weight_noise:
+class GenRNN(Layer):
+    def __init__(self, dim_in, dim_h,
+                 MLPa=None, MLPo=None, MLPc=None,
+                 name='gen_rnn', **kwargs):
+
+        self.dim_in = dim_in
+        self.dim_h = dim_h
+
+        self.MLPa = MLPa
+        self.MLPo = MLPo
+        self.MLPc = MLPc
+
+        kwargs = init_weights(self, **kwargs)
+        kwargs = init_rngs(self, **kwargs)
+
+        assert len(kwargs) == 0, kwargs.keys()
+        super(GenRNN, self).__init__(name=name)
+
+        if self.weight_noise:
             raise NotImplementedError()
 
-        self.condition_on_x = condition_on_x
-
-        self.weight_noise = weight_noise
-        super(GenRNN, self).__init__(dim_in, dim_h, weight_noise=weight_noise,
-                                     trng=trng, name=name)
-
     def set_params(self):
-        super(GenRNN, self).set_params()
+        Ur = ortho_weight(self.dim_h)
+        self.params = OrderedDict(Ur=Ur)
 
-        if self.condition_on_x:
-            XX = norm_weight(self.dim_in, self.dim_in)
-            self.params.update(XX=XX)
+        if self.MLPa is None:
+            self.MLPa = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
+                            rng=self.rng, trng=self.trng,
+                            h_act='T.nnet.sigmoid',
+                            out_act='T.tanh',
+                            name='MLPa')
+        else:
+            assert self.MLPa.dim_in == self.dim_in
+            assert self.MLPa.dim_out == self.dim_h
+            self.MLPa.name = 'MLPa'
 
-    def get_params(self):
-        params = [self.XH, self.bh, self.Ur, self.HX, self.bx]
-        if self.condition_on_x:
-            params.append(self.XX)
+        if self.MLPo is None:
+            self.MLPo = MLP(self.dim_h, self.dim_h, self.dim_in, 1,
+                            rng=self.rng, trng=self.trng,
+                            h_act='T.nnet.sigmoid',
+                            out_act='T.nnet.sigmoid',
+                            name='MLPo')
+        else:
+            assert self.MLPo.dim_in == self.dim_h
+            assert self.MLPo.dim_out == self.dim_in
+            self.MLPo.name = 'MLPo'
+
+        if self.MLPc is not None:
+            assert self.MLPc.dim_in == self.dim_in
+            assert self.MLPc.dim_out == self.dim_in
+            self.MLPc.name = 'MLPc'
+
+    def set_tparams(self):
+        tparams = super(GenRNN, self).set_tparams()
+        for mlp in [self.MLPa, self.MLPo]:
+            tparams.update(**mlp.set_tparams())
+
+        if self.MLPc is not None:
+            tparams.update(**self.MLPc.set_tparams())
+        return tparams
+
+    def get_sample_params(self):
+        params = [self.Ur]
+        params += self.MLPa.get_params()
+        params += self.MLPo.get_params()
+        if self.MLPc is not None:
+            params += self.MLPc.get_params()
         return params
 
+    def get_params(self):
+        params = [self.Ur]
+        return params
+
+    def get_recurrent_args(self, *args):
+        return args[:1]
+
+    def get_a_args(self, *args):
+        start = 1
+        length = len(self.MLPa.get_params())
+        return args[start:start+length]
+
+    def get_o_args(self, *args):
+        start = 1 + len(self.MLPa.get_params())
+        length = len(self.MLPo.get_params())
+        return args[start:start+length]
+
+    def get_c_args(self, *args):
+        start = 1 + len(self.MLPa.get_params()) + len(self.MLPo.get_params())
+        length = len(self.MLPc.get_params())
+        return args[start:start+length]
+
     def step_sample(self, h_, x_, *params):
-        XH, bh, Ur, HX, bx = params[:5]
+        Ur, = self.get_recurrent_args(*params)
 
-        h = T.tanh(T.dot(x_, XH) + T.dot(h_, Ur) + bh)
+        a_params = self.get_a_args(*params)
+        o_params = self.get_o_args(*params)
 
-        preact = T.dot(h, HX) + bx
-        if self.condition_on_x:
-            XX = params[6]
-            preact += T.dot(x_, XX)
+        y = self.MLPa.preact(x_, *a_params)
+        h = self._step(y, h_, Ur)
+
+        preact = self.MLPo.preact(h, *o_params)
+        if self.MLPc is not None:
+            c_params = self.get_c_args(*params)
+            preact += self.MLPc.preact(x_, *c_params)
+
         p = T.nnet.sigmoid(preact)
-
         x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
-
         return h, x, p
 
-    def step_slice(self, m_, x_, h_, *params):
-        XH, bh, Ur, HX, bx = params[:5]
+    def _step(self, y, h_, Ur):
+        preact = T.dot(h_, Ur) + y
+        h = T.tanh(preact)
+        return h
 
-        h = T.tanh(T.dot(h_, Ur) + T.dot(x_, XH) + bh)
-        h = m_[:, None] * h + (1. - m_)[:, None] * h_
+    def energy(self, X, h0=None):
+        outs, updates = self.__call__(X[:-1], h0=h0)
+        p = outs['p']
+        energy = -(X[1:] * T.log(p + 1e-7)
+                   + (1 - X[1:]) * T.log(1 - p + 1e-7)).sum(axis=(0, 2))
+        return energy
 
-        preact = T.dot(h, HX) + bx
-        if self.condition_on_x:
-            XX = params[6]
-            preact += T.dot(x_, XX)
-        p = T.nnet.sigmoid(preact)
-
-        x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
-
-        return h, x, p
-
-    def sample(self, x0=None, n_samples=10, n_steps=10):
+    def sample(self, x0=None, h0=None, n_samples=10, n_steps=10):
         if x0 is None:
             x0 = self.trng.binomial(size=(n_samples, self.dim_in), p=0.5, n=1,
                                     dtype='float32')
-
-        if self.h0_mode == 'average':
-            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX)
-            h0 += self.h0[None, :]
-        elif self.h0_mode == 'ffn':
-            h0 = T.dot(x0, self.W0) + self.b0
-        elif self.h0_mode is None:
-            h0 = T.alloc(0., n_samples, self.dim_h)
         else:
-            raise ValueError(self.h0_mode)
+            x0 = self.trng.binomial(p=x0, size=x0.shape, n=1, dtype=x0.dtype)
 
-        p0 = T.zeros_like(x0)
+        p0 = T.zeros_like(x0) + x0
+        if h0 is None:
+            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX)
 
         seqs = []
         outputs_info = [h0, x0, None]
-        non_seqs = self.get_params()
+        non_seqs = self.get_sample_params()
 
         (h, x, p), updates = theano.scan(
             self.step_sample,
@@ -186,31 +247,19 @@ class GenRNN(GenerativeRNN):
 
         return OrderedDict(x=x, p=p, h=h, x0=x0, p0=p0, h0=h0), updates
 
-    def __call__(self, state_below, mask=None):
-        state_below = state_below * (1 - self.trng.binomial(
-            p=0.1, size=state_below.shape, n=1, dtype=state_below.dtype))
-        n_steps = state_below.shape[0]
-        n_samples = state_below.shape[1]
+    def __call__(self, x, h0=None):
+        n_steps = x.shape[0]
+        n_samples = x.shape[1]
 
-        if mask is None:
-            mask = T.alloc(1, n_steps, 1).astype(floatX)
+        if h0 is None:
+            h0 = T.alloc(0., n_samples, self.dim_h).astype(floatX)
 
-        if self.h0_mode == 'average':
-            h0 = T.alloc(0., state_below[0].shape[0], self.dim_h).astype(floatX)
-            h0 += self.h0[None, :]
-        elif self.h0_mode == 'ffn':
-            h0 = T.dot(state_below[0], self.W0) + self.b0
-        elif self.h0_mode is None:
-            h0 = T.alloc(0., n_samples, self.dim_h)
-        else:
-            raise ValueError(self.h0_mode)
-
-        seqs = [mask, state_below]
-        outputs_info = [h0, None, None]
+        seqs = [self.MLPa(x, return_preact=True)]
+        outputs_info = [h0]
         non_seqs = self.get_params()
 
-        (h, x, p), updates = theano.scan(
-            self.step_slice,
+        h, updates = theano.scan(
+            self._step,
             sequences=seqs,
             outputs_info=outputs_info,
             non_sequences=non_seqs,
@@ -219,12 +268,13 @@ class GenRNN(GenerativeRNN):
             profile=tools.profile,
             strict=True)
 
-        if self.h0_mode == 'average':
-            h0_mean = h.mean(axis=(0, 1))
-            new_h = (1. - self.rate) * self.h0 + self.rate * h0_mean
-            updates += [(self.h0, new_h)]
+        preact = self.MLPo(h, return_preact=True)
+        if self.MLPc is not None:
+            preact += self.MLPc(x, return_preact=True)
+        p = T.nnet.sigmoid(preact)
+        y = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
 
-        return OrderedDict(h=h, x=x, p=p), updates
+        return OrderedDict(h=h, y=y, p=p), updates
 
 
 class SimpleInferRNN(GenerativeRNN):
