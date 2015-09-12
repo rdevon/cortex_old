@@ -141,6 +141,7 @@ class FFN(Layer):
 
 class MLP(Layer):
     def __init__(self, dim_in, dim_h, dim_out, n_layers,
+                 f_sample=None, f_neg_log_prob=None, f_entropy=None,
                  h_act='T.nnet.sigmoid', out_act='T.nnet.sigmoid',
                  name='MLP',
                  **kwargs):
@@ -162,10 +163,18 @@ class MLP(Layer):
             self.sample = self._centered_binomial
         elif out_act == 'lambda x: x':
             self.sample = self._normal
-            self.neg_log_prob = self._normal_prob
+            self.neg_log_prob = self._normal_log_prob
             self.entropy = self._normal_entropy
         else:
-            raise ValueError()
+            assert f_sample is not None
+            assert f_neg_log_prob is not None
+
+        if f_sample is not None:
+            self.sample = f_sample
+        if f_neg_log_prob is not None:
+            self.net_log_prob = f_neg_log_prob
+        if f_entropy is not None:
+            self.entropy = f_entropy
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
@@ -204,8 +213,11 @@ class MLP(Layer):
             size = mu.shape
         return self.trng.normal(avg=mu, std=sigma)
 
-    def _normal_prob(self, x, mu, log_sigma):
+    def _normal_log_prob(self, x, mu, log_sigma, axis=None):
         energy = -(x - mu)**2 / (2 * T.exp(2 * log_sigma)) - log_sigma - T.log(2 * pi) / 2.
+        if axis is None:
+            axis = entropy.ndim - 1
+        energy = energy.sum(axis=axis)
         return energy
 
     def _normal_entropy(self, x, mu, log_sigma):

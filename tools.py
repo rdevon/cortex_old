@@ -77,7 +77,7 @@ def load_model(model_file, f_unpack=None, **extra_args):
             try:
                 pretrained_v = pretrained_kwargs[
                     '{name}_{key}'.format(name=model.name, key=k)]
-                print 'Found %s for %s' % (k, model.name)
+                print 'Found %s for %s %s' % (k, model.name, pretrained_v.shape)
                 assert model.params[k].shape == pretrained_v.shape, (
                     'Sizes do not match: %s vs %s'
                     % (model.params[k].shape, pretrained_v.shape)
