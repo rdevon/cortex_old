@@ -99,14 +99,15 @@ def load_model(model_file, f_unpack=None, **extra_args):
     return model_dict, kwargs
 
 def check_bad_nums(rvals, names):
+    found = False
     for k, out in zip(names, rvals):
         if np.any(np.isnan(out)):
             print k, 'nan'
-            return True
+            found = True
         elif np.any(np.isinf(out)):
             print k, 'inf'
-            return True
-    return False
+            found = True
+    return found
 
 def flatten_dict(d):
     rval = OrderedDict()
