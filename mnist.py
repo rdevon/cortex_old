@@ -701,8 +701,10 @@ class MNIST_Pieces(mnist_iterator):
             assert i >= self.pos and i < self.pos + self.chain_length
 
         if self.out_path and save_chain:
-            self.save_images(self._load_chains(), path.join(self.out_path, 'training_chain_%d.png' % self.pos),
-                             x_limit=200)
+            self.save_images(
+                self._load_chains(),
+                path.join(self.out_path, 'training_chain_%d.png' % self.pos),
+                x_limit=200)
 
         x = self._load_chains()
         ps = [[p for p in chain] for chain in self.chains]
@@ -727,3 +729,17 @@ class MNIST_Pieces(mnist_iterator):
         self.spos += batch_size
 
         return x
+
+    def draw(self, ps):
+        pallet = T.alloc(
+            0., ps.shape[0], ps.shape[1],
+            self.dims[0] * self.dims[1]
+            ).astype(floatX)
+
+        def step_draw(p, pallet):
+            x = p[:, :-4]
+            pos = p[:, -4:-2]
+            x_pos = floor(pos[0])
+            y_pos = floor(pos[1])
+
+        seqs = [ps]
