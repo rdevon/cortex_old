@@ -2,7 +2,7 @@
 Module for monitor class.
 '''
 import matplotlib
-from matplotlib import pylab as plt
+matplotlib.use('Agg')
 import numpy as np
 import cPickle as pkl
 import os
@@ -11,7 +11,6 @@ import signal
 
 from collections import OrderedDict
 from tools import check_bad_nums
-matplotlib.use('Agg')
 from matplotlib import pylab as plt
 
 
