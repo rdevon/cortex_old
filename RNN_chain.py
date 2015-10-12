@@ -71,7 +71,8 @@ def estimate_parzen(samples, epochs=1000, optimizer='adam',
     log_est = f_par(samples, x_t)
     print 'Parzen log likelihood lower bound: %.5f' % log_est
 
-def lower_bound(model_file, n_samples=10000, sigma=0.2, from_chain=False):
+def lower_bound(model_file, n_samples=10000, sigma=0.2, from_chain=False,
+                start_at_data=False):
 
     models, kwargs = load_model(model_file, unpack)
     dataset_args = kwargs['dataset_args']
@@ -106,12 +107,17 @@ def lower_bound(model_file, n_samples=10000, sigma=0.2, from_chain=False):
         samples = np.array(xs)[:, 0]
     else:
         print 'Generating'
-        samples = generate(model_file, n_steps=100, n_samples=n_samples)
+        if start_at_data:
+            x = train.next_simple(batch_size=n_samples)
+        else:
+            x = None
+        samples = generate(model_file, x=x, n_steps=100, n_samples=n_samples)
 
     x_v = valid.next_simple(batch_size=n_samples/10)
 
     print 'Finding best sigma by grid search'
-    best = 0
+    best = -2000.
+    last = -3000.
     best_sigma = None
 
     def frange(x, y, jump):
@@ -119,7 +125,8 @@ def lower_bound(model_file, n_samples=10000, sigma=0.2, from_chain=False):
           yield x
           x += jump
 
-    for sigma in frange(0.15, 0.25, 0.01):
+    sigma = 0.15
+    while True:
         print 'Sigma = %.2f' % sigma
         parzen = lep.theano_parzen(samples, sigma)
         test_ll = lep.get_ll(x_v, parzen)
@@ -127,6 +134,10 @@ def lower_bound(model_file, n_samples=10000, sigma=0.2, from_chain=False):
         if best_ll > best:
             best_sigma = sigma
             best = best_ll
+        if best_ll < last:
+            break
+        last = best_ll
+        sigma += 0.01
 
     print 'Best ll and sigma at validation: %.2f and %.2f' % (best, best_sigma)
     sigma = best_sigma
@@ -270,12 +281,20 @@ def load_model_for_sampling(model_file):
         mlp.set_tparams()
         f_init = theano.function([X0], mlp(X0))
         f_h0 = lambda x: f_init(x)
+    elif h_init == 'noise':
+        X0 = T.matrix('X0', dtype=floatX)
+        avg = T.alloc(0., X0.shape[0], rnn.dim_h).astype(floatX)
+
+        h0 = rnn.trng.normal(size=avg.shape, avg=avg, std=0.1, dtype=avg.dtype)
+        f_init = theano.function([X0], h0)
+        f_h0 = lambda x: f_init(x)
     else:
         h0 = np.zeros((1, rnn.dim_h)).astype('float32')
         f_h0 = lambda x: h0
 
     tparams = rnn.set_tparams()
     train.set_f_energy(energy_function, rnn)
+    test.set_f_energy(energy_function, rnn)
 
     return rnn, train, test, f_h0
 
@@ -420,7 +439,8 @@ def test_AIS(model_file, n_samples=100, M=100, K=10, f_steps=10, T_steps=10):
     logw = log_mean_exp(logw, axis=0, as_numpy=True)
     print logw.mean()
 
-def generate(model_file, n_steps=20, n_samples=40, out_path=None):
+def generate(model_file, x=None, n_steps=20, n_samples=40, out_path=None,
+             from_data=False):
     rnn, train, test, f_h0 = load_model_for_sampling(model_file)
     params = rnn.get_sample_params()
 
@@ -429,7 +449,13 @@ def generate(model_file, n_steps=20, n_samples=40, out_path=None):
     h_s, x_s, p_s = rnn.step_sample(H, X, *params)
     f_sam = theano.function([X, H], [x_s, h_s, p_s])
 
-    x = rnn.rng.binomial(p=0.5, size=(n_samples, rnn.dim_in), n=1).astype(floatX)
+    if x is None:
+        if from_data == True:
+            train.randomize()
+            x = train.next_simple(batch_size=n_samples)
+        else:
+            x = rnn.rng.binomial(p=0.5, size=(n_samples, rnn.dim_in), n=1).astype(floatX)
+
     ps = [x]
     h = f_h0(x)
     for s in xrange(n_steps):
@@ -437,7 +463,11 @@ def generate(model_file, n_steps=20, n_samples=40, out_path=None):
         ps.append(p)
 
     if out_path is not None:
-        train.save_images(np.array(ps), path.join(out_path, 'generation_samples.png'))
+        if from_data:
+            out_file = 'generation_samples(from_data).png'
+        else:
+            out_file = 'generation_samples.png'
+        train.save_images(np.array(ps), path.join(out_path, out_file))
     else:
         return ps[-1]
 
@@ -454,6 +484,34 @@ def generate_samples(model_file, n_steps=1000, n_samples=1):
     h = f_h0(x)
     sample_chain = f_sample(x, h)
     return sample_chain
+
+def test_chain_likelihood(model_file, n_samples=10):
+    rnn, train, test, f_h0 = load_model_for_sampling(model_file)
+    params = rnn.get_sample_params()
+
+    train.next()
+    test.next()
+
+    x_tr = train._load_chains()
+    x_te = test._load_chains()
+
+    X_tr = T.tensor3('x_tr', dtype=floatX)
+    X_te = T.tensor3('x_te', dtype=floatX)
+    H_tr = T.matrix('h_tr', dtype=floatX)
+    H_te = T.matrix('h_te', dtype=floatX)
+
+    outs_tr, _ = rnn(X_tr[:-1], H_tr)
+    p_tr = outs_tr['p']
+
+    outs_te, _ = rnn(X_te[:-1], H_te)
+    p_te = outs_te['p']
+
+    energy_tr = -(X_tr[1:] * T.log(p_tr + 1e-7) + (1 - X_tr[1:]) * T.log(1 - p_tr + 1e-7)).sum(axis=2).mean()
+    energy_te = -(X_te[1:] * T.log(p_te + 1e-7) + (1 - X_te[1:]) * T.log(1 - p_te + 1e-7)).sum(axis=2).mean()
+
+    f_energy = theano.function([X_tr, X_te, H_tr, H_te], [energy_tr, energy_te])
+
+    print 'Train / Test chain energy: %s' % f_energy(x_tr, x_te, f_h0(x_tr[0]), f_h0(x_te[0]))
 
 def visualize(model_file, out_path=None, interval=1, n_samples=-1,
               save_movie=True, use_data_every=50, use_data_in=False,
@@ -581,6 +639,14 @@ def euclidean_distance(model):
     distance = distance.sum(axis=2)
     return theano.function([x, x_p, h_p], [distance, x, h_p])
 
+def random_distance(model):
+    x = T.matrix('x', dtype=floatX)
+    x_p = T.matrix('x_p', dtype=floatX)
+    h_p = T.matrix('h_p', dtype=floatX)
+
+    distance = model.trng.uniform(size=(x_p.shape[0], x.shape[0]), dtype=x_p.dtype)
+    return theano.function([x, x_p, h_p], [distance, x, h_p])
+
 def train_model(save_graphs=False, out_path='', name='',
                 load_last=False, model_to_load=None, save_images=True,
                 source=None,
@@ -674,6 +740,7 @@ def train_model(save_graphs=False, out_path='', name='',
     X_s = X[:-1]
     updates = theano.OrderedUpdates()
     if noise_input:
+        print 'Noising input'
         X_s = X_s * (1 - trng.binomial(p=0.1, size=X_s.shape, n=1, dtype=X_s.dtype))
 
     if h_init is None:
@@ -681,6 +748,9 @@ def train_model(save_graphs=False, out_path='', name='',
     elif h_init == 'last':
         print 'Initializing h0 from chain'
         h0 = theano.shared(np.zeros((batch_size, rnn.dim_h)).astype(floatX))
+    elif h_init == 'noise':
+        print 'Initializing h0 from noise'
+        h0 = trng.normal(avg=0, std=0.1, size=(batch_size, rnn.dim_h)).astype(floatX)
     elif h_init == 'average':
         print 'Initializing h0 from running average'
         if 'averager' in models.keys():
@@ -700,7 +770,8 @@ def train_model(save_graphs=False, out_path='', name='',
                       out_act='T.tanh',
                       name='MLPh')
         tparams.update(mlp.set_tparams())
-        h0 = mlp(X[0])
+        h0s = mlp(D)
+        h0 = h0s[0]
 
     print 'Model params: %s' % tparams.keys()
     if metric == 'energy':
@@ -728,8 +799,8 @@ def train_model(save_graphs=False, out_path='', name='',
         outs_h, updates_h = averager(h)
         updates.update(updates_h)
     elif h_init == 'mlp':
-        h_c = T.zeros_like(h[0]) + h[0]
-        cost += ((h0 - h[0])**2).sum(axis=1).mean()
+        h_c = T.zeros_like(h) + h
+        cost += ((h0s - h_c)**2).sum(axis=2).mean()
         consider_constant.append(h_c)
 
     extra_outs = [energy.mean(), h, p]
@@ -740,6 +811,8 @@ def train_model(save_graphs=False, out_path='', name='',
             h0_s = T.alloc(0., window, rnn.dim_h).astype(floatX) + averager.m[None, :]
         elif h_init == 'mlp':
             h0_s = mlp(X[:, 0])
+        elif h_init == 'noise':
+            h0_s = trng.normal(avg=0, std=0.1, size=(window, rnn.dim_h)).astype(floatX)
         elif h_init == 'last':
             h0_s = h[:, 0]
         else:
@@ -783,7 +856,7 @@ def train_model(save_graphs=False, out_path='', name='',
             if s % show_freq == 0:
                 print ('%d: cost: %.5f | energy: %.2f | prob: %.2f'
                        % (e, rval[0], rval[1], np.exp(-rval[1])))
-            if s % show_freq == 0:
+            if s % model_save_freq == 0:
                 idx = np.random.randint(rval[3].shape[1])
                 samples = np.concatenate([x[1:, idx, :][None, :, :],
                                         rval[3][:, idx, :][None, :, :]], axis=0)
@@ -801,7 +874,7 @@ def train_model(save_graphs=False, out_path='', name='',
                         sample_chain,
                         path.join(
                             out_path, '{name}_samples.png'.format(name=name)))
-            if s % model_save_freq == 0:
+
                 temp_file = path.join(
                     out_path, '{name}_temp.npz'.format(name=name))
                 d = dict((k, v.get_value()) for k, v in tparams.items())
