@@ -20,9 +20,14 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import time
+import warnings
 import yaml
 
-from GSN import likelihood_estimation_parzen as lep
+try:
+    from GSN import likelihood_estimation_parzen as lep
+except ImportError:
+    warnings.warn('GSN module not found. No Parzen window functionality')
+
 from gru import GenGRU
 from rbm import RBM
 from rnn import GenRNN
