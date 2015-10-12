@@ -84,16 +84,17 @@ def load_model(model_file, f_unpack=None, **extra_args):
                 )
                 model.params[k] = pretrained_v
             except KeyError:
-                pretrained_v = pretrained_kwargs[
-                    '{key}'.format(key=k)]
-                print 'Found %s, but name is ambiguous' % (k)
-                assert model.params[k].shape == pretrained_v.shape, (
-                    'Sizes do not match: %s vs %s'
-                    % (model.params[k].shape, pretrained_v.shape)
-                )
-                model.params[k] = pretrained_v
-            except KeyError:
-                print '{} not found'.format(k)
+                try:
+                    pretrained_v = pretrained_kwargs[
+                        '{key}'.format(key=k)]
+                    print 'Found %s, but name is ambiguous' % (k)
+                    assert model.params[k].shape == pretrained_v.shape, (
+                        'Sizes do not match: %s vs %s'
+                        % (model.params[k].shape, pretrained_v.shape)
+                    )
+                    model.params[k] = pretrained_v
+                except KeyError:
+                    print '{} not found'.format(k)
         model_dict[model.name] = model
 
     return model_dict, kwargs
