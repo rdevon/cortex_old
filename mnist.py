@@ -487,7 +487,7 @@ class MNIST_Chains(mnist_iterator):
 
         if trim_end is not None:
             for c in xrange(len(self.chains)):
-                self.chains[c] = self.chains[:-trim_end]
+                self.chains[c] = self.chains[c][:-trim_end]
 
     def next(self):
         assert self.f_energy is not None
