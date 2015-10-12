@@ -613,6 +613,7 @@ class GenerativeGRU(GRU):
 class GenGRU(Layer):
     def __init__(self, dim_in, dim_h,
                  MLPa=None, MLPb=None, MLPo=None, MLPc=None,
+                 f_sample=None, f_neg_log_prob=None,
                  name='gen_gru', **kwargs):
 
         self.dim_in = dim_in
@@ -622,6 +623,9 @@ class GenGRU(Layer):
         self.MLPb = MLPb
         self.MLPo = MLPo
         self.MLPc = MLPc
+
+        self.f_sample = f_sample
+        self.f_neg_log_prob = f_neg_log_prob
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
@@ -669,6 +673,8 @@ class GenGRU(Layer):
         if self.MLPo is None:
             self.MLPo = MLP(self.dim_h, self.dim_h, self.dim_in, 1,
                             rng=self.rng, trng=self.trng,
+                            f_sample=self.f_sample,
+                            f_neg_log_prob=self.f_neg_log_prob,
                             h_act='T.nnet.sigmoid',
                             out_act='T.nnet.sigmoid',
                             name='MLPo')
@@ -744,8 +750,8 @@ class GenGRU(Layer):
             c_params = self.get_c_args(*params)
             preact += self.MLPc.preact(x_, *c_params)
 
-        p = T.nnet.sigmoid(preact)
-        x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
+        p = eval(self.MLPo.out_act)(preact)
+        x = self.MLPo.sample(p)
         return h, x, p
 
     def _step(self, ya, yb, h_, Ura, Urb):
@@ -756,19 +762,17 @@ class GenGRU(Layer):
         h = u * h + (1. - u) * h_
         return h
 
-    def energy(self, X, h0=None):
+    def _energy(self, X, h0=None):
         outs, updates = self.__call__(X[:-1], h0=h0)
         p = outs['p']
-        energy = -(X[1:] * T.log(p + 1e-7)
-                   + (1 - X[1:]) * T.log(1 - p + 1e-7)).sum(axis=(0, 2))
+        energy = self.MLPo.net_log_prob(X[1:], p).sum(axis=0)
         return energy
 
     def sample(self, x0=None, h0=None, n_samples=10, n_steps=10):
         if x0 is None:
-            x0 = self.trng.binomial(size=(n_samples, self.dim_in), p=0.5, n=1,
-                                    dtype='float32')
+            x0 = self.MLPo.sample(p=0.5, size=(n_samples, self.dim_in)).astype(floatX)
         else:
-            x0 = self.trng.binomial(p=x0, size=x0.shape, n=1, dtype=x0.dtype)
+            x0 = self.MLPo.sample(x0)
 
         p0 = T.zeros_like(x0) + x0
         if h0 is None:
@@ -819,8 +823,8 @@ class GenGRU(Layer):
         preact = self.MLPo(h, return_preact=True)
         if self.MLPc is not None:
             preact += self.MLPc(x, return_preact=True)
-        p = T.nnet.sigmoid(preact)
-        y = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
+        p = eval(self.MLPo.out_act)(preact)
+        y = self.MLPo.sample(p=p)
 
         return OrderedDict(h=h, y=y, p=p), updates
 
