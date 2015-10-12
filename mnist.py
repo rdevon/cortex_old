@@ -404,7 +404,7 @@ class MNIST_Chains(mnist_iterator):
             X = X[:stop]
 
         self.n, self.dim = X.shape
-        self.chain_length = min(self.chain_length, self.n - self.trim_end)
+        self.chain_length = min(self.chain_length, self.n)
         self.chains = [[] for _ in xrange(n_chains)]
         self.chain_pos = 0
         self.pos = 0
@@ -492,7 +492,8 @@ class MNIST_Chains(mnist_iterator):
     def next(self):
         assert self.f_energy is not None
 
-        chain_length = min(self.chain_length, self.n - self.pos)
+        chain_length = min(self.chain_length - self.trim_end,
+                           self.n - self.pos - self.trim_end)
         window = min(self.window, chain_length)
         cpos = self.chain_pos
         if cpos == -1 or len(self.chains[0]) == 0:
