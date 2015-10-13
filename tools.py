@@ -43,6 +43,10 @@ def gaussian(x, mu, s):
 def log_gaussian(x, mu, s):
     return -(x - mu)**2 / (2 * s**2) - T.log(s + 1e-7) - T.sqrt(2 * pi).astype('float32')
 
+def logit(z):
+    z = T.clip(z, 1e-7, 1.0 - 1e-7)
+    return T.log(z) - T.log(1 - z)
+
 def load_experiment(experiment_yaml):
     print('Loading experiment from %s' % experiment_yaml)
     exp_dict = yaml.load(open(experiment_yaml))
