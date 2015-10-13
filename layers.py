@@ -12,10 +12,12 @@ import tools
 from tools import log_mean_exp
 from tools import init_rngs
 from tools import init_weights
+from tools import _slice
 
 
 floatX = theano.config.floatX
 pi = theano.shared(np.pi).astype('float32')
+e = theano.shared(np.e).astype('float32')
 
 
 class Layer(object):
@@ -208,20 +210,30 @@ class MLP(Layer):
         entropy = entropy.sum(axis=axis)
         return entropy
 
-    def _normal(self, mu, log_sigma, size=None):
+    def _normal(self, p, size=None):
+        mu = _slice(p, 0, self.dim_h)
+        log_sigma = _slice(p, 1, self.dim_h)
         if size is None:
             size = mu.shape
-        return self.trng.normal(avg=mu, std=sigma)
+        return self.trng.normal(avg=mu, std=T.exp(log_sigma))
 
-    def _normal_log_prob(self, x, mu, log_sigma, axis=None):
-        energy = -(x - mu)**2 / (2 * T.exp(2 * log_sigma)) - log_sigma - T.log(2 * pi) / 2.
+    def _normal_log_prob(self, x, p, axis=None):
+        mu = _slice(p, 0, self.dim_h)
+        log_sigma = _slice(p, 1, self.dim_h)
+        energy = -0.5 * ((x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
         if axis is None:
             axis = entropy.ndim - 1
         energy = energy.sum(axis=axis)
         return energy
 
-    def _normal_entropy(self, x, mu, log_sigma):
-        raise NotImplementedError()
+    def _normal_entropy(self, p, log_sigma, axis=None):
+        mu = _slice(p, 0, self.dim_h)
+        log_sigma = _slice(p, 1, self.dim_h)
+        entropy = 0.5 * T.log(2 * pi * e) + log_sigma
+        if axis is None:
+            axis = entropy.ndim - 1
+        entropy = entropy.sum(axis=axis)
+        return entropy
 
     def set_params(self):
         self.params = OrderedDict()
@@ -250,10 +262,9 @@ class MLP(Layer):
                 self.params['W%d_noise' % l] = W_noise
 
         if self.out_act == 'lambda x: x':
-            raise NotImplementedError()
-            Ws = tools.norm_weight(self.dim_h, dim_out,
+            Ws = tools.norm_weight(self.dim_h, self.dim_out,
                                     scale=self.weight_scale, ortho=False)
-            bs = np.zeros((dim_out,)).astype(floatX)
+            bs = np.zeros((self.dim_out,)).astype(floatX)
             self.params.update(Ws=Ws, bs=bs)
 
     def get_params(self):
@@ -269,7 +280,6 @@ class MLP(Layer):
                 params += [W_noise]
 
         if self.out_act == 'lambda x: x':
-            raise NotImplementedError()
             Ws = self.Ws
             bs = self.bs
             params += [Ws, bs]
@@ -289,7 +299,14 @@ class MLP(Layer):
                 W = W + W_noise
 
             if l == self.n_layers - 1:
-                x = T.dot(x, W) + b
+                if self.out_act == 'lambda x: x':
+                    Ws = params.pop(0)
+                    bs = params.pop(0)
+                    mu = T.dot(x, W) + b
+                    log_sigma = T.dot(x, Ws) + bs
+                    x = T.concatenate([mu, log_sigma], axis=mu.ndim-1)
+                else:
+                    x = T.dot(x, W) + b
             else:
                 activ = self.h_act
                 x = eval(activ)(T.dot(x, W) + b)
