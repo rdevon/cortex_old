@@ -47,6 +47,11 @@ def logit(z):
     z = T.clip(z, 1e-7, 1.0 - 1e-7)
     return T.log(z) - T.log(1 - z)
 
+def _slice(_x, n, dim):
+    if _x.ndim == 3:
+        return _x[:, :, n*dim:(n+1)*dim]
+    return _x[:, n*dim:(n+1)*dim]
+
 def load_experiment(experiment_yaml):
     print('Loading experiment from %s' % experiment_yaml)
     exp_dict = yaml.load(open(experiment_yaml))
