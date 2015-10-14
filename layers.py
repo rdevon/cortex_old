@@ -211,24 +211,24 @@ class MLP(Layer):
         return entropy
 
     def _normal(self, p, size=None):
-        mu = _slice(p, 0, self.dim_h)
-        log_sigma = _slice(p, 1, self.dim_h)
+        mu = _slice(p, 0, self.dim_out)
+        log_sigma = _slice(p, 1, self.dim_out)
         if size is None:
             size = mu.shape
-        return self.trng.normal(avg=mu, std=T.exp(log_sigma))
+        return self.trng.normal(avg=mu, std=T.exp(log_sigma), size=size)
 
     def _normal_log_prob(self, x, p, axis=None):
-        mu = _slice(p, 0, self.dim_h)
-        log_sigma = _slice(p, 1, self.dim_h)
+        mu = _slice(p, 0, self.dim_out)
+        log_sigma = _slice(p, 1, self.dim_out)
         energy = -0.5 * ((x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
         if axis is None:
-            axis = entropy.ndim - 1
+            axis = energy.ndim - 1
         energy = energy.sum(axis=axis)
         return energy
 
-    def _normal_entropy(self, p, log_sigma, axis=None):
-        mu = _slice(p, 0, self.dim_h)
-        log_sigma = _slice(p, 1, self.dim_h)
+    def _normal_entropy(self, p, axis=None):
+        mu = _slice(p, 0, self.dim_out)
+        log_sigma = _slice(p, 1, self.dim_out)
         entropy = 0.5 * T.log(2 * pi * e) + log_sigma
         if axis is None:
             axis = entropy.ndim - 1
@@ -320,7 +320,7 @@ class MLP(Layer):
                                              dtype=x.dtype)
                     x = x * x_d / (1 - self.dropout)
 
-        assert len(params) == 0
+        assert len(params) == 0, params
         return x
 
     def step_call(self, x, *params):
