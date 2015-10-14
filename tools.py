@@ -48,9 +48,15 @@ def logit(z):
     return T.log(z) - T.log(1 - z)
 
 def _slice(_x, n, dim):
-    if _x.ndim == 3:
+    if _x.ndim == 1:
+        return _x[n*dim:(n+1)*dim]
+    elif _x.ndim == 2:
+        return _x[:, n*dim:(n+1)*dim]
+    elif _x.ndim == 3:
         return _x[:, :, n*dim:(n+1)*dim]
-    return _x[:, n*dim:(n+1)*dim]
+    else:
+        raise ValueError('Number of dims (%d) not supported'
+                         ' (but can add easily here)' % _x.ndim)
 
 def load_experiment(experiment_yaml):
     print('Loading experiment from %s' % experiment_yaml)
