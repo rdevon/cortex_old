@@ -165,7 +165,7 @@ class MLP(Layer):
             self.sample = self._centered_binomial
         elif out_act == 'lambda x: x':
             self.sample = self._normal
-            self.neg_log_prob = self._normal_log_prob
+            self.neg_log_prob = self._neg_normal_log_prob
             self.entropy = self._normal_entropy
         else:
             assert f_sample is not None
@@ -217,10 +217,10 @@ class MLP(Layer):
             size = mu.shape
         return self.trng.normal(avg=mu, std=T.exp(log_sigma), size=size)
 
-    def _normal_log_prob(self, x, p, axis=None):
+    def _neg_normal_log_prob(self, x, p, axis=None):
         mu = _slice(p, 0, self.dim_out)
         log_sigma = _slice(p, 1, self.dim_out)
-        energy = -0.5 * ((x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
+        energy = 0.5 * ((x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
         if axis is None:
             axis = energy.ndim - 1
         energy = energy.sum(axis=axis)
