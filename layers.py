@@ -203,8 +203,8 @@ class MLP(Layer):
         return energy
 
     def _binary_entropy(self, p, axis=None):
-        p = T.clip(p, 1e-7, 1.0 - 1e-7)
-        entropy = T.nnet.binary_crossentropy(p, p)
+        p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
+        entropy = T.nnet.binary_crossentropy(p, p_c)
         if axis is None:
             axis = entropy.ndim - 1
         entropy = entropy.sum(axis=axis)
@@ -227,7 +227,6 @@ class MLP(Layer):
         return energy
 
     def _normal_entropy(self, p, axis=None):
-        mu = _slice(p, 0, self.dim_out)
         log_sigma = _slice(p, 1, self.dim_out)
         entropy = 0.5 * T.log(2 * pi * e) + log_sigma
         if axis is None:
