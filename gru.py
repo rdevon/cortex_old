@@ -612,17 +612,17 @@ class GenerativeGRU(GRU):
 
 class GenGRU(Layer):
     def __init__(self, dim_in, dim_h,
-                 MLPa=None, MLPb=None, MLPo=None, MLPc=None,
+                 input_net=None, input_net_aux=None, output_net=None, conditional=None,
                  f_sample=None, f_neg_log_prob=None,
                  name='gen_gru', **kwargs):
 
         self.dim_in = dim_in
         self.dim_h = dim_h
 
-        self.MLPa = MLPa
-        self.MLPb = MLPb
-        self.MLPo = MLPo
-        self.MLPc = MLPc
+        self.input_net = input_net
+        self.input_net_aux = input_net_aux
+        self.output_net = output_net
+        self.conditional = conditional
 
         self.f_sample = f_sample
         self.f_neg_log_prob = f_neg_log_prob
@@ -648,62 +648,61 @@ class GenGRU(Layer):
 
         self.params = OrderedDict(Ura=Ura, Urb=Urb)
 
-        if self.MLPa is None:
-            self.MLPa = MLP(self.dim_in, 2 * self.dim_h, 2 * self.dim_h, 1,
+        if self.input_net is None:
+            self.input_net = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
                             rng=self.rng, trng=self.trng,
                             h_act='T.nnet.sigmoid',
                             out_act='T.tanh',
-                            name='MLPa')
+                            name='input_net')
         else:
-            assert self.MLPa.dim_in == self.dim_in
-            assert self.MLPa.dim_out == 2 * self.dim_h
-            self.MLPa.name = 'MLPa'
+            assert self.input_net.dim_in == self.dim_in
+            assert self.input_net.dim_out == self.dim_h
+            self.input_net.name = 'input_net'
 
-        if self.MLPb is None:
-            self.MLPb = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
+        if self.input_net_aux is None:
+            self.input_net_aux = MLP(self.dim_in, 2 * self.dim_h, 2 * self.dim_h, 1,
                             rng=self.rng, trng=self.trng,
                             h_act='T.nnet.sigmoid',
                             out_act='T.tanh',
-                            name='MLPb')
+                            name='input_net_aux')
         else:
-            assert self.MLPb.dim_in == self.dim_in
-            assert self.MLPb.dim_out == self.dim_h
-            self.MLPb.name = 'MLPb'
+            assert self.input_net_aux.dim_in == self.dim_in
+            assert self.input_net_aux.dim_out == 2 * self.dim_h
+            self.input_net_aux.name = 'input_net_aux'
 
-        if self.MLPo is None:
-            self.MLPo = MLP(self.dim_h, self.dim_h, self.dim_in, 1,
+        if self.output_net is None:
+            self.output_net = MLP(self.dim_h, self.dim_h, self.dim_in, 1,
                             rng=self.rng, trng=self.trng,
                             f_sample=self.f_sample,
                             f_neg_log_prob=self.f_neg_log_prob,
                             h_act='T.nnet.sigmoid',
                             out_act='T.nnet.sigmoid',
-                            name='MLPo')
+                            name='output_net')
         else:
-            assert self.MLPo.dim_in == self.dim_h
-            assert self.MLPo.dim_out == self.dim_in
-            self.MLPo.name = 'MLPo'
+            assert self.output_net.dim_in == self.dim_h
+            self.output_net.name = 'output_net'
 
-        if self.MLPc is not None:
-            assert self.MLPc.dim_in == self.dim_in
-            assert self.MLPc.dim_out == self.dim_in
-            self.MLPc.name = 'MLPc'
+        if self.conditional is not None:
+            assert self.conditional.dim_in == self.dim_in
+            assert self.conditional.dim_out == self.dim_in
+            self.conditional.name = 'conditional'
 
     def set_tparams(self):
         tparams = super(GenGRU, self).set_tparams()
-        for mlp in [self.MLPa, self.MLPb, self.MLPo]:
+        for mlp in [self.input_net_aux, self.input_net, self.output_net]:
             tparams.update(**mlp.set_tparams())
 
-        if self.MLPc is not None:
-            tparams.update(**self.MLPc.set_tparams())
+        if self.conditional is not None:
+            tparams.update(**self.conditional.set_tparams())
         return tparams
 
     def get_sample_params(self):
         params = [self.Ura, self.Urb]
-        params += self.MLPa.get_params()
-        params += self.MLPb.get_params()
-        params += self.MLPo.get_params()
-        if self.MLPc is not None:
-            params += self.MLPc.get_params()
+        params += self.input_net_aux.get_params()
+        params += self.input_net.get_params()
+        params += self.output_net.get_params()
+        if self.conditional is not None:
+            params += self.conditional.get_params()
         return params
 
     def get_params(self):
@@ -713,51 +712,51 @@ class GenGRU(Layer):
     def get_recurrent_args(self, *args):
         return args[:2]
 
-    def get_a_args(self, *args):
+    def get_aux_args(self, *args):
         start = 2
-        length = len(self.MLPa.get_params())
+        length = len(self.input_net_aux.get_params())
         return args[start:start+length]
 
-    def get_b_args(self, *args):
-        start = 2 + len(self.MLPa.get_params())
-        length = len(self.MLPb.get_params())
+    def get_input_args(self, *args):
+        start = 2 + len(self.input_net.get_params())
+        length = len(self.input_net.get_params())
         return args[start:start+length]
 
-    def get_o_args(self, *args):
-        start = 2 + len(self.MLPa.get_params()) + len(self.MLPb.get_params())
-        length = len(self.MLPo.get_params())
+    def get_output_args(self, *args):
+        start = 2 + len(self.input_net_aux.get_params()) + len(self.input_net.get_params())
+        length = len(self.output_net.get_params())
         return args[start:start+length]
 
-    def get_c_args(self, *args):
-        start = 2 + len(self.MLPa.get_params()) + len(self.MLPb.get_params()) + len(self.MLPo.get_params())
-        length = len(self.MLPc.get_params())
+    def get_conditional_args(self, *args):
+        start = 2 + len(self.input_net_aux.get_params()) + len(self.input_net.get_params()) + len(self.output_net.get_params())
+        length = len(self.conditional.get_params())
         return args[start:start+length]
 
     def step_sample(self, h_, x_, *params):
         Ura, Urb = self.get_recurrent_args(*params)
 
-        a_params = self.get_a_args(*params)
-        b_params = self.get_b_args(*params)
-        o_params = self.get_o_args(*params)
+        aux_params = self.get_aux_args(*params)
+        input_params = self.get_input_args(*params)
+        output_params = self.get_output_args(*params)
 
-        ya = self.MLPa.preact(x_, *a_params)
-        yb = self.MLPb.preact(x_, *b_params)
+        y_aux = self.input_net_aux.preact(x_, *aux_params)
+        y_input = self.input_net.preact(x_, *input_params)
 
-        h = self._step(ya, yb, h_, Ura, Urb)
+        h = self._step(y_aux, y_input, h_, Ura, Urb)
 
-        preact = self.MLPo.preact(h, *o_params)
-        if self.MLPc is not None:
-            c_params = self.get_c_args(*params)
-            preact += self.MLPc.preact(x_, *c_params)
+        preact = self.output_net.preact(h, *output_params)
+        if self.conditional is not None:
+            c_params = self.get_conditional_args(*params)
+            preact += self.conditional.preact(x_, *c_params)
 
-        p = eval(self.MLPo.out_act)(preact)
-        x = self.MLPo.sample(p)
+        p = eval(self.output_net.out_act)(preact)
+        x = self.output_net.sample(p)
         return h, x, p
 
-    def _step(self, ya, yb, h_, Ura, Urb):
-        preact = T.dot(h_, Ura) + ya
+    def _step(self, y_a, y_i, h_, Ura, Urb):
+        preact = T.dot(h_, Ura) + y_a
         r, u = self.get_gates(preact)
-        preactx = T.dot(h_, Urb) * r + yb
+        preactx = T.dot(h_, Urb) * r + y_i
         h = T.tanh(preactx)
         h = u * h + (1. - u) * h_
         return h
@@ -765,16 +764,17 @@ class GenGRU(Layer):
     def _energy(self, X, h0=None):
         outs, updates = self.__call__(X[:-1], h0=h0)
         p = outs['p']
-        energy = self.MLPo.net_log_prob(X[1:], p).sum(axis=0)
+        energy = self.output_net.net_log_prob(X[1:], p).sum(axis=0)
         return energy
 
     def sample(self, x0=None, h0=None, n_samples=10, n_steps=10):
         if x0 is None:
-            x0 = self.MLPo.sample(p=0.5, size=(n_samples, self.dim_in)).astype(floatX)
+            x0 = self.output_net.sample(
+                p=0.5, size=(n_samples, self.output_net.dim_out)).astype(floatX)
         else:
-            x0 = self.MLPo.sample(x0)
+            x0 = self.output_net.sample(x0)
 
-        p0 = T.zeros_like(x0) + x0
+        p0 = x0.copy()
         if h0 is None:
             h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX)
 
@@ -805,8 +805,8 @@ class GenGRU(Layer):
         if h0 is None:
             h0 = T.alloc(0., n_samples, self.dim_h).astype(floatX)
 
-        seqs = [self.MLPa(x, return_preact=True),
-                self.MLPb(x, return_preact=True)]
+        seqs = [self.input_net_aux(x, return_preact=True),
+                self.input_net(x, return_preact=True)]
         outputs_info = [h0]
         non_seqs = self.get_params()
 
@@ -820,11 +820,11 @@ class GenGRU(Layer):
             profile=tools.profile,
             strict=True)
 
-        preact = self.MLPo(h, return_preact=True)
-        if self.MLPc is not None:
-            preact += self.MLPc(x, return_preact=True)
-        p = eval(self.MLPo.out_act)(preact)
-        y = self.MLPo.sample(p=p)
+        preact = self.output_net(h, return_preact=True)
+        if self.conditional is not None:
+            preact += self.conditional(x, return_preact=True)
+        p = eval(self.output_net.out_act)(preact)
+        y = self.output_net.sample(p=p)
 
         return OrderedDict(h=h, y=y, p=p), updates
 
