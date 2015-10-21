@@ -180,21 +180,21 @@ def unpack_rbm(dim_h=None,
 def unpack(mode=None,
            dim_h=None,
            h_init=None,
-           mlp_a=None, mlp_b=None, mlp_o=None, mlp_c=None,
+           i_net=None, a_net=None, o_net=None, c_net=None,
            dataset='horses',
            dataset_args=None,
            **model_args):
 
     dataset_args = dataset_args[()]
 
-    if mlp_a is not None:
-        mlp_a = mlp_a[()]
-    if mlp_b is not None:
-        mlp_b = mlp_b[()]
-    if mlp_o is not None:
-        mlp_o = mlp_o[()]
-    if mlp_c is not None:
-        mlp_c = mlp_c[()]
+    if i_net is not None:
+        i_net = i_net[()]
+    if a_net is not None:
+        a_net = a_net[()]
+    if o_net is not None:
+        o_net = o_net[()]
+    if c_net is not None:
+        c_net = c_net[()]
 
     trng = RandomStreams(random.randint(0, 100000))
 
@@ -209,42 +209,38 @@ def unpack(mode=None,
     def load_mlp(name, dim_in, dim_out,
                  dim_h=None, n_layers=None,
                  **kwargs):
-        out_act = 'T.tanh'
         mlp = MLP(dim_in, dim_h, dim_out, n_layers, name=name, **kwargs)
         return mlp
 
-    if mlp_a is not None:
-        MLPa = load_mlp('MLPa', dim_in, 2 * dim_h, **mlp_a)
-    else:
-        MLPa = None
-    if mlp_b is not None:
-        MLPb = load_mlp('MLPb', dim_in, dim_h, **mlp_b)
-    else:
-        MLPb = None
-    if mlp_o is not None:
-        MLPo = load_mlp('MLPo', dim_h, dim_in, **mlp_o)
-    else:
-        MLPo = None
-    if mlp_c is not None:
-        MLPc = load_mlp('MLPc', dim_in, dim_in, **mlp_c)
-    else:
-        MLPc = None
+    mlps = {}
 
-    if mode == 'rnn':
-        MLPa = MLPb
-        MLPb = None
+    if i_net is not None:
+        input_net = load_mlp('input_net', dim_in, dim_h, **i_net)
+        mlps['input_net'] = input_net
+
+    if a_net is not None:
+        input_net_aux = load_mlp('input_net_aux', dim_in, 2 * dim_h, **a_net)
+        mlps['input_net_aux'] = input_net_aux
+
+    if o_net is not None:
+        output_net = load_mlp('output_net', dim_h, dim_in, **o_net)
+        mlps['output_net'] = output_net
+
+    if c_net is not None:
+        conditional = load_mlp('conditional', dim_in, dim_in, **mlp_c)
+        mlps['conditional'] = conditional
 
     if mode == 'gru':
-        rnn = GenGRU(dim_in, dim_h, MLPa=MLPa, MLPb=MLPb, MLPo=MLPo, MLPc=MLPc)
-        models = [rnn, rnn.MLPa, rnn.MLPb, rnn.MLPo]
+        rnn = GenGRU(dim_in, dim_h, **mlps)
+        models = [rnn, rnn.input_net, rnn.input_net_aux, rnn.output_net]
     elif mode == 'rnn':
-        rnn = GenRNN(dim_in, dim_h, MLPa=MLPa, MLPo=MLPo, MLPc=MLPc)
-        models = [rnn, rnn.MLPa, rnn.MLPo]
+        rnn = GenRNN(dim_in, dim_h, **mlps)
+        models = [rnn, rnn.input_net, rnn.output_net]
     else:
         raise ValueError('Mode %s not recognized' % mode)
 
-    if mlp_c is not None:
-        models.append(rnn.MLPc)
+    if c_net is not None:
+        models.append(rnn.conditional)
 
     if h_init == 'average':
         averager = Averager((batch_size, dim_h))
@@ -659,7 +655,7 @@ def train_model(save_graphs=False, out_path='', name='',
                 mode='gru',
                 metric='energy',
                 dim_h=500,
-                mlp_a=None, mlp_b=None, mlp_o=None, mlp_c=None,
+                i_net=None, a_net=None, o_net=None, c_net=None,
                 dataset=None, dataset_args=None,
                 noise_input=True, sample=True,
                 h_init='mlp',
@@ -693,7 +689,6 @@ def train_model(save_graphs=False, out_path='', name='',
     def load_mlp(name, dim_in, dim_out,
                  dim_h=None, n_layers=None,
                  **kwargs):
-        out_act = 'T.tanh'
         mlp = MLP(dim_in, dim_h, dim_out, n_layers, **kwargs)
         return mlp
 
@@ -704,33 +699,22 @@ def train_model(save_graphs=False, out_path='', name='',
         models, _ = load_model(model_file, unpack)
     else:
         mlps = {}
-        if mode == 'gru':
-            if mlp_a is not None:
-                MLPa = load_mlp('MLPa', dim_in, 2 * dim_h, **mlp_a)
-            else:
-                MLPa = None
-            mlps['MLPa'] = MLPa
 
-        if mlp_b is not None:
-            MLPb = load_mlp('MLPb', dim_in, dim_h, **mlp_b)
-        else:
-            MLPb = None
-        if mode == 'gru':
-            mlps['MLPb'] = MLPb
-        else:
-            mlps['MLPa'] = MLPb
+        if i_net is not None:
+            input_net = load_mlp('input_net', dim_in, dim_h, **i_net)
+            mlps['input_net'] = input_net
 
-        if mlp_o is not None:
-            MLPo = load_mlp('MLPo', dim_h, dim_in, **mlp_o)
-        else:
-            MLPo = None
-        mlps['MLPo'] = MLPo
+        if a_net is not None:
+            input_net_aux = load_mlp('input_net_aux', dim_in, 2 * dim_h, **a_net)
+            mlps['input_net_aux'] = input_net_aux
 
-        if mlp_c is not None:
-            MLPc = load_mlp('MLPc', dim_in, dim_in, **mlp_c)
-        else:
-            MLPc = None
-        mlps['MLPc'] = MLPc
+        if o_net is not None:
+            output_net = load_mlp('output_net', dim_h, dim_in, **o_net)
+            mlps['output_net'] = output_net
+
+        if c_net is not None:
+            conditional = load_mlp('conditional', dim_in, dim_in, **mlp_c)
+            mlps['conditional'] = conditional
 
         rnn = C(dim_in, dim_h, trng=trng,
                 **mlps)
@@ -825,6 +809,8 @@ def train_model(save_graphs=False, out_path='', name='',
         out_s, updates_s = rnn.sample(X[:, 0], h0=h0_s, n_samples=10, n_steps=10)
         f_sample = theano.function([X], out_s['p'], updates=updates_s)
 
+    all_params = OrderedDict((k, v) for k, v in tparams.iteritems())
+
     grad_tparams = OrderedDict((k, v)
         for k, v in tparams.iteritems()
         if (v not in updates.keys()))
@@ -840,6 +826,16 @@ def train_model(save_graphs=False, out_path='', name='',
         extra_outs=extra_outs)
 
     print 'Actually running'
+
+    def save(outfile):
+        d = dict((k, v.get_value()) for k, v in all_params.items())
+
+        d.update(mode=mode,
+                 dim_h=dim_h,
+                 h_init=h_init,
+                 i_net=i_net, a_net=a_net, o_net=o_net, c_net=c_net,
+                 dataset=dataset, dataset_args=dataset_args)
+        np.savez(outfile, **d)
 
     try:
         e = 0
@@ -882,13 +878,7 @@ def train_model(save_graphs=False, out_path='', name='',
 
                 temp_file = path.join(
                     out_path, '{name}_temp.npz'.format(name=name))
-                d = dict((k, v.get_value()) for k, v in tparams.items())
-                d.update(mode=mode,
-                         dim_h=dim_h,
-                         h_init=h_init,
-                         mlp_a=mlp_a, mlp_b=mlp_b, mlp_o=mlp_o, mlp_c=mlp_c,
-                         dataset=dataset, dataset_args=dataset_args)
-                np.savez(temp_file, **d)
+                save(temp_file)
 
             f_grad_updates(learning_rate)
     except KeyboardInterrupt:
@@ -899,15 +889,8 @@ def train_model(save_graphs=False, out_path='', name='',
     last_outfile = path.join(out_path, '{name}_last.npz'.format(name=name))
 
     print 'Saving the following params: %s' % tparams.keys()
-    d = dict((k, v.get_value()) for k, v in tparams.items())
-    d.update(mode=mode,
-             dim_h=dim_h,
-             h_init=h_init,
-             mlp_a=mlp_a, mlp_b=mlp_b, mlp_o=mlp_o, mlp_c=mlp_c,
-             dataset=dataset, dataset_args=dataset_args)
-
-    np.savez(outfile, **d)
-    np.savez(last_outfile,  **d)
+    save(outfile)
+    save(last_outfile)
     print 'Done saving. Bye bye.'
 
 def make_argument_parser():
