@@ -261,7 +261,11 @@ class MLP(Layer):
                 self.params['W%d_noise' % l] = W_noise
 
         if self.out_act == 'lambda x: x':
-            Ws = tools.norm_weight(self.dim_h, self.dim_out,
+            if l == 0:
+                dim_in = self.dim_in
+            else:
+                dim_in = self.dim_h
+            Ws = tools.norm_weight(dim_in, self.dim_out,
                                     scale=self.weight_scale, ortho=False)
             bs = np.zeros((self.dim_out,)).astype(floatX)
             self.params.update(Ws=Ws, bs=bs)
