@@ -204,7 +204,7 @@ class MLP(Layer):
 
     def _binary_entropy(self, p, axis=None):
         p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
-        entropy = T.nnet.binary_crossentropy(p, p_c)
+        entropy = T.nnet.binary_crossentropy(p_c, p)
         if axis is None:
             axis = entropy.ndim - 1
         entropy = entropy.sum(axis=axis)
