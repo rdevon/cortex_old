@@ -39,6 +39,7 @@ from layers import MLP
 from layers import ParzenEstimator
 from mnist import mnist_iterator
 from mnist import MNIST_Chains
+from monitor import SimpleMonitor
 import op
 import tools
 from tools import check_bad_nums
@@ -659,23 +660,25 @@ def train_model(save_graphs=False, out_path='', name='',
                 dataset=None, dataset_args=None,
                 noise_input=True, sample=True,
                 h_init='mlp',
-                model_save_freq=100, show_freq=10):
+                model_save_freq=10, show_freq=10):
 
-    print 'Dataset args: %s' % pprint.pformat(dataset_args)
     window = dataset_args['window']
     stride = min(window, dataset_args['chain_stride'])
     out_path = path.abspath(out_path)
 
+    # ========================================================================
+    print 'Dataset args: %s' % pprint.pformat(dataset_args)
+
     if dataset == 'mnist':
         train = MNIST_Chains(batch_size=batch_size, out_path=out_path, **dataset_args)
+        valid = MNIST_Chains(batch_size=1, mode='valid', out_path=out_path, **dataset_args)
     elif dataset == 'horses':
         train = Horses(batch_size=batch_size, out_path=out_path, crop_image=True, **dataset_args)
     else:
         raise ValueError()
 
-    dim_in = train.dim
-    X = T.tensor3('x', dtype=floatX)
-    trng = RandomStreams(random.randint(0, 100000))
+    # ========================================================================
+    print 'Forming model'
 
     if mode == 'gru':
         C = GenGRU
@@ -684,7 +687,9 @@ def train_model(save_graphs=False, out_path='', name='',
     else:
         raise ValueError()
 
-    print 'Forming model'
+    dim_in = train.dim
+    X = T.tensor3('x', dtype=floatX)
+    trng = RandomStreams(random.randint(0, 100000))
 
     def load_mlp(name, dim_in, dim_out,
                  dim_h=None, n_layers=None,
@@ -721,16 +726,25 @@ def train_model(save_graphs=False, out_path='', name='',
         models = OrderedDict()
         models[rnn.name] = rnn
 
+    # ========================================================================
     print 'Getting params...'
+
     rnn = models['gen_{mode}'.format(mode=mode)]
     tparams = rnn.set_tparams()
+    prior = theano.shared(np.zeros((rnn.dim_in,)) + 0.5, name='prior')
+    updates = theano.OrderedUpdates()
+
+    # ========================================================================
+    print 'Getting theano variables'
 
     X = trng.binomial(p=X, size=X.shape, n=1, dtype=X.dtype)
     X_s = X[:-1]
-    updates = theano.OrderedUpdates()
     if noise_input:
         print 'Noising input'
         X_s = X_s * (1 - trng.binomial(p=0.1, size=X_s.shape, n=1, dtype=X_s.dtype))
+
+    # ========================================================================
+    print 'Initializing h0'
 
     if h_init is None:
         h0 = None
@@ -762,25 +776,40 @@ def train_model(save_graphs=False, out_path='', name='',
         h0s = mlp(D)
         h0 = h0s[0]
 
+    # ========================================================================
     print 'Model params: %s' % tparams.keys()
+
+    # ========================================================================
+    print 'Setting RNN metric'
+
     if metric == 'energy':
         print 'Energy-based metric'
         train.set_f_energy(energy_function, rnn)
+        valid.set_f_energy(energy_function, rnn)
     elif metric in ['euclidean', 'euclidean_then_energy']:
         print 'Euclidean-based metic'
         train.set_f_energy(euclidean_distance, rnn)
+        valid.set_f_energy(euclidean_distance, rnn)
     else:
         raise ValueError(metric)
 
+    # ========================================================================
+    print 'Forming graph'
+
     outs, updates_1 = rnn(X_s, h0=h0)
+    out_test, updates_t = rnn(X_s)
     h = outs['h']
     p = outs['p']
     x = outs['y']
     updates.update(updates_1)
 
-    energy = -(X[1:] * T.log(p + 1e-7) + (1 - X[1:]) * T.log(1 - p + 1e-7)).sum(axis=(0, 2))
-    cost = energy.mean()
-    consider_constant = [x]
+    # ========================================================================
+    print 'Updating priors'
+
+    updates += [(prior, 0.99 * prior + (1.0 - 0.99) * X.mean(axis=(0, 1)))]
+
+    # ========================================================================
+    print 'Updating h0'
 
     if h_init == 'last':
         updates += [(h0, h[stride - 1])]
@@ -792,25 +821,17 @@ def train_model(save_graphs=False, out_path='', name='',
         cost += ((h0s - h_c)**2).sum(axis=2).mean()
         consider_constant.append(h_c)
 
-    extra_outs = [energy.mean(), h, p]
+    # ========================================================================
+    print 'Setting cost and optimizer'
 
-    if sample:
-        print 'Setting up sampler'
-        if h_init == 'average':
-            h0_s = T.alloc(0., window, rnn.dim_h).astype(floatX) + averager.m[None, :]
-        elif h_init == 'mlp':
-            h0_s = mlp(X[:, 0])
-        elif h_init == 'noise':
-            h0_s = trng.normal(avg=0, std=0.1, size=(window, rnn.dim_h)).astype(floatX)
-        elif h_init == 'last':
-            h0_s = h[:, 0]
-        else:
-            h0_s = None
-        out_s, updates_s = rnn.sample(X[:, 0], h0=h0_s, n_samples=10, n_steps=10)
-        f_sample = theano.function([X], out_s['p'], updates=updates_s)
+    energy = rnn.output_net.neg_log_prob(X[1:], p).sum(axis=0)
+    cost = energy.mean()
+    cost_test = rnn.output_net.neg_log_prob(X[1:], out_test['p']).sum(axis=0).mean()
+    consider_constant = [x]
+    extra_outs = [energy.mean()]
+    extra_outs_names = ['cost', 'energy']
 
     all_params = OrderedDict((k, v) for k, v in tparams.iteritems())
-
     grad_tparams = OrderedDict((k, v)
         for k, v in tparams.iteritems()
         if (v not in updates.keys()))
@@ -818,14 +839,44 @@ def train_model(save_graphs=False, out_path='', name='',
     grads = T.grad(cost, wrt=itemlist(grad_tparams),
                    consider_constant=consider_constant)
 
-    print 'Building optimizer'
     lr = T.scalar(name='lr')
     f_grad_shared, f_grad_updates = eval('op.' + optimizer)(
         lr, tparams, grads, [X], cost,
         extra_ups=updates,
         extra_outs=extra_outs)
 
-    print 'Actually running'
+    # ========================================================================
+    print 'Extra functions'
+
+    f_log_prob = theano.function([X], cost_test)
+    f_prob = theano.function([X], [x, p])
+
+    if sample:
+        N = T.scalar('N', dtype='int64')
+        x0 = trng.binomial(p=prior, size=(N, prior.shape[0]), n=1, dtype=floatX)
+        print 'Setting up sampler'
+        if h_init == 'average':
+            h0_s = T.alloc(
+                0., N, rnn.dim_h).astype(floatX) + averager.m[None, :]
+        elif h_init == 'mlp':
+            h0_s = mlp(x0)
+        elif h_init == 'noise':
+            h0_s = trng.normal(
+                avg=0, std=0.1, size=(N, rnn.dim_h)).astype(floatX)
+        elif h_init == 'last':
+            h0_s = h[:, 0]
+        else:
+            h0_s = None
+
+        out_s, updates_s = rnn.sample(x0, h0=h0_s, n_samples=10, n_steps=10)
+        f_sample = theano.function([N], out_s['p'], updates=updates_s)
+
+    # ========================================================================
+    print 'Setting up monitor'
+    monitor = SimpleMonitor()
+
+    # ========================================================================
+    print 'Actually running (main loop)'
 
     def save(outfile):
         d = dict((k, v.get_value()) for k, v in all_params.items())
@@ -840,27 +891,62 @@ def train_model(save_graphs=False, out_path='', name='',
     try:
         e = 0
         for s in xrange(steps):
+            t0 = time.time()
             try:
                 x, _ = train.next()
             except StopIteration:
                 e += 1
                 print 'Epoch {epoch}'.format(epoch=e)
+
                 if metric == 'euclidean_then_energy' and e == 2:
                     print 'Switching to model energy'
                     train.set_f_energy(energy_function, rnn)
+                    valid.set_f_energy(energy_function, rnn)
+
+                train_chain_cost =  f_log_prob(train._load_chains())
+                valid._build_chain(trim_end=train.trim_end)
+                valid_chain_cost = f_log_prob(valid._load_chains())
+
+                print 'Calculating valid lower bound by Parzen window'
+                samples = f_sample(valid.n)[-1]
+                x_v = valid.next_simple(valid.n)
+                parzen = lep.theano_parzen(samples, 2.0)
+                test_ll = lep.get_ll(x_v, parzen)
+
+                monitor.update(
+                    train_chain_cost=train_chain_cost,
+                    valid_chain_cost=valid_chain_cost,
+                    parzen_valid=np.mean(test_ll)
+                )
+
                 continue
+
             rval = f_grad_shared(x)
 
-            if check_bad_nums(rval, ['cost', 'energy', 'h', 'x', 'p']):
+            if check_bad_nums(rval, extra_outs_names):
                 return
 
             if s % show_freq == 0:
-                print ('%d: cost: %.5f | energy: %.2f | prob: %.2f'
-                       % (e, rval[0], rval[1], np.exp(-rval[1])))
+                outs = OrderedDict((k, v)
+                    for k, v in zip(extra_outs_names,
+                                    rval[:len(extra_outs_names)]))
+
+                t1 = time.time()
+                outs.update(**{
+                    'elapsed_time': t1-t0,}
+                )
+                monitor.update(**outs)
+                t0 = time.time()
+
+                monitor.display(e, s)
+
             if s % model_save_freq == 0:
-                idx = np.random.randint(rval[3].shape[1])
+                monitor.save(path.join(
+                    out_path, '{name}_monitor.png').format(name=name))
+                x_i, p_i = f_prob(x)
+                idx = np.random.randint(p_i.shape[1])
                 samples = np.concatenate([x[1:, idx, :][None, :, :],
-                                        rval[3][:, idx, :][None, :, :]], axis=0)
+                                        p_i[:, idx, :][None, :, :]], axis=0)
                 train.save_images(
                     samples,
                     path.join(
@@ -870,7 +956,7 @@ def train_model(save_graphs=False, out_path='', name='',
                     x, path.join(
                         out_path, '{name}_input_samples.png'.format(name=name)))
                 if sample:
-                    sample_chain = f_sample(x)
+                    sample_chain = f_sample(window)
                     train.save_images(
                         sample_chain,
                         path.join(
@@ -884,11 +970,12 @@ def train_model(save_graphs=False, out_path='', name='',
     except KeyboardInterrupt:
         print 'Training interrupted'
 
+    # ========================================================================
+    print 'Saving the following params: %s' % tparams.keys()
+
     outfile = os.path.join(
         out_path, '{name}_{t}.npz'.format(name=name, t=int(time.time())))
     last_outfile = path.join(out_path, '{name}_last.npz'.format(name=name))
-
-    print 'Saving the following params: %s' % tparams.keys()
     save(outfile)
     save(last_outfile)
     print 'Done saving. Bye bye.'
