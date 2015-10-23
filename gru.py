@@ -815,7 +815,7 @@ class GenGRU(Layer):
             sequences=seqs,
             outputs_info=outputs_info,
             non_sequences=non_seqs,
-            name=tools._p(self.name, '_layers'),
+            name=tools._p(self.name, '_recurrent_steps'),
             n_steps=n_steps,
             profile=tools.profile,
             strict=True)

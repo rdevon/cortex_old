@@ -374,14 +374,16 @@ class mnist_iterator(object):
 class MNIST_Chains(mnist_iterator):
     def __init__(self, batch_size=1, source='/Users/devon/Data/mnist.pkl.gz',
                  restrict_digits=None, mode='train', shuffle=True,
-                 window=20, chain_length=5000,  chain_build_batch=1000,
+                 window=20, chain_length=5000, chain_build_batch=1000,
                  stop=None, out_path=None, chain_stride=None, n_chains=1,
                  trim_end=None):
+
         with gzip.open(source, 'rb') as f:
             x = cPickle.load(f)
 
         X, Y = self.get_data(x, mode)
 
+        self.mode = mode
         self.dims = (28, 28)
         self.f_energy = None
         self.chain_length = chain_length
@@ -428,10 +430,14 @@ class MNIST_Chains(mnist_iterator):
         return x
 
     def _build_chain(self, x_p=None, h_p=None, trim_end=None):
+        self.chains = [[] for _ in xrange(len(self.chains))]
         n_chains = len(self.chains)
         l_chain = min(self.chain_length, self.n - self.pos)
         n_samples = min(self.chains_build_batch, l_chain)
         chain_idx = [range(l_chain) for _ in xrange(n_chains)]
+
+        if h_p is None:
+            h_p = np.random.normal(loc=0, scale=1, size=(len(self.chains), self.dim_h)).astype('float32')
 
         print('Resetting chains with length %d and %d samples per query. '
               'Position in data is %d'
@@ -485,9 +491,19 @@ class MNIST_Chains(mnist_iterator):
                     rnd_idx = np.random.permutation(np.arange(0, l_chain, 1))
                     chain_idx[c] = [chain_idx[c][i] for i in rnd_idx]
 
+        if self.out_path:
+            self.save_images(
+                self._load_chains(),
+                path.join(self.out_path, '%s_chain_%d.png' % (self.mode, self.pos)), x_limit=200)
+
         if trim_end is not None:
             for c in xrange(len(self.chains)):
                 self.chains[c] = self.chains[c][:-trim_end]
+
+            if self.out_path:
+                self.save_images(
+                    self._load_chains(),
+                    path.join(self.out_path, '%s_chain_%d_trimmed.png' % (self.mode, self.pos)), x_limit=200)
 
     def next(self):
         assert self.f_energy is not None
@@ -503,19 +519,11 @@ class MNIST_Chains(mnist_iterator):
             self.chain_pos = 0
             cpos = self.chain_pos
 
-            self.chains = [[] for _ in xrange(len(self.chains))]
-
-            x_p = None
-            h_p = np.random.normal(loc=0, scale=1, size=(len(self.chains), self.dim_h)).astype('float32')
-            self._build_chain(x_p=x_p, h_p=h_p, trim_end=self.trim_end)
+            self._build_chain(trim_end=self.trim_end)
 
             assert len(np.unique(self.chains[0])) == len(self.chains[0]), (len(np.unique(self.chains[0])), len(self.chains[0]))
             for i in self.chains[0]:
                 assert i >= self.pos and i < self.pos + self.chain_length
-
-            if self.out_path:
-                self.save_images(self._load_chains(), path.join(self.out_path, 'training_chain_%d.png' % self.pos),
-                                 x_limit=200)
 
             self.pos += self.chain_length
             if self.pos >= self.n:

@@ -37,7 +37,7 @@ class SimpleMonitor(object):
 
     def save(self, out_path):
         plt.clf()
-        y = 3
+        y = 2
         x = ((len(self.d) - 1) // y) + 1
         fig, axes = plt.subplots(y, x)
         fig.set_size_inches(20, 8)
