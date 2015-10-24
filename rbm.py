@@ -99,11 +99,11 @@ class RBM(Layer):
 
         return x, h, p, q
 
-    def sample(self, n_steps, n_chains=None, x0=None, h0=None):
+    def sample(self, n_steps=10, n_samples=1, x0=None, h0=None):
         assert x0 is None or h0 is None
 
         if x0 is not None:
-            assert n_chains is None
+            assert n_samples is not None
         elif h0 is not None:
             x0 = self.trng.binomial(p=p0,
                                     size=(h0.shape[0], self.dim_in),
@@ -111,7 +111,7 @@ class RBM(Layer):
         else:
             assert n_chains is not None
             x0 = self.trng.binomial(p=0.5,
-                                    size=(n_chains, self.dim_in),
+                                    size=(n_samples, self.dim_in),
                                     n=1, dtype=floatX)
 
         seqs = []
@@ -127,6 +127,7 @@ class RBM(Layer):
             profile=tools.profile,
             strict=True
         )
+        x = T.concatenate([x0[None, :, :], x], axis=0)
 
         return OrderedDict(x=x, h=h, p=p, q=q), updates
 
@@ -136,7 +137,7 @@ class RBM(Layer):
 
         y, h, p, q = self._step(x, *self.get_params())
 
-        return OrderedDict(y=y, h=h, p=p, q=q), updates
+        return OrderedDict(y=y, h=h, p=p, q=q), theano.OrderedUpdates()
 
 
 class GradInferRBM(RBM):
