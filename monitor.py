@@ -25,6 +25,10 @@ class SimpleMonitor(object):
             else:
                 self.d[k].append(v)
 
+    def add(self, **kwargs):
+        for k, v in kwargs.iteritems():
+            self.d[k] = v
+
     def display(self, e, s):
         s = 'Epoch: %d, step: %d' % (e, s)
         for k, v in self.d.iteritems():
