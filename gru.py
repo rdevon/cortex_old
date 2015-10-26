@@ -805,8 +805,9 @@ class GenGRU(Layer):
         if h0 is None:
             h0 = T.alloc(0., n_samples, self.dim_h).astype(floatX)
 
-        seqs = [self.input_net_aux(x, return_preact=True),
-                self.input_net(x, return_preact=True)]
+        a = self.input_net_aux(x, return_preact=True)
+        b = self.input_net(x, return_preact=True)
+        seqs = [a, b]
         outputs_info = [h0]
         non_seqs = self.get_params()
 
@@ -826,7 +827,7 @@ class GenGRU(Layer):
         p = eval(self.output_net.out_act)(preact)
         y = self.output_net.sample(p=p)
 
-        return OrderedDict(h=h, y=y, p=p), updates
+        return OrderedDict(h=h, y=y, p=p, a=a, b=b), updates
 
 class MultiLayerGRU(Layer):
     def __init__(self, dim_in, dim_h, n_layers=2,
