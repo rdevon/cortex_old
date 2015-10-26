@@ -184,6 +184,7 @@ def unpack(mode=None,
            i_net=None, a_net=None, o_net=None, c_net=None,
            dataset='horses',
            dataset_args=None,
+           batch_size=None,
            **model_args):
 
     dataset_args = dataset_args[()]
@@ -244,7 +245,7 @@ def unpack(mode=None,
         models.append(rnn.conditional)
 
     if h_init == 'average':
-        averager = Averager((batch_size, dim_h))
+        averager = Averager((dim_h))
         models.append(averager)
     elif h_init == 'mlp':
         mlp = MLP(dim_in, dim_h, dim_h, 1, out_act='T.tanh', name='MLPh')
@@ -698,10 +699,10 @@ def train_model(save_graphs=False, out_path='', name='',
         return mlp
 
     if model_to_load is not None:
-        models, _ = load_model(model_to_load, unpack)
+        models, _ = load_model(model_to_load, unpack, batch_size=batch_size)
     elif load_last:
         model_file = glob(path.join(out_path, '*last.npz'))[0]
-        models, _ = load_model(model_file, unpack)
+        models, _ = load_model(model_file, unpack, batch_size=batch_size)
     else:
         mlps = {}
 
@@ -853,7 +854,7 @@ def train_model(save_graphs=False, out_path='', name='',
 
     if sample:
         N = T.scalar('N', dtype='int64')
-        x0 = trng.binomial(p=prior, size=(N, prior.shape[0]), n=1, dtype=floatX)
+        x0 = trng.binomial(p=0.5, size=(N, prior.shape[0]), n=1, dtype=floatX)
         print 'Setting up sampler'
         if h_init == 'average':
             h0_s = T.alloc(
@@ -868,7 +869,7 @@ def train_model(save_graphs=False, out_path='', name='',
         else:
             h0_s = None
 
-        out_s, updates_s = rnn.sample(x0, h0=h0_s, n_samples=10, n_steps=10)
+        out_s, updates_s = rnn.sample(x0, h0=h0_s, n_samples=10, n_steps=100)
         f_sample = theano.function([N], out_s['p'], updates=updates_s)
 
     # ========================================================================
@@ -907,16 +908,17 @@ def train_model(save_graphs=False, out_path='', name='',
                 valid._build_chain(trim_end=train.trim_end)
                 valid_chain_cost = f_log_prob(valid._load_chains())
 
+                '''
                 print 'Calculating valid lower bound by Parzen window'
-                samples = f_sample(valid.n)[-1]
-                x_v = valid.next_simple(valid.n)
-                parzen = lep.theano_parzen(samples, 2.0)
+                samples = f_sample(valid.chain_length)[-1]
+                x_v = valid.next_simple(valid.chain_length)
+                parzen = lep.theano_parzen(samples, 1.2)
                 test_ll = lep.get_ll(x_v, parzen)
-
+                '''
                 monitor.update(
                     train_chain_cost=train_chain_cost,
                     valid_chain_cost=valid_chain_cost,
-                    parzen_valid=np.mean(test_ll)
+                    #parzen_valid=np.mean(test_ll)
                 )
 
                 continue
