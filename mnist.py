@@ -130,8 +130,6 @@ class MNIST(object):
 
         x = self.X[self.pos:self.pos+batch_size]
         y = self.O[self.pos:self.pos+batch_size]
-        x = np.concatenate([x] * self.repeat, axis=0)
-        y = np.concatenate([y] * self.repeat, axis=0)
 
         self.pos += batch_size
         if self.pos > self.n:
