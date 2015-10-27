@@ -132,7 +132,7 @@ class MNIST(object):
         y = self.O[self.pos:self.pos+batch_size]
 
         self.pos += batch_size
-        if self.pos > self.n:
+        if self.pos + batch_size > self.n:
             self.pos = -1
 
         return x, y
