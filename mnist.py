@@ -10,6 +10,7 @@ from sys import stdout
 import theano
 from theano import tensor as T
 import traceback
+from tools import rng_
 from vis_utils import tile_raster_images
 
 def get_iter(inf=False, batch_size=128):
@@ -18,6 +19,7 @@ def get_iter(inf=False, batch_size=128):
 class MNIST(object):
     def __init__(self, batch_size=128, source='/Users/devon/Data/mnist.pkl.gz',
                  restrict_digits=None, mode='train', shuffle=True, inf=False,
+                 binarize=False,
                  stop=None, out_path=None):
         print 'Loading MNIST ({mode})'.format(mode=mode)
 
@@ -61,6 +63,10 @@ class MNIST(object):
         self.bs = batch_size
         self.inf = inf
         self.next = self._next
+
+        if binarize:
+            print 'Binarizing MNIST'
+            X = rng_.binomial(p=X, size=X.shape, n=1).astype('float32')
 
         self.X = X
         self.O = O
