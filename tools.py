@@ -200,6 +200,13 @@ def log_mean_exp(x, axis=None, as_numpy=False):
     x_max = Te.max(x, axis=axis, keepdims=True)
     return Te.log(Te.mean(Te.exp(x - x_max), axis=axis, keepdims=True)) + x_max
 
+def log_sum_exp(x, axis=None):
+    '''Numerically stable log( sum( exp(A) ) )'''
+    x_max = T.max(x, axis=axis, keepdims=True)
+    y = T.log(T.sum(T.exp(x - x_max), axis=axis, keepdims=True)) + x_max
+    y = T.sum(y, axis=axis)
+    return y
+
 def concatenate(tensor_list, axis=0):
     """
     Alternative implementation of `theano.T.concatenate`.
