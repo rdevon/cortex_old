@@ -57,6 +57,7 @@ class MNIST(object):
             X = X[:stop]
 
         self.n, self.dim = X.shape
+        print 'Data shape: %d x %d' % X.shape
 
         self.shuffle = shuffle
         self.pos = 0
