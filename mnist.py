@@ -72,6 +72,8 @@ class MNIST(object):
         self.X = X
         self.O = O
 
+        self.mean_image = self.X.mean(axis=0)
+
         if self.shuffle:
             self.randomize()
 
