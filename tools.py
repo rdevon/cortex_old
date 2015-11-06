@@ -71,9 +71,7 @@ def load_model(model_file, f_unpack=None, **extra_args):
 
     print 'Loading model from %s' % model_file
     params = np.load(model_file)
-
     d = dict(params)
-    print 'Found params %s' % d.keys()
     d.update(**extra_args)
     for k, v in d.iteritems():
         try:
