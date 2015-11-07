@@ -72,6 +72,8 @@ class MNIST(object):
         self.X = X
         self.O = O
 
+        self.mean_image = self.X.mean(axis=0)
+
         if self.shuffle:
             self.randomize()
 
@@ -124,14 +126,18 @@ class MNIST(object):
     def next(self):
         raise NotImplementedError()
 
+    def reset(self):
+        self.pos = 0
+        if self.shuffle:
+            self.randomize()
+
     def _next(self, batch_size=None):
         if batch_size is None:
             batch_size = self.bs
 
         if self.pos == -1:
-            self.pos = 0
-            if self.shuffle:
-                self.randomize()
+            self.reset()
+
             if not self.inf:
                 raise StopIteration
 
