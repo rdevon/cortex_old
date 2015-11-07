@@ -319,13 +319,14 @@ class MLP(Layer):
                 x = eval(activ)(T.dot(x, W) + b)
 
             if self.dropout:
-                raise NotImplementedError()
                 if activ == 'T.tanh':
-                    raise NotImplementedError()
-                else:
+                    raise NotImplementedError('dropout for tanh units not implemented yet')
+                elif activ in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
                     x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
                                              dtype=x.dtype)
                     x = x * x_d / (1 - self.dropout)
+                else:
+                    raise NotImplementedError('No dropout for %s yet' % activ)
 
         assert len(params) == 0, params
         return x
