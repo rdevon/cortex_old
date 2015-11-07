@@ -234,6 +234,17 @@ class MLP(Layer):
         entropy = entropy.sum(axis=axis)
         return entropy
 
+    def get_L2_weight_cost(self, gamma, layers=None):
+        if level is None:
+            level = range(self.n_layers)
+
+        cost = T.constant(0.).astype(floatX)
+        for l in level:
+            W = self.__dict__['W%d' % l]
+            cost += gamma * (W ** 2).sum()
+
+        return cost
+
     def set_params(self):
         self.params = OrderedDict()
 
@@ -255,11 +266,6 @@ class MLP(Layer):
             self.params['W%d' % l] = W
             self.params['b%d' % l] = b
 
-            if self.weight_noise:
-                raise ValueError()
-                W_noise = (W * 0).astype(floatX)
-                self.params['W%d_noise' % l] = W_noise
-
         if self.out_act == 'lambda x: x':
             if l == 0:
                 dim_in = self.dim_in
@@ -277,11 +283,6 @@ class MLP(Layer):
             b = self.__dict__['b%d' % l]
             params += [W, b]
 
-            if self.weight_noise:
-                raise NotImplementedError()
-                W_noise = self.__dict__['W%d_noise' % l]
-                params += [W_noise]
-
         if self.out_act == 'lambda x: x':
             Ws = self.Ws
             bs = self.bs
@@ -298,13 +299,16 @@ class MLP(Layer):
             b = params.pop(0)
 
             if self.weight_noise:
-                W_noise = params.pop(0)
-                W = W + W_noise
+                print 'Using weight noise in layer %d for MLP %s' % (l, self.name)
+                W += self.trng.normal(avg=0., std=self.weight_noise, size=W.shape)
 
             if l == self.n_layers - 1:
                 if self.out_act == 'lambda x: x':
                     Ws = params.pop(0)
                     bs = params.pop(0)
+                    if self.weight_noise:
+                        print 'Using weight noise in log sigma layer %d for MLP %s' % (l, self.name)
+                        Ws += self.trng.normal(avg=0., std=self.weight_noise, size=W.shape)
                     mu = T.dot(x, W) + b
                     log_sigma = T.dot(x, Ws) + bs
                     x = T.concatenate([mu, log_sigma], axis=mu.ndim-1)
@@ -315,13 +319,14 @@ class MLP(Layer):
                 x = eval(activ)(T.dot(x, W) + b)
 
             if self.dropout:
-                raise NotImplementedError()
                 if activ == 'T.tanh':
-                    raise NotImplementedError()
-                else:
+                    raise NotImplementedError('dropout for tanh units not implemented yet')
+                elif activ in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
                     x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
                                              dtype=x.dtype)
                     x = x * x_d / (1 - self.dropout)
+                else:
+                    raise NotImplementedError('No dropout for %s yet' % activ)
 
         assert len(params) == 0, params
         return x
