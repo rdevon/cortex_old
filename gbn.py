@@ -274,19 +274,32 @@ class GaussianBeliefNet(Layer):
         if not isinstance(n_inference_steps, T.TensorVariable):
             print '%d inference steps' % n_inference_steps
 
-        outs, updates = theano.scan(
-            self.step_infer,
-            sequences=seqs,
-            outputs_info=outputs_info,
-            non_sequences=non_seqs,
-            name=tools._p(self.name, 'infer'),
-            n_steps=n_inference_steps,
-            profile=tools.profile,
-            strict=self.strict
-        )
+        if isinstance(n_inference_steps, T.TensorVariable) or n_inference_steps > 1:
+            outs, updates = theano.scan(
+                self.step_infer,
+                sequences=seqs,
+                outputs_info=outputs_info,
+                non_sequences=non_seqs,
+                name=tools._p(self.name, 'infer'),
+                n_steps=n_inference_steps,
+                profile=tools.profile,
+                strict=self.strict
+            )
+            qs, i_costs = self.unpack_infer(outs)
+            qs = concatenate([q0[None, :, :], qs], axis=0)
 
-        qs, i_costs = self.unpack_infer(outs)
-        qs = T.concatenate([q0[None, :, :], qs], axis=0)
+        elif n_inference_steps == 1:
+            updates = theano.OrderedUpdates()
+            inps = [ys[0], epsilons[0]] + outputs_info[:-1] + non_seqs
+            outs = self.step_infer(*inps)
+            q, i_cost = self.unpack_infer(outs)
+            qs = concatenate([q0[None, :, :], q[None, :, :]], axis=0)
+            i_costs = [i_cost]
+
+        elif n_inference_steps == 0:
+            updates = theano.OrderedUpdates()
+            qs = q0[None, :, :]
+            i_costs = [T.constant(0.).astype(floatX)]
 
         return (ph, qs, i_costs[-1]), updates
 
@@ -309,21 +322,16 @@ class GaussianBeliefNet(Layer):
         updates = theano.OrderedUpdates()
         prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
 
-        if isinstance(n_inference_steps, T.TensorVariable) or n_inference_steps > 0:
-            if ph is None:
-                q0 = None
-            else:
-                q0 = ph
-
-            (ph_x, qs, i_cost), updates_i = self.infer_q(
-                x, y, n_inference_steps, q0=q0)
-            updates.update(updates_i)
-            q = qs[-1]
-            outs.update(inference_cost=i_cost)
-        elif ph is None:
-            q = self.posterior(x)
+        if ph is None:
+            q0 = None
         else:
-            q = ph
+            q0 = ph
+
+        (ph_x, qs, i_cost), updates_i = self.infer_q(
+            x, y, n_inference_steps, q0=q0)
+        updates.update(updates_i)
+        q = qs[-1]
+        outs.update(inference_cost=i_cost)
 
         if n_samples == 0:
             h = q[None, :, :]
@@ -480,33 +488,27 @@ class DeepGBN(Layer):
         y_energy = T.constant(0.).astype(floatX)
         h_energy = T.constant(0.).astype(floatX)
 
+        mu = self.mu
+        log_sigma = self.log_sigma
+        p_y = T.concatenate([mu[None, :], log_sigma[None, :]], axis=1)
 
-        for l in xrange(self.n_layers):
-
-            if l == self.n_layers - 1:
-                mu = self.mu
-                log_sigma = self.log_sigma
-                prior = T.concatenate([mu[None, :], log_sigma[None, :]], axis=1)
-            else:
-                prior = self.conditionals[l + 1](q)
-
+        for l in xrange(self.n_layers - 1, -1, -1):
             q = qs[l]
             p_h = p_hs[l]
-
-            h_energy += self.kl_divergence(q, ph).mean()
-            prior_energy += self.kl_divergence(q, prior).mean()
+            h_energy += self.kl_divergence(q, p_h).mean()
+            prior_energy += self.kl_divergence(q, p_y).mean()
 
             if n_samples == 0:
                 h = mu[None, :, :]
             else:
                 h = self.posteriors[l].sample(p=q, size=(n_samples, q.shape[0], q.shape[1] / 2))
 
-            py = self.conditional(h)
+            p_y = self.conditional(h)
 
             if l == 0:
-                y_energy += self.conditionals[l].neg_log_prob(y[None, :, :], py).mean()
+                y_energy += self.conditionals[l].neg_log_prob(y[None, :, :], p_y).mean()
             else:
-                y_energy += self.kl_divergence(q[l - 1], py).mean()
+                y_energy += self.kl_divergence(q[l - 1], p_y).mean()
 
         return (prior_energy, h_energy, y_energy), constants
 
