@@ -10,6 +10,138 @@ from collections import OrderedDict
 
 
 profile = False
+def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
+    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k) for k, p in tparams.iteritems()]
+    """
+    g_norm = 0.
+
+    for i in xrange(len(grads)):
+
+        grads[i] /= T.cast(100, dtype=theano.config.floatX)
+        g_norm += (grads[i]**2).sum()
+
+    g_norm = T.sqrt(g_norm)
+    scaler = 5 / T.maximum(5, g_norm)
+
+    for i in xrange(len(grads)):
+        grads[i] *= scaler
+    """
+    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
+
+    f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
+
+    b1 = 0.9
+    b2 = 0.999
+    eps = 1e-8
+    lambd = (1 - 1e-8)
+
+    updates = OrderedDict()
+
+    i = theano.shared(np.float32(0.))
+    i_t = i + 1.
+    fix1 = b1**(i_t)
+    fix2 = b2**(i_t)
+    b1_t = b1 * lambd**i
+    b2_t = b2 * lambd**i
+
+    for p, g in zip(tparams.values(), gshared):
+        m = theano.shared(p.get_value() * 0.)
+        v = theano.shared(p.get_value() * 0.)
+        m_t = b1_t * m + (1. - b1_t) * g
+        v_t = b2_t * v + (1. - b2_t) * g**2
+
+        m_t_hat = m_t / (1. - fix1)
+        v_t_hat = v_t / (1. - fix2)
+
+        g_t = m_t_hat / (T.sqrt(v_t_hat) + eps)
+
+        p_t = p - lr * g_t
+        updates[m] =  m_t
+        updates[v] =  v_t
+        if p.name not in exclude_params:
+            updates[p] = p_t
+
+    """
+    for k, updated_param in updates.items():
+        if 'W' in str(k):
+            col_norms = T.sqrt(T.sqr(updated_param).sum(axis=0))
+            desired_norms = T.clip(col_norms, 0, 1.9365)
+            ratio = (desired_norms / (1e-8 + col_norms))
+            updates[k] = updated_param * ratio
+    """
+    updates[i] = i_t
+
+    f_update = theano.function([lr], [], updates=updates,
+                               on_unused_input='ignore', profile=profile)
+
+    return f_grad_shared, f_update
+
+
+def adam2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
+    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k) for k, p in tparams.iteritems()]
+    """
+    g_norm = 0.
+
+    for i in xrange(len(grads)):
+
+        grads[i] /= T.cast(100, dtype=theano.config.floatX)
+        g_norm += (grads[i]**2).sum()
+
+    g_norm = T.sqrt(g_norm)
+    scaler = 5 / T.maximum(5, g_norm)
+
+    for i in xrange(len(grads)):
+        grads[i] *= scaler
+    """
+    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
+
+    f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
+
+    b1 = 0.9
+    b2 = 0.999
+    eps = 1e-8
+    lambd = (1 - 1e-8)
+
+    updates = OrderedDict()
+
+    i = theano.shared(np.float32(0.))
+    i_t = i + 1.
+    fix1 = b1**(i_t)
+    fix2 = b2**(i_t)
+    b1_t = b1 * lambd**i
+
+    for p, g in zip(tparams.values(), gshared):
+        m = theano.shared(p.get_value() * 0.)
+        v = theano.shared(p.get_value() * 0.)
+        m_t = b1_t * m + (1. - b1_t) * g
+        v_t = b2 * v + (1. - b2) * g**2
+
+        m_t_hat = m_t / (1. - fix1)
+        v_t_hat = v_t / (1. - fix2)
+
+        g_t = m_t_hat / (T.sqrt(v_t_hat) + eps)
+
+        p_t = p - lr * g_t
+        updates[m] =  m_t
+        updates[v] =  v_t
+        if p.name not in exclude_params:
+            updates[p] = p_t
+
+    """
+    for k, updated_param in updates.items():
+        if 'W' in str(k):
+            col_norms = T.sqrt(T.sqr(updated_param).sum(axis=0))
+            desired_norms = T.clip(col_norms, 0, 1.9365)
+            ratio = (desired_norms / (1e-8 + col_norms))
+            updates[k] = updated_param * ratio
+    """
+    updates[i] = i_t
+
+    f_update = theano.function([lr], [], updates=updates,
+                               on_unused_input='ignore', profile=profile)
+
+    return f_grad_shared, f_update
+
 
 # optimizers
 # name(hyperp, tparams, grads, inputs (list), cost) = f_grad_shared, f_update
@@ -37,7 +169,6 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_par
 
     b1 = 0.9
     b2 = 0.999
-    lambd = (1 - 1e-8)
     eps = 1e-8
 
     updates = OrderedDict()
@@ -60,14 +191,13 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_par
         if p.name not in exclude_params:
             updates[p] = p_t
 
-    """
     for k, updated_param in updates.items():
         if 'W' in str(k):
             col_norms = T.sqrt(T.sqr(updated_param).sum(axis=0))
             desired_norms = T.clip(col_norms, 0, 1.9365)
-            ratio = (desired_norms / (1e-7 + col_norms))
+            ratio = (desired_norms / (1e-8 + col_norms))
             updates[k] = updated_param * ratio
-    """
+
     updates[i] = i_t
 
     f_update = theano.function([lr], [], updates=updates,
