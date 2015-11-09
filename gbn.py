@@ -115,6 +115,17 @@ class GaussianBeliefNet(Layer):
 
         return w
 
+    def log_marginal(self, y, h, py, q, prior):
+        y_energy = self.conditional.neg_log_prob(y, py)
+        prior_energy = self.posterior.neg_log_prob(h, prior)
+        entropy_term = self.posterior.neg_log_prob(h, q)
+
+        log_p = -y_energy - prior_energy + entropy_term
+        log_p_max = T.max(log_p, axis=0, keepdims=True)
+        w = T.exp(log_p - log_p_max)
+
+        return T.log(w.sum(axis=0, keepdims=True)) + log_p_max
+
     def m_step(self, ph, y, q, n_samples=10):
         constants = []
         prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
@@ -330,8 +341,7 @@ class GaussianBeliefNet(Layer):
         )
 
         if calculate_log_marginal:
-            w = self.importance_weights(y[None, :, :], h, py, q[None, :, :], prior[None, :, :])
-            nll = -T.log(w.mean(axis=0)).mean()
+            nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :], prior[None, :, :])
             outs.update(nll=nll)
 
         return outs, updates
