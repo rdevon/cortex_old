@@ -330,16 +330,8 @@ class GaussianBeliefNet(Layer):
         )
 
         if calculate_log_marginal:
-            nll = -log_mean_exp(
-                -self.conditional.neg_log_prob(
-                    y[None, :, :], py)
-                - self.posterior.neg_log_prob(
-                    h, prior[None, :, :]
-                )
-                + self.posterior.neg_log_prob(
-                    h, q[None, :, :]
-                ),
-                axis=0).mean()
+            w = self.importance_weights(y[None, :, :], h, py, q[None, :, :], prior[None, :, :])
+            nll = -T.log(w.mean(axis=0)).mean()
             outs.update(nll=nll)
 
         return outs, updates
