@@ -223,19 +223,22 @@ def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude
 
     return f_grad_shared, f_update
 
-def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
+def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([]),
+            relaxation=1e-4, momentum=0.9, coefficient=0.95
+            ):
+    print 'RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f' % (relaxation, momentum, coefficient)
     zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k) for k, p in tparams.iteritems()]
     running_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad'%k) for k, p in tparams.iteritems()]
     running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k) for k, p in tparams.iteritems()]
 
     zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
-    rgup = [(rg, 0.95 * rg + 0.05 * g) for rg, g in zip(running_grads, grads)]
-    rg2up = [(rg2, 0.95 * rg2 + 0.05 * (g ** 2)) for rg2, g in zip(running_grads2, grads)]
+    rgup = [(rg, coefficient * rg + (1.0 - coefficient) * g) for rg, g in zip(running_grads, grads)]
+    rg2up = [(rg2, coefficient * rg2 + (1.0 - coefficient) * (g ** 2)) for rg2, g in zip(running_grads2, grads)]
 
     f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=zgup+rgup+rg2up+extra_ups, profile=profile)
 
     updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k) for k, p in tparams.iteritems()]
-    updir_new = [(ud, 0.9 * ud - 1e-4 * zg / T.sqrt(rg2 - rg ** 2 + 1e-4)) for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads, running_grads2)]
+    updir_new = [(ud, momentum * ud - relaxation * zg / T.sqrt(rg2 - rg ** 2 + relaxation)) for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads, running_grads2)]
     param_up = [(p, p + udn[1]) for p, udn in zip(tools.itemlist(tparams), updir_new) if p.name not in exclude_params]
     f_update = theano.function([lr], [], updates=updir_new+param_up, on_unused_input='ignore', profile=profile)
 
