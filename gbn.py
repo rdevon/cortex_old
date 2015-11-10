@@ -355,6 +355,9 @@ class GaussianBeliefNet(Layer):
         return outs, updates
 
 
+#Deep Gaussian Belief Networks==================================================
+
+
 class DeepGBN(Layer):
     def __init__(self, dim_in, dim_h, dim_out, n_layers=2,
                  posteriors=None, conditionals=None,
@@ -488,15 +491,15 @@ class DeepGBN(Layer):
         y_energy = T.constant(0.).astype(floatX)
         h_energy = T.constant(0.).astype(floatX)
 
-        mu = self.mu
-        log_sigma = self.log_sigma
-        p_y = T.concatenate([mu[None, :], log_sigma[None, :]], axis=1)
+        mu = self.mu[None, None, :]
+        log_sigma = self.log_sigma[None, None, :]
+        p_y = concatenate([mu, log_sigma], axis=2)
 
         for l in xrange(self.n_layers - 1, -1, -1):
             q = qs[l]
             p_h = p_hs[l]
             h_energy += self.kl_divergence(q, p_h).mean()
-            prior_energy += self.kl_divergence(q, p_y).mean()
+            prior_energy += self.kl_divergence(q[None, :, :], p_y).mean()
 
             if n_samples == 0:
                 h = mu[None, :, :]
@@ -508,13 +511,13 @@ class DeepGBN(Layer):
             if l == 0:
                 y_energy += self.conditionals[l].neg_log_prob(y[None, :, :], p_y).mean()
             else:
-                y_energy += self.kl_divergence(q[l - 1], p_y).mean()
+                y_energy += self.kl_divergence(q[l - 1][None, :, :], p_y).mean()
 
         return (prior_energy, h_energy, y_energy), constants
 
     def e_step(self, y, qs, *params):
-        consider_constant = [y]
-
+        prior = concatenate(params[:1], axis=0)
+        consider_constant = [y, prior]
         cost = T.constant(0.).astype(floatX)
 
         for l in xrange(self.n_layers):
@@ -522,7 +525,6 @@ class DeepGBN(Layer):
             mu_q = _slice(q, 0, self.dim_h)
             log_sigma_q = _slice(q, 1, self.dim_h)
 
-            prior = T.concatenate(get_prior_params(l), axis=1)
             kl_term = self.kl_divergence(q, prior).mean(axis=0)
 
             epsilon = self.trng.normal(
@@ -591,17 +593,19 @@ class DeepGBN(Layer):
 
         state = xs
         q0s = []
+        phs = []
 
         for l in xrange(self.n_layers):
             ph = self.posteriors[l](state)
             phs.append(ph)
+            state = self.posteriors[l].sample(ph)
 
-            if q0 is None:
-                if self.z_init == 'recognition_net':
-                    print 'Starting q0 at recognition net'
-                    q0 = ph[0]
-                else:
-                    q0 = T.alloc(0., x.shape[0], 2 * self.dim_h).astype(floatX)
+            if self.z_init == 'recognition_net':
+                print 'Starting q0 at recognition net'
+                q0 = ph[0]
+            else:
+                raise NotImplementedError()
+                q0 = T.alloc(0., x.shape[0], 2 * self.dim_h).astype(floatX)
             q0s.append(q0)
 
         seqs = [ys]
