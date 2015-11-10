@@ -238,7 +238,7 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_
     f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=zgup+rgup+rg2up+extra_ups, profile=profile)
 
     updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k) for k, p in tparams.iteritems()]
-    updir_new = [(ud, momentum * ud - relaxation * zg / T.sqrt(rg2 - rg ** 2 + relaxation)) for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads, running_grads2)]
+    updir_new = [(ud, momentum * ud - lr * zg / T.sqrt(rg2 - rg ** 2 + relaxation)) for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads, running_grads2)]
     param_up = [(p, p + udn[1]) for p, udn in zip(tools.itemlist(tparams), updir_new) if p.name not in exclude_params]
     f_update = theano.function([lr], [], updates=updir_new+param_up, on_unused_input='ignore', profile=profile)
 
