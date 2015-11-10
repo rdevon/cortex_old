@@ -330,18 +330,6 @@ def train_model(
     rval, updates_s = model(
         X_i, X, n_samples=n_mcmc_samples_test, n_inference_steps=n_inference_steps_test,
         n_sampling_steps=n_sampling_steps_test)
-    '''
-    x, _ = train.next()
-
-    f = theano.function([X], [rval['q0'], rval['pya0'], rval['pyb0'], rval['kl0'], rval['c0']], updates=updates)
-    q, pa, pb, kl, c = f(x)
-    print q.shape, pa.shape, pb.shape, kl.shape, c.shape
-
-    f = theano.function([X], rval['inference_cost'])
-    print f(x)
-
-    assert False
-    '''
 
     py_s = rval['py']
     lower_bound = rval['lower_bound']
