@@ -33,7 +33,7 @@ class SimpleMonitor(object):
         s = 'Epoch: %d, step: %d' % (e, s)
         for k, v in self.d.iteritems():
             try:
-                s += ' | %s: %.2f' % (k, v[-1])
+                s += ' | %s: %.5f' % (k, v[-1])
             except TypeError as e:
                 print 'Error: %s, %s' % (k, v[-1])
                 raise e
