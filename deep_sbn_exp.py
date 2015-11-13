@@ -468,6 +468,10 @@ def train_model(
 
                 print '=' * 100
                 print 'Epoch {epoch} ({name})'.format(epoch=e, name=name)
+                # HACK
+                if e == 1:
+                    learning_rate = learning_rate / 10.
+                    print 'New learning rate: %.5f' % learning_rate
 
                 valid.reset()
                 train.reset()
