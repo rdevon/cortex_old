@@ -342,6 +342,10 @@ def train_model(
 
     f_test = theano.function([X], outs_s, updates=updates_s)
 
+    lower_bounds = rval['lower_bounds']
+
+    f_lower_bounds = theano.function([X], lower_bounds, updates=updates_s)
+
     # Sample from prior
     py_p = model.sample_from_prior()
     f_prior = theano.function([], py_p)
@@ -507,6 +511,9 @@ def train_model(
                 t0 = time.time()
 
                 monitor.display(e, s)
+
+                #lbs = f_lower_bounds(x_v)
+                #print lbs
 
                 if save_images and s % model_save_freq == 0:
                     monitor.save(path.join(
