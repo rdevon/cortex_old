@@ -226,7 +226,7 @@ def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude
 def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([]),
             relaxation=1e-4, momentum=0.9, coefficient=0.95
             ):
-    print 'RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f' % (relaxation, momentum, coefficient)
+    print 'RMSprop with learning rate %.5f, relaxation %.5f, momentum %.2f, and coeffient %.2f' % (lr, relaxation, momentum, coefficient)
     zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k) for k, p in tparams.iteritems()]
     running_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad'%k) for k, p in tparams.iteritems()]
     running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k) for k, p in tparams.iteritems()]

@@ -235,11 +235,12 @@ class MLP(Layer):
         return entropy
 
     def get_L2_weight_cost(self, gamma, layers=None):
-        if level is None:
-            level = range(self.n_layers)
+
+        if layers is None:
+            layers = range(self.n_layers)
 
         cost = T.constant(0.).astype(floatX)
-        for l in level:
+        for l in layers:
             W = self.__dict__['W%d' % l]
             cost += gamma * (W ** 2).sum()
 
