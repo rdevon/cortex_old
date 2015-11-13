@@ -86,38 +86,27 @@ def unpack(dim_h=None,
            recognition_net=None,
            generation_net=None,
            prior=None,
+           n_layers=None,
            dataset=None,
            dataset_args=None,
-           noise_amount=None,
            n_inference_steps=None,
-           inference_decay=None,
            inference_method=None,
            inference_rate=None,
-           inference_scaling=None,
-           importance_sampling=None,
            entropy_scale=None,
            input_mode=None,
-           alpha=None,
-           center_latent=None,
            **model_args):
     '''
     Function to unpack pretrained model into fresh SFFN class.
     '''
 
     kwargs = dict(
-        prior=prior,
         inference_method=inference_method,
         inference_rate=inference_rate,
         n_inference_steps=n_inference_steps,
-        inference_decay=inference_decay,
-        z_init=z_init,
-        entropy_scale=entropy_scale,
-        inference_scaling=inference_scaling,
-        importance_sampling=importance_sampling,
-        alpha=alpha,
-        center_latent=center_latent
+        z_init=z_init
     )
 
+    n_layers = int(n_layers)
     dim_h = int(dim_h)
     dataset_args = dataset_args[()]
 
@@ -137,30 +126,48 @@ def unpack(dim_h=None,
     models = []
     if recognition_net is not None:
         recognition_net = recognition_net[()]
-        posterior = load_mlp('posterior', dim_in, dim_h,
-                             out_act=out_act,
-                             **recognition_net)
-        models.append(posterior)
+        posteriors = []
+        for l in xrange(n_layers):
+            if l == 0:
+                mlp_dim_in = dim_in
+                name = 'posterior'
+            else:
+                mlp_dim_in = dim_h
+                name = 'posterior%d' % l
+
+            posteriors.append(load_mlp(name, mlp_dim_in, dim_h,
+                                       out_act=out_act,
+                                       **recognition_net))
     else:
-        posterior = None
+        posteriors = None
 
     if generation_net is not None:
         generation_net = generation_net[()]
-        conditional = load_mlp('conditional', dim_h, dim_in,
-                               out_act='T.nnet.sigmoid',
-                               **generation_net)
-        models.append(conditional)
+        conditionals = []
+        for l in xrange(n_layers):
+            if l == 0:
+                mlp_dim_out = dim_in
+                name = 'conditional'
+            else:
+                mlp_dim_out = dim_h
+                name = 'conditional%d' % l
+
+            conditionals.append(load_mlp(name, dim_h, mlp_dim_out,
+                                         out_act='T.nnet.sigmoid',
+                                         **generation_net))
+    else:
+        conditionals = None
 
     if prior == 'logistic':
         C = DSBN
     elif prior == 'gaussian':
         C = DGBN
     else:
-        raise ValueError('%s prior not known' % prior)
-
-    model = C(dim_in, dim_h, dim_out,
-              conditional=conditional, posterior=posterior,
-              **kwargs)
+        raise ValueError()
+    model = C(dim_in, dim_h, dim_out, n_layers=n_layers,
+            conditionals=conditionals,
+            posteriors=posteriors,
+            **kwargs)
     models.append(model)
 
     return models, model_args, dict(
@@ -206,16 +213,12 @@ def train_model(
     ):
 
     kwargs = dict(
+        prior=prior,
+        n_layers=n_layers,
         z_init=z_init,
         inference_method=inference_method,
         inference_rate=inference_rate,
-        n_inference_samples=n_inference_samples,
-        inference_decay=inference_decay,
-        entropy_scale=entropy_scale,
-        inference_scaling=inference_scaling,
-        importance_sampling=importance_sampling,
-        alpha=alpha,
-        center_latent=center_latent
+        n_inference_samples=n_inference_samples
     )
 
     # ========================================================================
@@ -300,7 +303,7 @@ def train_model(
             C = DGBN
         else:
             raise ValueError()
-        model = C(dim_in, dim_h, dim_out, n_layers=n_layers, trng=trng,
+        model = C(dim_in, dim_h, dim_out, trng=trng,
                 conditionals=conditionals,
                 posteriors=posteriors,
                 **kwargs)
@@ -333,18 +336,12 @@ def train_model(
 
     py_s = rval['py']
     lower_bound = rval['lower_bound']
-    pd_s, d_hat_s = concatenate_inputs(model, X, py_s)
+    pd_s, d_hat_s = concatenate_inputs(model, X_i, py_s)
 
     outs_s = [lower_bound, pd_s, d_hat_s]
-
-    if 'inference_cost' in rval.keys():
-        outs_s.append(rval['inference_cost'])
+    outs_s.append(rval['lower_bound_gain'])
 
     f_test = theano.function([X], outs_s, updates=updates_s)
-
-    lower_bounds = rval['lower_bounds']
-
-    f_lower_bounds = theano.function([X], lower_bounds, updates=updates_s)
 
     # Sample from prior
     py_p = model.sample_from_prior()
@@ -493,7 +490,7 @@ def train_model(
                 outs_v = f_test(x_v)
                 outs_t = f_test(x)
 
-                lb_v, pd_v, d_hat_v = outs_v[:3]
+                lb_v, pd_v, d_hat_v, lbg_v = outs_v[:4]
                 lb_t = outs_t[0]
 
                 outs = OrderedDict((k, v)
@@ -504,6 +501,7 @@ def train_model(
                 outs.update(**{
                     'train lower bound': lb_t,
                     'valid lower bound': lb_v,
+                    'inference gain': lbg_v,
                     'elapsed_time': t1-t0}
                 )
 
@@ -511,9 +509,6 @@ def train_model(
                 t0 = time.time()
 
                 monitor.display(e, s)
-
-                #lbs = f_lower_bounds(x_v)
-                #print lbs
 
                 if save_images and s % model_save_freq == 0:
                     monitor.save(path.join(
