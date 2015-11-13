@@ -247,18 +247,18 @@ class GaussianBeliefNet(Layer):
         return self._unpack_momentum(outs)
 
     # Momentum
-    def _step_momentum(self, y, epsilon, q, l, dq_, m, *params):
+    def _step_momentum(self, y, epsilon, q, dq_, m, *params):
+        l = self.inference_rate
         cost, grad = self.e_step(y, epsilon, q, *params)
         dq = (-l * grad + m * dq_).astype(floatX)
         q = (q + dq).astype(floatX)
-        l *= self.inference_decay
-        return q, l, dq, cost
+        return q, dq, cost
 
     def _init_momentum(self, q):
-        return [self.inference_rate, T.zeros_like(q)]
+        return [T.zeros_like(q)]
 
     def _unpack_momentum(self, outs):
-        qs, ls, dqs, costs = outs
+        qs, dqs, costs = outs
         return qs, costs
 
     def _params_momentum(self):
