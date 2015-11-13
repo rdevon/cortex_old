@@ -258,7 +258,7 @@ class GaussianBeliefNet(Layer):
         return [T.zeros_like(q)]
 
     def _unpack_momentum(self, outs):
-        qs, ls, dqs, costs = outs
+        qs, dqs, costs = outs
         return qs, costs
 
     def _params_momentum(self):
