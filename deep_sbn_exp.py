@@ -351,8 +351,8 @@ def train_model(
 
     extra_outs = [prior_energy, h_energy, y_energy]
 
-    extra_outs_names = ['cost', 'prior_energy', 'h energy',
-                        'train y energy']
+    extra_outs_names = ['cost', '-log p(h_n)', 'KL(q||q~)',
+                        '-log p(x|h)']
 
     # ========================================================================
     print 'Setting final tparams and save function'
@@ -469,9 +469,9 @@ def train_model(
                 print '=' * 100
                 print 'Epoch {epoch} ({name})'.format(epoch=e, name=name)
                 # HACK
-                if e == 1:
-                    learning_rate = learning_rate / 10.
-                    print 'New learning rate: %.5f' % learning_rate
+                #if e == 1:
+                #    learning_rate = learning_rate / 10.
+                #    print 'New learning rate: %.5f' % learning_rate
 
                 valid.reset()
                 train.reset()
@@ -503,10 +503,10 @@ def train_model(
 
                 t1 = time.time()
                 outs.update(**{
-                    'train lower bound': lb_t,
-                    'valid lower bound': lb_v,
-                    'inference gain': lbg_v,
-                    'elapsed_time': t1-t0}
+                    '-log p(x) <= (t)': lb_t,
+                    '-log p(x) <= (v)': lb_v,
+                    '-d log p(x)': lbg_v,
+                    'dt': t1-t0}
                 )
 
                 monitor.update(**outs)
