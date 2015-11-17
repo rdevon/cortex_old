@@ -92,23 +92,22 @@ def unpack(dim_h=None,
            n_inference_steps=None,
            inference_method=None,
            inference_rate=None,
-           entropy_scale=None,
-           input_mode=None,
            **model_args):
     '''
     Function to unpack pretrained model into fresh SFFN class.
     '''
 
+    n_layers = int(n_layers)
+    dim_h = int(dim_h)
+    dataset_args = dataset_args[()]
+
     kwargs = dict(
+        n_layers=n_layers,
         inference_method=inference_method,
         inference_rate=inference_rate,
         n_inference_steps=n_inference_steps,
         z_init=z_init
     )
-
-    n_layers = int(n_layers)
-    dim_h = int(dim_h)
-    dataset_args = dataset_args[()]
 
     if dataset == 'mnist':
         dim_in = 28 * 28
@@ -135,11 +134,10 @@ def unpack(dim_h=None,
                 mlp_dim_in = dim_h
                 name = 'posterior%d' % l
 
-            posteriors.append(load_mlp(name, mlp_dim_in, dim_h,
-                                       out_act=out_act,
-                                       **recognition_net))
-    else:
-        posteriors = None
+            posterior = load_mlp(name, mlp_dim_in, dim_h,
+                                 out_act=out_act, **recognition_net)
+            posteriors.append(posterior)
+            models.append(posterior)
 
     if generation_net is not None:
         generation_net = generation_net[()]
@@ -152,9 +150,10 @@ def unpack(dim_h=None,
                 mlp_dim_out = dim_h
                 name = 'conditional%d' % l
 
-            conditionals.append(load_mlp(name, dim_h, mlp_dim_out,
-                                         out_act='T.nnet.sigmoid',
-                                         **generation_net))
+            conditional = load_mlp(name, dim_h, mlp_dim_out,
+                                   out_act='T.nnet.sigmoid', **generation_net)
+            conditionals.append(conditional)
+            models.append(conditional)
     else:
         conditionals = None
 
@@ -164,7 +163,7 @@ def unpack(dim_h=None,
         C = DGBN
     else:
         raise ValueError()
-    model = C(dim_in, dim_h, dim_out, n_layers=n_layers,
+    model = C(dim_in, dim_h, dim_out,
             conditionals=conditionals,
             posteriors=posteriors,
             **kwargs)
@@ -217,8 +216,7 @@ def train_model(
         n_layers=n_layers,
         z_init=z_init,
         inference_method=inference_method,
-        inference_rate=inference_rate,
-        n_inference_samples=n_inference_samples
+        inference_rate=inference_rate
     )
 
     # ========================================================================
@@ -322,7 +320,7 @@ def train_model(
     print 'Getting cost'
     (zss, prior_energy, h_energy, y_energy), updates, constants = model.inference(
         X_i, X, n_inference_steps=n_inference_steps,
-        n_sampling_steps=n_sampling_steps, n_samples=n_mcmc_samples)
+        n_samples=n_mcmc_samples)
 
     cost = prior_energy + h_energy + y_energy
 
@@ -351,8 +349,8 @@ def train_model(
 
     extra_outs = [prior_energy, h_energy, y_energy]
 
-    extra_outs_names = ['cost', 'prior_energy', 'h energy',
-                        'train y energy']
+    extra_outs_names = ['cost', '-log p(h_n)', 'KL(q||q~)',
+                        '-log p(x|h)']
 
     # ========================================================================
     print 'Setting final tparams and save function'
@@ -469,9 +467,9 @@ def train_model(
                 print '=' * 100
                 print 'Epoch {epoch} ({name})'.format(epoch=e, name=name)
                 # HACK
-                if e == 1:
-                    learning_rate = learning_rate / 10.
-                    print 'New learning rate: %.5f' % learning_rate
+                #if e == 1:
+                #    learning_rate = learning_rate / 10.
+                #    print 'New learning rate: %.5f' % learning_rate
 
                 valid.reset()
                 train.reset()
@@ -503,10 +501,10 @@ def train_model(
 
                 t1 = time.time()
                 outs.update(**{
-                    'train lower bound': lb_t,
-                    'valid lower bound': lb_v,
-                    'inference gain': lbg_v,
-                    'elapsed_time': t1-t0}
+                    '-log p(x) <= (t)': lb_t,
+                    '-log p(x) <= (v)': lb_v,
+                    '-d log p(x)': lbg_v,
+                    'dt': t1-t0}
                 )
 
                 monitor.update(**outs)
