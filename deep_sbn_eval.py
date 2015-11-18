@@ -93,24 +93,33 @@ def eval_model(
            'with %d validated inference steps' % (N * 100, posterior_samples, steps))
 
     outs_s, updates_s = model(X_i, X, n_inference_steps=steps, n_samples=posterior_samples, calculate_log_marginal=True)
-    f_lower_bound = theano.function([X], [outs_s['lower_bound'], outs_s['nll']], updates=updates_s)
+    f_lower_bound = theano.function([X], [outs_s['lower_bound'], outs_s['nll'], outs_s['lbs'], outs_s['nlls']], updates=updates_s)
     lb_t = 0.
     nll_t = 0.
+    nlls_t = []
+    lbs_t = []
 
     pbar = ProgressBar(maxval=len(xs)).start()
     for i, x in enumerate(xs):
-        lb, nll = f_lower_bound(x)
+        lb, nll, lbs, nlls = f_lower_bound(x)
+        lbs_t.append(lbs)
+        nlls_t.append(nlls)
         lb_t += lb
         nll_t += nll
         pbar.update(i)
 
     lb_t /= N
     nll_t /= N
+    lbs_t = np.mean(lbs_t, axis=0).tolist()
+    nlls_t = np.mean(nlls_t, axis=0).tolist()
     print 'Final lower bound and NLL: %.2f and %.2f' % (lb_t, nll_t)
 
     if out_path is not None:
         plt.savefig(out_path)
         print 'Sampling from the prior'
+
+        np.save(path.join(outs_path, 'lbs.npy'), lbs_t)
+        np.save(path.join(outs_path, 'nlls.npy'), nlls_t)
 
         py_p = model.sample_from_prior()
         f_prior = theano.function([], py_p)
