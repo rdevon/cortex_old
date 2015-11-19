@@ -56,7 +56,6 @@ def eval_model(
     )
 
     models, _ = load_model(model_file, unpack, **model_args)
-    n_mcmc_samples_test = 1000
 
     if dataset == 'mnist':
         data_iter = MNIST(batch_size=10000, mode=mode, inf=False, **dataset_args)
@@ -86,40 +85,47 @@ def eval_model(
     x, _ = data_iter.next()
     x_v, _ = valid_iter.next()
 
-    xs = [x[i: (i + 100)] for i in range(0, n_samples, 100)]
-    N = len(range(0, n_samples, 100))
+    dx = 100
+    xs = [x[i: (i + dx)] for i in range(0, n_samples, dx)]
+    N = n_samples // dx
 
     print ('Calculating final lower bound and marginal with %d data samples, %d posterior samples '
-           'with %d validated inference steps' % (N * 100, posterior_samples, steps))
+           'with %d validated inference steps' % (N * dx, posterior_samples, steps))
 
     outs_s, updates_s = model(X_i, X, n_inference_steps=steps, n_samples=posterior_samples, calculate_log_marginal=True)
-    f_lower_bound = theano.function([X], [outs_s['lower_bound'], outs_s['nll'], outs_s['lbs'], outs_s['nlls']], updates=updates_s)
-    lb_t = 0.
-    nll_t = 0.
+    f_lower_bound = theano.function([X], [outs_s['lower_bound'], outs_s['nll']] + outs_s['lower_bounds'] + outs_s['nlls'], updates=updates_s)
+    lb_t = []
+    nll_t = []
     nlls_t = []
     lbs_t = []
 
     pbar = ProgressBar(maxval=len(xs)).start()
     for i, x in enumerate(xs):
-        lb, nll, lbs, nlls = f_lower_bound(x)
+        outs = f_lower_bound(x)
+        lb, nll = outs[:2]
+        outs = outs[2:]
+        lbs = outs[:len(outs)/2]
+        nlls = outs[len(outs)/2:]
         lbs_t.append(lbs)
         nlls_t.append(nlls)
-        lb_t += lb
-        nll_t += nll
+        lb_t.append(lb)
+        nll_t.append(nll)
         pbar.update(i)
 
-    lb_t /= N
-    nll_t /= N
+    lb_t = np.mean(lb_t)
+    nll_t = np.mean(nll_t)
     lbs_t = np.mean(lbs_t, axis=0).tolist()
     nlls_t = np.mean(nlls_t, axis=0).tolist()
     print 'Final lower bound and NLL: %.2f and %.2f' % (lb_t, nll_t)
+    print lbs_t
+    print nlls_t
 
     if out_path is not None:
         plt.savefig(out_path)
         print 'Sampling from the prior'
 
-        np.save(path.join(outs_path, 'lbs.npy'), lbs_t)
-        np.save(path.join(outs_path, 'nlls.npy'), nlls_t)
+        np.save(path.join(out_path, 'lbs.npy'), lbs_t)
+        np.save(path.join(out_path, 'nlls.npy'), nlls_t)
 
         py_p = model.sample_from_prior()
         f_prior = theano.function([], py_p)
