@@ -25,7 +25,8 @@ from tools import itemlist, load_experiment, load_model
 floatX = theano.config.floatX
 
 def eval_model(
-    model_file, steps=50, n_samples=10000,
+    model_file, steps=50, 
+    data_samples=10000,
     out_path=None,
     optimizer=None,
     optimizer_args=dict(),
@@ -40,7 +41,7 @@ def eval_model(
     inference_rate=.01,
     n_mcmc_samples=20,
     posterior_samples=20,
-    n_inference_samples=20,
+    inference_samples=20,
     dataset=None,
     dataset_args=None,
     extra_inference_args=dict(),
@@ -52,13 +53,13 @@ def eval_model(
         z_init=z_init,
         inference_method=inference_method,
         inference_rate=inference_rate,
-        n_inference_samples=n_inference_samples
+        n_inference_samples=inference_samples
     )
 
     models, _ = load_model(model_file, unpack, **model_args)
 
     if dataset == 'mnist':
-        data_iter = MNIST(batch_size=10000, mode=mode, inf=False, **dataset_args)
+        data_iter = MNIST(batch_size=data_samples, mode=mode, inf=False, **dataset_args)
         valid_iter = MNIST(batch_size=500, mode='valid', inf=False, **dataset_args)
     else:
         raise ValueError()
@@ -86,8 +87,8 @@ def eval_model(
     x_v, _ = valid_iter.next()
 
     dx = 100
-    xs = [x[i: (i + dx)] for i in range(0, n_samples, dx)]
-    N = n_samples // dx
+    xs = [x[i: (i + dx)] for i in range(0, data_samples, dx)]
+    N = data_samples // dx
 
     print ('Calculating final lower bound and marginal with %d data samples, %d posterior samples '
            'with %d validated inference steps' % (N * dx, posterior_samples, steps))
@@ -141,9 +142,11 @@ def make_argument_parser():
     parser.add_argument('experiment_dir')
     parser.add_argument('-m', '--mode', default='valid',
                         help='Dataset mode: valid, test, or train')
-    parser.add_argument('-s', '--samples', default=1000, type=int,
+    parser.add_argument('-p', '--posterior_samples', default=1000, type=int,
                         help='Number of posterior during eval')
-    parser.add_argument('-i', '--inference_steps', default=50, type=int)
+    parser.add_argument('-i', '--inference_samples', default=1000, type=int)
+    parser.add_argument('-s', '--inference_steps', default=50, type=int)
+    parser.add_argument('-d', '--data_samples', default=10000, type=int)
     return parser
 
 if __name__ == '__main__':
@@ -175,5 +178,10 @@ if __name__ == '__main__':
     valid_file = path.join(exp_dir, 'valid_lbs.npy')
     valid_scores = np.load(valid_file)
 
-    eval_model(model_file, mode=args.mode, out_path=out_path, valid_scores=valid_scores,
-               posterior_samples=args.samples, steps=args.inference_steps, **exp_dict)
+    eval_model(model_file, mode=args.mode, out_path=out_path, 
+               valid_scores=valid_scores,
+               posterior_samples=args.posterior_samples, 
+               inference_samples=args.inference_samples, 
+               data_samples=args.data_samples,
+               steps=args.inference_steps,
+               **exp_dict)
