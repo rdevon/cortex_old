@@ -178,11 +178,7 @@ class GaussianBeliefNet(Layer):
         constants = []
         prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
         p_h = self.posterior(x)
-
-        if n_samples == 0:
-            h = mu[None, :, :]
-        else:
-            h = self.posterior.sample(p=q, size=(n_samples, q.shape[0], q.shape[1] / 2))
+        h = self.posterior.sample(p=q, size=(n_samples, q.shape[0], q.shape[1] / 2))
 
         p_y = self.conditional(h)
 
@@ -285,8 +281,9 @@ class GaussianBeliefNet(Layer):
         outputs_info = [q0] + self.init_infer(q0) + [None]
         non_seqs = self.params_infer() + self.get_params()
 
-        if not isinstance(n_inference_steps, T.TensorVariable):
-            print '%d inference steps' % n_inference_steps
+        print ('Doing %d inference steps and a rate of %.2f with %d '
+               'inference samples'
+               % (n_inference_steps, self.inference_rate, self.n_inference_samples))
 
         if isinstance(n_inference_steps, T.TensorVariable) or n_inference_steps > 1:
             outs, updates = theano.scan(
@@ -300,32 +297,32 @@ class GaussianBeliefNet(Layer):
                 strict=self.strict
             )
             qs, i_costs = self.unpack_infer(outs)
-            q = qs[-1]
 
         elif n_inference_steps == 1:
             updates = theano.OrderedUpdates()
             inps = [ys[0], epsilons[0]] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
             q, i_cost = self.unpack_infer(outs)
+            qs = q[None, :, :]
             i_costs = [i_cost]
 
         elif n_inference_steps == 0:
             updates = theano.OrderedUpdates()
-            q = q0
+            qs = q0[None, :, :]
             i_costs = [T.constant(0.).astype(floatX)]
 
-        return (q, i_costs[-1]), updates
+        return (qs, i_costs[-1]), updates
 
     # Inference
     def inference(self, x, y, n_inference_steps=20, n_sampling_steps=None, n_samples=100):
-        (q, _), updates = self.infer_q(x, y, n_inference_steps)
+        (qs, _), updates = self.infer_q(x, y, n_inference_steps)
 
         (prior_energy, h_energy, y_energy, entropy), m_constants = self.m_step(
-            x, y, q, n_samples=n_samples)
+            x, y, qs[-1], n_samples=n_samples)
 
-        constants = [q, entropy] + m_constants
+        constants = [qs, entropy] + m_constants
 
-        return (q, prior_energy, h_energy,
+        return (qs[-1], prior_energy, h_energy,
                 y_energy, entropy), updates, constants
 
     def __call__(self, x, y, n_samples=100, n_sampling_steps=None,
@@ -335,29 +332,40 @@ class GaussianBeliefNet(Layer):
         updates = theano.OrderedUpdates()
         prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
 
-        (q, i_cost), updates_i = self.infer_q(
+        (qs, i_cost), updates_i = self.infer_q(
             x, y, n_inference_steps)
         updates.update(updates_i)
-        outs.update(inference_cost=i_cost)
 
-        if n_samples == 0:
-            h = q[None, :, :]
-        else:
+        steps = range(n_inference_steps // 10, n_inference_steps + 1, n_inference_steps // 10)
+        steps = steps[:-1] + [n_inference_steps]
+
+        lower_bounds = []
+        nlls = []
+        for i in steps:
+            q = qs[i]
+
+
             h = self.posterior.sample(
                 q, size=(n_samples, q.shape[0], q.shape[1] / 2))
 
-        py = self.conditional(h)
-        y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=(0, 1))
-        kl_term = self.kl_divergence(q, prior).mean(axis=0)
+            py = self.conditional(h)
+            y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=(0, 1))
+            kl_term = self.kl_divergence(q, prior).mean(axis=0)
+            lower_bound = (y_energy+kl_term)
+            lower_bounds.append(lower_bound)
+
+            if calculate_log_marginal:
+                nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :], prior[None, :, :])
+                nlls.append(nll)
 
         outs.update(
             py=py,
-            lower_bound=(y_energy+kl_term)
+            lower_bound=lower_bounds[-1],
+            lower_bounds=lower_bounds
         )
 
         if calculate_log_marginal:
-            nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :], prior[None, :, :])
-            outs.update(nll=nll)
+            outs.update(nll=nlls[-1], nlls=nlls)
 
         return outs, updates
 
