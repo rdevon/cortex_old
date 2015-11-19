@@ -92,6 +92,7 @@ def unpack(dim_h=None,
            n_inference_steps=None,
            inference_method=None,
            inference_rate=None,
+           n_inference_samples=None,
            **model_args):
     '''
     Function to unpack pretrained model into fresh SFFN class.
@@ -106,7 +107,8 @@ def unpack(dim_h=None,
         inference_method=inference_method,
         inference_rate=inference_rate,
         n_inference_steps=n_inference_steps,
-        z_init=z_init
+        z_init=z_init,
+        n_inference_samples=n_inference_samples
     )
 
     if dataset == 'mnist':
@@ -195,13 +197,8 @@ def train_model(
     inference_rate=.01,
     n_inference_steps=100,
     n_inference_steps_test=0,
-    inference_decay=1.0,
     n_inference_samples=20,
     inference_scaling=None,
-    entropy_scale=1.0,
-    alpha=7,
-    n_sampling_steps=0,
-    n_sampling_steps_test=0,
 
     n_mcmc_samples=20,
     n_mcmc_samples_test=20,
@@ -216,7 +213,8 @@ def train_model(
         n_layers=n_layers,
         z_init=z_init,
         inference_method=inference_method,
-        inference_rate=inference_rate
+        inference_rate=inference_rate,
+        n_inference_samples=n_inference_samples
     )
 
     # ========================================================================
@@ -329,8 +327,7 @@ def train_model(
 
     # Test function with sampling
     rval, updates_s = model(
-        X_i, X, n_samples=n_mcmc_samples_test, n_inference_steps=n_inference_steps_test,
-        n_sampling_steps=n_sampling_steps_test)
+        X_i, X, n_samples=n_mcmc_samples_test, n_inference_steps=n_inference_steps_test)
 
     py_s = rval['py']
     lower_bound = rval['lower_bound']
@@ -468,8 +465,8 @@ def train_model(
                 print 'Epoch {epoch} ({name})'.format(epoch=e, name=name)
                 # HACK
                 #if e == 1:
-                #    learning_rate = learning_rate / 10.
-                #    print 'New learning rate: %.5f' % learning_rate
+                #learning_rate = learning_rate * 0.99
+                #print 'New learning rate: %.5f' % learning_rate
 
                 valid.reset()
                 train.reset()
