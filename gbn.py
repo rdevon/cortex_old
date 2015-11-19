@@ -351,7 +351,7 @@ class GaussianBeliefNet(Layer):
             lower_bounds.append(lower_bound)
 
             if calculate_log_marginal:
-                nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :], prior[None, None, :])
+                nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :], prior[None, :, :])
                 nlls.append(nll)
 
         outs.update(
