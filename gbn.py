@@ -303,12 +303,11 @@ class GaussianBeliefNet(Layer):
             inps = [ys[0], epsilons[0]] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
             q, i_cost = self.unpack_infer(outs)
-            qs = q[None, :, :]
             i_costs = [i_cost]
 
         elif n_inference_steps == 0:
             updates = theano.OrderedUpdates()
-            qs = q0[None, :, :]
+            q = q0
             i_costs = [T.constant(0.).astype(floatX)]
 
         return (qs, i_costs[-1]), updates
@@ -316,25 +315,23 @@ class GaussianBeliefNet(Layer):
     # Inference
     def inference(self, x, y, n_inference_steps=20, n_sampling_steps=None, n_samples=100):
         (qs, _), updates = self.infer_q(x, y, n_inference_steps)
+        q = qs[-1]
 
         (prior_energy, h_energy, y_energy, entropy), m_constants = self.m_step(
-            x, y, qs[-1], n_samples=n_samples)
+            x, y, q, n_samples=n_samples)
 
-        constants = [qs, entropy] + m_constants
+        constants = [q, entropy] + m_constants
 
-        return (qs[-1], prior_energy, h_energy,
+        return (q, prior_energy, h_energy,
                 y_energy, entropy), updates, constants
 
-    def __call__(self, x, y, n_samples=100, n_sampling_steps=None,
+    def __call__(self, x, y, n_samples=100,
                  n_inference_steps=0, calculate_log_marginal=False):
 
         outs = OrderedDict()
-        updates = theano.OrderedUpdates()
         prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
 
-        (qs, i_cost), updates_i = self.infer_q(
-            x, y, n_inference_steps)
-        updates.update(updates_i)
+        (qs, i_cost), updates = self.infer_q(x, y, n_inference_steps)
 
         steps = range(n_inference_steps // 10, n_inference_steps + 1, n_inference_steps // 10)
         steps = steps[:-1] + [n_inference_steps]
@@ -342,8 +339,7 @@ class GaussianBeliefNet(Layer):
         lower_bounds = []
         nlls = []
         for i in steps:
-            q = qs[i]
-
+            q = qs[i-1]
 
             h = self.posterior.sample(
                 q, size=(n_samples, q.shape[0], q.shape[1] / 2))
@@ -351,17 +347,18 @@ class GaussianBeliefNet(Layer):
             py = self.conditional(h)
             y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=(0, 1))
             kl_term = self.kl_divergence(q, prior).mean(axis=0)
-            lower_bound = (y_energy+kl_term)
+            lower_bound = y_energy + kl_term
             lower_bounds.append(lower_bound)
 
             if calculate_log_marginal:
-                nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :], prior[None, :, :])
+                nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :], prior[None, None, :])
                 nlls.append(nll)
 
         outs.update(
             py=py,
             lower_bound=lower_bounds[-1],
-            lower_bounds=lower_bounds
+            lower_bounds=lower_bounds,
+            inference_cost=(lower_bounds[0] - lower_bounds[-1])
         )
 
         if calculate_log_marginal:
