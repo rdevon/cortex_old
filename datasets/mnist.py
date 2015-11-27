@@ -4,20 +4,29 @@ import multiprocessing as mp
 import numpy as np
 from os import path
 import PIL
+from progressbar import ProgressBar
 import random
 import sys
 from sys import stdout
 import theano
 from theano import tensor as T
+import time
 import traceback
-from tools import rng_
-from vis_utils import tile_raster_images
+
+from utils.tools import (
+    concatenate,
+    init_rngs,
+    rng_,
+    scan
+)
+from utils.vis_utils import tile_raster_images
+
 
 def get_iter(inf=False, batch_size=128):
     return mnist_iterator(inf=inf, batch_size=batch_size)
 
 class MNIST(object):
-    def __init__(self, batch_size=128, source='/Users/devon/Data/mnist.pkl.gz',
+    def __init__(self, batch_size=128, source=None,
                  restrict_digits=None, mode='train', shuffle=True, inf=False,
                  binarize=False,
                  stop=None, out_path=None):
@@ -92,29 +101,6 @@ class MNIST(object):
 
         return X, Y
 
-    def process(self, X, Y, restrict_digits=None):
-        if restrict_digits is None:
-            n_classes = 10
-        else:
-            n_classes = len(restrict_digits)
-
-        O = np.zeros((X.shape[0], n_classes), dtype='float32')
-        if restrict_digits is None:
-            for idx in xrange(X.shape[0]):
-                O[idx, Y[idx]] = 1.;
-        else:
-            new_X = []
-            i = 0
-            for j in xrange(X.shape[0]):
-                if Y[j] in restrict_digits:
-                    new_X.append(X[j])
-                    c_idx = restrict_digits.index(Y[j])
-                    O[i, c_idx] = 1.;
-                    i += 1
-            X = np.float32(new_X)
-
-        return X, O
-
     def __iter__(self):
         return self
 
@@ -181,207 +167,202 @@ class MNIST(object):
         return x
 
 
-class MNIST_Chains(MNIST):
-    def __init__(self, batch_size=1, source='/Users/devon/Data/mnist.pkl.gz',
-                 restrict_digits=None, mode='train', shuffle=True,
-                 window=20, chain_length=5000, chain_build_batch=1000,
-                 stop=None, out_path=None, chain_stride=None, n_chains=1,
-                 trim_end=None):
+class Chains(object):
+    def __init__(self, D, batch_size=10,
+                 window=20, chain_length=5000, build_batch=1000,
+                 chain_stride=None, n_chains=1,
+                 use_theano=False,
+                 trim_end=0, out_path=None, **kwargs):
 
-        with gzip.open(source, 'rb') as f:
-            x = cPickle.load(f)
+        self.dataset = D(**kwargs)
 
-        X, Y = self.get_data(x, mode)
-
-        self.mode = mode
-        self.dims = (28, 28)
+        self.batch_size = batch_size
         self.f_energy = None
-        self.chain_length = chain_length
+        self.f_chain = None
         self.window = window
-        self.chains_build_batch = chain_build_batch
-        self.bs = batch_size
+        self.build_batch = build_batch
         self.trim_end = trim_end
-
+        self.chain_length = min(chain_length, self.dataset.n)
+        self.dim_h = None
         self.out_path = out_path
+        self.use_theano = use_theano
+
         if chain_stride is None:
-            self.chain_stride = self.chain_length
+            self.chain_stride = self.window
         else:
             self.chain_stride = chain_stride
 
-        self.shuffle = shuffle
+        self.next = self._next
+        self.cpos = -1
+        init_rngs(self, **kwargs)
 
-        X, O = self.process(X, Y, restrict_digits)
+    def next(self):
+        raise NotImplementedError()
 
-        if stop is not None:
-            X = X[:stop]
+    def set_f_energy(self, f_energy, dim_h, model=None):
+        self.dim_h = dim_h
 
-        self.n, self.dim = X.shape
-        self.chain_length = min(self.chain_length, self.n)
-        self.chains = [[] for _ in xrange(n_chains)]
-        self.chain_pos = 0
-        self.pos = 0
-        self.chain_idx = range(0, self.chain_length - window, self.chain_stride)
-        self.spos = 0
+        # Energy function -----------------------------------------------------
+        X = T.matrix('x', dtype='float32')
+        x_p = T.vector('x_p', dtype='float32')
+        h_p = T.vector('h_p', dtype='float32')
 
-        self.X = X
-        self.O = O
+        energy, x_n, h_n = f_energy(X, x_p, h_p, model)
+        self.f_energy = theano.function([X, x_p, h_p], [energy, x_n, h_n])
 
-        if self.shuffle:
-            print 'Shuffling mnist'
-            self.randomize()
+        # Chain function ------------------------------------------------------
+        counts = T.ones((X.shape[0],)).astype('int64')
+        P = T.scalar('P', dtype='int64')
+        x_p = X[0]
+        h_p = self.trng.normal(avg=0., std=1., size=(dim_h,)).astype('float32')
+        counts = T.set_subtensor(counts[0], 0)
+
+        def step(i, x_p, h_p, counts, x):
+            energies, _, h_n = f_energy(x, x_p, h_p, model)
+            energies = energies / counts
+            i = T.argmin(energies)
+            counts = T.set_subtensor(counts[i], 0)
+            return i, x[i], h_n, counts
+
+        seqs = []
+        outputs_info = [T.constant(0).astype('int64'), x_p, h_p, counts]
+        non_seqs = [X]
+
+        (chain, x_chain, h_chain, counts), updates = scan(
+            step, seqs, outputs_info, non_seqs, X.shape[0] - 1, name='make_chain',
+            strict=False)
+
+        chain += P
+        chain_e = T.zeros((chain.shape[0] + 1,)).astype('int64')
+        chain = T.set_subtensor(chain_e[1:], chain)
+        self.f_chain = theano.function([X, P], chain, updates=updates)
+
+    def _build_chain_py(self, x, data_pos):
+        h_p = np.random.normal(
+            loc=0, scale=1, size=(self.dim_h,)).astype('float32')
+
+        l_chain = x.shape[0]
+        n_samples = min(self.build_batch, l_chain)
+        chain_idx = range(l_chain)
+        rnd_idx = np.random.permutation(np.arange(0, l_chain, 1))
+        chain_idx = [chain_idx[i] for i in rnd_idx]
+
+        counts = [True for _ in xrange(l_chain)]
+        n = l_chain
+        chain = []
+
+        pbar = ProgressBar(maxval=l_chain).start()
+        while n > 0:
+            idx = [j for j in chain_idx if counts[j]]
+            x_idx = [idx[i] for i in range(min(n_samples, n))]
+            assert len(np.unique(x_idx)) == len(x_idx)
+
+            if n == l_chain:
+                picked_idx = random.choice(x_idx)
+            else:
+                assert x_p is not None
+                x_n = x[x_idx]
+                energies, _, h_p = self.f_energy(x_n, x_p, h_p)
+                i = np.argmin(energies)
+                picked_idx = x_idx[i]
+
+            counts[picked_idx] = False
+            assert not (picked_idx + data_pos) in self.chain
+            chain.append(picked_idx + data_pos)
+
+            x_p = x[picked_idx]
+            n -= 1
+
+            nd_idx = np.random.permutation(np.arange(0, l_chain, 1))
+            chain_idx = [chain_idx[i] for i in rnd_idx]
+
+            pbar.update(l_chain - n)
+
+        return chain
+
+    def _build_chain(self, trim_end=0):
+        self.chain = []
+        n_remaining_samples = self.dataset.n - self.dataset.pos
+        l_chain = min(self.chain_length, n_remaining_samples)
+
+        data_pos = self.dataset.pos
+        x, _ = self.dataset.next(batch_size=l_chain)
+        n_samples = min(self.build_batch, l_chain)
+
+        t0 = time.time()
+        if self.use_theano:
+            print('Resetting chain with length %d using all datapoints (theano). '
+                  'Position in data is %d'
+                  % (l_chain, data_pos))
+            self.chain = self.f_chain(x, data_pos)
+        else:
+            print('Resetting chain with length %d and %d samples per query. '
+                  'Position in data is %d'
+                  % (l_chain, n_samples, data_pos))
+            self.chain = self._build_chain_py(x, data_pos)
+        t1 = time.time()
+        print 'Chain took %.2f seconds' % (t1 - t0)
+
+        if self.out_path is not None:
+            self.save_images(self._load_chains(),
+                             path.join(self.out_path,
+                                       '%s_chain_%d.png' % (self.mode, self.pos)),
+                             x_limit=200)
+
+        if trim_end:
+            print 'Trimming %d' % trim_end
+            self.chain = self.chain[:-trim_end]
+
+        if self.out_path is not None:
+            self.save_images(
+                self._load_chains(),
+                path.join(self.out_path,
+                          '%s_chain_%d_trimmed.png' % (self.mode, self.pos)),
+                x_limit=200)
 
     def _load_chains(self, chains=None):
         if chains is None:
-            chains = self.chains
+            chains = [self.chain]
 
-        x = np.zeros((len(chains[0]), len(chains), self.dim)).astype('float32')
+        x = np.zeros((len(chains[0]), len(chains), self.dataset.dim)).astype('float32')
         for i, c in enumerate(chains):
-            x[:, i] = self.X[c]
+            x[:, i] = self.dataset.X[c]
         return x
 
-    def _build_chain(self, x_p=None, h_p=None, trim_end=None):
-        self.chains = [[] for _ in xrange(len(self.chains))]
-        n_chains = len(self.chains)
-        l_chain = min(self.chain_length, self.n - self.pos)
-        n_samples = min(self.chains_build_batch, l_chain)
-        chain_idx = [range(l_chain) for _ in xrange(n_chains)]
+    def reset(self):
+        self.dataset.reset()
+        self.cpos = -1
 
-        if h_p is None:
-            h_p = np.random.normal(loc=0, scale=1, size=(len(self.chains), self.dim_h)).astype('float32')
-
-        print('Resetting chains with length %d and %d samples per query. '
-              'Position in data is %d'
-              % (l_chain, n_samples, self.pos))
-
-        for c in xrange(n_chains):
-            rnd_idx = np.random.permutation(np.arange(0, l_chain, 1))
-            chain_idx[c] = [chain_idx[c][i] for i in rnd_idx]
-
-        counts = [[True for _ in xrange(l_chain)] for _ in xrange(n_chains)]
-        n = l_chain
-        pos = 0
-
-        while n > 0:
-            stdout.write('\r%d         ' % n); stdout.flush()
-            x_idx = []
-
-            for c in xrange(n_chains):
-                idx = [j for j in chain_idx[c] if counts[c][j]]
-                x_idx.append([idx[i] for i in range(pos, pos + min(n_samples, n))])
-
-            uniques = np.unique(x_idx).tolist()
-            x = self.X[[u + self.pos for u in uniques]]
-            wheres = [dict((i, j) for i, j in enumerate(uniques) if j in x_idx[c])
-                for c in xrange(n_chains)]
-
-            if n == l_chain:
-                picked_idx = [random.choice(idx) for idx in x_idx]
-            else:
-                assert x_p is not None
-                energies, _, h_p = self.f_energy(x, x_p, h_p)
-                picked_idx = []
-                for c in xrange(n_chains):
-                    idx = wheres[c].keys()
-                    chain_energies = energies[c, idx]
-                    i = np.argmin(chain_energies)
-                    j = wheres[c][idx[i]]
-                    picked_idx.append(j)
-
-            for c in xrange(n_chains):
-                j = picked_idx[c]
-                counts[c][j] = False
-                self.chains[c].append(j + self.pos)
-
-            x_p = self.X[[i + self.pos for i in picked_idx]]
-            n -= 1
-
-            if pos + n_samples > n:
-                pos = 0
-                for c in xrange(n_chains):
-                    rnd_idx = np.random.permutation(np.arange(0, l_chain, 1))
-                    chain_idx[c] = [chain_idx[c][i] for i in rnd_idx]
-
-        if self.out_path:
-            self.save_images(
-                self._load_chains(),
-                path.join(self.out_path, '%s_chain_%d.png' % (self.mode, self.pos)), x_limit=200)
-
-        if trim_end is not None:
-            for c in xrange(len(self.chains)):
-                self.chains[c] = self.chains[c][:-trim_end]
-
-            if self.out_path:
-                self.save_images(
-                    self._load_chains(),
-                    path.join(self.out_path, '%s_chain_%d_trimmed.png' % (self.mode, self.pos)), x_limit=200)
-
-    def next(self):
+    def _next(self, l_chain=None):
         assert self.f_energy is not None
 
         chain_length = min(self.chain_length - self.trim_end,
-                           self.n - self.pos - self.trim_end)
+                           self.dataset.n - self.dataset.pos - self.trim_end)
         window = min(self.window, chain_length)
-        cpos = self.chain_pos
-        if cpos == -1 or len(self.chains[0]) == 0:
-            if self.pos == 0:
-                self.randomize()
 
-            self.chain_pos = 0
-            cpos = self.chain_pos
-
+        if self.cpos == -1:
+            self.cpos = 0
             self._build_chain(trim_end=self.trim_end)
-
-            assert len(np.unique(self.chains[0])) == len(self.chains[0]), (len(np.unique(self.chains[0])), len(self.chains[0]))
-            for i in self.chains[0]:
-                assert i >= self.pos and i < self.pos + self.chain_length
-
-            self.pos += self.chain_length
-            if self.pos >= self.n:
-                self.pos = 0
-                self.chain_idx = range(0, chain_length - window + 1, self.chain_stride)
-                random.shuffle(self.chain_idx)
-                raise StopIteration()
-
             self.chain_idx = range(0, chain_length - window + 1, self.chain_stride)
             random.shuffle(self.chain_idx)
 
         chains = []
-        for b in xrange(self.bs):
-            try:
-                chains += [
-                    [chain[j] for j in xrange(self.chain_idx[b + cpos],
-                                              self.chain_idx[b + cpos] + window)]
-                    for chain in self.chains]
-            except IndexError as e:
-                print 'len', self.chain_idx
-                print 'b', b
-                print 'cpos', cpos
-                print 'window', window
-                print 'range', range(self.chain_idx[b + cpos], self.chain_idx[b + cpos] + window)
-                print len(self.chains[0])
-                raise e
+        for b in xrange(self.batch_size):
+            p = self.chain_idx[b + self.cpos]
+            chains.append([self.chain[j] for j in xrange(p, p + window)])
 
         x = self._load_chains(chains=chains)
 
-        if cpos + 2 * self.bs >= len(self.chain_idx):
-            self.chain_pos = -1
+        if self.cpos + 2 * self.batch_size >= len(self.chain_idx):
+            self.cpos = -1
         else:
-            self.chain_pos += self.bs
-
-        return x, None
-
-    def next_simple(self, batch_size=10):
-        cpos = self.spos
-        if cpos + batch_size > self.n:
-            self.spos = 0
-            cpos = self.spos
-            if self.shuffle:
-                self.randomize()
-
-        x = self.X[cpos:cpos+batch_size]
-        self.spos += batch_size
+            self.cpos += self.batch_size
 
         return x
+
+    def next_simple(self, batch_size=None):
+        x, y = super(MNIST_Chain, self)._next(batch_size=batch_size)
+        return x, y
 
 
 class MNIST_Pieces(MNIST):

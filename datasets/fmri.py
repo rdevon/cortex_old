@@ -2,13 +2,56 @@
 Module for fMRI data
 '''
 
+from glob import glob
 import numpy as np
 import os
+from os import path
+import pprint
 import random
+import theano
+import yaml
+
+import nifti_viewer
+import nipy
+from nipy.core.api import Image
+import rois
 
 
-def make_datasets():
-    pass
+floatX = theano.config.floatX
+
+def load_data(idx=None, **dataset_args):
+    train, valid, test, idx = make_datasets(MRI, idx=idx, **dataset_args)
+    return train, valid, test, idx
+
+def make_datasets(C, split=None, idx=None, **dataset_args):
+    assert C in [MRI]
+
+    if idx is None:
+        assert split is not None
+        if round(np.sum(split), 5) != 1. or len(split) != 3:
+            raise ValueError(split)
+        dummy = C(**dataset_args)
+        N = dummy.n
+        idx = range(N)
+        random.shuffle(idx)
+        split_idx = []
+        accum = 0
+        for s in split:
+            s_i = int(s * N + accum)
+            split_idx.append(s_i)
+            accum += s_i
+
+        print split_idx
+        train_idx = idx[:split_idx[0]]
+        valid_idx = idx[split_idx[0]:split_idx[1]]
+        test_idx = idx[split_idx[1]:]
+        idx = [train_idx, valid_idx, test_idx]
+
+    train = C(idx=idx[0], **dataset_args)
+    valid = C(idx=idx[1], **dataset_args)
+    test = C(idx=idx[2], **dataset_args)
+
+    return train, valid, test, idx
 
 def medfilt(x, k):
     """Apply a length-k median filter to a 1D array x.
@@ -35,6 +78,175 @@ def make_one_hot(labels):
         j = unique_labels.index(l)
         one_hot[i][j] = 1
     return one_hot.astype('float32')
+
+
+class MRI(object):
+    def __init__(self, source=None, batch_size=None, shuffle=True, idx=None):
+        print 'Loading MRI from %s' % source
+
+        X, Y = self.get_data(source)
+
+        self.dims = X.shape[1:]
+        self.dim = int(self.mask.sum())
+        self.shuffle = shuffle
+        self.pos = 0
+        self.batch_size = batch_size
+        self.next = self._next
+
+        if idx is not None:
+            X = X[idx]
+            Y = Y[idx]
+
+        self.n = X.shape[0]
+
+        self.X = self._mask(X)
+        self.Y = Y
+
+        self.mean_image = self.X.mean(axis=0)
+
+        if self.shuffle:
+            self._randomize()
+
+    def _randomize(self):
+        rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
+        self.X = self.X[rnd_idx, :]
+
+    def _reset(self):
+        self.pos = 0
+        if self.shuffle:
+            self._randomize()
+
+    def _next(self, batch_size=None):
+        if batch_size is None:
+            batch_size = self.batch_size
+
+        if self.pos == -1:
+            self._reset()
+            raise StopIteration
+
+        x = self.X[self.pos:self.pos+batch_size]
+        y = self.Y[self.pos:self.pos+batch_size]
+        self.pos += batch_size
+
+        if self.pos + batch_size > self.n:
+            self.pos = -1
+
+        return x, y
+
+    def get_data(self, source):
+        print('Loading file locations from %s' % source)
+        source_dict = yaml.load(open(source))
+        print('Source locations: %s' % pprint.pformat(source_dict))
+
+        nifti_file = source_dict['nifti']
+        mask_file = source_dict['mask']
+        self.tmp_path = source_dict['tmp_path']
+        if not path.isdir(self.tmp_path):
+            os.mkdir(self.tmp_path)
+        self.anat_file = source_dict['anat_file']
+
+        data_files = source_dict['data']
+        if isinstance(data_files, str):
+            data_files = [data_files]
+
+        X = []
+        Y = []
+        for i, data_file in enumerate(data_files):
+            X_ = np.load(data_file)
+            X.append(X_.astype(floatX))
+            Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
+
+        X = np.concatenate(X, axis=0)
+        Y = np.concatenate(Y, axis=0)
+
+        mask = np.load(mask_file)
+        if not np.all(np.bitwise_or(mask == 0, mask == 1)):
+            raise ValueError("Mask has incorrect values.")
+
+        self.mask = mask
+        self.base_nifti_file = nifti_file
+
+        return X, Y
+
+    def _mask(self, X, mask=None):
+        if mask is None:
+            mask = self.mask
+
+        if X.shape[1:] != mask.shape:
+            raise ValueError()
+
+        mask_f = mask.flatten()
+        mask_idx = np.where(mask_f == 1)[0].tolist()
+        X_masked = np.zeros((X.shape[0], self.dim)).astype(floatX)
+
+        for i, x in enumerate(X):
+            X_masked[i] = x.flatten()[mask_idx]
+
+        return X_masked
+
+    def _unmask(self, X_masked, mask=None):
+        if mask is None:
+            mask = self.mask
+
+        if X_masked.shape[1] != self.dim:
+            raise ValueError(X_masked.shape)
+
+        mask_f = mask.flatten()
+        mask_idx = np.where(mask_f == 1)[0].tolist()
+        X = np.zeros((X_masked.shape[0],) + self.dims).astype(floatX)
+
+        for i, x_m in enumerate(X_masked):
+            x_f = X[i].flatten()
+            x_f[mask_idx] = x_m
+            X[i] = x_f.reshape(self.dims)
+
+        return X
+
+    def make_image(self, X, base_nifti):
+        X = X.transpose((1, 2, 3, 0))
+        image = Image.from_image(base_nifti, data=X)
+        return image
+
+    def save_niftis(self, X):
+        base_nifti = nipy.load_image(self.base_nifti_file)
+
+        image = self.make_image(X, base_nifti)
+        out_file = path.join(self.tmp_path, "tmp_image.nii.gz")
+        nipy.save_image(image, out_file)
+
+        return image, out_file
+
+    def save_images(self, x, out_file):
+        x = self._unmask(x)
+
+        image, nifti_file = self.save_niftis(x)
+        roi_dict = rois.main(nifti_file)
+
+        nifti_viewer.montage(image, self.anat_file, roi_dict, out_file=out_file)
+
+
+class FMRI_IID(object):
+    def __init__(self, source):
+        print 'Loading '
+        pass
+
+    def randomize(self):
+        pass
+
+    def __iter__(self):
+        return self
+
+    def next(self, batch_size):
+        pass
+
+    def name(self, ):
+        pass
+
+    def save_images(self, x, outfile):
+        pass
+
+    def show(self, image):
+        pass
 
 
 class ICA_Loadings(object):

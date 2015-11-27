@@ -13,8 +13,8 @@ from layers import (
     MLP
 )
 from sbn import init_inference_args
-import tools
-from tools import (
+from utils import tools
+from utils.tools import (
     concatenate,
     init_rngs,
     init_weights,
@@ -66,7 +66,7 @@ class GaussianBeliefNet(Layer):
                                  h_act='T.nnet.sigmoid',
                                  out_act='lambda x: x')
         if self.conditional is None:
-            self.conditional = MLP(self.dim_h, self.dim_out, self.dim_out, 1,
+            self.conditional = MLP(self.dim_h, self.dim_h, self.dim_out, 1,
                                    rng=self.rng, trng=self.trng,
                                    h_act='T.nnet.sigmoid',
                                    out_act='T.nnet.sigmoid')

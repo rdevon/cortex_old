@@ -8,11 +8,11 @@ import theano
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as T
 
-import tools
-from tools import log_mean_exp
-from tools import init_rngs
-from tools import init_weights
-from tools import _slice
+from utils import tools
+from utils.tools import log_mean_exp
+from utils.tools import init_rngs
+from utils.tools import init_weights
+from utils.tools import _slice
 
 
 floatX = theano.config.floatX
@@ -161,12 +161,14 @@ class MLP(Layer):
             self.sample = self._binomial
             self.neg_log_prob = self._cross_entropy
             self.entropy = self._binary_entropy
+            self.prob = lambda x: x
         elif out_act == 'T.tanh':
             self.sample = self._centered_binomial
         elif out_act == 'lambda x: x':
             self.sample = self._normal
             self.neg_log_prob = self._neg_normal_log_prob
             self.entropy = self._normal_entropy
+            self.prob = self._normal_prob
         else:
             assert f_sample is not None
             assert f_neg_log_prob is not None
@@ -184,12 +186,17 @@ class MLP(Layer):
         assert len(kwargs) == 0, kwargs.keys()
         super(MLP, self).__init__(name=name)
 
+    @staticmethod
+    def factory(dim_in=None, dim_h=None, dim_out=None, n_layers=None,
+                **kwargs):
+        return MLP(dim_in, dim_h, dim_out, n_layers, **kwargs)
+
     def _binomial(self, p, size=None):
         if size is None:
             size = p.shape
         return self.trng.binomial(p=p, size=size, n=1, dtype=p.dtype)
 
-    def _centered_binomial(self, p, size=None):
+    def _centered_binomial(mlp, p, size=None):
         if size is None:
             size = p.shape
         return 2 * self.trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
@@ -211,11 +218,15 @@ class MLP(Layer):
         return entropy
 
     def _normal(self, p, size=None):
-        mu = _slice(p, 0, self.dim_out)
+        mu = _slice(p, 0, mlp.dim_out)
         log_sigma = _slice(p, 1, self.dim_out)
         if size is None:
             size = mu.shape
         return self.trng.normal(avg=mu, std=T.exp(log_sigma), size=size)
+
+    def _normal_prob(mlp, p):
+        mu = _slice(p, 0, mlp.dim_out)
+        return mu
 
     def _neg_normal_log_prob(self, x, p, axis=None):
         mu = _slice(p, 0, self.dim_out)
@@ -241,7 +252,7 @@ class MLP(Layer):
 
         cost = T.constant(0.).astype(floatX)
         for l in layers:
-            W = self.__dict__['W%d' % l]
+            W = mlp.__dict__['W%d' % l]
             cost += gamma * (W ** 2).sum()
 
         return cost
@@ -344,6 +355,61 @@ class MLP(Layer):
             x = self.step_call(x, *params)
 
         return x
+
+
+class MultiModalMLP(Layer):
+    def __init__(self, dim_in, graph, name='MLP', **kwargs):
+
+
+        self.dim_in = dim_in
+
+        graph = dict(
+            nodes=dict(
+                a=dict(dim=200, act='T.nnet.sigmoid'),
+                b=dict(dim=200, act='T.nnet.sigmoid')
+            ),
+            outs=dict(
+                o=dict(
+                    dim=500, act='lambda x: x'
+                )
+            ),
+            edges=[
+                ('i', 'a'), ('i', 'b'), ('a', 'o'), ('b', 'o')
+            ]
+        )
+
+        self.nodes = graph['nodes']
+        self.edges = graph['edges']
+        self.outs = graph['outs']
+
+        if out_act == 'T.nnet.sigmoid':
+            self.sample = self._binomial
+            self.neg_log_prob = self._cross_entropy
+            self.entropy = self._binary_entropy
+            self.prob = lambda x: x
+        elif out_act == 'T.tanh':
+            self.sample = self._centered_binomial
+        elif out_act == 'lambda x: x':
+            self.sample = self._normal
+            self.neg_log_prob = self._neg_normal_log_prob
+            self.entropy = self._normal_entropy
+            self.prob = self._normal_prob
+        else:
+            assert f_sample is not None
+            assert f_neg_log_prob is not None
+
+        if f_sample is not None:
+            self.sample = f_sample
+        if f_neg_log_prob is not None:
+            self.net_log_prob = f_neg_log_prob
+        if f_entropy is not None:
+            self.entropy = f_entropy
+
+        kwargs = init_weights(self, **kwargs)
+        kwargs = init_rngs(self, **kwargs)
+
+        assert len(kwargs) == 0, kwargs.keys()
+        super(MLP, self).__init__(name=name)
 
 
 class Softmax(Layer):

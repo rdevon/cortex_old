@@ -11,9 +11,9 @@ from sys import stdout
 import theano
 from theano import tensor as T
 import traceback
-from vis_utils import tile_raster_images
 
-from mnist import MNIST_Chains
+from mnist import Chains
+from utils.vis_utils import tile_raster_images
 
 
 def reshape_image(img, shape, crop_image=True):
@@ -29,7 +29,7 @@ def reshape_image(img, shape, crop_image=True):
     new_img.paste(img, offset_tuple)
     return new_img
 
-class Horses(MNIST_Chains):
+class Horses(Chains):
     def __init__(self, batch_size=10, source=None,
                  inf=False, chain_length=97, chain_build_batch=97, window=7,
                  stop=None, out_path=None, dims=None, chain_stride=None, shuffle=True,

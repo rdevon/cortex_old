@@ -17,6 +17,19 @@ floatX = theano.config.floatX
 norm_weight = tools.norm_weight
 ortho_weight = tools.ortho_weight
 
+def unpack(dim_h=None,
+           dim_in=None,
+           **model_args):
+
+    dim_in = int(dim_in)
+    dim_h = int(dim_h)
+
+    rbm = RBM(dim_in, dim_h)
+    models = [rbm]
+
+    return models, model_args, None
+
+
 class RBM(Layer):
     def __init__(self, dim_in, dim_h, name='rbm', rng=None, trng=None,
                  stochastic=True):
