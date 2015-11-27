@@ -21,6 +21,19 @@ f_clip = lambda x, y, z: T.clip(x, y, 1.)
 
 pi = theano.shared(np.pi).astype('float32')
 
+def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan', strict=True):
+    return theano.scan(
+        f_scan,
+        sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=name,
+            n_steps=n_steps,
+            profile=profile,
+            strict=strict
+    )
+
+
 def init_weights(model, weight_noise=False, weight_scale=0.01, dropout=False, **kwargs):
     model.weight_noise = weight_noise
     model.weight_scale = weight_scale
@@ -112,7 +125,7 @@ def load_model(model_file, f_unpack=None, **extra_args):
                     print '{} not found'.format(k)
         model_dict[model.name] = model
 
-    return model_dict, kwargs
+    return model_dict, pretrained_kwargs
 
 def check_bad_nums(rvals, names):
     found = False

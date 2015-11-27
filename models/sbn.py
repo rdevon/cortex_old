@@ -10,14 +10,16 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from layers import Layer
 from layers import MLP
-import tools
-from tools import concatenate
-from tools import init_rngs
-from tools import init_weights
-from tools import log_mean_exp
-from tools import log_sum_exp
-from tools import logit
-from tools import _slice
+from utils import tools
+from utils.tools import (
+    concatenate,
+    init_rngs,
+    init_weights,
+    log_mean_exp,
+    log_sum_exp,
+    logit,
+    _slice
+)
 
 
 norm_weight = tools.norm_weight
@@ -112,9 +114,86 @@ def set_input(x, mode, trng=None):
         raise ValueError('% not supported' % mode)
     return x
 
+def load_mlp(name, dim_in, dim_out, dim_h=None, n_layers=None, **kwargs):
+    mlp = MLP(dim_in, dim_h, dim_out, n_layers, name=name, **kwargs)
+    return mlp
+
+def unpack(dim_in=None,
+           dim_h=None,
+           z_init=None,
+           recognition_net=None,
+           generation_net=None,
+           prior=None,
+           dataset=None,
+           dataset_args=None,
+           n_inference_steps=None,
+           n_inference_samples=None,
+           inference_method=None,
+           inference_rate=None,
+           input_mode=None,
+           extra_inference_args=dict(),
+           **model_args):
+    '''
+    Function to unpack pretrained model into fresh SFFN class.
+    '''
+
+    kwargs = dict(
+        prior=prior,
+        inference_method=inference_method,
+        inference_rate=inference_rate,
+        n_inference_steps=n_inference_steps,
+        z_init=z_init,
+        n_inference_samples=n_inference_samples,
+        extra_inference_args=extra_inference_args,
+    )
+
+    dim_h = int(dim_h)
+    dim_in = int(dim_in)
+    dataset_args = dataset_args[()]
+
+    if prior == 'logistic':
+        out_act = 'T.nnet.sigmoid'
+    elif prior == 'gaussian':
+        out_act = 'lambda x: x'
+    else:
+        raise ValueError('%s prior not known' % prior)
+
+    models = []
+    if recognition_net is not None:
+        recognition_net = recognition_net[()]
+        posterior = load_mlp('posterior', dim_in, dim_h,
+                             out_act=out_act,
+                             **recognition_net)
+        models.append(posterior)
+    else:
+        posterior = None
+
+    if generation_net is not None:
+        generation_net = generation_net[()]
+        conditional = load_mlp('conditional', dim_h, dim_in,
+                               out_act='T.nnet.sigmoid',
+                               **generation_net)
+        models.append(conditional)
+
+    if prior == 'logistic':
+        C = SigmoidBeliefNetwork
+    elif prior == 'gaussian':
+        C = GBN
+    else:
+        raise ValueError('%s prior not known' % prior)
+
+    model = C(dim_in, dim_h,
+              conditional=conditional, posterior=posterior,
+              **kwargs)
+    models.append(model)
+    return models, model_args, dict(
+        dataset=dataset,
+        dataset_args=dataset_args
+    )
+
 
 class SigmoidBeliefNetwork(Layer):
-    def __init__(self, dim_in, dim_h, dim_out,
+    def __init__(self, dim_in, dim_h,
                  posterior=None, conditional=None,
                  z_init=None,
                  name='sbn',
@@ -122,7 +201,6 @@ class SigmoidBeliefNetwork(Layer):
 
         self.dim_in = dim_in
         self.dim_h = dim_h
-        self.dim_out = dim_out
 
         self.posterior = posterior
         self.conditional = conditional
@@ -148,7 +226,7 @@ class SigmoidBeliefNetwork(Layer):
                                  h_act='T.nnet.sigmoid',
                                  out_act='T.nnet.sigmoid')
         if self.conditional is None:
-            self.conditional = MLP(self.dim_h, self.dim_out, self.dim_out, 1,
+            self.conditional = MLP(self.dim_h, self.dim_h, self.dim_in, 1,
                                    rng=self.rng, trng=self.trng,
                                    h_act='T.nnet.sigmoid',
                                    out_act='T.nnet.sigmoid')
@@ -179,11 +257,13 @@ class SigmoidBeliefNetwork(Layer):
     def sample_from_prior(self, n_samples=100):
         p = T.nnet.sigmoid(self.z)
         h = self.posterior.sample(p=p, size=(n_samples, self.dim_h))
-        if self.center_latent:
-            py = self.conditional(h - p[None, :])
-        else:
-            py = self.conditional(h)
+        py = self.conditional(h)
         return py
+
+    def generate_from_latent(self, H):
+        py = self.conditional(H)
+        prob = self.conditional.prob(py)
+        return prob
 
     def importance_weights(self, y, h, py, q, prior, normalize=True):
         y_energy = self.conditional.neg_log_prob(y, py)
@@ -267,10 +347,7 @@ class SigmoidBeliefNetwork(Layer):
         h = self.posterior.sample(
             q, size=(self.n_inference_samples, q.shape[0], q.shape[1]))
 
-        if self.center_latent:
-            py = self.p_y_given_h(h - prior[None, None, :], *params)
-        else:
-            py = self.p_y_given_h(h, *params)
+        py = self.p_y_given_h(h, *params)
 
         y_energy = self.conditional.neg_log_prob(y[None, :, :], py)
         prior_energy = self.posterior.neg_log_prob(h, prior[None, None, :])
@@ -423,10 +500,10 @@ class SigmoidBeliefNetwork(Layer):
                 sequences=seqs,
                 outputs_info=outputs_info,
                 non_sequences=non_seqs,
-                name=tools._p(self.name, 'infer'),
+                name=self.name + '_infer',
                 n_steps=n_inference_steps,
                 profile=tools.profile,
-                strict=True
+                strict=False
             )
             updates.update(updates_2)
 
@@ -507,7 +584,7 @@ class SigmoidBeliefNetwork(Layer):
 
 
 class DeepSBN(Layer):
-    def __init__(self, dim_in, dim_h, dim_out, n_layers=2,
+    def __init__(self, dim_in, dim_h, n_layers=2,
                  posteriors=None, conditionals=None,
                  z_init=None,
                  name='sbn',
@@ -515,7 +592,6 @@ class DeepSBN(Layer):
 
         self.dim_in = dim_in
         self.dim_h = dim_h
-        self.dim_out = dim_out
 
         self.n_layers = n_layers
 
@@ -552,7 +628,7 @@ class DeepSBN(Layer):
                 dim_in = self.dim_h
 
             if l == self.n_layers - 1:
-                dim_out = self.dim_out
+                dim_out = self.dim_in
             else:
                 dim_out = self.dim_h
 
