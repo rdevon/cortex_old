@@ -71,6 +71,17 @@ def _slice(_x, n, dim):
         raise ValueError('Number of dims (%d) not supported'
                          ' (but can add easily here)' % _x.ndim)
 
+def _slice2(_x, start, end):
+    if _x.ndim == 1:
+        return _x[start:emd]
+    elif _x.ndim == 2:
+        return _x[:, start:end]
+    elif _x.ndim == 3:
+        return _x[:, :, start:end]
+    else:
+        raise ValueError('Number of dims (%d) not supported'
+                         ' (but can add easily here)' % _x.ndim)
+
 def load_experiment(experiment_yaml):
     print('Loading experiment from %s' % experiment_yaml)
     exp_dict = yaml.load(open(experiment_yaml))
