@@ -171,21 +171,21 @@ class Chains(object):
         print 'Chain took %.2f seconds' % (t1 - t0)
 
         if self.out_path is not None:
-            self.save_images(self._load_chains(),
+            self.dataset.save_images(self._load_chains(),
                              path.join(self.out_path,
-                                       '%s_chain_%d.png' % (self.mode, self.pos)),
+                                       '%s_chain_%d.png' % (self.dataset.mode, self.dataset.pos)),
                              x_limit=200)
 
         if trim_end:
             print 'Trimming %d' % trim_end
             self.chain = self.chain[:-trim_end]
 
-        if self.out_path is not None:
-            self.save_images(
-                self._load_chains(),
-                path.join(self.out_path,
-                          '%s_chain_%d_trimmed.png' % (self.mode, self.pos)),
-                x_limit=200)
+            if self.out_path is not None:
+                self.dataset.save_images(
+                    self._load_chains(),
+                    path.join(self.out_path,
+                              '%s_chain_%d_trimmed.png' % (self.dataset.mode, self.dataset.pos)),
+                    x_limit=200)
 
     def _load_chains(self, chains=None):
         if chains is None:
