@@ -12,7 +12,7 @@ import theano
 from theano import tensor as T
 import traceback
 
-from mnist import Chains
+from chains import Chains
 from utils.vis_utils import tile_raster_images
 
 

@@ -5,6 +5,7 @@ Module for GRU layers
 import copy
 from collections import OrderedDict
 import numpy as np
+import random
 import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
@@ -30,6 +31,7 @@ def unpack(dim_in=None,
            dim_h=None,
            h_init=None,
            i_net=None, a_net=None, o_net=None, c_net=None,
+           mode=None,
            **model_args):
 
     # HACKS
@@ -46,18 +48,21 @@ def unpack(dim_in=None,
 
     trng = RandomStreams(random.randint(0, 100000))
 
-    mlps = GRU.mlp_factory(dim_in, dim_h,
+    mlps = GRU.mlp_factory(dim_in, dim_h, mode=mode,
                            i_net=i_net, a_net=a_net, o_net=o_net, c_net=c_net)
 
     model = GRU(dim_in, dim_h, **mlps)
-    models = [model] + model.nets
+    models = [model]
+    for net in model.nets:
+        if net is not None:
+            models.append(net)
 
     if h_init == 'average':
         averager = Averager((dim_h))
         models.append(averager)
     elif h_init == 'mlp':
-        mlp = MLP(dim_in, dim_h, dim_h, 1, out_act='T.tanh', name='MLPh')
-        models.append(mlp)
+        h_net = MLP(dim_in, dim_h, dim_h, 1, out_act='T.tanh', name='h_net')
+        models.append(h_net)
 
     return models, model_args, None
 
