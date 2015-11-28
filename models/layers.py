@@ -3,16 +3,21 @@ Module for general layers
 '''
 
 from collections import OrderedDict
+import copy
 import numpy as np
 import theano
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as T
 
 from utils import tools
-from utils.tools import log_mean_exp
-from utils.tools import init_rngs
-from utils.tools import init_weights
-from utils.tools import _slice
+from utils.tools import (
+    concatenate,
+    log_mean_exp,
+    init_rngs,
+    init_weights,
+    _slice,
+    _slice2
+)
 
 
 floatX = theano.config.floatX
@@ -97,48 +102,66 @@ class Scheduler(Layer):
         return OrderedDict(x=x), theano.OrderedUpdates([(self.counter, counter)])
 
 
-class FFN(Layer):
-    def __init__(self, nin, nout, ortho=True, dropout=False, trng=None,
-                 activ='lambda x: x', name='ff', weight_noise=False):
-        self.nin = nin
-        self.nout = nout
-        self.ortho = ortho
-        self.activ = activ
-        self.dropout = dropout
-        self.weight_noise = weight_noise
+def _binomial(trng, p, size=None):
+    if size is None:
+        size = p.shape
+    return trng.binomial(p=p, size=size, n=1, dtype=p.dtype)
 
-        if self.dropout and trng is None:
-            self.trng = RandomStreams(1234)
-        else:
-            self.trng = trng
+def _centered_binomial(trng, p, size=None):
+    if size is None:
+        size = p.shape
+    return 2 * trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
 
-        super(FFN, self).__init__(name)
-        self.set_params()
+def _cross_entropy(x, p, axis=None):
+    p = T.clip(p, 1e-7, 1.0 - 1e-7)
+    energy = T.nnet.binary_crossentropy(p, x)
+    if axis is None:
+        axis = energy.ndim - 1
+    energy = energy.sum(axis=axis)
+    return energy
 
-    def set_params(self):
-        W = tools.norm_weight(self.nin, self.nout, scale=0.01, ortho=self.ortho)
-        b = np.zeros((self.nout,)).astype(floatX)
+def _binary_entropy(p, axis=None):
+    p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
+    entropy = T.nnet.binary_crossentropy(p_c, p)
+    if axis is None:
+        axis = entropy.ndim - 1
+    entropy = entropy.sum(axis=axis)
+    return entropy
 
-        self.params = OrderedDict(
-            W=W,
-            b=b
-        )
+def _normal(trng, p, size=None):
+    dim = p.shape[p.ndim-1] // 2
+    mu = _slice(p, 0, dim)
+    log_sigma = _slice(p, 1, dim)
 
-        if self.weight_noise:
-            W_noise = (W * 0).astype(floatX)
-            self.params.update(W_noise=W_noise)
+    if size is None:
+        size = mu.shape
+    return trng.normal(avg=mu, std=T.exp(log_sigma), size=size)
 
-    def __call__(self, state_below):
-        W = self.W + self.W_noise if self.weight_noise else self.W
-        z = eval(self.activ)(T.dot(state_below, W) + self.b)
-        if self.dropout:
-            if self.activ == 'T.tanh':
-                raise NotImplementedError()
-            else:
-                z_d = self.trng.binomial(z.shape, p=1-self.dropout, n=1,
-                                         dtype=z.dtype)
-                z = z * z_d / (1 - self.dropout)
-        return OrderedDict(z=z), theano.OrderedUpdates()
+def _normal_prob(p):
+    dim = p.shape[p.ndim-1] // 2
+    mu = _slice(p, 0, dim)
+    return mu
+
+def _neg_normal_log_prob(x, p, axis=None):
+    dim = p.shape[p.ndim-1] // 2
+    mu = _slice(p, 0, dim)
+    log_sigma = _slice(p, 1, dim)
+
+    energy = 0.5 * ((x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
+    if axis is None:
+        axis = energy.ndim - 1
+    energy = energy.sum(axis=axis)
+    return energy
+
+def _normal_entropy(p, axis=None):
+    dim = p.shape[p.ndim-1] // 2
+    log_sigma = _slice(p, 1, dim)
+
+    entropy = 0.5 * T.log(2 * pi * e) + log_sigma
+    if axis is None:
+        axis = entropy.ndim - 1
+    entropy = entropy.sum(axis=axis)
+    return entropy
 
 
 class MLP(Layer):
@@ -158,17 +181,17 @@ class MLP(Layer):
         self.out_act = out_act
 
         if out_act == 'T.nnet.sigmoid':
-            self.sample = self._binomial
-            self.neg_log_prob = self._cross_entropy
-            self.entropy = self._binary_entropy
-            self.prob = lambda x: x
+            self.f_sample = _binomial
+            self.f_neg_log_prob = _cross_entropy
+            self.f_entropy = _binary_entropy
+            self.f_prob = lambda x: x
         elif out_act == 'T.tanh':
-            self.sample = self._centered_binomial
+            self.f_sample = _centered_binomial
         elif out_act == 'lambda x: x':
-            self.sample = self._normal
-            self.neg_log_prob = self._neg_normal_log_prob
-            self.entropy = self._normal_entropy
-            self.prob = self._normal_prob
+            self.f_sample = _normal
+            self.f_neg_log_prob = _neg_normal_log_prob
+            self.f_entropy = _normal_entropy
+            self.f_prob = _normal_prob
         else:
             assert f_sample is not None
             assert f_neg_log_prob is not None
@@ -186,64 +209,22 @@ class MLP(Layer):
         assert len(kwargs) == 0, kwargs.keys()
         super(MLP, self).__init__(name=name)
 
+    def sample(self, p, size=None):
+        return self.f_sample(self.trng, p, size=size)
+
+    def neg_log_prob(self, x, p):
+        return self.f_neg_log_prob(x, p)
+
+    def entropy(self, p):
+        return self.f_entropy(p)
+
+    def prob(self, p):
+        return self.f_prob(p)
+
     @staticmethod
     def factory(dim_in=None, dim_h=None, dim_out=None, n_layers=None,
                 **kwargs):
         return MLP(dim_in, dim_h, dim_out, n_layers, **kwargs)
-
-    def _binomial(self, p, size=None):
-        if size is None:
-            size = p.shape
-        return self.trng.binomial(p=p, size=size, n=1, dtype=p.dtype)
-
-    def _centered_binomial(mlp, p, size=None):
-        if size is None:
-            size = p.shape
-        return 2 * self.trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
-
-    def _cross_entropy(self, x, p, axis=None):
-        p = T.clip(p, 1e-7, 1.0 - 1e-7)
-        energy = T.nnet.binary_crossentropy(p, x)
-        if axis is None:
-            axis = energy.ndim - 1
-        energy = energy.sum(axis=axis)
-        return energy
-
-    def _binary_entropy(self, p, axis=None):
-        p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
-        entropy = T.nnet.binary_crossentropy(p_c, p)
-        if axis is None:
-            axis = entropy.ndim - 1
-        entropy = entropy.sum(axis=axis)
-        return entropy
-
-    def _normal(self, p, size=None):
-        mu = _slice(p, 0, mlp.dim_out)
-        log_sigma = _slice(p, 1, self.dim_out)
-        if size is None:
-            size = mu.shape
-        return self.trng.normal(avg=mu, std=T.exp(log_sigma), size=size)
-
-    def _normal_prob(mlp, p):
-        mu = _slice(p, 0, mlp.dim_out)
-        return mu
-
-    def _neg_normal_log_prob(self, x, p, axis=None):
-        mu = _slice(p, 0, self.dim_out)
-        log_sigma = _slice(p, 1, self.dim_out)
-        energy = 0.5 * ((x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
-        if axis is None:
-            axis = energy.ndim - 1
-        energy = energy.sum(axis=axis)
-        return energy
-
-    def _normal_entropy(self, p, axis=None):
-        log_sigma = _slice(p, 1, self.dim_out)
-        entropy = 0.5 * T.log(2 * pi * e) + log_sigma
-        if axis is None:
-            axis = entropy.ndim - 1
-        entropy = entropy.sum(axis=axis)
-        return entropy
 
     def get_L2_weight_cost(self, gamma, layers=None):
 
@@ -252,7 +233,7 @@ class MLP(Layer):
 
         cost = T.constant(0.).astype(floatX)
         for l in layers:
-            W = mlp.__dict__['W%d' % l]
+            W = self.__dict__['W%d' % l]
             cost += gamma * (W ** 2).sum()
 
         return cost
@@ -323,7 +304,7 @@ class MLP(Layer):
                         Ws += self.trng.normal(avg=0., std=self.weight_noise, size=W.shape)
                     mu = T.dot(x, W) + b
                     log_sigma = T.dot(x, Ws) + bs
-                    x = T.concatenate([mu, log_sigma], axis=mu.ndim-1)
+                    x = concatenate([mu, log_sigma], axis=mu.ndim-1)
                 else:
                     x = T.dot(x, W) + b
             else:
@@ -358,106 +339,218 @@ class MLP(Layer):
 
 
 class MultiModalMLP(Layer):
-    def __init__(self, dim_in, graph, name='MLP', **kwargs):
+    def __init__(self, graph, name='MLP', **kwargs):
+        graph = copy.deepcopy(graph)
 
-
-        self.dim_in = dim_in
-
-        graph = dict(
-            nodes=dict(
-                a=dict(dim=200, act='T.nnet.sigmoid'),
-                b=dict(dim=200, act='T.nnet.sigmoid')
-            ),
-            outs=dict(
-                o=dict(
-                    dim=500, act='lambda x: x'
-                )
-            ),
-            edges=[
-                ('i', 'a'), ('i', 'b'), ('a', 'o'), ('b', 'o')
-            ]
-        )
-
-        self.nodes = graph['nodes']
+        self.layers = OrderedDict()
+        self.layers.update(**graph['layers'])
         self.edges = graph['edges']
-        self.outs = graph['outs']
+        outs = graph['outs'].keys()
+        for k in outs:
+            assert not k in self.layers.keys()
+        self.layers.update(**graph['outs'])
 
-        if out_act == 'T.nnet.sigmoid':
-            self.sample = self._binomial
-            self.neg_log_prob = self._cross_entropy
-            self.entropy = self._binary_entropy
-            self.prob = lambda x: x
-        elif out_act == 'T.tanh':
-            self.sample = self._centered_binomial
-        elif out_act == 'lambda x: x':
-            self.sample = self._normal
-            self.neg_log_prob = self._neg_normal_log_prob
-            self.entropy = self._normal_entropy
-            self.prob = self._normal_prob
-        else:
-            assert f_sample is not None
-            assert f_neg_log_prob is not None
+        for l in self.layers.keys():
+            if self.layers[l]['act'] == 'lambda x: x':
+                self.layers[l]['dim'] *= 2
 
-        if f_sample is not None:
-            self.sample = f_sample
-        if f_neg_log_prob is not None:
-            self.net_log_prob = f_neg_log_prob
-        if f_entropy is not None:
-            self.entropy = f_entropy
+        self.outs = OrderedDict()
+        for i, o in self.edges:
+            if o in outs:
+                assert not o in self.outs.keys()
+                o_dict = OrderedDict()
+                act = self.layers[o]['act']
+                if act == 'T.nnet.sigmoid':
+                    o_dict['f_sample'] = _binomial
+                    o_dict['f_neg_log_prob'] = _cross_entropy
+                    o_dict['f_entropy'] = _binary_entropy
+                    o_dict['f_prob'] = lambda x: x
+                elif act == 'T.tanh':
+                    o_dict['f_sample'] = _centered_binomial
+                elif act == 'lambda x: x':
+                    o_dict['f_sample'] = _normal
+                    o_dict['f_neg_log_prob'] = _neg_normal_log_prob
+                    o_dict['f_entropy'] = _normal_entropy
+                    o_dict['f_prob'] = _normal_prob
+                else:
+                    raise ValueError(act)
+
+                self.outs[o] = o_dict
+
+        assert not 'i' in self.layers.keys()
+        self.layers['i'] = graph['input']
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
-        assert len(kwargs) == 0, kwargs.keys()
-        super(MLP, self).__init__(name=name)
+        assert len(kwargs) == 0, 'Got extra args: %r' % kwargs.keys()
+        super(MultiModalMLP, self).__init__(name=name)
 
+    def sample(self, p, size=None):
+        if size is None:
+            size = p.shape
+        start = 0
+        x = []
+        for o, v in self.outs.iteritems():
+            dim = self.layers[o]['dim']
+            f_sample = v['f_sample']
+            p_ = _slice2(p, start, start+dim)
+            if self.layers[o]['act'] == 'lambda x: x':
+                scale = 2
+            else:
+                scale = 1
 
-class Softmax(Layer):
-    def __init__(self, name='softmax'):
-        super(Softmax, self).__init__(name)
+            if size is None:
+                size_ = None
+            else:
+                if p.ndim == 1:
+                    size_ = (size[0], p_.shape[0] // scale)
+                elif p.ndim == 2:
+                    size_ = (size[0], p_.shape[0], p_.shape[1] // scale)
+                elif p.ndim == 3:
+                    size_ = (size[0], p_.shape[0], p_.shape[1], p_.shape[2] // scale)
+                else:
+                    raise ValueError()
+            x.append(f_sample(self.trng, p_, size=size_))
+            start += dim
 
-    def __call__(self, input_):
-        if input_.ndim == 3:
-            reshape = input_.shape
-            input_ = input_.reshape((input_.shape[0] * input_.shape[1], input_.shape[2]))
+        return concatenate(x, axis=(x[0].ndim-1))
+
+    def neg_log_prob(self, x, p):
+        neg_log_prob = T.constant(0.).astype('float32')
+        start = 0
+        for o, v in self.outs.iteritems():
+            dim = self.layer[0]['dim']
+            f_neg_log_prob = v['f_neg_log_prob']
+            print start, start + dim
+            p_ = _slice2(p, start, start + dim)
+            x_ = _slice2(x, start, start + dim)
+            neg_log_prob += f_neg_log_prob(x_, p_)
+            start += dim
+
+        return neg_log_prob
+
+    def entropy(self, p):
+        start = 0
+        entropy = T.constant(0.).astype('float32')
+        for o, v in self.outs.iteritems():
+            dim = self.layers[o]['dim']
+            f_entropy = v['f_entropy']
+            p_ = _slice2(p, start, start + dim)
+            print start, start + dim
+            entropy += f_entropy(p_)
+            start += dim
+
+        return entropy
+
+    def prob(self, p):
+        start = 0
+        x = []
+        for o, v in self.outs.iteritems():
+            dim = self.layer[0]['dim']
+            f_prob = v['f_prob']
+            p_ = _slice2(p, start, start + dim)
+            x.append(f_prob(p_))
+        return concatenate(x, axis=(x[0].ndim-1))
+
+    def set_params(self):
+        self.params = OrderedDict()
+
+        for i, o in self.edges:
+            assert not o == 'i'
+            assert not i in self.outs
+
+            dim_in = self.layers[i]['dim']
+            dim_out = self.layers[o]['dim']
+
+            W = tools.norm_weight(dim_in, dim_out,
+                                  scale=self.weight_scale, ortho=False)
+            b = np.zeros((dim_out,)).astype(floatX)
+
+            self.params['W_%s' % o] = W
+            self.params['b_%s' % o] = b
+
+            '''
+            if o in self.outs and self.layers[o]['act'] == 'lambda x: x':
+
+                Ws = tools.norm_weight(dim_in, dim_out,
+                                       scale=self.weight_scale, ortho=False)
+                bs = np.zeros((dim_out,)).astype(floatX)
+                self.params['Ws_%s' % o] = Ws
+                self.params['bs_%s' % o] = bs
+            '''
+
+    def get_params(self):
+        params = []
+        for _, o in self.edges:
+            W = self.__dict__['W_%s' % o]
+            b = self.__dict__['b_%s' % o]
+            params += [W, b]
+
+            '''
+            if o in self.outs.keys() and self.layers[o]['act'] == 'lambda x: x':
+                Ws = self.__dict__['Ws_%s' % o]
+                bs = self.__dict__['bs_%s' % o]
+                params += [Ws, bs]
+            '''
+
+        return params
+
+    def preact(self, x, *params):
+        # Used within scan with `get_params`
+        params = list(params)
+        outs = dict(i=x)
+
+        for i, o in self.edges:
+            x = outs[i]
+            assert not o in outs.keys()
+            W = params.pop(0)
+            b = params.pop(0)
+
+            if o in self.outs:
+                '''
+                if self.layers[o]['act'] == 'lambda x: x':
+                    Ws = params.pop(0)
+                    bs = params.pop(0)
+                    mu = T.dot(x, W) + b
+                    log_sigma = T.dot(x, Ws) + bs
+                    x = concatenate([mu, log_sigma], axis=mu.ndim-1)
+                else:
+                '''
+                x = T.dot(x, W) + b
+            else:
+                act = self.layers[o]['act']
+                x = eval(act)(T.dot(x, W) + b)
+
+            outs[o] = x
+
+        x = []
+        for o in self.outs.keys():
+            x.append(outs[o])
+
+        return concatenate(x, axis=(x[0].ndim-1))
+
+    def step_call(self, x, *params):
+        x = self.preact(x, *params)
+        start = 0
+        y = []
+        for o in self.outs.keys():
+            dim = self.layers[o]['dim']
+            act = self.layers[o]['act']
+            x_ = _slice2(x, start, start + dim)
+            y.append(eval(act)(x_))
+            start += dim
+
+        return concatenate(y, axis=(y[0].ndim-1))
+
+    def __call__(self, x, return_preact=False):
+        params = self.get_params()
+        if return_preact:
+            x = self.preact(x, *params)
         else:
-            reshape = False
-        y_hat = T.nnet.softmax(input_)
-        if reshape:
-            y_hat = y_hat.reshape(reshape)
-        return OrderedDict(y_hat=y_hat), theano.OrderedUpdates()
+            x = self.step_call(x, *params)
 
-    def err(self, y_hat, Y):
-        err = (Y * (1 - y_hat) + (1 - Y) * y_hat).mean()
-        return err
-
-    def zero_one_loss(self, y_hat, Y):
-        y_hat = self.take_argmax(y_hat)
-        y = self.take_argmax(Y)
-        return T.mean(T.neq(y_hat, y))
-
-    def take_argmax(self, var):
-        """Takes argmax along 1st axis if tensor variable is matrix."""
-        if var.ndim == 2:
-            return T.argmax(var, axis=1)
-        elif var.ndim == 1:
-            return var
-        else:
-            raise ValueError("Un-recognized shape for Softmax::"
-                             "zero-one-loss, taking argmax!")
-
-
-class Logistic(Layer):
-    def __init__(self, name='logistic'):
-        super(Logistic, self).__init__(name)
-
-    def __call__(self, input_):
-        y_hat = T.nnet.sigmoid(input_)
-        return OrderedDict(y_hat=y_hat), theano.OrderedUpdates()
-
-    def err(self, y_hat, Y):
-        err = (Y * (1 - y_hat) + (1 - Y) * y_hat).mean()
-        return err
+        return x
 
 
 class Averager(Layer):
