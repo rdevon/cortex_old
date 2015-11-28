@@ -35,6 +35,7 @@ class MNIST(object):
             x = cPickle.load(f)
 
         X, Y = self.get_data(x, mode)
+        self.mode = mode
 
         self.dims = (28, 28)
         self.out_path = out_path
