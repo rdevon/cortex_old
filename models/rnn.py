@@ -9,7 +9,6 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from layers import FFN
 from layers import Layer
 from utils import tools
 from utils.tools import (
@@ -168,15 +167,16 @@ class RNN(Layer):
     def energy(self, X, h0=None):
         outs, updates = self.__call__(X[:-1], h0=h0)
         p = outs['p']
-        energy = self.output_net.net_log_prob(X[1:], p).sum(axis=0)
+        energy = self.neg_log_prob(X[1:], p).sum(axis=0)
         return energy
+
+    def neg_log_prob(self, x, p):
+        return self.output_net.neg_log_prob(x, p)
 
     def sample(self, x0=None, h0=None, n_samples=10, n_steps=10):
         if x0 is None:
             x0 = self.output_net.sample(
                 p=0.5, size=(n_samples, self.output_net.dim_out)).astype(floatX)
-        else:
-            x0 = self.output_net.sample(x0)
 
         p0 = x0.copy()
         if h0 is None:
