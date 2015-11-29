@@ -339,7 +339,7 @@ class MLP(Layer):
 
 
 class MultiModalMLP(Layer):
-    def __init__(self, graph, name='MLP', **kwargs):
+    def __init__(self, dim_in, graph, name='MLP', **kwargs):
         graph = copy.deepcopy(graph)
 
         self.layers = OrderedDict()
@@ -378,7 +378,7 @@ class MultiModalMLP(Layer):
                 self.outs[o] = o_dict
 
         assert not 'i' in self.layers.keys()
-        self.layers['i'] = graph['input']
+        self.layers['i'] = dict(dim=dim_in)
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
