@@ -37,7 +37,7 @@ def random_distance(x, x_p, h_p, model):
 class Chains(object):
     def __init__(self, D, batch_size=10,
                  window=20, chain_length=5000, build_batch=1000,
-                 chain_stride=None, n_chains=1,
+                 chain_stride=None, chain_noise=0.,
                  use_theano=False,
                  trim_end=0, out_path=None, **kwargs):
 
@@ -50,6 +50,7 @@ class Chains(object):
         self.build_batch = build_batch
         self.trim_end = trim_end
         self.chain_length = min(chain_length, self.dataset.n)
+        self.chain_noise = chain_noise
         self.dim_h = None
         self.out_path = out_path
         self.use_theano = use_theano
@@ -84,14 +85,16 @@ class Chains(object):
         h_p = self.trng.normal(avg=0., std=1., size=(dim_h,)).astype('float32')
         counts = T.set_subtensor(counts[0], 0)
 
-        def step(i, x_p, h_p, counts, x):
+        chain_noise = self.trng.normal(avg=0., std=self.chain_noise, size=(X.shape[0]-1,)).astype('floatX')
+
+        def step(cn, i, x_p, h_p, counts, x):
             energies, _, h_n = f_energy(x, x_p, h_p, model)
-            energies = energies / counts
+            energies = energies / counts + cn
             i = T.argmin(energies)
             counts = T.set_subtensor(counts[i], 0)
             return i, x[i], h_n, counts
 
-        seqs = []
+        seqs = [chain_noise]
         outputs_info = [T.constant(0).astype('int64'), x_p, h_p, counts]
         non_seqs = [X]
 
