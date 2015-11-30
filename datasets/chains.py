@@ -81,11 +81,12 @@ class Chains(object):
         # Chain function ------------------------------------------------------
         counts = T.ones((X.shape[0],)).astype('int64')
         P = T.scalar('P', dtype='int64')
+        S = T.scalar('S', dtype='float32')
         x_p = X[0]
         h_p = self.trng.normal(avg=0., std=1., size=(dim_h,)).astype('float32')
         counts = T.set_subtensor(counts[0], 0)
 
-        chain_noise = self.trng.normal(avg=0., std=self.chain_noise, size=(X.shape[0]-1,)).astype('floatX')
+        chain_noise = self.trng.normal(avg=0., std=S, size=(X.shape[0]-1,)).astype('floatX')
 
         def step(cn, i, x_p, h_p, counts, x):
             energies, _, h_n = f_energy(x, x_p, h_p, model)
@@ -105,7 +106,7 @@ class Chains(object):
         chain += P
         chain_e = T.zeros((chain.shape[0] + 1,)).astype('int64')
         chain = T.set_subtensor(chain_e[1:], chain)
-        self.f_chain = theano.function([X, P], chain, updates=updates)
+        self.f_chain = theano.function([X, P, S], chain, updates=updates)
 
     def _build_chain_py(self, x, data_pos):
         h_p = np.random.normal(
@@ -150,7 +151,7 @@ class Chains(object):
 
         return chain
 
-    def _build_chain(self, trim_end=0):
+    def _build_chain(self, trim_end=0, use_noise=True):
         self.chain = []
         n_remaining_samples = self.dataset.n - self.dataset.pos
         l_chain = min(self.chain_length, n_remaining_samples)
@@ -164,7 +165,11 @@ class Chains(object):
             print('Resetting chain with length %d using all datapoints (theano). '
                   'Position in data is %d'
                   % (l_chain, data_pos))
-            self.chain = self.f_chain(x, data_pos)
+            if use_noise:
+                s = self.chain_noise
+            else:
+                s = 0.
+            self.chain = self.f_chain(x, data_pos, s)
         else:
             print('Resetting chain with length %d and %d samples per query. '
                   'Position in data is %d'
@@ -203,7 +208,7 @@ class Chains(object):
         self.dataset.reset()
         self.cpos = -1
 
-    def _next(self, l_chain=None):
+    def _next(self, l_chain=None, use_noise=True):
         assert self.f_energy is not None
 
         chain_length = min(self.chain_length - self.trim_end,
@@ -212,7 +217,7 @@ class Chains(object):
 
         if self.cpos == -1:
             self.cpos = 0
-            self._build_chain(trim_end=self.trim_end)
+            self._build_chain(trim_end=self.trim_end, use_noise=True)
             self.chain_idx = range(0, chain_length - window + 1, self.chain_stride)
             random.shuffle(self.chain_idx)
 
