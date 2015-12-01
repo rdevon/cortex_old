@@ -119,7 +119,12 @@ def montage(nifti, anat, roi_dict, thr=2,
     texcol = 1
     bgcol = 1
     iscale = 2
-    weights = nifti.get_data(); #weights = weights / weights.std(axis=3)
+    if isinstance(nifti, list):
+        weights = np.array([n.get_data() for n in nifti]).astype('float32')
+        weights = weights.transpose(1, 2, 3, 0)
+        nifti = nifti[0]
+    else:
+        weights = nifti.get_data(); #weights = weights / weights.std(axis=3)
     features = weights.shape[-1]
 
     indices = [0]
@@ -142,10 +147,10 @@ def montage(nifti, anat, roi_dict, thr=2,
             coords = roi["top_clust"]["coords"]
         else:
             coords = (0., 0., 0.)
-
         assert coords is not None
 
         feat = weights[:, :, :, f]
+
         feat = feat / feat.std()
         imax = np.max(np.absolute(feat)); imin = -imax
         imshow_args = {"vmax": imax, "vmin": imin}
@@ -155,7 +160,8 @@ def montage(nifti, anat, roi_dict, thr=2,
         ax = fig.add_subplot(x, y, f + 1)
         plt.axis("off")
 
-        try: plot_map(feat,
+        try:
+            plot_map(feat,
                       xyz_affine(nifti),
                       anat=anat.get_data(),
                       anat_affine=xyz_affine(anat),
@@ -168,6 +174,7 @@ def montage(nifti, anat, roi_dict, thr=2,
                       draw_cross=False,
                       **imshow_args)
         except Exception as e:
+            print e
             pass
 
         plt.text(0.05, 0.8, str(f),
