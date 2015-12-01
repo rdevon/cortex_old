@@ -279,7 +279,7 @@ def cluster_worker(fnifti, thr, roi_dict):
     try:
         idx = int(fnifti.split("/")[-1].split(".")[0])
     except:
-        idx = fnifti.split("/")[-1].split(".")[0]
+        idx = int(fnifti.split("/")[-1].split(".")[0].split('_')[-1])
     roi_dict[idx] = get_cluster_info(clusters)
 
 def worker_helper(args):

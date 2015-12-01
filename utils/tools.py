@@ -73,7 +73,7 @@ def _slice(_x, n, dim):
 
 def _slice2(_x, start, end):
     if _x.ndim == 1:
-        return _x[start:emd]
+        return _x[start:end]
     elif _x.ndim == 2:
         return _x[:, start:end]
     elif _x.ndim == 3:
