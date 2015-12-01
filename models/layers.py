@@ -129,9 +129,11 @@ def _binary_entropy(p, axis=None):
     return entropy
 
 # Softmax
-def softmax(x):
-    e_x = T.exp(x - x.max(axis=1, keepdims=True))
-    out = e_x / e_x.sum(axis=1, keepdims=True)
+def _softmax(x, axis=None):
+    if axis is None:
+        axis = x.ndim - 1
+    e_x = T.exp(x - x.max(axis=axis, keepdims=True))
+    out = e_x / e_x.sum(axis=axis, keepdims=True)
     return out
 
 def _sample_softmax(trng, p, size=None):
@@ -250,7 +252,6 @@ class MLP(Layer):
     @staticmethod
     def factory(dim_in=None, dim_h=None, dim_out=None, n_layers=None,
                 **kwargs):
-        print dim_in, dim_h, dim_out, n_layers, kwargs
         return MLP(dim_in, dim_h, dim_out, n_layers, **kwargs)
 
     def get_L2_weight_cost(self, gamma, layers=None):
@@ -396,7 +397,7 @@ class MultiModalMLP(Layer):
                     o_dict['f_neg_log_prob'] = _categorical_cross_entropy
                     o_dict['f_entropy'] = _categorical_entropy
                     o_dict['f_prob'] = lambda x: x
-                    self.layers[o]['act'] = 'softmax'
+                    self.layers[o]['act'] = '_softmax'
                 elif act == 'T.tanh':
                     o_dict['f_sample'] = _centered_binomial
                 elif act == 'lambda x: x':
@@ -494,6 +495,7 @@ class MultiModalMLP(Layer):
             f_prob = v['f_prob']
             p_ = _slice2(p, start, start + dim)
             x.append(f_prob(p_))
+            start += dim
 
         return x
 
