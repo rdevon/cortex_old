@@ -9,7 +9,10 @@ from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from layers import Layer
-from layers import MLP
+from layers import (
+    MLP,
+    MultiModalMLP
+)
 from utils import tools
 from utils.tools import (
     concatenate,
@@ -114,10 +117,6 @@ def set_input(x, mode, trng=None):
         raise ValueError('% not supported' % mode)
     return x
 
-def load_mlp(name, dim_in, dim_out, dim_h=None, n_layers=None, **kwargs):
-    mlp = MLP(dim_in, dim_h, dim_out, n_layers, name=name, **kwargs)
-    return mlp
-
 def unpack(dim_in=None,
            dim_h=None,
            z_init=None,
@@ -212,6 +211,29 @@ class SigmoidBeliefNetwork(Layer):
         kwargs = init_rngs(self, **kwargs)
 
         super(SigmoidBeliefNetwork, self).__init__(name=name)
+
+    @staticmethod
+    def mlp_factory(recognition_net=None, generation_net=None):
+        mlps = {}
+        print recognition_net
+        print generation_net
+
+        if recognition_net is not None:
+            assert not 'type' in recognition_net.keys()
+            posterior = MLP.factory(**recognition_net)
+            mlps['posterior'] = posterior
+
+        if generation_net is not None:
+            t = generation_net.get('type', None)
+            if t is None:
+                conditional = MLP.factory(**generation_net)
+            elif t == 'MMMLP':
+                conditional = MultiModalMLP.factory(**generation_net)
+            else:
+                raise ValueError()
+            mlps['conditional'] = conditional
+
+        return mlps
 
     def set_params(self):
         z = np.zeros((self.dim_h,)).astype(floatX)
@@ -360,7 +382,8 @@ class SigmoidBeliefNetwork(Layer):
         w_tilde = w / w.sum(axis=0, keepdims=True)
 
         cost = (log_p - log_p_max).mean()
-        q = self.inference_rate * (w_tilde[:, :, None] * h).sum(axis=0) + (1 - self.inference_rate) * q
+        q_ = (w_tilde[:, :, None] * h).sum(axis=0)
+        q = self.inference_rate * q_ + (1 - self.inference_rate) * q
 
         return q, cost
 
@@ -547,6 +570,7 @@ class SigmoidBeliefNetwork(Layer):
 
         lower_bounds = []
         nlls = []
+        pys = []
         for i in steps:
             z = zs[i-1]
             q = T.nnet.sigmoid(z)
@@ -559,6 +583,7 @@ class SigmoidBeliefNetwork(Layer):
             else:
                 py = self.conditional(h)
 
+            pys.append(py)
             cond_term = self.conditional.neg_log_prob(y[None, :, :], py).mean()
             kl_term = self.kl_divergence(q, prior[None, :]).mean()
             lower_bounds.append(cond_term + kl_term)
@@ -568,7 +593,8 @@ class SigmoidBeliefNetwork(Layer):
                 nlls.append(nll)
 
         outs.update(
-            py=py,
+            py0=pys[0],
+            py=pys[-1],
             lower_bound=lower_bounds[-1],
             lower_bounds=lower_bounds,
             inference_cost=(lower_bounds[0] - lower_bounds[-1])
