@@ -101,7 +101,7 @@ class Scheduler(Layer):
 
         return OrderedDict(x=x), theano.OrderedUpdates([(self.counter, counter)])
 
-
+# Bernoulli
 def _binomial(trng, p, size=None):
     if size is None:
         size = p.shape
@@ -128,6 +128,31 @@ def _binary_entropy(p, axis=None):
     entropy = entropy.sum(axis=axis)
     return entropy
 
+# Softmax
+def softmax(x):
+    e_x = T.exp(x - x.max(axis=1, keepdims=True))
+    out = e_x / e_x.sum(axis=1, keepdims=True)
+    return out
+
+def _sample_softmax(trng, p, size=None):
+    if size is None:
+        size = p.shape
+    return trng.multinomial(pvals=p, size=size).astype('float32')
+
+def _categorical_cross_entropy(x, p, axis=None):
+    p = T.clip(p, 1e-7, 1.0 - 1e-7)
+    energy = T.nnet.categorical_crossentropy(p, x)
+    return energy
+
+def _categorical_entropy(p, axis=None):
+    p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
+    entropy = T.nnet.categorical_crossentropy(p_c, p)
+    if axis is None:
+        axis = entropy.ndim - 1
+    entropy = entropy.sum(axis=axis)
+    return entropy
+
+# Gaussian
 def _normal(trng, p, size=None):
     dim = p.shape[p.ndim-1] // 2
     mu = _slice(p, 0, dim)
@@ -147,7 +172,8 @@ def _neg_normal_log_prob(x, p, axis=None):
     mu = _slice(p, 0, dim)
     log_sigma = _slice(p, 1, dim)
 
-    energy = 0.5 * ((x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
+    energy = 0.5 * (
+        (x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
     if axis is None:
         axis = energy.ndim - 1
     energy = energy.sum(axis=axis)
@@ -206,7 +232,7 @@ class MLP(Layer):
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
-        assert len(kwargs) == 0, kwargs.keys()
+        #assert len(kwargs) == 0, kwargs.keys()
         super(MLP, self).__init__(name=name)
 
     def sample(self, p, size=None):
@@ -224,10 +250,10 @@ class MLP(Layer):
     @staticmethod
     def factory(dim_in=None, dim_h=None, dim_out=None, n_layers=None,
                 **kwargs):
+        print dim_in, dim_h, dim_out, n_layers, kwargs
         return MLP(dim_in, dim_h, dim_out, n_layers, **kwargs)
 
     def get_L2_weight_cost(self, gamma, layers=None):
-
         if layers is None:
             layers = range(self.n_layers)
 
@@ -365,6 +391,12 @@ class MultiModalMLP(Layer):
                     o_dict['f_neg_log_prob'] = _cross_entropy
                     o_dict['f_entropy'] = _binary_entropy
                     o_dict['f_prob'] = lambda x: x
+                elif act == 'T.nnet.softmax':
+                    o_dict['f_sample'] = _sample_softmax
+                    o_dict['f_neg_log_prob'] = _categorical_cross_entropy
+                    o_dict['f_entropy'] = _categorical_entropy
+                    o_dict['f_prob'] = lambda x: x
+                    self.layers[o]['act'] = 'softmax'
                 elif act == 'T.tanh':
                     o_dict['f_sample'] = _centered_binomial
                 elif act == 'lambda x: x':
@@ -383,10 +415,14 @@ class MultiModalMLP(Layer):
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
-        assert len(kwargs) == 0, 'Got extra args: %r' % kwargs.keys()
+        #assert len(kwargs) == 0, 'Got extra args: %r' % kwargs.keys()
         super(MultiModalMLP, self).__init__(name=name)
 
-    def sample(self, p, size=None):
+    @staticmethod
+    def factory(dim_in=None, graph=None, **kwargs):
+        return MultiModalMLP(dim_in, graph, **kwargs)
+
+    def sample(self, p, size=None, split=False):
         if size is None:
             size = p.shape
         start = 0
@@ -414,19 +450,27 @@ class MultiModalMLP(Layer):
             x.append(f_sample(self.trng, p_, size=size_))
             start += dim
 
-        return concatenate(x, axis=(x[0].ndim-1))
+        if split:
+            return x
+        else:
+            return concatenate(x, axis=(x[0].ndim-1))
 
     def neg_log_prob(self, x, p):
         neg_log_prob = T.constant(0.).astype('float32')
         start = 0
+        start_x = 0
         for o, v in self.outs.iteritems():
-            dim = self.layer[0]['dim']
+            dim = self.layers[o]['dim']
             f_neg_log_prob = v['f_neg_log_prob']
-            print start, start + dim
+            if self.layers[o]['act'] == 'lambda x: x':
+                scale = 2
+            else:
+                scale = 1
             p_ = _slice2(p, start, start + dim)
-            x_ = _slice2(x, start, start + dim)
+            x_ = _slice2(x, start_x, start_x + dim // scale)
             neg_log_prob += f_neg_log_prob(x_, p_)
             start += dim
+            start_x += dim // scale
 
         return neg_log_prob
 
@@ -437,7 +481,6 @@ class MultiModalMLP(Layer):
             dim = self.layers[o]['dim']
             f_entropy = v['f_entropy']
             p_ = _slice2(p, start, start + dim)
-            print start, start + dim
             entropy += f_entropy(p_)
             start += dim
 
@@ -447,11 +490,34 @@ class MultiModalMLP(Layer):
         start = 0
         x = []
         for o, v in self.outs.iteritems():
-            dim = self.layer[0]['dim']
+            dim = self.layers[o]['dim']
             f_prob = v['f_prob']
             p_ = _slice2(p, start, start + dim)
             x.append(f_prob(p_))
-        return concatenate(x, axis=(x[0].ndim-1))
+
+        return x
+
+    def get_L2_weight_cost(self, gamma, layers=None):
+        if layers is None:
+            layers = self.layers.keys()
+            layers = [l for l in layers if l != 'i']
+
+        cost = T.constant(0.).astype(floatX)
+        for k in layers:
+            W = self.__dict__['W_%s' % k]
+            cost += gamma * (W ** 2).sum()
+
+        return cost
+
+    def split(self, p):
+        start = 0
+        ps = []
+        for o, v in self.outs.iteritems():
+            dim = self.layers[o]['dim']
+            p_ = _slice2(p, start, start + dim)
+            ps.append(p_)
+
+        return ps
 
     def set_params(self):
         self.params = OrderedDict()
@@ -470,29 +536,12 @@ class MultiModalMLP(Layer):
             self.params['W_%s' % o] = W
             self.params['b_%s' % o] = b
 
-            '''
-            if o in self.outs and self.layers[o]['act'] == 'lambda x: x':
-
-                Ws = tools.norm_weight(dim_in, dim_out,
-                                       scale=self.weight_scale, ortho=False)
-                bs = np.zeros((dim_out,)).astype(floatX)
-                self.params['Ws_%s' % o] = Ws
-                self.params['bs_%s' % o] = bs
-            '''
-
     def get_params(self):
         params = []
         for _, o in self.edges:
             W = self.__dict__['W_%s' % o]
             b = self.__dict__['b_%s' % o]
             params += [W, b]
-
-            '''
-            if o in self.outs.keys() and self.layers[o]['act'] == 'lambda x: x':
-                Ws = self.__dict__['Ws_%s' % o]
-                bs = self.__dict__['bs_%s' % o]
-                params += [Ws, bs]
-            '''
 
         return params
 
@@ -508,15 +557,6 @@ class MultiModalMLP(Layer):
             b = params.pop(0)
 
             if o in self.outs:
-                '''
-                if self.layers[o]['act'] == 'lambda x: x':
-                    Ws = params.pop(0)
-                    bs = params.pop(0)
-                    mu = T.dot(x, W) + b
-                    log_sigma = T.dot(x, Ws) + bs
-                    x = concatenate([mu, log_sigma], axis=mu.ndim-1)
-                else:
-                '''
                 x = T.dot(x, W) + b
             else:
                 act = self.layers[o]['act']
@@ -537,8 +577,9 @@ class MultiModalMLP(Layer):
         for o in self.outs.keys():
             dim = self.layers[o]['dim']
             act = self.layers[o]['act']
-            x_ = _slice2(x, start, start + dim)
-            y.append(eval(act)(x_))
+            z_ = _slice2(x, start, start + dim)
+            x_  = eval(act)(z_)
+            y.append(x_)
             start += dim
 
         return concatenate(y, axis=(y[0].ndim-1))
