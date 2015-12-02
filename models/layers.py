@@ -143,15 +143,16 @@ def _sample_softmax(trng, p, size=None):
 
 def _categorical_cross_entropy(x, p, axis=None):
     p = T.clip(p, 1e-7, 1.0 - 1e-7)
-    energy = T.nnet.categorical_crossentropy(p, x)
+    #energy = T.nnet.categorical_crossentropy(p, x)
+    energy = T.nnet.binary_crossentropy(p, x)
+    if axis is None:
+        axis = x.ndim - 1
+    energy = energy.sum(axis=axis)
     return energy
 
 def _categorical_entropy(p, axis=None):
     p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
     entropy = T.nnet.categorical_crossentropy(p_c, p)
-    if axis is None:
-        axis = entropy.ndim - 1
-    entropy = entropy.sum(axis=axis)
     return entropy
 
 # Gaussian
@@ -518,6 +519,7 @@ class MultiModalMLP(Layer):
             dim = self.layers[o]['dim']
             p_ = _slice2(p, start, start + dim)
             ps.append(p_)
+            start += dim
 
         return ps
 
@@ -583,7 +585,6 @@ class MultiModalMLP(Layer):
             x_  = eval(act)(z_)
             y.append(x_)
             start += dim
-
         return concatenate(y, axis=(y[0].ndim-1))
 
     def __call__(self, x, return_preact=False):
@@ -592,7 +593,6 @@ class MultiModalMLP(Layer):
             x = self.preact(x, *params)
         else:
             x = self.step_call(x, *params)
-
         return x
 
 
