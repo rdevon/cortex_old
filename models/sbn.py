@@ -577,11 +577,7 @@ class SigmoidBeliefNetwork(Layer):
             h = self.posterior.sample(
                 q, size=(n_samples, q.shape[0], q.shape[1]))
 
-            if self.center_latent:
-                print 'Centering latents in call'
-                py = self.conditional(h - prior[None, None, :])
-            else:
-                py = self.conditional(h)
+            py = self.conditional(h)
 
             pys.append(py)
             cond_term = self.conditional.neg_log_prob(y[None, :, :], py).mean()
