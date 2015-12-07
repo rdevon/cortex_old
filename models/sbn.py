@@ -147,9 +147,9 @@ def unpack(dim_in=None,
     )
 
     dim_h = int(dim_h)
-    dim_in = int(dim_in)
     dataset_args = dataset_args[()]
-
+    recognition_net = recognition_net[()]
+    generation_net = generation_net[()]
     if prior == 'logistic':
         out_act = 'T.nnet.sigmoid'
     elif prior == 'gaussian':
@@ -158,21 +158,11 @@ def unpack(dim_in=None,
         raise ValueError('%s prior not known' % prior)
 
     models = []
-    if recognition_net is not None:
-        recognition_net = recognition_net[()]
-        posterior = load_mlp('posterior', dim_in, dim_h,
-                             out_act=out_act,
-                             **recognition_net)
-        models.append(posterior)
-    else:
-        posterior = None
 
-    if generation_net is not None:
-        generation_net = generation_net[()]
-        conditional = load_mlp('conditional', dim_h, dim_in,
-                               out_act='T.nnet.sigmoid',
-                               **generation_net)
-        models.append(conditional)
+    mlps = SigmoidBeliefNetwork.mlp_factory(recognition_net=recognition_net,
+                           generation_net=generation_net)
+
+    models += mlps.values()
 
     if prior == 'logistic':
         C = SigmoidBeliefNetwork
@@ -181,9 +171,8 @@ def unpack(dim_in=None,
     else:
         raise ValueError('%s prior not known' % prior)
 
-    model = C(dim_in, dim_h,
-              conditional=conditional, posterior=posterior,
-              **kwargs)
+    kwargs.update(**mlps)
+    model = C(dim_in, dim_h, **kwargs)
     models.append(model)
     return models, model_args, dict(
         dataset=dataset,
