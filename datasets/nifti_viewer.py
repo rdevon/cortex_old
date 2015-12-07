@@ -108,15 +108,15 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
     p.join()
 
 def montage(nifti, anat, roi_dict, thr=2,
-            fig=None, out_file=None, feature_dict=None,
-            target_stat=None, target_value=None):
+            fig=None, out_file=None,
+            order=None, stats=dict()):
     if isinstance(anat, str):
         anat = load_image(anat)
     assert nifti is not None
     assert anat is not None
     assert roi_dict is not None
 
-    texcol = 1
+    texcol = 0
     bgcol = 1
     iscale = 2
     if isinstance(nifti, list):
@@ -138,7 +138,10 @@ def montage(nifti, anat, roi_dict, thr=2,
         fig = plt.figure(figsize=[iscale * y, iscale * x / 2.5])
     plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99, wspace=0.1, hspace=0)
 
-    for f in xrange(features):
+    if order is None:
+        order = range(features)
+
+    for i, f in enumerate(order):
         roi = roi_dict.get(f, None)
         if roi is None:
             continue
@@ -157,7 +160,7 @@ def montage(nifti, anat, roi_dict, thr=2,
 
         coords = ([-coords[0], -coords[1], coords[2]])
 
-        ax = fig.add_subplot(x, y, f + 1)
+        ax = fig.add_subplot(x, y, i + 1)
         plt.axis("off")
 
         try:
@@ -179,31 +182,17 @@ def montage(nifti, anat, roi_dict, thr=2,
 
         plt.text(0.05, 0.8, str(f),
                  transform=ax.transAxes,
-                 horizontalalignment="center",
-                 color=(texcol,texcol,texcol))
+                 horizontalalignment='center',
+                 color=(texcol, texcol, texcol))
         pos = [(0.05, 0.05), (0.4, 0.05), (0.8, 0.05)]
-        colors = ["purple", "yellow", "green"]
-        if feature_dict is not None and feature_dict.get(f, None) is not None:
-            d = feature_dict[f]
-            for i, key in enumerate([k for k in d if k != "real_id"]):
-                plt.text(pos[i][0], pos[i][1], "%s=%.2f" % (key, d[key]) ,transform=ax.transAxes,
-                         horizontalalignment="left", color=colors[i])
-                if key == target_stat:
-                    assert target_value is not None
-                    if d[key] >= target_value:
-                        p_fancy = FancyBboxPatch((0.1, 0.1), 2.5 - .1, 1 - .1,
-                                                 boxstyle="round,pad=0.1",
-                                                 ec=(1., 0.5, 1.),
-                                                 fc="none")
-                        ax.add_patch(p_fancy)
-                    elif d[key] <= -target_value:
-                        p_fancy = FancyBboxPatch((0.1, 0.1), iscale * 2.5 - .1, iscale - .1,
-                                                 boxstyle="round,pad=0.1",
-                                                 ec=(0., 0.5, 0.),
-                                                 fc="none")
-                        ax.add_patch(p_fancy)
+        colors = ["purple", "blue", "green"]
+        for i, (k, vs) in enumerate(stats.iteritems()):
+            v = vs[f]
+            plt.text(pos[i][0], pos[i][1], '%s=%.2f' % (k, v),
+                     transform=ax.transAxes,
+                     horizontalalignment='left',
+                     color=colors[i])
 
-#    stdout.write("\rSaving montage: DONE\n")
     if out_file is not None:
         plt.savefig(out_file, transparent=True, facecolor=(bgcol, bgcol, bgcol))
     else:

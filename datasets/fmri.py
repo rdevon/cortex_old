@@ -222,7 +222,8 @@ class MRI(object):
 
         return images, out_files
 
-    def save_images(self, x, out_file, remove_niftis=True):
+    def save_images(self, x, out_file, remove_niftis=True,
+                    order=None, stats=dict()):
         x = self._unmask(x)
 
         images, nifti_files = self.save_niftis(x)
@@ -231,9 +232,11 @@ class MRI(object):
         if remove_niftis:
             for f in nifti_files:
                 os.remove(f)
-
         print 'Saving montage'
-        nifti_viewer.montage(images, self.anat_file, roi_dict, out_file=out_file)
+        nifti_viewer.montage(images, self.anat_file, roi_dict,
+                             out_file=out_file,
+                             order=order,
+                             stats=stats)
         print 'Done'
 
 
