@@ -67,7 +67,8 @@ class Chains(object):
     def next(self):
         raise NotImplementedError()
 
-    def set_f_energy(self, f_energy, dim_h, model=None):
+    def set_f_energy(self, f_energy, dim_h, model=None,
+                     alpha=0.0, beta=1.0, steps=None):
         self.dim_h = dim_h
 
         # Energy function -----------------------------------------------------
@@ -79,34 +80,44 @@ class Chains(object):
         self.f_energy = theano.function([X, x_p, h_p], [energy, x_n, h_n])
 
         # Chain function ------------------------------------------------------
-        counts = T.ones((X.shape[0],)).astype('int64')
+        counts = T.zeros((X.shape[0],)).astype('int64')
+        scaling = T.ones((X.shape[0],)).astype('float32')
         P = T.scalar('P', dtype='int64')
         S = T.scalar('S', dtype='float32')
         x_p = X[0]
         h_p = self.trng.normal(avg=0., std=1., size=(dim_h,)).astype('float32')
-        counts = T.set_subtensor(counts[0], 0)
+        counts = T.set_subtensor(counts[0], 1)
+        scaling = T.set_subtensor(scaling[0], scaling[0] * alpha)
 
-        chain_noise = self.trng.normal(avg=0., std=S, size=(X.shape[0]-1,)).astype('floatX')
+        if steps is None:
+            steps = X.shape[0] - 1
 
-        def step(cn, i, x_p, h_p, counts, x):
+        chain_noise = self.trng.normal(avg=0., std=S, size=(steps,)).astype('floatX')
+
+        def f_step(cn, i, x_p, h_p, counts, scaling, x):
             energies, _, h_n = f_energy(x, x_p, h_p, model)
-            energies = energies / counts + cn
+            energies = energies / scaling + cn
             i = T.argmin(energies)
-            counts = T.set_subtensor(counts[i], 0)
-            return i, x[i], h_n, counts
+            counts = T.set_subtensor(counts[i], 1)
+            picked_scaling = scaling[i]
+            scaling = scaling / float(beta)
+            scaling = T.set_subtensor(scaling[i], picked_scaling * alpha)
+            return (i, x[i], h_n, counts, scaling), theano.scan_module.until(T.all(counts))
 
         seqs = [chain_noise]
-        outputs_info = [T.constant(0).astype('int64'), x_p, h_p, counts]
+        outputs_info = [T.constant(0).astype('int64'), x_p, h_p, counts, scaling]
         non_seqs = [X]
 
-        (chain, x_chain, h_chain, counts), updates = scan(
-            step, seqs, outputs_info, non_seqs, X.shape[0] - 1, name='make_chain',
+        (chain, x_chain, h_chain, counts, scalings), updates = scan(
+            f_step, seqs, outputs_info, non_seqs, steps, name='make_chain',
             strict=False)
+        counts = counts[-1]
 
         chain += P
         chain_e = T.zeros((chain.shape[0] + 1,)).astype('int64')
         chain = T.set_subtensor(chain_e[1:], chain)
-        self.f_chain = theano.function([X, P, S], chain, updates=updates)
+        perc = counts.sum() / counts.shape[0].astype('float32')
+        self.f_chain = theano.function([X, P, S], [chain, perc], updates=updates)
 
     def _build_chain_py(self, x, data_pos):
         h_p = np.random.normal(
@@ -162,14 +173,13 @@ class Chains(object):
 
         t0 = time.time()
         if self.use_theano:
-            print('Resetting chain with length %d using all datapoints (theano). '
-                  'Position in data is %d'
-                  % (l_chain, data_pos))
+            print('Resetting chain. Position in data is %d' % (data_pos))
             if use_noise:
                 s = self.chain_noise
             else:
                 s = 0.
-            self.chain = self.f_chain(x, data_pos, s)
+            self.chain, perc = self.f_chain(x, data_pos, s)
+            print 'Chain has length %d and used %.2f percent of data points' % (len(self.chain), 100 * perc)
         else:
             print('Resetting chain with length %d and %d samples per query. '
                   'Position in data is %d'
@@ -179,10 +189,12 @@ class Chains(object):
         print 'Chain took %.2f seconds' % (t1 - t0)
 
         if self.out_path is not None:
-            self.dataset.save_images(self._load_chains(),
-                             path.join(self.out_path,
-                                       '%s_chain_%d.png' % (self.dataset.mode, self.dataset.pos)),
-                             x_limit=200)
+            self.dataset.save_images(
+                self._load_chains(),
+                path.join(self.out_path,
+                          '%s_chain_%d.png'
+                          % (self.dataset.mode, self.dataset.pos)),
+                x_limit=200)
 
         if trim_end:
             print 'Trimming %d' % trim_end
@@ -192,17 +204,33 @@ class Chains(object):
                 self.dataset.save_images(
                     self._load_chains(),
                     path.join(self.out_path,
-                              '%s_chain_%d_trimmed.png' % (self.dataset.mode, self.dataset.pos)),
+                              '%s_chain_%d_trimmed.png'
+                              % (self.dataset.mode, self.dataset.pos)),
                     x_limit=200)
 
     def _load_chains(self, chains=None):
         if chains is None:
             chains = [self.chain]
 
-        x = np.zeros((len(chains[0]), len(chains), self.dataset.dim)).astype('float32')
+        x = np.zeros((len(chains[0]),
+                      len(chains),
+                      self.dataset.dim)
+            ).astype('float32')
         for i, c in enumerate(chains):
             x[:, i] = self.dataset.X[c]
         return x
+
+    def _get_labels(self, chains=None):
+        if chains is None:
+            chains = [self.chain]
+
+        y = []
+        for chain in chains:
+            y_ = []
+            for c in chain:
+                y_.append(self.dataset.Y[c])
+            y.append(y_)
+        return np.array(y).astype('float32')
 
     def reset(self):
         self.dataset.reset()

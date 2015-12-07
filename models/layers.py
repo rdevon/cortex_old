@@ -112,13 +112,13 @@ def _centered_binomial(trng, p, size=None):
         size = p.shape
     return 2 * trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
 
-def _cross_entropy(x, p, axis=None):
+def _cross_entropy(x, p, axis=None, scale=1.0):
     p = T.clip(p, 1e-7, 1.0 - 1e-7)
     energy = T.nnet.binary_crossentropy(p, x)
     if axis is None:
         axis = energy.ndim - 1
     energy = energy.sum(axis=axis)
-    return energy
+    return (scale * energy).astype('float32')
 
 def _binary_entropy(p, axis=None):
     p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
@@ -141,14 +141,14 @@ def _sample_softmax(trng, p, size=None):
         size = p.shape
     return trng.multinomial(pvals=p, size=size).astype('float32')
 
-def _categorical_cross_entropy(x, p, axis=None):
+def _categorical_cross_entropy(x, p, axis=None, scale=1.0):
     p = T.clip(p, 1e-7, 1.0 - 1e-7)
     #energy = T.nnet.categorical_crossentropy(p, x)
     energy = T.nnet.binary_crossentropy(p, x)
     if axis is None:
         axis = x.ndim - 1
     energy = energy.sum(axis=axis)
-    return energy
+    return (scale * energy / p.shape[p.ndim-1]).astype('float32')
 
 def _categorical_entropy(p, axis=None):
     p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
@@ -170,7 +170,7 @@ def _normal_prob(p):
     mu = _slice(p, 0, dim)
     return mu
 
-def _neg_normal_log_prob(x, p, axis=None):
+def _neg_normal_log_prob(x, p, axis=None, scale=1.0):
     dim = p.shape[p.ndim-1] // 2
     mu = _slice(p, 0, dim)
     log_sigma = _slice(p, 1, dim)
@@ -180,7 +180,7 @@ def _neg_normal_log_prob(x, p, axis=None):
     if axis is None:
         axis = energy.ndim - 1
     energy = energy.sum(axis=axis)
-    return energy
+    return (scale * energy).astype('float32')
 
 def _normal_entropy(p, axis=None):
     dim = p.shape[p.ndim-1] // 2
@@ -367,7 +367,8 @@ class MLP(Layer):
 
 
 class MultiModalMLP(Layer):
-    def __init__(self, dim_in, graph, name='MLP', **kwargs):
+    def __init__(self, dim_in, graph, log_prob_scale=dict(), name='MLP',
+                 **kwargs):
         graph = copy.deepcopy(graph)
 
         self.layers = OrderedDict()
@@ -408,6 +409,9 @@ class MultiModalMLP(Layer):
                     o_dict['f_prob'] = _normal_prob
                 else:
                     raise ValueError(act)
+
+                if log_prob_scale.get(o, None) is not None:
+                    o_dict['log_prob_scale'] = log_prob_scale[o]
 
                 self.outs[o] = o_dict
 
@@ -464,13 +468,14 @@ class MultiModalMLP(Layer):
         for o, v in self.outs.iteritems():
             dim = self.layers[o]['dim']
             f_neg_log_prob = v['f_neg_log_prob']
+            log_prob_scale = v.get('log_prob_scale', 1.0)
             if self.layers[o]['act'] == 'lambda x: x':
                 scale = 2
             else:
                 scale = 1
             p_ = _slice2(p, start, start + dim)
             x_ = _slice2(x, start_x, start_x + dim // scale)
-            neg_log_prob += f_neg_log_prob(x_, p_)
+            neg_log_prob += f_neg_log_prob(x_, p_, scale=log_prob_scale)
             start += dim
             start_x += dim // scale
 
