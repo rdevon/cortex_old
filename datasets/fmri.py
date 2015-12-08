@@ -146,6 +146,7 @@ class MRI(object):
         if not path.isdir(self.tmp_path):
             os.mkdir(self.tmp_path)
         self.anat_file = source_dict['anat_file']
+        sites_file = source_dict['sites']
 
         data_files = source_dict['data']
         if isinstance(data_files, str):
@@ -167,6 +168,15 @@ class MRI(object):
 
         self.mask = mask
         self.base_nifti_file = nifti_file
+        self.sites = np.load(sites_file).tolist()
+
+        idx0 = [i for i, s in enumerate(self.sites) if s == 0]
+        idx1 = [i for i, s in enumerate(self.sites) if s == 1]
+        mi0 = X[idx0].mean(axis=0)
+        mi1 = X[idx1].mean(axis=0)
+
+        X[idx0] -= mi0
+        X[idx1] -= mi1
 
         return X, Y
 

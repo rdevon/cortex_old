@@ -30,22 +30,23 @@ def read_niftis(file_list):
     print 'Found %d files with data shape is %r' % (len(file_list), data0.shape)
     n = len(file_list)
 
-    data = np.zeros((n, x, y, z))
+    data = []
 
+    new_file_list = []
     for i, f in enumerate(file_list):
-        print 'Loading subject from file: %s' % f
+        print '%d) Loading subject from file: %s' % (i, f)
 
         nifti = load_image(f)
         subject_data = nifti.get_data()
-
         if subject_data.shape != (x, y, z):
             raise ValueError('Shape mismatch')
-        data[i] = subject_data
+        data.append(subject_data)
+        new_file_list.append(f)
+    data = np.array(data).astype('float32')
 
-    return data
+    return data, new_file_list
 
 def save_mask(data, out_path):
-
     print 'Getting mask'
 
     n, x, y, z = data.shape
@@ -61,8 +62,9 @@ def save_mask(data, out_path):
                              "%.2f, datapoint is %.2f"
                              % (zero_freq.mean(), freq))
 
-    mask[np.where(np.invert((data < 0.07).sum(0) >
-        .01 * data.shape[0]))] = 1
+    nonzero_avg = (data > 0).mean(axis=0)
+
+    mask[np.where(nonzero_avg > .99)] = 1
 
     print 'Masked out %d out of %d voxels' % ((mask == 0).sum(), reduce(
         lambda x_, y_: x_ * y_, mask.shape))
@@ -78,19 +80,24 @@ def load_niftis(source_dir, out_dir, name='mri', patterns=None):
         file_lists = []
         for i, pattern in enumerate(patterns):
             file_list = glob(path.join(source_dir, pattern))
-            print('Found %r' % file_list)
             file_lists.append(file_list)
     else:
         file_lists = [find_niftis(source_dir)]
-        print 'Found files: %r' % file_lists[0]
 
     datas = []
+    new_file_lists = []
     for i, file_list in enumerate(file_lists):
-        data = read_niftis(file_list)
+        data, new_file_list = read_niftis(file_list)
+        new_file_lists.append(new_file_list)
         datas.append(data)
         np.save(path.join(out_dir, name + '_%d.npy' % i), data)
 
+    sites = [[0 if 'st' in f else 1 for f in fl] for fl in file_lists]
+    sites = sites[0] + sites[1]
+
     mask = save_mask(np.concatenate(datas, axis=0), path.join(out_dir, name + '_mask.npy'))
+    np.save(path.join(out_dir, name + '_file_paths.npy'), new_file_lists)
+    np.save(path.join(out_dir, name + '_sites.npy'), sites)
 
 def make_argument_parser():
     parser = argparse.ArgumentParser()
