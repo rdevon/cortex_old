@@ -240,14 +240,13 @@ class Chains(object):
     def _next(self, l_chain=None, use_noise=True):
         assert self.f_energy is not None
 
-        chain_length = min(self.chain_length - self.trim_end,
-                           self.dataset.n - self.dataset.pos - self.trim_end)
+        chain_length = len(self.chain)
         window = min(self.window, chain_length)
 
         if self.cpos == -1:
             self.cpos = 0
             self._build_chain(trim_end=self.trim_end, use_noise=True)
-            self.chain_idx = range(0, chain_length - window + 1, self.chain_stride)
+            self.chain_idx = range(0, len(self.chain) - window + 1, self.chain_stride)
             random.shuffle(self.chain_idx)
 
         chains = []
