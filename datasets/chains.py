@@ -96,12 +96,13 @@ class Chains(object):
 
         def f_step(cn, i, x_p, h_p, counts, scaling, x):
             energies, _, h_n = f_energy(x, x_p, h_p, model)
-            energies = energies / scaling + cn
+            energies = (energies / scaling) + cn
             i = T.argmin(energies)
             counts = T.set_subtensor(counts[i], 1)
             picked_scaling = scaling[i]
-            scaling = scaling / float(beta)
+            scaling = scaling / beta
             scaling = T.set_subtensor(scaling[i], picked_scaling * alpha)
+            scaling = T.clip(scaling, 0.0, 1.0)
             return (i, x[i], h_n, counts, scaling), theano.scan_module.until(T.all(counts))
 
         seqs = [chain_noise]
