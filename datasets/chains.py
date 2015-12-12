@@ -68,7 +68,7 @@ class Chains(object):
         raise NotImplementedError()
 
     def set_f_energy(self, f_energy, dim_h, model=None,
-                     alpha=0.0, beta=1.0, steps=None):
+                     alpha=0.0, beta=1.0, steps=None, sample=False):
         self.dim_h = dim_h
 
         # Energy function -----------------------------------------------------
@@ -94,10 +94,19 @@ class Chains(object):
 
         chain_noise = self.trng.normal(avg=0., std=S, size=(steps,)).astype('floatX')
 
-        def f_step(cn, i, x_p, h_p, counts, scaling, x):
+        def f_step(cn, x_p, h_p, counts, scaling, x):
             energies, _, h_n = f_energy(x, x_p, h_p, model)
-            energies = (energies / scaling) + cn
-            i = T.argmin(energies)
+            energies -= T.log(scaling)
+            e_max = (-energies).max()
+
+            if sample:
+                probs = T.exp(-energies - e_max)
+                probs = probs + cn
+                probs = probs / probs.sum()
+                i = T.argmax(self.trng.multinomial(pvals=probs[None, :]).astype('int64')[0])
+            else:
+                i = T.argmin(T.log(-energies - e_max) + cn)
+
             counts = T.set_subtensor(counts[i], 1)
             picked_scaling = scaling[i]
             scaling = scaling / beta
@@ -106,7 +115,7 @@ class Chains(object):
             return (i, x[i], h_n, counts, scaling), theano.scan_module.until(T.all(counts))
 
         seqs = [chain_noise]
-        outputs_info = [T.constant(0).astype('int64'), x_p, h_p, counts, scaling]
+        outputs_info = [None, x_p, h_p, counts, scaling]
         non_seqs = [X]
 
         (chain, x_chain, h_chain, counts, scalings), updates = scan(
