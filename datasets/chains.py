@@ -83,8 +83,6 @@ class Chains(object):
         counts = T.zeros((X.shape[0],)).astype('int64')
         scaling = T.ones((X.shape[0],)).astype('float32')
         P = T.scalar('P', dtype='int64')
-        S = T.scalar('S', dtype='float32')
-        x_p = X[0]
         h_p = self.trng.normal(avg=0., std=1., size=(dim_h,)).astype('float32')
         counts = T.set_subtensor(counts[0], 1)
         scaling = T.set_subtensor(scaling[0], scaling[0] * alpha)
@@ -92,33 +90,31 @@ class Chains(object):
         if steps is None:
             steps = X.shape[0] - 1
 
-        chain_noise = self.trng.normal(avg=0., std=S, size=(steps,)).astype('floatX')
-
-        def f_step(cn, x_p, h_p, counts, scaling, x):
-            energies, _, h_n = f_energy(x, x_p, h_p, model)
+        def f_step(i_p, h_p, counts, scaling, x):
+            energies, _, h_n = f_energy(x, x[i_p], h_p, model)
             energies -= T.log(scaling)
-            e_max = (-energies).max()
 
             if sample:
+                e_max = (-energies).max()
                 probs = T.exp(-energies - e_max)
-                probs = probs + cn
+                probs = probs
                 probs = probs / probs.sum()
                 i = T.argmax(self.trng.multinomial(pvals=probs[None, :]).astype('int64')[0])
             else:
-                i = T.argmin(T.log(-energies - e_max) + cn)
+                i = T.argmin(energies)
 
             counts = T.set_subtensor(counts[i], 1)
             picked_scaling = scaling[i]
             scaling = scaling / beta
             scaling = T.set_subtensor(scaling[i], picked_scaling * alpha)
             scaling = T.clip(scaling, 0.0, 1.0)
-            return (i, x[i], h_n, counts, scaling), theano.scan_module.until(T.all(counts))
+            return (i, h_n, counts, scaling), theano.scan_module.until(T.all(counts))
 
-        seqs = [chain_noise]
-        outputs_info = [None, x_p, h_p, counts, scaling]
+        seqs = []
+        outputs_info = [T.constant(0).astype('int64'), h_p, counts, scaling]
         non_seqs = [X]
 
-        (chain, x_chain, h_chain, counts, scalings), updates = scan(
+        (chain, h_chain, counts, scalings), updates = scan(
             f_step, seqs, outputs_info, non_seqs, steps, name='make_chain',
             strict=False)
         counts = counts[-1]
@@ -127,7 +123,7 @@ class Chains(object):
         chain_e = T.zeros((chain.shape[0] + 1,)).astype('int64')
         chain = T.set_subtensor(chain_e[1:], chain)
         perc = counts.sum() / counts.shape[0].astype('float32')
-        self.f_chain = theano.function([X, P, S], [chain, perc], updates=updates)
+        self.f_chain = theano.function([X, P], [chain, perc], updates=updates)
 
     def _build_chain_py(self, x, data_pos):
         h_p = np.random.normal(
@@ -172,7 +168,7 @@ class Chains(object):
 
         return chain
 
-    def _build_chain(self, trim_end=0, use_noise=True):
+    def _build_chain(self, trim_end=0):
         self.chain = []
         n_remaining_samples = self.dataset.n - self.dataset.pos
         l_chain = min(self.chain_length, n_remaining_samples)
@@ -184,11 +180,7 @@ class Chains(object):
         t0 = time.time()
         if self.use_theano:
             print('Resetting chain. Position in data is %d' % (data_pos))
-            if use_noise:
-                s = self.chain_noise
-            else:
-                s = 0.
-            self.chain, perc = self.f_chain(x, data_pos, s)
+            self.chain, perc = self.f_chain(x, data_pos)
             print 'Chain has length %d and used %.2f percent of data points' % (len(self.chain), 100 * perc)
         else:
             print('Resetting chain with length %d and %d samples per query. '
@@ -246,12 +238,12 @@ class Chains(object):
         self.dataset.reset()
         self.cpos = -1
 
-    def _next(self, l_chain=None, use_noise=True):
+    def _next(self, l_chain=None):
         assert self.f_energy is not None
 
         if self.cpos == -1:
             self.cpos = 0
-            self._build_chain(trim_end=self.trim_end, use_noise=True)
+            self._build_chain(trim_end=self.trim_end)
             window = min(self.window, len(self.chain))
             self.chain_idx = range(0, len(self.chain) - window + 1, self.chain_stride)
             random.shuffle(self.chain_idx)
