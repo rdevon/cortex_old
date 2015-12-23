@@ -135,6 +135,7 @@ def unpack(dim_in=None,
     '''
     Function to unpack pretrained model into fresh SFFN class.
     '''
+    from gbn import GaussianBeliefNet as GBN
 
     kwargs = dict(
         prior=prior,
