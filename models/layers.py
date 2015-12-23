@@ -163,6 +163,12 @@ def _normal(trng, p, size=None):
 
     if size is None:
         size = mu.shape
+    else:
+        pass
+#        mu = T.zeros(size) + mu[None, :, :]
+#        log_sigma = T.zeros(size) + log_sigma[None, :, :]
+
+    #return mu + T.exp(log_sigma) * trng.normal(avg=0.0, std=1.0, size=size)
     return trng.normal(avg=mu, std=T.exp(log_sigma), size=size)
 
 def _normal_prob(p):
@@ -174,9 +180,9 @@ def _neg_normal_log_prob(x, p, axis=None, scale=1.0):
     dim = p.shape[p.ndim-1] // 2
     mu = _slice(p, 0, dim)
     log_sigma = _slice(p, 1, dim)
-
     energy = 0.5 * (
         (x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
+
     if axis is None:
         axis = energy.ndim - 1
     energy = energy.sum(axis=axis)
@@ -221,6 +227,7 @@ class MLP(Layer):
             self.f_neg_log_prob = _neg_normal_log_prob
             self.f_entropy = _normal_entropy
             self.f_prob = _normal_prob
+            self.dim_out *= 2
         else:
             assert f_sample is not None
             assert f_neg_log_prob is not None
@@ -287,28 +294,12 @@ class MLP(Layer):
             self.params['W%d' % l] = W
             self.params['b%d' % l] = b
 
-        if self.out_act == 'lambda x: x':
-            if l == 0:
-                dim_in = self.dim_in
-            else:
-                dim_in = self.dim_h
-            Ws = tools.norm_weight(dim_in, self.dim_out,
-                                    scale=self.weight_scale, ortho=False)
-            bs = np.zeros((self.dim_out,)).astype(floatX)
-            self.params.update(Ws=Ws, bs=bs)
-
     def get_params(self):
         params = []
         for l in xrange(self.n_layers):
             W = self.__dict__['W%d' % l]
             b = self.__dict__['b%d' % l]
             params += [W, b]
-
-        if self.out_act == 'lambda x: x':
-            Ws = self.Ws
-            bs = self.bs
-            params += [Ws, bs]
-
         return params
 
     def preact(self, x, *params):
@@ -324,17 +315,7 @@ class MLP(Layer):
                 W += self.trng.normal(avg=0., std=self.weight_noise, size=W.shape)
 
             if l == self.n_layers - 1:
-                if self.out_act == 'lambda x: x':
-                    Ws = params.pop(0)
-                    bs = params.pop(0)
-                    if self.weight_noise:
-                        print 'Using weight noise in log sigma layer %d for MLP %s' % (l, self.name)
-                        Ws += self.trng.normal(avg=0., std=self.weight_noise, size=W.shape)
-                    mu = T.dot(x, W) + b
-                    log_sigma = T.dot(x, Ws) + bs
-                    x = concatenate([mu, log_sigma], axis=mu.ndim-1)
-                else:
-                    x = T.dot(x, W) + b
+                x = T.dot(x, W) + b
             else:
                 activ = self.h_act
                 x = eval(activ)(T.dot(x, W) + b)

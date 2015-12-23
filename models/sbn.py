@@ -204,8 +204,6 @@ class SigmoidBeliefNetwork(Layer):
     @staticmethod
     def mlp_factory(recognition_net=None, generation_net=None):
         mlps = {}
-        print recognition_net
-        print generation_net
 
         if recognition_net is not None:
             assert not 'type' in recognition_net.keys()
@@ -228,8 +226,7 @@ class SigmoidBeliefNetwork(Layer):
         z = np.zeros((self.dim_h,)).astype(floatX)
         inference_scale_factor = np.float32(1.0)
 
-        self.params = OrderedDict(
-            z=z, inference_scale_factor=inference_scale_factor)
+        self.params = OrderedDict(z=z, inference_scale_factor=inference_scale_factor)
 
         if self.posterior is None:
             self.posterior = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
@@ -494,7 +491,6 @@ class SigmoidBeliefNetwork(Layer):
         updates = theano.OrderedUpdates()
 
         ys = T.alloc(0., n_inference_steps + 1, y.shape[0], y.shape[1]) + y[None, :, :]
-
         p_h_logit = self.posterior(x, return_preact=True)
         z0 = self.init_variational_params(p_h_logit)
 
@@ -533,9 +529,7 @@ class SigmoidBeliefNetwork(Layer):
 
     # Inference
     def inference(self, x, y, n_inference_steps=20, n_samples=100):
-
         (zs, _), updates = self.infer_q(x, y, n_inference_steps)
-
         z = zs[-1]
 
         (prior_energy, h_energy, y_energy, entropy), m_constants = self.m_step(
