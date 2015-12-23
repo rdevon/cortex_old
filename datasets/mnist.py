@@ -37,7 +37,7 @@ class MNIST(object):
         X, Y = self.get_data(x, mode)
         self.mode = mode
 
-        self.dims = (28, 28)
+        self.image_shape = (28, 28)
         self.out_path = out_path
 
         if restrict_digits is None:
@@ -65,8 +65,11 @@ class MNIST(object):
         if stop is not None:
             X = X[:stop]
 
-        self.n, self.dim = X.shape
+        self.n = X.shape[0]
         print 'Data shape: %d x %d' % X.shape
+
+        self.dims = dict(mnist=X.shape[1], label=len(np.unique(Y)))
+        self.acts = dict(mnist='T.nnet.sigmoid', label='T.nnet.softmax')
 
         self.shuffle = shuffle
         self.pos = 0
@@ -153,7 +156,7 @@ class MNIST(object):
         image.save(imgfile)
 
     def show(self, image, tshape, transpose=False):
-        fshape = self.dims
+        fshape = self.image_shape
         if transpose:
             X = image
         else:
