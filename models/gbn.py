@@ -31,7 +31,7 @@ pi = theano.shared(np.pi).astype('float32')
 
 
 class GaussianBeliefNet(Layer):
-    def __init__(self, dim_in, dim_h, dim_out,
+    def __init__(self, dim_in, dim_h,
                  posterior=None, conditional=None,
                  z_init=None,
                  name='gbn',
@@ -40,7 +40,6 @@ class GaussianBeliefNet(Layer):
         self.strict = True
         self.dim_in = dim_in
         self.dim_h = dim_h
-        self.dim_out = dim_out
 
         self.posterior = posterior
         self.conditional = conditional
@@ -66,7 +65,7 @@ class GaussianBeliefNet(Layer):
                                  h_act='T.nnet.sigmoid',
                                  out_act='lambda x: x')
         if self.conditional is None:
-            self.conditional = MLP(self.dim_h, self.dim_h, self.dim_out, 1,
+            self.conditional = MLP(self.dim_h, self.dim_h, self.dim_in, 1,
                                    rng=self.rng, trng=self.trng,
                                    h_act='T.nnet.sigmoid',
                                    out_act='T.nnet.sigmoid')
@@ -151,17 +150,15 @@ class GaussianBeliefNet(Layer):
         '''
         E step for IRVI.
         '''
-
         prior = concatenate([params[0][None, :], params[1][None, :]], axis=1)
 
         mu_q = _slice(q, 0, self.dim_h)
         log_sigma_q = _slice(q, 1, self.dim_h)
-
-        h = mu_q + epsilon * T.exp(log_sigma_q)
+        h = mu_q[None, :, :] + epsilon * T.exp(log_sigma_q[None, :, :])
         py = self.p_y_given_h(h, *params)
 
-        consider_constant = [y] + list(params[:1])
-        cond_term = self.conditional.neg_log_prob(y[None, :, :], py).mean()
+        consider_constant = [y] + list(params)
+        cond_term = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=0)
 
         kl_term = self.kl_divergence(q, prior)
 
@@ -178,8 +175,13 @@ class GaussianBeliefNet(Layer):
         constants = []
         prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
         p_h = self.posterior(x)
-        h = self.posterior.sample(p=q, size=(n_samples, q.shape[0], q.shape[1] / 2))
-
+        epsilon = self.trng.normal(avg=0, std=1.0,
+                                   size=(n_samples, q.shape[0], q.shape[1] // 2),
+                                   dtype=x.dtype)
+        #mu_q = _slice(q, 0, self.dim_h)
+        #log_sigma_q = _slice(q, 1, self.dim_h)
+        #h = mu_q[None, :, :] + epsilon * T.exp(log_sigma_q[None, :, :])
+        h = self.posterior.sample(p=q, size=(n_samples, q.shape[0], q.shape[1] // 2))
         p_y = self.conditional(h)
 
         y_energy = self.conditional.neg_log_prob(y[None, :, :], p_y).mean()
@@ -201,47 +203,6 @@ class GaussianBeliefNet(Layer):
     def params_infer(self):
         raise NotImplementedError()
 
-    def _step_adapt(self, y, epsilon, q, *params):
-        prior = concatenate([params[0][None, None, :], params[1][None, None, :]], axis=2)
-
-        mu_q = _slice(q, 0, self.dim_h)
-        log_sigma_q = _slice(q, 1, self.dim_h)
-
-        h = mu_q[None, :, :] + epsilon * T.exp(log_sigma_q[None, :, :])
-        py = self.p_y_given_h(h, *params)
-
-        w = self.importance_weights(y[None, :, :], h, py, q[None, :, :], prior)
-
-        cost = w.std()
-        mu_q = (w[:, :, None] * h).sum(axis=0)
-        q = concatenate([mu_q, log_sigma_q], axis=1)
-
-        return q, cost
-
-    def _init_adapt(self, q):
-        return []
-
-    def _unpack_adapt(self, outs):
-        return outs
-
-    def _init_variational_params_adapt(self):
-        # Dummy. Needed for SBN
-        return
-
-    def _params_adapt(self):
-        return []
-
-    def _step_momentum_then_adapt(self, y, epsilon, q, l, dq_, m, *params):
-        cost, grad = self.e_step(y, epsilon, q, *params)
-        dq = (-l * grad + m * dq_).astype(floatX)
-        q = (q + dq).astype(floatX)
-        q, _ = self._step_adapt(y, epsilon, q, *params)
-        l *= self.inference_decay
-        return q, l, dq, cost
-
-    def _unpack_momentum_then_adapt(self, outs):
-        return self._unpack_momentum(outs)
-
     # Momentum
     def _step_momentum(self, y, epsilon, q, dq_, m, *params):
         l = self.inference_rate
@@ -260,20 +221,25 @@ class GaussianBeliefNet(Layer):
     def _params_momentum(self):
         return [T.constant(self.momentum).astype('float32')]
 
-    def infer_q(self, x, y, n_inference_steps):
-
-        ys = T.alloc(0., n_inference_steps + 1, y.shape[0], y.shape[1]) + y[None, :, :]
-        ph = self.posterior(x)
-
+    def init_variational_inference(self, ph):
         if self.z_init == 'recognition_net':
             print 'Starting q0 at recognition net'
             q0 = ph
         else:
             q0 = T.alloc(0., x.shape[0], 2 * self.dim_h).astype(floatX)
 
+        return q0
+
+    def infer_q(self, x, y, n_inference_steps):
+        updates = theano.OrderedUpdates()
+
+        ys = T.alloc(0., n_inference_steps + 1, y.shape[0], y.shape[1]) + y[None, :, :]
+        ph = self.posterior(x)
+        q0 = self.init_variational_inference(ph)
+
         epsilons = self.trng.normal(
             avg=0, std=1.0,
-            size=(n_inference_steps + 1, self.n_inference_samples,
+            size=(n_inference_steps, self.n_inference_samples,
                   x.shape[0], self.dim_h),
             dtype=x.dtype)
 
@@ -281,12 +247,12 @@ class GaussianBeliefNet(Layer):
         outputs_info = [q0] + self.init_infer(q0) + [None]
         non_seqs = self.params_infer() + self.get_params()
 
-        print ('Doing %d inference steps and a rate of %.2f with %d '
+        print ('Doing %d inference steps and a rate of %.5f with %d '
                'inference samples'
                % (n_inference_steps, self.inference_rate, self.n_inference_samples))
 
         if isinstance(n_inference_steps, T.TensorVariable) or n_inference_steps > 1:
-            outs, updates = theano.scan(
+            outs, updates_2 = theano.scan(
                 self.step_infer,
                 sequences=seqs,
                 outputs_info=outputs_info,
@@ -294,23 +260,26 @@ class GaussianBeliefNet(Layer):
                 name=tools._p(self.name, 'infer'),
                 n_steps=n_inference_steps,
                 profile=tools.profile,
-                strict=self.strict
+                strict=False
             )
+            updates.update(updates_2)
+
             qs, i_costs = self.unpack_infer(outs)
 
         elif n_inference_steps == 1:
-            updates = theano.OrderedUpdates()
             inps = [ys[0], epsilons[0]] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
             q, i_cost = self.unpack_infer(outs)
+            qs = q[None, :, :]
             i_costs = [i_cost]
 
         elif n_inference_steps == 0:
-            updates = theano.OrderedUpdates()
+            print 'No inference steps. VAE'
             q = q0
+            qs = q[None, :, :]
             i_costs = [T.constant(0.).astype(floatX)]
 
-        return (qs, i_costs[-1]), updates
+        return (qs, i_costs), updates
 
     # Inference
     def inference(self, x, y, n_inference_steps=20, n_sampling_steps=None, n_samples=100):
@@ -320,21 +289,27 @@ class GaussianBeliefNet(Layer):
         (prior_energy, h_energy, y_energy, entropy), m_constants = self.m_step(
             x, y, q, n_samples=n_samples)
 
-        constants = [q, entropy] + m_constants
+        constants = [entropy] + m_constants
+        if n_inference_steps > 0:
+            constants.append(qs)
 
-        return (q, prior_energy, h_energy,
-                y_energy, entropy), updates, constants
+        return (q, prior_energy, h_energy, y_energy, entropy), updates, constants
 
-    def __call__(self, x, y, n_samples=100,
-                 n_inference_steps=0, calculate_log_marginal=False):
+    def __call__(self, x, y, n_samples=100, n_inference_steps=0,
+                 calculate_log_marginal=False):
 
         outs = OrderedDict()
         prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
 
-        (qs, i_cost), updates = self.infer_q(x, y, n_inference_steps)
+        (qs, i_costs), updates = self.infer_q(x, y, n_inference_steps)
 
-        steps = range(n_inference_steps // 10, n_inference_steps + 1, n_inference_steps // 10)
-        steps = steps[:-1] + [n_inference_steps]
+        if n_inference_steps > 10:
+            steps = range(n_inference_steps // 10, n_inference_steps + 1, n_inference_steps // 10)
+            steps = steps[:-1] + [n_inference_steps]
+        elif n_inference_steps > 0:
+            steps = [0, n_inference_steps]
+        else:
+            steps = [0]
 
         lower_bounds = []
         nlls = []
