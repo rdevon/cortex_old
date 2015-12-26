@@ -159,7 +159,6 @@ class GaussianBeliefNet(Layer):
 
         consider_constant = [y] + list(params)
         cond_term = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=0)
-
         kl_term = self.kl_divergence(q, prior)
 
         cost = (cond_term + kl_term).sum(axis=0)
@@ -171,16 +170,9 @@ class GaussianBeliefNet(Layer):
         '''
         M step for IRVI in GBNs.
         '''
-
         constants = []
         prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
         p_h = self.posterior(x)
-        epsilon = self.trng.normal(avg=0, std=1.0,
-                                   size=(n_samples, q.shape[0], q.shape[1] // 2),
-                                   dtype=x.dtype)
-        #mu_q = _slice(q, 0, self.dim_h)
-        #log_sigma_q = _slice(q, 1, self.dim_h)
-        #h = mu_q[None, :, :] + epsilon * T.exp(log_sigma_q[None, :, :])
         h = self.posterior.sample(p=q, size=(n_samples, q.shape[0], q.shape[1] // 2))
         p_y = self.conditional(h)
 
@@ -252,6 +244,7 @@ class GaussianBeliefNet(Layer):
                % (n_inference_steps, self.inference_rate, self.n_inference_samples))
 
         if isinstance(n_inference_steps, T.TensorVariable) or n_inference_steps > 1:
+            print 'Multiple inference steps. Using `scan`'
             outs, updates_2 = theano.scan(
                 self.step_infer,
                 sequences=seqs,
@@ -263,26 +256,27 @@ class GaussianBeliefNet(Layer):
                 strict=False
             )
             updates.update(updates_2)
-
             qs, i_costs = self.unpack_infer(outs)
+            qs = T.concatenate([q0[None, :, :], qs], axis=0)
 
         elif n_inference_steps == 1:
+            print 'Single inference step'
             inps = [ys[0], epsilons[0]] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
             q, i_cost = self.unpack_infer(outs)
-            qs = q[None, :, :]
+            qs = T.concatenate([q0[None, :, :], q[None, :, :]], axis=0)
             i_costs = [i_cost]
 
         elif n_inference_steps == 0:
             print 'No inference steps. VAE'
-            q = q0
-            qs = q[None, :, :]
+            qs = q0[None, :, :]
             i_costs = [T.constant(0.).astype(floatX)]
 
         return (qs, i_costs), updates
 
     # Inference
-    def inference(self, x, y, n_inference_steps=20, n_sampling_steps=None, n_samples=100):
+    def inference(self, x, y, n_inference_steps=20, n_sampling_steps=None,
+                  n_samples=100, pass_gradients=False):
         (qs, _), updates = self.infer_q(x, y, n_inference_steps)
         q = qs[-1]
 
@@ -290,7 +284,8 @@ class GaussianBeliefNet(Layer):
             x, y, q, n_samples=n_samples)
 
         constants = [entropy] + m_constants
-        if n_inference_steps > 0:
+        if n_inference_steps > 0 or pass_gradients:
+            print 'Passing the gradient through latent variables'
             constants.append(qs)
 
         return (q, prior_energy, h_energy, y_energy, entropy), updates, constants
@@ -304,7 +299,7 @@ class GaussianBeliefNet(Layer):
         (qs, i_costs), updates = self.infer_q(x, y, n_inference_steps)
 
         if n_inference_steps > 10:
-            steps = range(n_inference_steps // 10, n_inference_steps + 1, n_inference_steps // 10)
+            steps = [0] + range(n_inference_steps // 10, n_inference_steps + 1, n_inference_steps // 10)
             steps = steps[:-1] + [n_inference_steps]
         elif n_inference_steps > 0:
             steps = [0, n_inference_steps]
@@ -314,10 +309,8 @@ class GaussianBeliefNet(Layer):
         lower_bounds = []
         nlls = []
         for i in steps:
-            q = qs[i-1]
-
-            h = self.posterior.sample(
-                q, size=(n_samples, q.shape[0], q.shape[1] / 2))
+            q = qs[i]
+            h = self.posterior.sample(q, size=(n_samples, q.shape[0], q.shape[1] // 2))
 
             py = self.conditional(h)
             y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=(0, 1))
