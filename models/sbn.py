@@ -529,7 +529,7 @@ class SigmoidBeliefNetwork(Layer):
         return (zs, i_costs), updates
 
     # Inference
-    def inference(self, x, y, n_inference_steps=20, n_samples=100):
+    def inference(self, x, y, n_inference_steps=20, n_samples=100, pass_gradients=False):
         (zs, _), updates = self.infer_q(x, y, n_inference_steps)
         z = zs[-1]
 
