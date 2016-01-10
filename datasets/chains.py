@@ -58,6 +58,7 @@ class Chains(object):
         self.use_theano = use_theano
         self.dim = self.dataset.dims[data_name]
         self.mean_image = self.dataset.mean_image
+        self.save_images = self.dataset.save_images
 
         if chain_stride is None:
             self.chain_stride = self.window
@@ -166,7 +167,8 @@ class Chains(object):
 
         t0 = time.time()
         if self.use_theano:
-            print('Resetting chain. Position in data is %d' % (data_pos))
+            print('Resetting chain (%s). Position in data is %d'
+                  % (self.dataset.mode, data_pos))
             x = x[:, None, :]
             h0 = self.rng.normal(loc=0., scale=1., size=(1, self.dim_h,)).astype('float32')
             inps = [x, h0]
@@ -174,7 +176,7 @@ class Chains(object):
                 inps.append(condition_on)
             inps.append(data_pos)
             self.chain, perc = self.f_chain(*inps)
-            self.chain = self.chain[:, 0]
+            self.chain = self.chain[:, 0].astype('int64')
             print 'Chain has length %d and used %.2f percent of data points' % (len(self.chain), 100 * perc)
         else:
             print('Resetting chain with length %d and %d samples per query. '

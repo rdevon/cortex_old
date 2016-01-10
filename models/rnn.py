@@ -246,7 +246,8 @@ class RNN(Layer):
                condition_on=None):
         if x0 is None:
             x0 = self.output_net.sample(
-                p=0.5, size=(n_samples, self.output_net.dim_out)).astype(floatX)
+                p=T.constant(0.5).astype(floatX),
+                size=(n_samples, self.output_net.dim_out)).astype(floatX)
 
         if h0 is None:
             h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX)
