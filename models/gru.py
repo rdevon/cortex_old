@@ -11,21 +11,20 @@ from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from layers import Layer
-from layers import MLP
+from models.mlp import MLP
 from rnn import RNN
 import utils.tools
 from utils.tools import (
     concatenate,
+    floatX,
     init_rngs,
     init_weights,
     norm_weight,
     ortho_weight,
+    pi,
     _slice
 )
 
-
-floatX = theano.config.floatX
-pi = theano.shared(np.pi).astype(floatX)
 
 def unpack(dim_in=None,
            dim_h=None,
@@ -68,38 +67,24 @@ def unpack(dim_in=None,
 
 
 class GRU(RNN):
-    def __init__(self, dim_in, dim_h, input_net_aux=None,  name='gru',
+    def __init__(self, dim_in, dim_h, input_net_aux=None, name='gru',
                  **kwargs):
 
         self.input_net_aux = input_net_aux
         super(GRU, self).__init__(dim_in, dim_h, name=name, **kwargs)
 
     @staticmethod
-    def mlp_factory(dim_in, dim_h, mode=None,
-                    i_net=None, a_net=None, o_net=None, c_net=None,
-                    **kwargs):
-        mlps = {}
+    def factory(dim_in=None, dim_h=None, **kwargs):
+        return GRU(dim_in, dim_h, **kwargs)
 
-        if i_net is not None:
-            input_net = MLP.factory(dim_in=dim_in, dim_out=dim_h,
-                                    name='input_net', **i_net)
-            mlps['input_net'] = input_net
+    @staticmethod
+    def mlp_factory(dim_in, dim_h, a_net=None, **kwargs):
+        mlps = RNN.mlp_factory(dim_in, dim_h, **kwargs)
 
         if a_net is not None:
-            assert mode == 'gru'
             input_net_aux = MLP.factory(dim_in=dim_in, dim_out=2*dim_h,
                                         name='input_net_aux', **a_net)
             mlps['input_net_aux'] = input_net_aux
-
-        if o_net is not None:
-            output_net = MLP.factory(dim_in=dim_h, dim_out=dim_in,
-                                     name='output_net', **o_net)
-            mlps['output_net'] = output_net
-
-        if c_net is not None:
-            conditional = MLP.factory(dim_in=dim_in, dim_out=dim_in,
-                                      name='conditional', **mlp_c)
-            mlps['conditional'] = conditional
 
         return mlps
 
@@ -139,7 +124,7 @@ class GRU(RNN):
         else:
             assert self.input_net_aux.dim_in == self.dim_in
             assert self.input_net_aux.dim_out == 2 * self.dim_h
-            self.input_net_aux.name = 'input_net_aux'
+        self.input_net_aux.name = self.name + '_input_net_aux'
 
         self.nets.append(self.input_net_aux)
 
@@ -157,7 +142,7 @@ class GRU(RNN):
     def get_aux_args(self, *args):
         return args[self.param_idx[3]:self.param_idx[4]]
 
-    def step_sample(self, h_, x_, *params):
+    def step_sample_preact(self, h_, x_, *params):
         Ura, Urb = self.get_recurrent_args(*params)
         aux_params = self.get_aux_args(*params)
         input_params = self.get_input_args(*params)
@@ -169,9 +154,21 @@ class GRU(RNN):
         h = self._step(y_aux, y_input, h_, Ura, Urb)
 
         preact = self.output_net.preact(h, *output_params)
-        if self.conditional is not None:
-            c_params = self.get_conditional_args(*params)
-            preact += self.conditional.preact(x_, *c_params)
+        return h, preact
+
+    def step_sample_cond(self, h_, x_, c, *params):
+        Ura, Urb = self.get_recurrent_args(*params)
+        aux_params = self.get_aux_args(*params)
+        input_params = self.get_input_args(*params)
+        output_params = self.get_output_args(*params)
+
+        y_aux = self.input_net_aux.preact(x_, *aux_params)
+        y_input = self.input_net.preact(x_, *input_params)
+        y_input += c
+
+        h = self._step(y_aux, y_input, h_, Ura, Urb)
+
+        preact = self.output_net.preact(h, *output_params)
 
         p = eval(self.output_net.out_act)(preact)
         x = self.output_net.sample(p)
@@ -185,8 +182,12 @@ class GRU(RNN):
         h = u * h + (1. - u) * h_
         return h
 
-    def call_seqs(self, x):
-        a = self.input_net_aux(x, return_preact=True)
-        b = self.input_net(x, return_preact=True)
-        seqs = [a, b]
+    def call_seqs(self, x, condition_on, *params):
+        i_params = self.get_input_args(*params)
+        a_params = self.get_aux_args(*params)
+        i = self.input_net.preact(x, *i_params)
+        a = self.input_net_aux.preact(x, *a_params)
+        if condition_on is not None:
+            i += condition_on
+        seqs = [a, i]
         return seqs

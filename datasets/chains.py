@@ -12,6 +12,7 @@ import time
 
 from utils.tools import (
     concatenate,
+    floatX,
     init_rngs,
     rng_,
     scan
@@ -24,18 +25,19 @@ def energy(x, x_p, h_p, model):
     energy = model.neg_log_prob(x, p)
     return energy, x_s[0], h[0]
 
-def distance(x, x_p, h_p, model):
+def distance(x, x_p, h_p):
     distance = (x - x_p[None, :]) ** 2
     distance = distance.sum(axis=1)
     return distance, x, h_p
 
-def random_distance(x, x_p, h_p, model):
+def random_distance(x, x_p, h_p):
+    raise NotImplementedError()
     distance = model.trng.uniform(size=(x.shape[0],), dtype=x_p.dtype)
     return distance, x, h_p
 
 
 class Chains(object):
-    def __init__(self, D, batch_size=10,
+    def __init__(self, D, data_name, batch_size=10,
                  window=20, chain_length=5000, build_batch=1000,
                  chain_stride=None, chain_noise=0.,
                  use_theano=False,
@@ -54,6 +56,8 @@ class Chains(object):
         self.dim_h = None
         self.out_path = out_path
         self.use_theano = use_theano
+        self.dim = self.dataset.dims[data_name]
+        self.mean_image = self.dataset.mean_image
 
         if chain_stride is None:
             self.chain_stride = self.window
@@ -67,67 +71,50 @@ class Chains(object):
     def next(self):
         raise NotImplementedError()
 
-    def set_f_energy(self, f_energy, dim_h, model=None,
-                     alpha=0.0, beta=1.0, steps=None, sample=False):
-        self.dim_h = dim_h
+    def set_f_energy(self, model, f_energy=None, condition=False, **chain_args):
 
         # Energy function -----------------------------------------------------
-        X = T.matrix('x', dtype='float32')
-        x_p = T.vector('x_p', dtype='float32')
-        h_p = T.vector('h_p', dtype='float32')
+        X = T.tensor3('x', dtype=floatX)
+        x_p = T.matrix('x_p', dtype=floatX)
+        h_p = T.matrix('h_p', dtype=floatX)
 
-        energy, x_n, h_n = f_energy(X, x_p, h_p, model)
-        self.f_energy = theano.function([X, x_p, h_p], [energy, x_n, h_n])
+        inps = [X, x_p, h_p]
+
+        self.dim_h = model.dim_h
+
+        if condition:
+            C = T.matrix('C', dtype=floatX)
+            inps.append(C)
+            if f_energy is None:
+                f_energy = model.step_energy_cond
+        else:
+            C = None
+            if f_energy is None:
+                f_energy = model.step_energy
+
+        energy, h_n, p_n = f_energy(*(inps + model.get_sample_params()))
+        self.f_energy = theano.function(inps, [energy, p_n, h_n])
 
         # Chain function ------------------------------------------------------
-        counts = T.zeros((X.shape[0],)).astype('int64')
-        scaling = T.ones((X.shape[0],)).astype('float32')
         P = T.scalar('P', dtype='int64')
-        h_p = self.trng.normal(avg=0., std=1., size=(dim_h,)).astype('float32')
-        counts = T.set_subtensor(counts[0], 1)
-        scaling = T.set_subtensor(scaling[0], scaling[0] * alpha)
+        inps = [X, h_p]
 
-        if steps is None:
-            steps = X.shape[0] - 1
+        if condition:
+            inps.append(C)
+        inps.append(P)
 
-        def f_step(i_p, h_p, counts, scaling, x):
-            energies, _, h_n = f_energy(x, x[i_p], h_p, model)
-            energies -= T.log(scaling)
-
-            if sample:
-                e_max = (-energies).max()
-                probs = T.exp(-energies - e_max)
-                probs = probs
-                probs = probs / probs.sum()
-                i = T.argmax(self.trng.multinomial(pvals=probs[None, :]).astype('int64')[0])
-            else:
-                i = T.argmin(energies)
-
-            counts = T.set_subtensor(counts[i], 1)
-            picked_scaling = scaling[i]
-            scaling = scaling / beta
-            scaling = T.set_subtensor(scaling[i], picked_scaling * alpha)
-            scaling = T.clip(scaling, 0.0, 1.0)
-            return (i, h_n, counts, scaling), theano.scan_module.until(T.all(counts))
-
-        seqs = []
-        outputs_info = [T.constant(0).astype('int64'), h_p, counts, scaling]
-        non_seqs = [X]
-
-        (chain, h_chain, counts, scalings), updates = scan(
-            f_step, seqs, outputs_info, non_seqs, steps, name='make_chain',
-            strict=False)
-        counts = counts[-1]
+        chain_dict, updates = model.assign(X, h_p, condition_on=C, **chain_args)
+        chain = chain_dict['chain']
+        counts = chain_dict['counts']
+        scalings = chain_dict['scalings']
 
         chain += P
-        chain_e = T.zeros((chain.shape[0] + 1,)).astype('int64')
-        chain = T.set_subtensor(chain_e[1:], chain)
-        perc = counts.sum() / counts.shape[0].astype('float32')
-        self.f_chain = theano.function([X, P], [chain, perc], updates=updates)
+        perc = counts.sum() / counts.shape[0].astype(floatX)
+        self.f_chain = theano.function(inps, [chain, perc], updates=updates)
 
     def _build_chain_py(self, x, data_pos):
         h_p = np.random.normal(
-            loc=0, scale=1, size=(self.dim_h,)).astype('float32')
+            loc=0, scale=1, size=(self.dim_h,)).astype(floatX)
 
         l_chain = x.shape[0]
         n_samples = min(self.build_batch, l_chain)
@@ -168,7 +155,7 @@ class Chains(object):
 
         return chain
 
-    def _build_chain(self, trim_end=0):
+    def _build_chain(self, trim_end=0, condition_on=None):
         self.chain = []
         n_remaining_samples = self.dataset.n - self.dataset.pos
         l_chain = min(self.chain_length, n_remaining_samples)
@@ -180,7 +167,14 @@ class Chains(object):
         t0 = time.time()
         if self.use_theano:
             print('Resetting chain. Position in data is %d' % (data_pos))
-            self.chain, perc = self.f_chain(x, data_pos)
+            x = x[:, None, :]
+            h0 = self.rng.normal(loc=0., scale=1., size=(1, self.dim_h,)).astype('float32')
+            inps = [x, h0]
+            if condition_on is not None:
+                inps.append(condition_on)
+            inps.append(data_pos)
+            self.chain, perc = self.f_chain(*inps)
+            self.chain = self.chain[:, 0]
             print 'Chain has length %d and used %.2f percent of data points' % (len(self.chain), 100 * perc)
         else:
             print('Resetting chain with length %d and %d samples per query. '
@@ -216,7 +210,7 @@ class Chains(object):
 
         x = np.zeros((len(chains[0]),
                       len(chains),
-                      self.dataset.dim)
+                      self.dim)
             ).astype('float32')
         for i, c in enumerate(chains):
             x[:, i] = self.dataset.X[c]
@@ -238,12 +232,12 @@ class Chains(object):
         self.dataset.reset()
         self.cpos = -1
 
-    def _next(self, l_chain=None):
+    def _next(self, l_chain=None, condition_on=None):
         assert self.f_energy is not None
 
         if self.cpos == -1:
             self.cpos = 0
-            self._build_chain(trim_end=self.trim_end)
+            self._build_chain(trim_end=self.trim_end, condition_on=condition_on)
             window = min(self.window, len(self.chain))
             self.chain_idx = range(0, len(self.chain) - window + 1, self.chain_stride)
             random.shuffle(self.chain_idx)

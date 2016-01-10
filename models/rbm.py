@@ -11,11 +11,13 @@ import yaml
 
 from layers import Layer
 import tools
-
-
-floatX = theano.config.floatX
-norm_weight = tools.norm_weight
-ortho_weight = tools.ortho_weight
+from tools import (
+    init_rngs,
+    init_weights,
+    norm_weight,
+    ortho_weight,
+    scan
+)
 
 def unpack(dim_h=None,
            dim_in=None,
@@ -31,25 +33,18 @@ def unpack(dim_h=None,
 
 
 class RBM(Layer):
-    def __init__(self, dim_in, dim_h, name='rbm', rng=None, trng=None,
-                 stochastic=True):
-        self.stochastic = stochastic
+    def __init__(self, dim_in, dim_h, name='rbm', **kwargs):
+
         self.dim_in = dim_in
         self.dim_h = dim_h
 
-        if rng is None:
-            rng = tools.rng_
-        self.rng = rng
-
-        if trng is None:
-            self.trng = RandomStreams(6 * 10 * 2015)
-        else:
-            self.trng = trng
-
-        super(RBM, self).__init__(name=name)
+        kwargs = init_weights(self, **kwargs)
+        kwargs = init_rngs(self, **kwargs)
+        assert len(kwargs) == 0, kwargs.keys()
+        super(RNN, self).__init__(name=name)
 
     def set_params(self):
-        W = norm_weight(self.dim_in, self.dim_h, rng=self.rng)
+        W = norm_weight(self.dim_in, self.dim_h)
         b = np.zeros((self.dim_in,)).astype(floatX)
         c = np.zeros((self.dim_h,)).astype(floatX)
 
@@ -58,13 +53,25 @@ class RBM(Layer):
     def get_params(self):
         return [self.W, self.b, self.c]
 
+    def _step_down(self, h, W, b, c):
+        return eval(self.v_act)(T.dot(h, W.T) + b)
+
+    def _step_sample_down(self, h, W, b, c):
+        p = self._step_down(h, W, b, c)
+        return eval(self.v_sample)(p)
+
+    def _step_up(self, x, W, b, c):
+        z = T.dot(x, W) + c
+        p = eval(self.h_act)(z)
+        return p
+
+    def _step_sample_up(self, x, W, b, c):
+        p = self._step_up(x, W, b, c)
+        return eval(self.h_sample)(p)
+
     def _step_energy(self, x_, x, e_, W, b, c):
-        q = T.nnet.sigmoid(T.dot(x_, W) + c)
-        if self.stochastic:
-            z = self.trng.binomial(p=q, size=q.shape, n=1, dtype=q.dtype)
-            p = T.nnet.sigmoid(T.dot(z, W.T) + b)
-        else:
-            p = T.nnet.sigmoid(T.dot(q, W.T) + b)
+        q = eval(self.h_act)(T.dot(x_, W) + c)
+        p = T.nnet.sigmoid(T.dot(q, W.T) + b)
         e = -(x * T.log(p + 1e-7) + (1. - x) * T.log(1. - p + 1e-7))
         e = e.sum(axis=e.ndim-1)
         return e_ + e, e
@@ -95,16 +102,7 @@ class RBM(Layer):
         e = -T.dot(T.dot(h, self.W), v.T) - T.dot(v, self.b) - T.dot(h, self.c)
         return e
 
-    def RAISE_estimate(self, x, n_samples=10, K=100):
-        for m in xrange(n_samples):
-            q = T.nnet.sigmoid(T.dot(x, self.W) + self.c)
-            h_k = self.trng.binomial(p=q, size=q.shape, n=1, dtype=q.dtype)
-            energy = self.joint_energy(samples)
-
-            for k in reversed(xrange(K)):
-                code
-
-    def _step(self, x_, W, b, c):
+    def _step_sample(self, x_, W, b, c):
         q = T.nnet.sigmoid(T.dot(x_, W) + c)
         h = self.trng.binomial(p=q, size=q.shape, n=1, dtype=q.dtype)
         p = T.nnet.sigmoid(T.dot(h, W.T) + b)
@@ -112,34 +110,22 @@ class RBM(Layer):
 
         return x, h, p, q
 
-    def sample(self, n_steps=10, n_samples=1, x0=None, h0=None):
-        assert x0 is None or h0 is None
-
-        if x0 is not None:
-            assert n_samples is not None
-        elif h0 is not None:
-            x0 = self.trng.binomial(p=p0,
-                                    size=(h0.shape[0], self.dim_in),
-                                    n=1, dtype=floatX)
+    def sample(self, x0=None, h0=None, n_steps=1):
+        if x0 is None:
+            assert h0 is not None
         else:
-            assert n_chains is not None
-            x0 = self.trng.binomial(p=0.5,
-                                    size=(n_samples, self.dim_in),
+            x0 = self.trng.binomial(p=self.b,
+                                    size=(h0.shape[0], self.dim_in),
                                     n=1, dtype=floatX)
 
         seqs = []
         outputs_info = [x0, None, None, None]
-        non_seqs = [self.W, self.b, self.c]
-        (x, h, p, q), updates = theano.scan(
-            self._step,
-            sequences=seqs,
-            outputs_info=outputs_info,
-            non_sequences=non_seqs,
-            name=tools._p(self.name, '_sample'),
-            n_steps=n_steps,
-            profile=tools.profile,
-            strict=True
-        )
+        non_seqs = self.get_params()
+
+        (x, h, p, q), updates = scan(
+            self._step_sample, seqs, outputs_info, non_seqs, n_steps,
+            name=self.name+'_sample', strict=False)
+
         x = T.concatenate([x0[None, :, :], x], axis=0)
 
         return OrderedDict(x=x, h=h, p=p, q=q), updates
