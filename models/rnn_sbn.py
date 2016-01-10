@@ -448,7 +448,11 @@ class RNN_SBN(Layer):
     def _params_adapt(self):
         return []
 
-    def assign(self, y, z):
+    def assign(self, y, z, apply_assignment=False):
+        def step_order(y, idx):
+            return y[idx]
+
+        cond = self.conditional.conditional(z, return_preact=True)
         y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
         z_e = concatenate([y_e[0], z], axis=2)
         h0 = self.aux_net(z_e)
@@ -458,6 +462,13 @@ class RNN_SBN(Layer):
         h0 = h0.reshape((cond.shape[0] * cond.shape[1], h0.shape[2])).astype(floatX)
 
         out_dict, updates = self.conditional.assign(y_e, h0=h0, condition_on=cond_e, select_first=True)
+
+        if apply_assignment:
+            y_hat, _ = scan(step_order, [y_e.transpose(1, 0, 2), out_dict['chain']], [None], [],
+                                         y_e.shape[1], name='order_data', strict=False)
+            y_hat = y_hat.transpose(1, 0, 2).reshape((y_hat.shape[0], cond.shape[0], cond.shape[1], y_hat.shape[2])).astype(flaotX)
+            out_dict['y_hat'] = y_hat
+
         return out_dict, updates
 
     def infer_q(self, x, y, p_h_logit, n_inference_steps):
