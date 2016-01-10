@@ -210,8 +210,9 @@ class RNN_SBN(Layer):
 
     def generate_from_prior(self, n_samples=100):
         h = self.sample_from_prior(n_samples=n_samples)
-        py = self.conditional(h)
-        return py
+        cond_dict, updates = self.conditional.sample(condition_on=h)
+        py = cond_dict['p']
+        return py, updates
 
     def generate_from_latent(self, H):
         py = self.conditional(H)
@@ -447,6 +448,18 @@ class RNN_SBN(Layer):
     def _params_adapt(self):
         return []
 
+    def assign(self, y, z):
+        y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
+        z_e = concatenate([y_e[0], z], axis=2)
+        h0 = self.aux_net(z_e)
+
+        y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
+        cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
+        h0 = h0.reshape((cond.shape[0] * cond.shape[1], h0.shape[2])).astype(floatX)
+
+        out_dict, updates = self.conditional.assign(y_e, h0=h0, condition_on=cond_e, select_first=True)
+        return out_dict, updates
+
     def infer_q(self, x, y, p_h_logit, n_inference_steps):
         updates = theano.OrderedUpdates()
 
@@ -576,6 +589,7 @@ class RNN_SBN(Layer):
                 nlls.append(nll)
 
         outs.update(
+            zs=zs,
             py0=pys[0],
             py=pys[-1],
             lower_bound=lower_bounds[-1],
