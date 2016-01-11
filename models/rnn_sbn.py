@@ -272,6 +272,8 @@ class RNN_SBN(Layer):
             py = out_dict['probs']
             py = py.reshape((py.shape[0], cond.shape[0], cond.shape[1], py.shape[2])).astype(floatX)
             cond_dict, _ = self.conditional(y_e[:-1], h0=cond_h0, condition_on=cond_e)
+
+            y_energy = out_dict['energies'].sum(axis=0).mean()
         else:
             print 'Regular M step'
             y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
@@ -286,9 +288,10 @@ class RNN_SBN(Layer):
             py = cond_dict['p']
             py = py.reshape((py.shape[0], cond.shape[0], cond.shape[1], py.shape[2])).astype(floatX)
 
+            y_energy = self.conditional.neg_log_prob(y[:, None, :, :][1:], py).sum(axis=0).mean()
+
         entropy = self.posterior.output_net.entropy(q).mean()
         prior_energy = self.posterior.neg_log_prob(q, prior[None, :]).mean()
-        y_energy = self.conditional.neg_log_prob(y[:, None, :, :][1:], py).sum(axis=0).mean()
         h_energy = self.posterior.neg_log_prob(q, p_h).mean()
         constants.append(entropy)
 
