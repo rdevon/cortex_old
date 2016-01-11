@@ -180,9 +180,6 @@ class RNN_SBN(Layer):
                                        dim_out=self.conditional.dim_h,
                                        n_layers=1, out_act='T.tanh')
 
-        self.posterior.name = self.name + '_posterior'
-        self.conditional.name = self.name + '_conditional'
-
     def set_tparams(self, excludes=[]):
         excludes.append('inference_scale_factor')
         excludes = ['{name}_{key}'.format(name=self.name, key=key)
