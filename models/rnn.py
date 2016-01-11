@@ -266,8 +266,9 @@ class RNN(Layer):
 
         non_seqs += self.get_sample_params()
 
-        (h, x, p), updates = scan(step, seqs, outputs_info, non_seqs, n_steps,
+        outs = scan(step, seqs, outputs_info, non_seqs, n_steps,
                                   name=self.name+'_sampling', strict=False)
+        (h, x, p), updates = outs
 
         x = concatenate([x0[None, :, :], x])
         h = concatenate([h0[None, :, :], h])
@@ -302,7 +303,7 @@ class RNN(Layer):
         idx = T.argmin(energies, axis=0)
 
         scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
-        return (idx, h_n, p, counts, scaling), theano.scan_module.until(T.all(counts))
+        return (idx, h_n, p, energies[idx, T.arange(energies.shape[1])], counts, scaling), theano.scan_module.until(T.all(counts))
 
     def step_assign_cond(self, idx, h_p, counts, scaling, x, alpha, beta, c, *params):
         energies, h_n, p = self.step_energy_cond(x, x[idx, T.arange(x.shape[1])], h_p, c, *params)
@@ -311,7 +312,7 @@ class RNN(Layer):
         idx = T.argmin(energies, axis=0)
 
         scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
-        return (idx, h_n, p, counts, scaling), theano.scan_module.until(T.all(counts))
+        return (idx, h_n, p, energies[idx, T.arange(energies.shape[1])], counts, scaling), theano.scan_module.until(T.all(counts))
 
     def step_assign_sample(self, idx, h_p, counts, scaling, x, alpha, beta, *params):
         energies, h_n, p = self.step_energy(x, x[idx, T.arange(x.shape[1])], h_p, *params)
@@ -324,7 +325,7 @@ class RNN(Layer):
         idx = T.argmax(self.trng.multinomial(pvals=probs).astype('int64'), axis=0)
 
         scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
-        return (idx, h_n, p, counts, scaling), theano.scan_module.until(T.all(counts))
+        return (idx, h_n, p, energies[idx, T.arange(energies.shape[1])], counts, scaling), theano.scan_module.until(T.all(counts))
 
     def get_first_assign(self, x, p0):
         energy = self.neg_log_prob(x, p0)
@@ -351,7 +352,7 @@ class RNN(Layer):
         scaling = T.set_subtensor(scaling[idx0, T.arange(scaling.shape[1])], scaling[0] * alpha)
 
         seqs = []
-        outputs_info = [idx0, h0, None, counts, scaling]
+        outputs_info = [idx0, h0, None, None, counts, scaling]
         non_seqs = [X, alpha, beta]
 
         if condition_on is None:
@@ -362,14 +363,14 @@ class RNN(Layer):
 
         non_seqs += params
 
-        (chain, h_chain, p_chain, counts, scalings), updates = scan(
+        (chain, h_chain, p_chain, energies, counts, scalings), updates = scan(
             step, seqs, outputs_info, non_seqs, steps, name='make_chain',
             strict=False)
 
         chain = concatenate([idx0[None, :], chain], axis=0)
         p_chain = concatenate([p0[None, :, :], p_chain], axis=0)
 
-        return OrderedDict(chain=chain, probs=p_chain, counts=counts[-1], scalings=scalings[-1]), updates
+        return OrderedDict(chain=chain, probs=p_chain, energies=energies, counts=counts[-1], scalings=scalings[-1]), updates
 
     def assign(self, X, h0=None, condition_on=None, alpha=0.0, beta=1.0,
                steps=None, sample=False, select_first=False):
