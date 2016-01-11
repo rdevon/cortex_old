@@ -172,6 +172,7 @@ class GRU(RNN):
 
         p = eval(self.output_net.out_act)(preact)
         x = self.output_net.sample(p)
+
         return h, x, p
 
     def _step(self, y_a, y_i, h_, Ura, Urb):
