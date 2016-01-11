@@ -127,10 +127,11 @@ def load_model(model_file, f_unpack=None, **extra_args):
     model_dict = OrderedDict()
 
     for model in models:
+        print '--- Loading params for %s' % model.name
         for k, v in model.params.iteritems():
             try:
-                pretrained_v = pretrained_kwargs[
-                    '{name}_{key}'.format(name=model.name, key=k)]
+                param_key = '{name}_{key}'.format(name=model.name, key=k)
+                pretrained_v = pretrained_kwargs.pop(param_key)
                 print 'Found %s for %s %s' % (k, model.name, pretrained_v.shape)
                 assert model.params[k].shape == pretrained_v.shape, (
                     'Sizes do not match: %s vs %s'
@@ -139,8 +140,8 @@ def load_model(model_file, f_unpack=None, **extra_args):
                 model.params[k] = pretrained_v
             except KeyError:
                 try:
-                    pretrained_v = pretrained_kwargs[
-                        '{key}'.format(key=k)]
+                    param_key = '{key}'.format(key=k)
+                    pretrained_v = pretrained_kwargs[param_key]
                     print 'Found %s, but name is ambiguous' % (k)
                     assert model.params[k].shape == pretrained_v.shape, (
                         'Sizes do not match: %s vs %s'
@@ -150,6 +151,10 @@ def load_model(model_file, f_unpack=None, **extra_args):
                 except KeyError:
                     print '{} not found'.format(k)
         model_dict[model.name] = model
+
+    if len(pretrained_kwargs) > 0:
+        raise ValueError('ERROR: Leftover params: %s' %
+                         pprint.pformat(pretrained_kwargs.keys()))
 
     return model_dict, pretrained_kwargs
 
