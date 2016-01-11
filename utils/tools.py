@@ -12,6 +12,9 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import yaml
 
 
+floatX = theano.config.floatX
+pi = theano.shared(np.pi).astype(floatX)
+
 random_seed = 0xeffe
 rng_ = np.random.RandomState(random_seed)
 
@@ -19,7 +22,20 @@ profile = False
 
 f_clip = lambda x, y, z: T.clip(x, y, 1.)
 
-pi = theano.shared(np.pi).astype('float32')
+def print_profile(tparams):
+    print 'Print profile for tparams (name, shape)'
+    for (k, v) in tparams.iteritems():
+        print k, v.get_value().shape
+
+def shuffle_columns(x, srng):
+    def step_shuffle(m, perm):
+        return m[perm]
+
+    perm_mat = srng.permutation(n=x.shape[0], size=(x.shape[1],))
+    y, _ = scan(
+        step_shuffle, [x.transpose(1, 0, 2), perm_mat], [None], [], x.shape[1],
+        name='shuffle', strict=False)
+    return y.transpose(1, 0, 2)
 
 def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan', strict=True):
     return theano.scan(
@@ -222,7 +238,9 @@ def log_mean_exp(x, axis=None, as_numpy=False):
     return Te.log(Te.mean(Te.exp(x - x_max), axis=axis, keepdims=True)) + x_max
 
 def log_sum_exp(x, axis=None):
-    '''Numerically stable log( sum( exp(A) ) )'''
+    '''
+    Numerically stable log( sum( exp(A) ) ).
+    '''
     x_max = T.max(x, axis=axis, keepdims=True)
     y = T.log(T.sum(T.exp(x - x_max), axis=axis, keepdims=True)) + x_max
     y = T.sum(y, axis=axis)

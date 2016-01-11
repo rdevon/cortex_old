@@ -9,26 +9,25 @@ from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from layers import Layer
-from layers import (
+from models.mlp import (
     MLP,
     MultiModalMLP
 )
 from utils import tools
 from utils.tools import (
     concatenate,
+    floatX,
     init_rngs,
     init_weights,
     log_mean_exp,
     log_sum_exp,
     logit,
+    norm_weight,
+    ortho_weight,
+    pi,
     _slice
 )
 
-
-norm_weight = tools.norm_weight
-ortho_weight = tools.ortho_weight
-floatX = 'float32' # theano.config.floatX
-pi = theano.shared(np.pi).astype('float32')
 
 def init_momentum_args(model, momentum=0.9, **kwargs):
     model.momentum = momentum
@@ -83,6 +82,13 @@ def init_inference_args(model,
         model.params_infer = model._params_adapt
         model.strict = False
         model.init_variational_params = model._init_variational_params_adapt
+    elif inference_method == 'adaptive_assign':
+        model.step_infer = model._step_adapt_assign
+        model.init_infer = model._init_adapt
+        model.unpack_infer = model._unpack_adapt
+        model.params_infer = model._params_adapt
+        model.strict = False
+        model.init_variational_params = model._init_variational_params_adapt
     elif inference_method == 'momentum_then_adapt':
         model.step_infer = model._step_momentum_then_adapt
         model.init_infer = model._init_momentum
@@ -92,7 +98,7 @@ def init_inference_args(model,
         model.strict = False
         kwargs = init_momentum_args(model, **extra_inference_args)
     else:
-        raise ValueError()
+        raise ValueError('Inference method <%s> not supported' % inference_method)
 
     return kwargs
 
@@ -269,8 +275,8 @@ class SigmoidBeliefNetwork(Layer):
         py = self.conditional(h)
         return py
 
-    def generate_from_latent(self, H):
-        py = self.conditional(H)
+    def generate_from_latent(self, h):
+        py = self.conditional(h)
         prob = self.conditional.prob(py)
         return prob
 
@@ -327,7 +333,6 @@ class SigmoidBeliefNetwork(Layer):
 
         h = self.posterior.sample(
             q, size=(n_samples, q.shape[0], q.shape[1]))
-
         py = self.conditional(h)
 
         entropy = self.posterior.entropy(q).mean()
