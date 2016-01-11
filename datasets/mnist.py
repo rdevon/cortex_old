@@ -29,6 +29,9 @@ class MNIST(object):
                  restrict_digits=None, mode='train', shuffle=True, inf=False,
                  binarize=False,
                  stop=None, out_path=None):
+
+        if source is None:
+            raise ValueError('No source file provided')
         print 'Loading MNIST ({mode})'.format(mode=mode)
 
         with gzip.open(source, 'rb') as f:
