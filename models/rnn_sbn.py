@@ -176,7 +176,7 @@ class RNN_SBN(Layer):
         if self.conditional is None:
             self.conditional = RNN(self.dim_h, self.dim_in)
         if self.aux_net is None:
-            self.aux_net = MLP.factory(dim_in=self.dim_in+self.dim_h, dim_h=0,
+            self.aux_net = MLP.factory(dim_in=self.dim_h, dim_h=0,
                                        dim_out=self.conditional.dim_h,
                                        n_layers=1, out_act='T.tanh')
 
@@ -261,8 +261,7 @@ class RNN_SBN(Layer):
         if assign:
             print 'Assignment at M step'
             y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-            z_e = concatenate([y_e[0], h], axis=2)
-            cond_h0 = self.aux_net(z_e)
+            cond_h0 = self.aux_net(h)
 
             y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
             cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
@@ -277,8 +276,7 @@ class RNN_SBN(Layer):
         else:
             print 'Regular M step'
             y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-            z_e = concatenate([y_e[0], h], axis=2)
-            cond_h0 = self.aux_net(z_e)
+            cond_h0 = self.aux_net(h)
 
             y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
             cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
@@ -295,15 +293,17 @@ class RNN_SBN(Layer):
         h_energy = self.posterior.neg_log_prob(q, p_h).mean()
         constants.append(entropy)
 
+        '''
         print 'Getting conditional h0 cost'
         z_e = concatenate([y_e, h.reshape((h.shape[0] * h.shape[1], h.shape[2]))[None, :, :]], axis=2)
         cond_h0s = self.aux_net(z_e)
         cond_h_c = cond_dict['h'].copy()
         constants.append(cond_h_c)
         cond_h_cost = ((cond_h0s[1:] - cond_h_c) ** 2).sum(axis=2).mean()
+        '''
 
         return OrderedDict(prior_energy=prior_energy, h_energy=h_energy,
-                           y_energy=y_energy, entropy=entropy, cond_h_cost=cond_h_cost), constants, updates
+                           y_energy=y_energy, entropy=entropy), constants, updates
 
     def step_infer(self, *params):
         raise NotImplementedError()
@@ -364,14 +364,13 @@ class RNN_SBN(Layer):
 
         aux_params = params[-(1+len(self.aux_net.get_params())):-1]
         y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-        z_e = concatenate([y_e[0], h], axis=2)
-        h0 = self.aux_net.step_call(z_e, *aux_params)
+        cond_h0 = self.aux_net.step_call(h, *aux_params)
 
         y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
         cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
-        h0 = h0.reshape((cond.shape[0] * cond.shape[1], h0.shape[2])).astype(floatX)
+        cond_h0 = cond_h0.reshape((cond.shape[0] * cond.shape[1], cond_h0.shape[2])).astype(floatX)
 
-        cond_dict, _ = self.conditional.step_call(y_e[:-1], h0, cond_e, *cond_params)
+        cond_dict, _ = self.conditional.step_call(y_e[:-1], cond_h0, cond_e, *cond_params)
         py = cond_dict['p']
         py = py.reshape((py.shape[0], cond.shape[0], cond.shape[1], py.shape[2])).astype(floatX)
 
@@ -404,14 +403,13 @@ class RNN_SBN(Layer):
 
         aux_params = params[-(1+len(self.aux_net.get_params())):-1]
         y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-        z_e = concatenate([y_e[0], h], axis=2)
-        h0 = self.aux_net.step_call(z_e, *aux_params)
+        cond_h0 = self.aux_net.step_call(h, *aux_params)
 
         y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
         cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
-        h0 = h0.reshape((cond.shape[0] * cond.shape[1], h0.shape[2])).astype(floatX)
+        cond_h0 = cond_h0.reshape((cond.shape[0] * cond.shape[1], cond_h0.shape[2])).astype(floatX)
 
-        cond_dict, _ = self.conditional.step_assign_call(y_e, h0, cond_e,
+        cond_dict, _ = self.conditional.step_assign_call(y_e, cond_h0, cond_e,
                                                          0.0, 1.0, y.shape[0] - 1,
                                                          False, True, *cond_params)
         py = cond_dict['probs']
@@ -465,14 +463,13 @@ class RNN_SBN(Layer):
 
         cond = self.conditional.conditional(z, return_preact=True)
         y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-        z_e = concatenate([y_e[0], z], axis=2)
-        h0 = self.aux_net(z_e)
+        cond_h0 = self.aux_net(z)
 
         y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
         cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
-        h0 = h0.reshape((cond.shape[0] * cond.shape[1], h0.shape[2])).astype(floatX)
+        cond_h0 = cond_h0.reshape((cond.shape[0] * cond.shape[1], cond_h0.shape[2])).astype(floatX)
 
-        out_dict, updates = self.conditional.assign(y_e, h0=h0, condition_on=cond_e, select_first=True)
+        out_dict, updates = self.conditional.assign(y_e, h0=cond_h0, condition_on=cond_e, select_first=True)
 
         if apply_assignment:
             y_hat, updates_a = scan(step_order, [y_e.transpose(1, 0, 2), out_dict['chain'].T], [None], [],
@@ -482,7 +479,7 @@ class RNN_SBN(Layer):
             y_hat = y_hat.reshape((y_hat.shape[0], cond.shape[0], cond.shape[1], y_hat.shape[2])).astype(floatX)
             out_dict['y_hat'] = y_hat
 
-        out_dict['h0'] = h0
+        out_dict['h0'] = cond_h0
 
         return out_dict, updates
 
@@ -601,14 +598,13 @@ class RNN_SBN(Layer):
             else:
                 cond = self.conditional.conditional(h, return_preact=True)
                 y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-                z_e = concatenate([y_e[0], h], axis=2)
-                h0 = self.aux_net(z_e)
+                cond_h0 = self.aux_net(h)
 
                 y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
                 cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
-                h0 = h0.reshape((cond.shape[0] * cond.shape[1], h0.shape[2])).astype(floatX)
+                cond_h0 = cond_h0.reshape((cond.shape[0] * cond.shape[1], cond_h0.shape[2])).astype(floatX)
 
-                cond_dict, _ = self.conditional(y_e[:-1], h0, cond_e)
+                cond_dict, _ = self.conditional(y_e[:-1], cond_h0, cond_e)
                 py = cond_dict['p']
                 py = py.reshape((py.shape[0], cond.shape[0], cond.shape[1], py.shape[2])).astype(floatX)
                 cond_term = self.conditional.neg_log_prob(y[:, None, :, :][1:], py).sum(axis=0).mean()

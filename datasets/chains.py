@@ -156,10 +156,12 @@ class Chains(object):
 
         return chain
 
-    def _build_chain(self, trim_end=0, condition_on=None):
+    def _build_chain(self, trim_end=0, condition_on=None, chain_length=None):
         self.chain = []
         n_remaining_samples = self.dataset.n - self.dataset.pos
-        l_chain = min(self.chain_length, n_remaining_samples)
+        if chain_length is None:
+            chain_length = self.chain_length
+        l_chain = min(chain_length, n_remaining_samples)
 
         data_pos = self.dataset.pos
         x, _ = self.dataset.next(batch_size=l_chain)
@@ -234,12 +236,13 @@ class Chains(object):
         self.dataset.reset()
         self.cpos = -1
 
-    def _next(self, l_chain=None, condition_on=None):
+    def _next(self, l_chain=None, condition_on=None, chain_build_length=None):
         assert self.f_energy is not None
 
         if self.cpos == -1:
             self.cpos = 0
-            self._build_chain(trim_end=self.trim_end, condition_on=condition_on)
+            self._build_chain(trim_end=self.trim_end, condition_on=condition_on,
+                              chain_length=chain_build_length)
             window = min(self.window, len(self.chain))
             self.chain_idx = range(0, len(self.chain) - window + 1, self.chain_stride)
             random.shuffle(self.chain_idx)
