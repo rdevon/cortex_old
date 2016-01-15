@@ -42,6 +42,9 @@ class MLP(Layer):
         self.h_act = h_act
         self.out_act = out_act
 
+        if out_act is None:
+            out_act = 'T.nnet.sigmoid'
+
         if out_act == 'T.nnet.sigmoid':
             self.f_sample = _binomial
             self.f_neg_log_prob = _cross_entropy
@@ -58,6 +61,7 @@ class MLP(Layer):
         else:
             assert f_sample is not None
             assert f_neg_log_prob is not None
+            assert out_act is not None
 
         if f_sample is not None:
             self.sample = f_sample

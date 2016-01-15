@@ -5,6 +5,13 @@ Module for Theano probabilistic distributions.
 import theano
 from theano import tensor as T
 
+from utils.tools import (
+    e,
+    floatX,
+    pi,
+    _slice
+)
+
 
 # BERNOULLI --------------------------------------------------------------------
 
