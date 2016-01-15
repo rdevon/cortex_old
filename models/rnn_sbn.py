@@ -118,7 +118,8 @@ class RNN_SBN(Layer):
         super(RNN_SBN, self).__init__(name=name)
 
     @staticmethod
-    def rnn_factory(recognition_rnn=None, generation_rnn=None):
+    def rnn_factory(recognition_rnn=None, generation_rnn=None,
+                    latent_act='T.nnet.sigmoid'):
         rnns = {}
 
         if recognition_rnn is not None:
@@ -248,59 +249,38 @@ class RNN_SBN(Layer):
         return prior_term - entropy_term
 
     def m_step(self, x, y, z, p_h, n_samples=10, assign=False, sample=False):
+
+        y = T.zeros((y.shape[0], n_samples, y.shape[1], y.shape[2])
+            ).astype(floatX) + y[:, None, :, :]
+        y_e = y.reshape((y.shape[0], y.shape[1] * y.shape[2], y.shape[3])).astype(floatX)
+
         constants = []
         q = T.nnet.sigmoid(z)
         prior = T.nnet.sigmoid(self.z)
 
         h = self.posterior.output_net.sample(
             q, size=(n_samples, q.shape[0], q.shape[1]))
+        h_e = h.reshape((h.shape[0] * h.shape[1], h.shape[2])).astype(floatX)
 
-        cond = self.conditional.conditional(h, return_preact=True)
         updates = theano.OrderedUpdates()
+
+        cond = self.conditional.conditional(h_e, return_preact=True)
+        cond_h0 = self.aux_net(h_e)
 
         if assign:
             print 'Assignment at M step'
-            y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-            cond_h0 = self.aux_net(h)
-
-            y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
-            cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
-            cond_h0 = cond_h0.reshape((cond.shape[0] * cond.shape[1], cond_h0.shape[2])).astype(floatX)
-
-            out_dict, updates = self.conditional.assign(y_e, h0=cond_h0, condition_on=cond_e, select_first=True)
-            py = out_dict['probs']
-            py = py.reshape((py.shape[0], cond.shape[0], cond.shape[1], py.shape[2])).astype(floatX)
-            cond_dict, _ = self.conditional(y_e[:-1], h0=cond_h0, condition_on=cond_e)
-
+            out_dict, updates = self.conditional.assign(y_e, h0=cond_h0, condition_on=cond, select_first=True)
             y_energy = out_dict['energies'].sum(axis=0).mean()
         else:
             print 'Regular M step'
-            y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-            cond_h0 = self.aux_net(h)
-
-            y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
-            cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
-            cond_h0 = cond_h0.reshape((cond.shape[0] * cond.shape[1], cond_h0.shape[2])).astype(floatX)
-
-            cond_dict, _ = self.conditional(y_e[:-1], h0=cond_h0, condition_on=cond_e)
+            cond_dict, _ = self.conditional(y_e[:-1], h0=cond_h0, condition_on=cond)
             py = cond_dict['p']
-            py = py.reshape((py.shape[0], cond.shape[0], cond.shape[1], py.shape[2])).astype(floatX)
-
-            y_energy = self.conditional.neg_log_prob(y[:, None, :, :][1:], py).sum(axis=0).mean()
+            y_energy = self.conditional.neg_log_prob(y_e[1:], py).sum(axis=0).mean()
 
         entropy = self.posterior.output_net.entropy(q).mean()
         prior_energy = self.posterior.neg_log_prob(q, prior[None, :]).mean()
         h_energy = self.posterior.neg_log_prob(q, p_h).mean()
         constants.append(entropy)
-
-        '''
-        print 'Getting conditional h0 cost'
-        z_e = concatenate([y_e, h.reshape((h.shape[0] * h.shape[1], h.shape[2]))[None, :, :]], axis=2)
-        cond_h0s = self.aux_net(z_e)
-        cond_h_c = cond_dict['h'].copy()
-        constants.append(cond_h_c)
-        cond_h_cost = ((cond_h0s[1:] - cond_h_c) ** 2).sum(axis=2).mean()
-        '''
 
         return OrderedDict(prior_energy=prior_energy, h_energy=h_energy,
                            y_energy=y_energy, entropy=entropy), constants, updates
@@ -323,113 +303,67 @@ class RNN_SBN(Layer):
     def _params_momentum(self): pass
 
     # Importance Sampling
-    def _step_adapt_simple(self, q, y, preact, *params):
-        params = list(params)
-        prior = T.nnet.sigmoid(params[0])
-        h = self.posterior.output_net.sample(
-            q, size=(self.n_inference_samples, q.shape[0], q.shape[1]))
 
-        cond_params = params[1:1+len(self.conditional.get_sample_params())]
-        c_params = self.conditional.get_conditional_args(*cond_params)
-
-        cond = self.conditional.conditional.step_call(h, *c_params)
-        py = eval(self.conditional.output_net.out_act)(preact[:, None, :, :] + cond[None, :, :, :])
-
-        y_energy = self.conditional.neg_log_prob(y[:, None, :, :], py).sum(axis=0)
+    def get_importance_weights(self, q_, y, py, h, prior):
+        y_energy = self.conditional.neg_log_prob(y, py).sum(axis=0)
         prior_energy = self.posterior.neg_log_prob(h, prior[None, None, :])
-        entropy_term = self.posterior.neg_log_prob(h, q[None, :, :])
+        entropy_term = self.posterior.neg_log_prob(h, q_[None, :, :])
 
         log_p = -y_energy - prior_energy + entropy_term
         log_p_max = T.max(log_p, axis=0, keepdims=True)
         w = T.exp(log_p - log_p_max)
-
         w_tilde = w / w.sum(axis=0, keepdims=True)
 
         cost = (log_p - log_p_max).mean()
-        q_ = (w_tilde[:, :, None] * h).sum(axis=0)
-        q = self.inference_rate * q_ + (1 - self.inference_rate) * q
-
+        q_tilde = (w_tilde[:, :, None] * h).sum(axis=0)
+        q = self.inference_rate * q_tilde + (1 - self.inference_rate) * q_
         return q, cost
 
-    def _step_adapt(self, q, y, *params):
+    def _step_adapt(self, q, y, y_e, *params):
         print 'Adaptive inference'
         params = list(params)
         prior = T.nnet.sigmoid(params[0])
         h = self.posterior.output_net.sample(
             q, size=(self.n_inference_samples, q.shape[0], q.shape[1]))
+        h_e = h.reshape((h.shape[0] * h.shape[1], h.shape[2])).astype(floatX)
 
         cond_params = params[1:1+len(self.conditional.get_sample_params())]
         c_params = self.conditional.get_conditional_args(*cond_params)
-        cond = self.conditional.conditional.preact(h, *c_params)
+        cond = self.conditional.conditional.preact(h_e, *c_params)
 
         aux_params = params[-(1+len(self.aux_net.get_params())):-1]
-        y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-        cond_h0 = self.aux_net.step_call(h, *aux_params)
-
-        y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
-        cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
-        cond_h0 = cond_h0.reshape((cond.shape[0] * cond.shape[1], cond_h0.shape[2])).astype(floatX)
-
-        cond_dict, _ = self.conditional.step_call(y_e[:-1], cond_h0, cond_e, *cond_params)
+        cond_h0 = self.aux_net.step_call(h_e, *aux_params)
+        cond_dict, _ = self.conditional.step_call(y_e[:-1], cond_h0, cond, *cond_params)
         py = cond_dict['p']
-        py = py.reshape((py.shape[0], cond.shape[0], cond.shape[1], py.shape[2])).astype(floatX)
+        py = py.reshape((py.shape[0], y.shape[1], y.shape[2], py.shape[2])).astype(floatX)
 
-        y_energy = self.conditional.neg_log_prob(y[:, None, :, :][1:], py).sum(axis=0)
-        prior_energy = self.posterior.neg_log_prob(h, prior[None, None, :])
-        entropy_term = self.posterior.neg_log_prob(h, q[None, :, :])
+        q, cost = self.get_importance_weights(q, y[1:], py, h, prior)
 
-        log_p = -y_energy - prior_energy + entropy_term
-        log_p_max = T.max(log_p, axis=0, keepdims=True)
-        w = T.exp(log_p - log_p_max)
+        return q, cost
 
-        w_tilde = w / w.sum(axis=0, keepdims=True)
-
-        cost = (log_p - log_p_max).mean()
-        q_ = (w_tilde[:, :, None] * h).sum(axis=0)
-        q = self.inference_rate * q_ + (1 - self.inference_rate) * q
-
-        return q, prior_energy.mean()
-
-    def _step_adapt_assign(self, q, y, *params):
+    def _step_adapt_assign(self, q, y, y_e, *params):
         print 'Assignment adapt inference'
         params = list(params)
         prior = T.nnet.sigmoid(params[0])
         h = self.posterior.output_net.sample(
             q, size=(self.n_inference_samples, q.shape[0], q.shape[1]))
+        h_e = h.reshape((h.shape[0] * h.shape[1], h.shape[2])).astype(floatX)
 
         cond_params = params[1:1+len(self.conditional.get_sample_params())]
         c_params = self.conditional.get_conditional_args(*cond_params)
-        cond = self.conditional.conditional.preact(h, *c_params)
+        cond = self.conditional.conditional.preact(h_e, *c_params)
 
         aux_params = params[-(1+len(self.aux_net.get_params())):-1]
-        y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-        cond_h0 = self.aux_net.step_call(h, *aux_params)
-
-        y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
-        cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
-        cond_h0 = cond_h0.reshape((cond.shape[0] * cond.shape[1], cond_h0.shape[2])).astype(floatX)
-
-        cond_dict, _ = self.conditional.step_assign_call(y_e, cond_h0, cond_e,
+        cond_h0 = self.aux_net.step_call(h_e, *aux_params)
+        cond_dict, _ = self.conditional.step_assign_call(y_e, cond_h0, cond,
                                                          0.0, 1.0, y.shape[0] - 1,
                                                          False, True, *cond_params)
         py = cond_dict['probs']
-        py = py.reshape((py.shape[0], cond.shape[0], cond.shape[1], py.shape[2])).astype(floatX)
+        py = py.reshape((py.shape[0], y.shape[1], y.shape[2], py.shape[2])).astype(floatX)
 
-        y_energy = self.conditional.neg_log_prob(y[:, None, :, :], py).sum(axis=0)
-        prior_energy = self.posterior.neg_log_prob(h, prior[None, None, :])
-        entropy_term = self.posterior.neg_log_prob(h, q[None, :, :])
+        q, cost = self.get_importance_weights(q, y, py, h, prior)
 
-        log_p = -y_energy - prior_energy + entropy_term
-        log_p_max = T.max(log_p, axis=0, keepdims=True)
-        w = T.exp(log_p - log_p_max)
-
-        w_tilde = w / w.sum(axis=0, keepdims=True)
-
-        cost = (log_p - log_p_max).mean()
-        q_ = (w_tilde[:, :, None] * h).sum(axis=0)
-        q = self.inference_rate * q_ + (1 - self.inference_rate) * q
-
-        return q, prior_energy.mean()
+        return q, cost
 
     def _init_adapt(self, q):
         return []
@@ -462,21 +396,14 @@ class RNN_SBN(Layer):
             return y[idx.astype('int64')]
 
         cond = self.conditional.conditional(z, return_preact=True)
-        y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
         cond_h0 = self.aux_net(z)
-
-        y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
-        cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
-        cond_h0 = cond_h0.reshape((cond.shape[0] * cond.shape[1], cond_h0.shape[2])).astype(floatX)
-
-        out_dict, updates = self.conditional.assign(y_e, h0=cond_h0, condition_on=cond_e, select_first=True)
+        out_dict, updates = self.conditional.assign(y, h0=cond_h0, condition_on=cond, select_first=True)
 
         if apply_assignment:
-            y_hat, updates_a = scan(step_order, [y_e.transpose(1, 0, 2), out_dict['chain'].T], [None], [],
-                                    y_e.shape[1], name='order_data', strict=False)
+            y_hat, updates_a = scan(step_order, [y.transpose(1, 0, 2), out_dict['chain'].T], [None], [],
+                                    y.shape[1], name='order_data', strict=False)
             updates.update(updates_a)
             y_hat = y_hat.transpose(1, 0, 2)
-            y_hat = y_hat.reshape((y_hat.shape[0], cond.shape[0], cond.shape[1], y_hat.shape[2])).astype(floatX)
             out_dict['y_hat'] = y_hat
 
         out_dict['h0'] = cond_h0
@@ -484,14 +411,16 @@ class RNN_SBN(Layer):
         return out_dict, updates
 
     def infer_q(self, x, y, p_h_logit, n_inference_steps):
+        y = T.zeros((y.shape[0], self.n_inference_samples, y.shape[1], y.shape[2])
+            ).astype(floatX) + y[:, None, :, :]
+        y_e = y.reshape((y.shape[0], y.shape[1] * y.shape[2], y.shape[3])).astype(floatX)
         updates = theano.OrderedUpdates()
 
         z0 = self.init_variational_params(p_h_logit)
 
         seqs = []
         outputs_info = [z0] + self.init_infer(z0) + [None]
-        #non_seqs = [y, cond_preact] + self.params_infer() + self.get_params()
-        non_seqs = [y] + self.params_infer() + self.get_params()
+        non_seqs = [y, y_e] + self.params_infer() + self.get_params()
 
         print ('Doing %d inference steps and a rate of %.2f with %d '
                'inference samples'
@@ -525,14 +454,11 @@ class RNN_SBN(Layer):
     # Inference
     def inference(self, x, y, post_h0=None, n_inference_steps=20,
                   n_samples=100, pass_gradients=False, sample=False, assign=False):
-        #cond_dict, updates = self.conditional(y, h0=cond_h0)
-        #cond_preact = cond_dict['z']
 
         post_dict, updates = self.posterior(x, h0=post_h0)
         p_h = post_dict['p'][-1]
         p_h_logit = post_dict['z'][-1]
 
-        #(zs, _), updates_i = self.infer_q(x, y, p_h_logit, cond_preact, n_inference_steps)
         (zs, _), updates_i = self.infer_q(x, y, p_h_logit, n_inference_steps)
         z = zs[-1]
 
@@ -553,12 +479,17 @@ class RNN_SBN(Layer):
         updates = theano.OrderedUpdates()
         prior = T.nnet.sigmoid(self.z)
 
+        # INFERENCE ----------------
+
         post_dict, updates = self.posterior(x, h0=post_h0)
         p_h = post_dict['p'][-1]
         p_h_logit = post_dict['z'][-1]
 
         (zs, i_costs), updates_i = self.infer_q(x, y, p_h_logit, n_inference_steps)
         updates.update(updates_i)
+        outs.update(i_cost=i_costs[-1])
+
+        # EVAL ---------------------
 
         if n_inference_steps > stride and stride != 0:
             steps = [0] + range(n_inference_steps // 10, n_inference_steps + 1, n_inference_steps // 10)
@@ -567,6 +498,10 @@ class RNN_SBN(Layer):
             steps = [0, n_inference_steps]
         else:
             steps = [0]
+
+        y = T.zeros((y.shape[0], n_samples, y.shape[1], y.shape[2])
+            ).astype(floatX) + y[:, None, :, :]
+        y_e = y.reshape((y.shape[0], y.shape[1] * y.shape[2], y.shape[3])).astype(floatX)
 
         lower_bounds = []
         nlls = []
@@ -577,37 +512,25 @@ class RNN_SBN(Layer):
 
             h = self.posterior.output_net.sample(
                 q, size=(n_samples, q.shape[0], q.shape[1]))
+            h_e = h.reshape((h.shape[0] * h.shape[1], h.shape[2])).astype(floatX)
 
             if assign:
-                out_dict, updates_a = self.assign(y, h, apply_assignment=True)
+                out_dict, updates_a = self.assign(y_e, h_e, apply_assignment=True)
                 updates.update(**updates_a)
                 cond_term = out_dict['energies'].sum(axis=0).mean()
                 py = out_dict['probs']
-                py = py.reshape((py.shape[0], h.shape[0], h.shape[1], py.shape[2])).astype(floatX)[1:]
+                py = py.reshape((py.shape[0], y.shape[1], y.shape[2], py.shape[2])).astype(floatX)[1:]
                 y_hat = out_dict['y_hat']
-                h0 = out_dict['h0']
-                #y_hat_e = y_hat.reshape((y_hat.shape[0], h0.shape[1], y_hat.shape[2])).astype(floatX)
-                #s_dict, updates_sam = self.conditional.sample(
-                #    x0=y_hat_e[0], h0=h0, n_steps=y_hat_e.shape[0]-1,
-                #    condition_on=h.reshape((h.shape[0] * h.shape[1], h.shape[2])))
-                #py = s_dict['p'][1:]
-                #py = py.reshape((py.shape[0], h.shape[0], h.shape[1], py.shape[2]))
-                #cond_term = self.conditional.neg_log_prob(out_dict['y_hat'], s_dict['p']).sum(axis=0).mean()
-                #updates += updates_sam
+                y_hat = y_hat.reshape(
+                    (y_hat.shape[0], y.shape[1], y.shape[2], y_hat.shape[2])).astype(floatX)
                 outs.update(y_hat=y_hat)
             else:
-                cond = self.conditional.conditional(h, return_preact=True)
-                y_e = T.zeros((y.shape[0], cond.shape[0], cond.shape[1], y.shape[2])).astype(floatX) + y[:, None, :, :]
-                cond_h0 = self.aux_net(h)
-
-                y_e = y_e.reshape((y.shape[0], cond.shape[0] * cond.shape[1], y.shape[2])).astype(floatX)
-                cond_e = cond.reshape((cond.shape[0] * cond.shape[1], cond.shape[2])).astype(floatX)
-                cond_h0 = cond_h0.reshape((cond.shape[0] * cond.shape[1], cond_h0.shape[2])).astype(floatX)
-
-                cond_dict, _ = self.conditional(y_e[:-1], cond_h0, cond_e)
+                cond = self.conditional.conditional(h_e, return_preact=True)
+                cond_h0 = self.aux_net(h_e)
+                cond_dict, _ = self.conditional(y_e[:-1], cond_h0, cond)
                 py = cond_dict['p']
-                py = py.reshape((py.shape[0], cond.shape[0], cond.shape[1], py.shape[2])).astype(floatX)
-                cond_term = self.conditional.neg_log_prob(y[:, None, :, :][1:], py).sum(axis=0).mean()
+                py = py.reshape((py.shape[0], y.shape[1], y.shape[2], py.shape[2])).astype(floatX)
+                cond_term = self.conditional.neg_log_prob(y[1:], py).sum(axis=0).mean()
 
             pys.append(py)
 
@@ -615,7 +538,7 @@ class RNN_SBN(Layer):
             lower_bounds.append(cond_term + kl_term)
 
             if calculate_log_marginal:
-                nll = -self.log_marginal(y[:, None, :, :][1:], h, py, q[None, :, :], prior[None, None, :])
+                nll = -self.log_marginal(y[1:], h, py, q[None, :, :], prior[None, None, :])
                 nlls.append(nll)
 
         outs.update(

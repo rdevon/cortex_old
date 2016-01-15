@@ -17,7 +17,8 @@ from utils.tools import floatX
 sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))
 
 def test_make_gru(dim_in=31, dim_h=11, dim_out=None,
-                  i_net=None, a_net=None, o_net=None, c_net=None):
+                  i_net=None, a_net=None, o_net=None, c_net=None,
+                  out_act='T.nnet.sigmoid'):
     print 'Testing GRU formation'
 
     if i_net is None:
@@ -40,7 +41,8 @@ def test_make_gru(dim_in=31, dim_h=11, dim_out=None,
         o_net = dict(
             dim_h=23,
             n_layers=2,
-            weight_scale=0.1
+            weight_scale=0.1,
+            out_act=out_act
         )
 
     nets = dict(i_net=i_net, a_net=a_net, o_net=o_net, c_net=c_net)
