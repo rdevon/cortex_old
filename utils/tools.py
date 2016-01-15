@@ -14,6 +14,7 @@ import yaml
 
 floatX = theano.config.floatX
 pi = theano.shared(np.pi).astype(floatX)
+e = theano.shared(np.e).astype(floatX)
 
 random_seed = 0xeffe
 rng_ = np.random.RandomState(random_seed)
@@ -82,6 +83,8 @@ def _slice(_x, n, dim):
         return _x[:, n*dim:(n+1)*dim]
     elif _x.ndim == 3:
         return _x[:, :, n*dim:(n+1)*dim]
+    elif _x.ndim == 4:
+        return _x[:, :, :, n*dim:(n+1)*dim]
     else:
         raise ValueError('Number of dims (%d) not supported'
                          ' (but can add easily here)' % _x.ndim)
@@ -93,6 +96,8 @@ def _slice2(_x, start, end):
         return _x[:, start:end]
     elif _x.ndim == 3:
         return _x[:, :, start:end]
+    elif _x.ndim == 4:
+        return _x[:, :, :, start:end]
     else:
         raise ValueError('Number of dims (%d) not supported'
                          ' (but can add easily here)' % _x.ndim)
