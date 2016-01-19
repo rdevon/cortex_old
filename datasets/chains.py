@@ -164,7 +164,10 @@ class Chains(object):
         l_chain = min(chain_length, n_remaining_samples)
 
         data_pos = self.dataset.pos
+        if data_pos == -1:
+            data_pos = 0
         x, _ = self.dataset.next(batch_size=l_chain)
+        print x.shape
         n_samples = min(self.build_batch, l_chain)
 
         t0 = time.time()

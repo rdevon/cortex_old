@@ -167,7 +167,6 @@ class GRU(RNN):
         y_input += c
 
         h = self._step(y_aux, y_input, h_, Ura, Urb)
-
         preact = self.output_net.preact(h, *output_params)
 
         p = eval(self.output_net.out_act)(preact)
