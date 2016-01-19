@@ -289,15 +289,15 @@ class GaussianBeliefNet(Layer):
         return (q, prior_energy, h_energy, y_energy, entropy), updates, constants
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
-                 calculate_log_marginal=False):
+                 calculate_log_marginal=False, stride=0):
 
         outs = OrderedDict()
         prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
 
         (qs, i_costs), updates = self.infer_q(x, y, n_inference_steps)
 
-        if n_inference_steps > 10:
-            steps = [0] + range(n_inference_steps // 10, n_inference_steps + 1, n_inference_steps // 10)
+        if n_inference_steps > stride and stride != 0:
+            steps = [0] + range(n_inference_steps // stride, n_inference_steps + 1, n_inference_steps // stride)
             steps = steps[:-1] + [n_inference_steps]
         elif n_inference_steps > 0:
             steps = [0, n_inference_steps]
@@ -306,6 +306,7 @@ class GaussianBeliefNet(Layer):
 
         lower_bounds = []
         nlls = []
+        pys = []
         for i in steps:
             q = qs[i]
             h = self.posterior.sample(q, size=(n_samples, q.shape[0], q.shape[1] // 2))
@@ -320,8 +321,11 @@ class GaussianBeliefNet(Layer):
                 nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :], prior[None, :, :])
                 nlls.append(nll)
 
+            pys.append(py)
+
         outs.update(
             py=py,
+            pys=pys,
             lower_bound=lower_bounds[-1],
             lower_bounds=lower_bounds,
             inference_cost=(lower_bounds[0] - lower_bounds[-1])
@@ -630,7 +634,7 @@ class DeepGBN(Layer):
                 y_energy_approx, entropy), updates, constants
 
     def __call__(self, x, y, n_samples=100, n_sampling_steps=None,
-                 n_inference_steps=0, end_with_inference=True):
+                 n_inference_steps=0, end_with_inference=True, sample=False):
 
         outs = OrderedDict()
         updates = theano.OrderedUpdates()
