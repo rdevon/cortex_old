@@ -492,7 +492,7 @@ class RNN_SBN(Layer):
         # EVAL ---------------------
 
         if n_inference_steps > stride and stride != 0:
-            steps = [0] + range(n_inference_steps // 10, n_inference_steps + 1, n_inference_steps // 10)
+            steps = [0] + range(n_inference_steps // stride, n_inference_steps + 1, n_inference_steps // stride)
             steps = steps[:-1] + [n_inference_steps]
         elif n_inference_steps > 0:
             steps = [0, n_inference_steps]

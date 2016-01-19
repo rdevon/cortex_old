@@ -546,7 +546,7 @@ class SigmoidBeliefNetwork(Layer):
         return (z, prior_energy, h_energy, y_energy, entropy), updates, constants
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
-                 calculate_log_marginal=False):
+                 calculate_log_marginal=False, stride=0):
         outs = OrderedDict()
         updates = theano.OrderedUpdates()
         prior = T.nnet.sigmoid(self.z)
@@ -554,8 +554,13 @@ class SigmoidBeliefNetwork(Layer):
         (zs, i_costs), updates_i = self.infer_q(x, y, n_inference_steps)
         updates.update(updates_i)
 
-        steps = range(n_inference_steps // 10, n_inference_steps + 1, n_inference_steps // 10)
-        steps = steps[:-1] + [n_inference_steps]
+        if n_inference_steps > stride and stride != 0:
+            steps = [0] + range(n_inference_steps // stride, n_inference_steps + 1, n_inference_steps // stride)
+            steps = steps[:-1] + [n_inference_steps]
+        elif n_inference_steps > 0:
+            steps = [0, n_inference_steps]
+        else:
+            steps = [0]
 
         lower_bounds = []
         nlls = []
