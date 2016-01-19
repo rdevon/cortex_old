@@ -8,10 +8,8 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from layers import (
-    Layer,
-    MLP
-)
+from layers import Layer
+from mlp import MLP
 from sbn import init_inference_args
 from utils import tools
 from utils.tools import (
