@@ -96,7 +96,10 @@ class GaussianBeliefNet(Layer):
         p = T.concatenate([self.mu, self.log_sigma])
         h = self.posterior.sample(p=p, size=(n_samples, self.dim_h))
         py = self.conditional(h)
-        return py
+        return self.get_center(py)
+
+    def get_center(self, p):
+        return self.conditional.prob(p)
 
     def importance_weights(self, y, h, py, q, prior, normalize=True):
         y_energy = self.conditional.neg_log_prob(y, py)
@@ -297,8 +300,8 @@ class GaussianBeliefNet(Layer):
         (qs, i_costs), updates = self.infer_q(x, y, n_inference_steps)
 
         if n_inference_steps > stride and stride != 0:
-            steps = [0] + range(stride, 
-                                n_inference_steps + 1, 
+            steps = [0] + range(stride,
+                                n_inference_steps + 1,
                                 stride)
             steps = steps[:-1] + [n_inference_steps]
         elif n_inference_steps > 0:

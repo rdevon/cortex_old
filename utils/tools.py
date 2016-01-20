@@ -23,6 +23,12 @@ profile = False
 
 f_clip = lambda x, y, z: T.clip(x, y, 1.)
 
+def debug_shape(X, x, t_out, updates=None):
+    f = theano.function([X], t_out, updates=updates)
+    out = f(x)
+    print out.shape
+    assert False
+
 def print_profile(tparams):
     print 'Print profile for tparams (name, shape)'
     for (k, v) in tparams.iteritems():
