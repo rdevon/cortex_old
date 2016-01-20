@@ -904,7 +904,7 @@ class DeepSBN(Layer):
         (prior_energy, h_energy, y_energy), m_constants = self.m_step(
             x, y, qs, n_samples=n_samples)
 
-        constants = qs + m_constants
+        constants = m_constants
 
         return (qs, prior_energy, h_energy, y_energy), updates, constants
 
