@@ -297,7 +297,9 @@ class GaussianBeliefNet(Layer):
         (qs, i_costs), updates = self.infer_q(x, y, n_inference_steps)
 
         if n_inference_steps > stride and stride != 0:
-            steps = [0] + range(n_inference_steps // stride, n_inference_steps + 1, n_inference_steps // stride)
+            steps = [0] + range(stride, 
+                                n_inference_steps + 1, 
+                                stride)
             steps = steps[:-1] + [n_inference_steps]
         elif n_inference_steps > 0:
             steps = [0, n_inference_steps]
@@ -307,12 +309,15 @@ class GaussianBeliefNet(Layer):
         lower_bounds = []
         nlls = []
         pys = []
+        energies = []
         for i in steps:
             q = qs[i]
             h = self.posterior.sample(q, size=(n_samples, q.shape[0], q.shape[1] // 2))
 
             py = self.conditional(h)
-            y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=(0, 1))
+            y_energy_b = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=0)
+            energies.append(y_energy_b)
+            y_energy = y_energy_b.mean(axis=0)
             kl_term = self.kl_divergence(q, prior).mean(axis=0)
             lower_bound = y_energy + kl_term
             lower_bounds.append(lower_bound)
@@ -324,6 +329,7 @@ class GaussianBeliefNet(Layer):
             pys.append(py)
 
         outs.update(
+            energies=energies,
             py=py,
             pys=pys,
             lower_bound=lower_bounds[-1],
