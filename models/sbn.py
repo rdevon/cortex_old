@@ -273,12 +273,15 @@ class SigmoidBeliefNetwork(Layer):
         p = T.nnet.sigmoid(self.z)
         h = self.posterior.sample(p=p, size=(n_samples, self.dim_h))
         py = self.conditional(h)
-        return py
+        return self.get_center(py)
 
     def generate_from_latent(self, h):
         py = self.conditional(h)
         prob = self.conditional.prob(py)
         return prob
+
+    def get_center(self, p):
+        return self.conditional.prob(p)
 
     def importance_weights(self, y, h, py, q, prior, normalize=True):
         y_energy = self.conditional.neg_log_prob(y, py)
