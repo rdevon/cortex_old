@@ -702,7 +702,8 @@ class DeepSBN(Layer):
 
         conditional_energy = T.constant(0.).astype(floatX)
         posterior_energy = T.constant(0.).astype(floatX)
-
+        print q0s
+        print qks
         for l in xrange(self.n_layers):
             posterior_energy += self.posteriors[l].neg_log_prob(qks[l], q0s[l])
             conditional_energy += self.conditionals[l].neg_log_prob(
@@ -771,7 +772,7 @@ class DeepSBN(Layer):
 
         for l in xrange(self.n_layers):
             state = self.posteriors[l](state)
-            q0s.append(state)
+            q0s.append(state.copy())
 
         return q0s
 
@@ -857,7 +858,7 @@ class DeepSBN(Layer):
         (prior_energy, h_energy, y_energy), m_constants = self.m_step(
             x, y, qks, q0s, n_samples=n_samples)
 
-        constants = m_constants + qss + q0s
+        constants = m_constants + qks
 
         return (qks, prior_energy, h_energy, y_energy), updates, constants
 
