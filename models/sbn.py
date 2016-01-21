@@ -690,74 +690,26 @@ class DeepSBN(Layer):
         prior_term = T.nnet.binary_crossentropy(q, p)
         return (prior_term - entropy_term).sum(axis=entropy_term.ndim-1)
 
-    def e_step(self, y, zs, *params):
-        total_cost = T.constant(0.).astype(floatX)
-        qs = [T.nnet.sigmoid(z) for z in zs]
-
-        prior = T.nnet.sigmoid(params[0])
-        ys = [y] + qs[:-1]
-
-        hs = []
-        for l, q in enumerate(qs):
-            h = self.posteriors[l].sample(
-                q, size=(self.n_inference_samples, q.shape[0], q.shape[1]))
-            hs.append(h)
-
-        p_ys = [self.p_y_given_h(h, l, *params) for l, h in enumerate(hs)]
-        p_y_approxs = [self.p_y_given_h(q, l, *params) for l, h in enumerate(qs)]
-
-        grads = []
-        def refine_layer(l):
-            z = zs[l]
-            q = qs[l]
-            y = ys[l]
-            h = hs[l]
-
-            if l == self.n_layers - 1:
-                kl_term = self.kl_divergence(q, prior[None, :])
-            else:
-                kl_term = self.kl_divergence(q[None, :, :], p_ys[l + 1]).mean(axis=0)
-
-            cond_term = self.conditionals[l].neg_log_prob(y, p_y_approxs[l])
-
-            cost = (cond_term + kl_term).sum(axis=0)
-
-            grad = theano.grad(cost, wrt=z, consider_constant=[y, prior])
-            return grad, cost
-
-        for l in xrange(self.n_layers):
-            grad, cost = refine_layer(l)
-            grads.append(grad)
-            total_cost += cost
-
-        return total_cost, grads
-
-    def m_step(self, x, y, qs, n_samples=10):
+    def m_step(self, x, y, qks, q0s, n_samples=10):
         constants = []
 
         hs = []
-        for l, q in enumerate(qs):
-            h = self.posteriors[l].sample(q, size=(n_samples, q.shape[0], q.shape[1]))
+        for l, qk in enumerate(qks):
+            h = self.posteriors[l].sample(qk, size=(n_samples, qk.shape[0], qk.shape[1]))
             hs.append(h)
         p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
         ys = [y[None, :, :]] + hs[:-1]
-
-        p_hs = []
-        state = x
-        for l, posterior in enumerate(self.posteriors):
-            state = posterior(state)
-            p_hs.append(state)
 
         conditional_energy = T.constant(0.).astype(floatX)
         posterior_energy = T.constant(0.).astype(floatX)
 
         for l in xrange(self.n_layers):
-            posterior_energy += self.posteriors[l].neg_log_prob(qs[l], p_hs[l])
+            posterior_energy += self.posteriors[l].neg_log_prob(qks[l], q0s[l])
             conditional_energy += self.conditionals[l].neg_log_prob(
                 ys[l], p_ys[l]).mean(axis=0)
 
         prior = T.nnet.sigmoid(self.z)
-        prior_energy = self.posteriors[-1].neg_log_prob(qs[-1], prior[None, :])
+        prior_energy = self.posteriors[-1].neg_log_prob(qks[-1], prior[None, :])
 
         return (prior_energy.mean(axis=0), posterior_energy.mean(axis=0),
                 conditional_energy.mean(axis=0)), constants
@@ -860,12 +812,10 @@ class DeepSBN(Layer):
     def _params_momentum(self): pass
     def init_variational_params(self, state): pass
 
-    def infer_q(self, x, y, n_inference_steps):
+    def infer_q(self, q0s, y, n_inference_steps):
         updates = theano.OrderedUpdates()
 
         ys = T.alloc(0., n_inference_steps + 1, y.shape[0], y.shape[1]) + y[None, :, :]
-        q0s = self.init_variational_params(x)
-
         seqs = [ys]
         outputs_info = q0s + self.init_infer(q0s) + [None]
         non_seqs = self.params_infer() + self.get_params()
@@ -899,17 +849,17 @@ class DeepSBN(Layer):
 
     # Inference
     def inference(self, x, y, n_inference_steps=20, n_samples=100):
+        q0s = self.init_variational_params(x)
+        (qss, _), updates = self.infer_q(q0s, y, n_inference_steps)
 
-        (qss, _), updates = self.infer_q(x, y, n_inference_steps)
-
-        qs = [q[-1] for q in qss]
+        qks = [q[-1] for q in qss]
 
         (prior_energy, h_energy, y_energy), m_constants = self.m_step(
-            x, y, qs, n_samples=n_samples)
+            x, y, qks, q0s, n_samples=n_samples)
 
-        constants = m_constants
+        constants = m_constants + qss + q0s
 
-        return (qs, prior_energy, h_energy, y_energy), updates, constants
+        return (qks, prior_energy, h_energy, y_energy), updates, constants
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
                  calculate_log_marginal=False, stride=0):
@@ -918,7 +868,9 @@ class DeepSBN(Layer):
         updates = theano.OrderedUpdates()
         prior = T.nnet.sigmoid(self.z)
 
-        (qss, i_costs), updates_i = self.infer_q(x, y, n_inference_steps)
+        q0s = self.init_variational_params(x)
+
+        (qss, i_costs), updates_i = self.infer_q(q0s, y, n_inference_steps)
         updates.update(updates_i)
 
         if n_inference_steps > stride and stride != 0:
