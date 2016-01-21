@@ -124,7 +124,7 @@ class CIFAR(object):
             X = (X_r + X_b + X_g) / 3.0
 
         X = X.astype(floatX)
-        X = (X - X.mean()) / X.std()
+        X = (X - X.mean(axis=0)) / X.std(axis=0)
 
         return X, Y
 
