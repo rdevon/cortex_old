@@ -621,7 +621,7 @@ class DeepSBN(Layer):
 
             if self.posteriors[l] is None:
                 self.posteriors[l] = MLP(
-                    dim_in, dim_h, dim_h, 1,
+                    dim_in, dim_h, dim_h, 2,
                     rng=self.rng, trng=self.trng,
                     h_act='T.nnet.sigmoid',
                     out_act='T.nnet.sigmoid')
