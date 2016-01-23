@@ -395,3 +395,94 @@ class DeepSBN(Layer):
             outs.update(nll=nlls[-1], nlls=nlls)
 
         return outs, updates
+
+
+class DeepSBN_AR(DeepSBN):
+    def __init__(self, dim_in,
+                 **kwargs):
+
+        super(DeepSBN_AR, self).__init__(dim_in, **kwargs)
+
+    def set_params(self):
+        z = np.zeros((self.dim_hs[-1],)).astype(floatX)
+
+        self.params = OrderedDict(z=z)
+
+        if self.posteriors is None:
+            self.posteriors = [None for _ in xrange(self.n_layers)]
+        else:
+            assert len(self.posteriors) == self.n_layers
+
+        if self.conditionals is None:
+            self.conditionals = [None for _ in xrange(self.n_layers)]
+        else:
+            assert len(self.conditionals) == self.n_layers
+
+        for l, dim_h in enumerate(self.dim_hs):
+            if l == 0:
+                dim_in = self.dim_in
+                dim_in_post = dim_in
+            else:
+                dim_in = self.dim_hs[l-1]
+                dim_in_post += dim_in
+
+            if self.posteriors[l] is None:
+                self.posteriors[l] = MLP(
+                    dim_in_post, dim_h, dim_h, 1,
+                    rng=self.rng, trng=self.trng,
+                    h_act='T.nnet.softplus',
+                    out_act='T.nnet.sigmoid')
+
+            if self.conditionals[l] is None:
+                self.conditionals[l] = MLP(
+                    dim_h, dim_h, dim_in, 1,
+                    rng=self.rng, trng=self.trng,
+                    h_act='T.nnet.softplus',
+                    out_act='T.nnet.sigmoid')
+
+            if l == 0:
+                self.posteriors[l].name = self.name + '_posterior'
+                self.conditionals[l].name = self.name + '_conditional'
+            else:
+                self.posteriors[l].name = self.name + '_posterior%d' % l
+                self.conditionals[l].name = self.name + '_conditional%d' % l
+
+    def m_step(self, x, y, qks, n_samples=10):
+        constants = []
+
+        hs = []
+        for l, qk in enumerate(qks):
+            h = self.posteriors[l].sample(qk, size=(n_samples, qk.shape[0], qk.shape[1]))
+            hs.append(h)
+        p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
+        ys = [y[None, :, :]] + hs[:-1]
+
+        #q0s = self.init_variational_params(x)
+
+        q0s = self.init_variational_params(x)
+
+        conditional_energy = T.constant(0.).astype(floatX)
+        posterior_energy = T.constant(0.).astype(floatX)
+        for l in xrange(self.n_layers):
+            posterior_energy += self.posteriors[l].neg_log_prob(qks[l], q0s[l])
+            conditional_energy += self.conditionals[l].neg_log_prob(
+                ys[l], p_ys[l]).mean(axis=0)
+
+        prior = T.nnet.sigmoid(self.z)
+        prior_energy = self.posteriors[-1].neg_log_prob(qks[-1], prior[None, :])
+
+        return (prior_energy.mean(axis=0), posterior_energy.mean(axis=0),
+                conditional_energy.mean(axis=0)), constants
+
+    def _init_variational_params_adapt(self, state):
+        print 'Initializing variational params for AdIS'
+        q0s = []
+
+        ndim = state.ndim
+        state = [state]
+        for l in xrange(self.n_layers):
+            y = self.posteriors[l](concatenate(state, axis=ndim-1))
+            q0s.append(y)
+            state.append(y)
+
+        return q0s
