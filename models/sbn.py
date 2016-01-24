@@ -9,6 +9,7 @@ from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from layers import Layer
+from models.distributions import Bernoulli
 from models.mlp import (
     MLP,
     MultiModalMLP
@@ -230,10 +231,8 @@ class SigmoidBeliefNetwork(Layer):
         return mlps
 
     def set_params(self):
-        z = np.zeros((self.dim_h,)).astype(floatX)
-        inference_scale_factor = np.float32(1.0)
-
-        self.params = OrderedDict(z=z, inference_scale_factor=inference_scale_factor)
+        self.params = OrderedDict()
+        self.prior = Bernoulli(self.dim_h)
 
         if self.posterior is None:
             self.posterior = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
@@ -256,24 +255,24 @@ class SigmoidBeliefNetwork(Layer):
         tparams = super(SigmoidBeliefNetwork, self).set_tparams()
         tparams.update(**self.posterior.set_tparams())
         tparams.update(**self.conditional.set_tparams())
+        tparams.update(**self.prior.set_tparams())
         tparams = OrderedDict((k, v) for k, v in tparams.iteritems()
             if k not in excludes)
 
         return tparams
 
     def get_params(self):
-        params = [self.z] + self.conditional.get_params() + self.posterior.get_params() + [self.inference_scale_factor]
+        params = self.prior.get_params() + self.conditional.get_params() + self.posterior.get_params()
         return params
 
     def p_y_given_h(self, h, *params):
-        params = params[1:1+len(self.conditional.get_params())]
+        start = len(self.prior.get_params())
+        params = params[start:start+len(self.conditional.get_params())]
         return self.conditional.step_call(h, *params)
 
     def sample_from_prior(self, n_samples=100):
-        p = T.nnet.sigmoid(self.z)
-        h = self.posterior.sample(p=p, size=(n_samples, self.dim_h))
-        py = self.conditional(h)
-        return self.get_center(py)
+        size = (n_samples, self.dim_h)
+        return self.prior.sample(size=size)
 
     def generate_from_latent(self, h):
         py = self.conditional(h)
@@ -314,7 +313,7 @@ class SigmoidBeliefNetwork(Layer):
         return prior_term - entropy_term
 
     def e_step(self, y, z, *params):
-        prior = T.nnet.sigmoid(params[0])
+        prior = params[0]
         q = T.nnet.sigmoid(z)
         py = self.p_y_given_h(q, *params)
 
@@ -331,7 +330,7 @@ class SigmoidBeliefNetwork(Layer):
     def m_step(self, x, y, z, n_samples=10):
         constants = []
         q = T.nnet.sigmoid(z)
-        prior = T.nnet.sigmoid(self.z)
+        prior = concatenate(self.prior.get_params())
         p_h = self.posterior(x)
 
         h = self.posterior.sample(
@@ -357,7 +356,7 @@ class SigmoidBeliefNetwork(Layer):
 
     # Importance Sampling
     def _step_adapt(self, y, q, *params):
-        prior = T.nnet.sigmoid(params[0])
+        prior = params[0]
         h = self.posterior.sample(
             q, size=(self.n_inference_samples, q.shape[0], q.shape[1]))
 
@@ -520,7 +519,7 @@ class SigmoidBeliefNetwork(Layer):
                  calculate_log_marginal=False, stride=0):
         outs = OrderedDict()
         updates = theano.OrderedUpdates()
-        prior = T.nnet.sigmoid(self.z)
+        prior = concatenate(self.prior.get_params())
 
         (zs, i_costs), updates_i = self.infer_q(x, y, n_inference_steps)
         updates.update(updates_i)
@@ -566,4 +565,3 @@ class SigmoidBeliefNetwork(Layer):
             outs.update(nll=nlls[-1], nlls=nlls)
 
         return outs, updates
-

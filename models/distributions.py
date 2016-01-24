@@ -2,15 +2,87 @@
 Module for Theano probabilistic distributions.
 '''
 
+from collections import OrderedDict
+import numpy as np
 import theano
 from theano import tensor as T
 
+from models.layers import Layer
 from utils.tools import (
     e,
     floatX,
+    init_rngs,
+    init_weights,
     pi,
     _slice
 )
+
+
+class Distribution(Layer):
+    def __init__(self, dim, name='distribution', **kwargs):
+        self.dim = dim
+
+        kwargs = init_weights(self, **kwargs)
+        kwargs = init_rngs(self, **kwargs)
+
+        super(Distribution, self).__init__(name=name)
+
+    def set_params(self):
+        raise NotImplementedError()
+
+    def get_prob(self):
+        raise NotImplementedError()
+
+    def sample(self, size=None):
+        p = self.get_prob()
+        return self.f_sample(self.trng, p, size=size)
+
+    def neg_log_prob(self, x, axis=None, scale=None):
+        p = self.get_prob()
+        return self.f_neg_log_prob(x, p, axis=None, scale=None)
+
+    def entropy(self, axis=None):
+        p = self.get_prob()
+        return self.f_entropy(p, axis=None)
+
+
+class Bernoulli(Distribution):
+    def __init__(self, dim, name='bernoulli', **kwargs):
+        self.f_sample = _binomial
+        self.f_neg_log_prob = _cross_entropy
+        self.f_entropy = _binary_entropy
+        super(Bernoulli, self).__init__(dim, name=name, **kwargs)
+
+    def set_params(self):
+        z = np.zeros((self.dim,)).astype(floatX)
+        self.params = OrderedDict(z=z)
+
+    def get_params(self):
+        return [T.nnet.sigmoid(self.z)]
+
+    def get_prob(self):
+        return T.nnet.sigmoid(self.z)
+
+
+class Gaussian(Distribution):
+    def __init__(self, dim, name='gaussian', **kwargs):
+        self.f_sample = _normal
+        self.f_neg_log_prob = _neg_normal_log_prob
+        self.f_entropy = _normal_entropy
+        super(Gaussian, self).__init__(dim, name=name, **kwargs)
+
+    def set_params(self):
+        mu = np.zeros((self.dim_h,)).astype(floatX)
+        log_sigma = np.zeros((self.dim_h,)).astype(floatX)
+
+        self.params = OrderedDict(
+            mu=mu, log_sigma=log_sigma)
+
+    def get_params(self):
+        return [self.mu, self.log_sigma]
+
+    def get_prob(self, ):
+        return concatenate([self.mu, self.log_sigma])
 
 
 # BERNOULLI --------------------------------------------------------------------
