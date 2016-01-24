@@ -7,6 +7,8 @@ import numpy as np
 from theano import tensor as T
 
 from distributions import (
+    Bernoulli,
+    Gaussian,
     _binomial,
     _cross_entropy,
     _binary_entropy,
