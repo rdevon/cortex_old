@@ -32,6 +32,7 @@ class Layer(object):
         self.excludes = []
         self.learn = learn
         self.set_params()
+        self.n_params = len(self.params)
 
     def set_params(self):
         raise NotImplementedError()
