@@ -4,6 +4,7 @@ Module for MLP model.
 
 from collections import OrderedDict
 import numpy as np
+import theano
 from theano import tensor as T
 
 from distributions import (
@@ -78,8 +79,16 @@ class MLP(Layer):
         #assert len(kwargs) == 0, kwargs.keys()
         super(MLP, self).__init__(name=name)
 
-    def sample(self, p, size=None):
-        return self.f_sample(self.trng, p, size=size)
+    def sample(self, p, n_samples=1):
+        if p.ndim == 1:
+            size = (n_samples, p.shape[0])
+        elif p.ndim == 2:
+            size = (n_samples, p.shape[0], p.shape[1])
+        elif p.ndim == 3:
+            size = (n_samples, p.shape[0], p.shape[1], p.shape[2])
+        else:
+            raise ValueError()
+        return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
 
     def neg_log_prob(self, x, p):
         return self.f_neg_log_prob(x, p)

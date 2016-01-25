@@ -24,35 +24,67 @@ from utils.tools import (
     init_rngs,
     init_weights,
     norm_weight,
-    _scan
+    scan
 )
 
 
 class AutoRegressor(Distribution):
     def __init__(self, dim, name='autoregressor', **kwargs):
         self.f_neg_log_prob = _cross_entropy
-        super(AutoRegressor, self).__init__(dim, name=name, **kwargs)
+        self.f_sample = _binomial
+        super(AutoRegressor, self).__init__(dim, name=name, must_sample=True,
+                                            **kwargs)
 
     def set_params(self):
         b = np.zeros((self.dim,)).astype(floatX)
-        W = np.zeros((self.dim, self.dim)).astype(floatX)
+        W = norm_weight(self.dim, self.dim, scale=self.weight_scale,
+                        ortho=False)
         self.params = OrderedDict(W=W, b=b)
 
     def get_params(self):
         return [self.W, self.b]
 
-    def get_prob(self):
-        W = T.tril(self.W, k=-1)
+    def get_prob(self, x, W, b):
+        W = T.tril(W, k=-1)
         p = T.nnet.sigmoid(T.dot(x, W) + b)
         return p
 
-    def sample(self, ):
-        pass
+    def sample(self, n_samples):
+        '''
+        Inspired by jbornschein's implementation.
+        '''
+        x = T.zeros((n_samples, self.dim)).astype(floatX)
+        z = T.zeros((n_samples, self.dim,)).astype(floatX) + self.b[None, :]
+        rs = self.trng.uniform((self.dim, n_samples), dtype=floatX)
+
+        def _step_sample(i, W_i, r_i, z):
+            p_i = T.nnet.sigmoid(z[:, i])
+            x_i = (r_i <= p_i).astype(floatX)
+            z += T.outer(x_i, W_i)
+            return z, x_i
+
+        seqs = [T.arange(self.dim), self.W, rs]
+        outputs_info = [z, None]
+        non_seqs = []
+
+        (zs, x), updates = scan(_step_sample, seqs, outputs_info, non_seqs,
+                                self.dim)
+        return x.T, updates
+
+    def step_neg_log_prob(self, x, *params):
+        p = self.get_prob(x, *params)
+        return self.f_neg_log_prob(x, p)
+
+    def neg_log_prob(self, x, axis=None, scale=1.0):
+        p = self.get_prob(x, *self.get_params())
+        return self.f_neg_log_prob(x, p, axis=None, scale=scale)
+
+    def entropy(self, axis=None):
+        raise NotImplementedError('We aren\'t going to try to use MC to do this.')
 
 
 class DARN(Layer):
     def __init__(self, dim_in, dim_h, dim_out, n_layers,
-                 f_sample=None, f_neg_log_prob=None, f_entropy=None,
                  h_act='T.nnet.sigmoid', out_act='T.nnet.sigmoid',
                  name='DARN',
                  **kwargs):
@@ -73,49 +105,55 @@ class DARN(Layer):
             self.f_sample = _binomial
             self.f_neg_log_prob = _cross_entropy
             self.f_entropy = _binary_entropy
-            self.f_prob = lambda x: x
-        elif out_act == 'T.tanh':
-            self.f_sample = _centered_binomial
-        elif out_act == 'lambda x: x':
-            self.f_sample = _normal
-            self.f_neg_log_prob = _neg_normal_log_prob
-            self.f_entropy = _normal_entropy
-            self.f_prob = _normal_prob
-            self.dim_out *= 2
         else:
-            assert f_sample is not None
-            assert f_neg_log_prob is not None
-            assert out_act is not None
-
-        if f_sample is not None:
-            self.sample = f_sample
-        if f_neg_log_prob is not None:
-            self.net_log_prob = f_neg_log_prob
-        if f_entropy is not None:
-            self.entropy = f_entropy
+            raise ValueError()
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
-        #assert len(kwargs) == 0, kwargs.keys()
-        super(MLP, self).__init__(name=name)
+        super(DARN, self).__init__(name=name)
 
-    def sample(self, p, size=None):
-        return self.f_sample(self.trng, p, size=size)
+    def sample(self, c, n_samples=1):
 
-    def neg_log_prob(self, x, p):
+        if c.ndim == 2:
+            assert n_samples == 1
+            n_samples = c.shape[0]
+        else:
+            assert c.ndim == 1
+
+        x = T.zeros((n_samples, self.dim_out)).astype(floatX)
+        z = T.zeros((n_samples, self.dim_out,)).astype(floatX) + self.bar[None, :] + c
+        rs = self.trng.uniform((self.dim_out, n_samples), dtype=floatX)
+
+        def _step_sample(i, W_i, r_i, z):
+            p_i = T.nnet.sigmoid(z[:, i])
+            x_i = (r_i <= p_i).astype(floatX)
+            z += T.outer(x_i, W_i)
+            return z, x_i
+
+        seqs = [T.arange(self.dim_out), self.War, rs]
+        outputs_info = [z, None]
+        non_seqs = []
+
+        (zs, x), updates = scan(_step_sample, seqs, outputs_info, non_seqs,
+                                self.dim_out)
+        return x.T[None, :, :], updates
+
+    def neg_log_prob(self, x, c):
+        W = T.tril(self.War, k=-1)
+        p = T.nnet.sigmoid(T.dot(x, W) + self.bar + c)
         return self.f_neg_log_prob(x, p)
 
     def entropy(self, p):
-        return self.f_entropy(p)
+        raise NotImplementedError()
 
     def prob(self, p):
-        return self.f_prob(p)
+        return p
 
     @staticmethod
     def factory(dim_in=None, dim_h=None, dim_out=None, n_layers=None,
                 **kwargs):
-        return MLP(dim_in, dim_h, dim_out, n_layers, **kwargs)
+        return DARN(dim_in, dim_h, dim_out, n_layers, **kwargs)
 
     def get_L2_weight_cost(self, gamma, layers=None):
         if layers is None:
@@ -131,23 +169,28 @@ class DARN(Layer):
     def set_params(self):
         self.params = OrderedDict()
 
-        for l in xrange(self.n_layers):
-            if l == 0:
-                dim_in = self.dim_in
-            else:
-                dim_in = self.dim_h
+        dim_in = self.dim_in
+        dim_out = self.dim_h
 
+        for l in xrange(self.n_layers):
+            if l > 0:
+                dim_in = self.dim_h
             if l == self.n_layers - 1:
                 dim_out = self.dim_out
-            else:
-                dim_out = self.dim_h
 
             W = norm_weight(dim_in, dim_out,
-                                  scale=self.weight_scale, ortho=False)
+                            scale=self.weight_scale, ortho=False)
             b = np.zeros((dim_out,)).astype(floatX)
 
             self.params['W%d' % l] = W
             self.params['b%d' % l] = b
+
+        b = np.zeros((self.dim_out,)).astype(floatX)
+        W = norm_weight(self.dim_out, self.dim_out, scale=self.weight_scale,
+                                ortho=False)
+
+        self.params['War'] = W
+        self.params['bar'] = b
 
     def get_params(self):
         params = []
@@ -155,9 +198,14 @@ class DARN(Layer):
             W = self.__dict__['W%d' % l]
             b = self.__dict__['b%d' % l]
             params += [W, b]
+
+        params += [self.War, self.bar]
         return params
 
     def preact(self, x, *params):
+        raise NotImplementedError()
+
+    def step_call(self, x, *params):
         # Used within scan with `get_params`
         params = list(params)
 
@@ -165,32 +213,14 @@ class DARN(Layer):
             W = params.pop(0)
             b = params.pop(0)
 
-            if self.weight_noise:
-                print 'Using weight noise in layer %d for MLP %s' % (l, self.name)
-                W += self.trng.normal(avg=0., std=self.weight_noise, size=W.shape)
-
             if l == self.n_layers - 1:
                 x = T.dot(x, W) + b
             else:
                 activ = self.h_act
                 x = eval(activ)(T.dot(x, W) + b)
 
-            if self.dropout:
-                if activ == 'T.tanh':
-                    raise NotImplementedError('dropout for tanh units not implemented yet')
-                elif activ in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
-                    x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
-                                             dtype=x.dtype)
-                    x = x * x_d / (1 - self.dropout)
-                else:
-                    raise NotImplementedError('No dropout for %s yet' % activ)
-
-        assert len(params) == 0, params
+        assert len(params) == 2, params
         return x
-
-    def step_call(self, x, *params):
-        x = self.preact(x, *params)
-        return eval(self.out_act)(x)
 
     def __call__(self, x, return_preact=False):
         params = self.get_params()

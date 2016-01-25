@@ -19,30 +19,42 @@ from utils.tools import (
 
 
 class Distribution(Layer):
-    def __init__(self, dim, name='distribution', **kwargs):
+    def __init__(self, dim, name='distribution', must_sample=False, **kwargs):
         self.dim = dim
+        self.must_sample = must_sample
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
         super(Distribution, self).__init__(name=name)
+        self.n_params = len(self.params)
 
     def set_params(self):
+        raise NotImplementedError()
+
+    def get_params(self):
         raise NotImplementedError()
 
     def get_prob(self):
         raise NotImplementedError()
 
-    def sample(self, size=None):
-        p = self.get_prob()
-        return self.f_sample(self.trng, p, size=size)
+    def get(self):
+        return self.get_prob(*self.get_params())
 
-    def neg_log_prob(self, x, axis=None, scale=None):
-        p = self.get_prob()
-        return self.f_neg_log_prob(x, p, axis=None, scale=None)
+    def sample(self, n_samples):
+        p = self.get_prob(*self.get_params())
+        return self.f_sample(self.trng, p, size=(n_samples, self.dim)), theano.OrderedUpdates()
+
+    def step_neg_log_prob(self, x, *params):
+        p = self.get_prob(*params)
+        return self.f_neg_log_prob(x, p)
+
+    def neg_log_prob(self, x, axis=None, scale=1.0):
+        p = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(x, p, axis=None, scale=scale)
 
     def entropy(self, axis=None):
-        p = self.get_prob()
+        p = self.get_prob(*self.get_params())
         return self.f_entropy(p, axis=None)
 
 
@@ -58,10 +70,10 @@ class Bernoulli(Distribution):
         self.params = OrderedDict(z=z)
 
     def get_params(self):
-        return [T.nnet.sigmoid(self.z)]
+        return [self.z]
 
-    def get_prob(self):
-        return T.nnet.sigmoid(self.z)
+    def get_prob(self, z):
+        return T.nnet.sigmoid(z)
 
 
 class Gaussian(Distribution):
@@ -81,8 +93,8 @@ class Gaussian(Distribution):
     def get_params(self):
         return [self.mu, self.log_sigma]
 
-    def get_prob(self, ):
-        return concatenate([self.mu, self.log_sigma])
+    def get_prob(self, mu, log_sigma):
+        return concatenate([mu, log_sigma])
 
 
 # BERNOULLI --------------------------------------------------------------------
