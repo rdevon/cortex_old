@@ -224,11 +224,11 @@ class SigmoidBeliefNetwork(Layer):
         mlps = {}
 
         if recognition_net is not None:
-            t = generation_net.get('type', None)
+            t = recognition_net.get('type', None)
             if t is None:
                 posterior = MLP.factory(**recognition_net)
             elif t == 'darn':
-                posteior = DARN.factory(**recognition_net)
+                posterior = DARN.factory(**recognition_net)
             else:
                 raise ValueError(t)
             mlps['posterior'] = posterior
