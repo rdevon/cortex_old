@@ -71,6 +71,7 @@ def test_darn(dim_in=5, dim_h=3, dim_out=7, n_samples=13):
     h = np.random.randint(0, 2, size=(n_samples, dim_in)).astype(floatX)
 
     c_t, nlp_t = f(x, h)
+    print c_t.shape
 
     d_np = np.tanh(np.dot(h, darn.params['W0']) + darn.params['b0'])
     c_np = np.dot(d_np, darn.params['W1']) + darn.params['b1']
@@ -80,10 +81,7 @@ def test_darn(dim_in=5, dim_h=3, dim_out=7, n_samples=13):
     z_np = np.zeros((n_samples, dim_out)).astype(floatX) + darn.params['bar'][None, :] + c_np
 
     for i in xrange(dim_out):
-        print i
         for j in xrange(i + 1, dim_out):
-            print i, j
-            print z_np.shape, darn.params['War'].shape, x.shape
             z_np[:, i] += darn.params['War'][j, i] * x[:, j]
 
     p_np = sigmoid(z_np)
@@ -92,6 +90,11 @@ def test_darn(dim_in=5, dim_h=3, dim_out=7, n_samples=13):
     nlp_np = (- x * np.log(p_np) - (1 - x) * np.log(1 - p_np)).sum(axis=1)
 
     assert np.allclose(nlp_t, nlp_np), (nlp_t, nlp_np)
+
+    samples, updates_s = darn.sample(C, n_samples=n_samples-1)
+    f = theano.function([H], samples, updates=updates_s)
+    print f(h)
+    assert False
 
 def test_air(dim_in=5, dim_h=3, dim_out=7, n_inference_steps=1,
              n_mcmc_samples=11, n_samples=9):
@@ -107,15 +110,17 @@ def test_air(dim_in=5, dim_h=3, dim_out=7, n_inference_steps=1,
     )
 
     ar = AutoRegressor(dim_out)
-    darn = DARN(dim_out, dim_h, dim_in, 2, h_act='T.tanh', out_act='T.nnet.sigmoid')
+    darn = DARN(dim_in, dim_h, dim_out, 2, h_act='T.tanh', out_act='T.nnet.sigmoid')
 
-    sbn = SBN(dim_in, dim_out, prior=ar, conditional=darn, **kwargs)
+    sbn = SBN(dim_in, dim_out, prior=ar, posterior=darn, **kwargs)
     tparams = sbn.set_tparams()
 
     (z, prior_energy, h_energy, y_energy, entropy), updates, constants = sbn.inference(
         X, X, n_inference_steps=n_inference_steps, n_samples=n_mcmc_samples)
 
-    f = theano.function([X], prior_energy + h_energy + y_energy, updates=updates)
+    cost = prior_energy + h_energy + y_energy
+
+    f = theano.function([X], cost, updates=updates)
 
     x = np.random.randint(0, 2, size=(n_samples, dim_in)).astype(floatX)
     print f(x)

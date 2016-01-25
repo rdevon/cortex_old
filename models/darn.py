@@ -4,6 +4,7 @@ Module for DARN model.
 
 from collections import OrderedDict
 import numpy as np
+import theano
 from theano import tensor as T
 
 from distributions import (
@@ -94,6 +95,7 @@ class DARN(Layer):
         self.dim_out = dim_out
         self.n_layers = n_layers
         assert n_layers > 0
+        self.must_sample = True
 
         self.h_act = h_act
         self.out_act = out_act
@@ -114,16 +116,16 @@ class DARN(Layer):
         super(DARN, self).__init__(name=name)
 
     def sample(self, c, n_samples=1):
-
-        if c.ndim == 2:
-            assert n_samples == 1
-            n_samples = c.shape[0]
-        else:
-            assert c.ndim == 1
+        if c.ndim == 1:
+            c = c[None, :]
+        elif c.ndim > 2:
+            raise ValueError()
 
         x = T.zeros((n_samples, self.dim_out)).astype(floatX)
-        z = T.zeros((n_samples, self.dim_out,)).astype(floatX) + self.bar[None, :] + c
-        rs = self.trng.uniform((self.dim_out, n_samples), dtype=floatX)
+        z = T.zeros((n_samples, self.dim_out,)).astype(floatX) + self.bar[None, :]
+        z = z[None, :, :] + c[:, None, :]
+        z = z.reshape((z.shape[0] * z.shape[1], z.shape[2]))
+        rs = self.trng.uniform((self.dim_out, z.shape[0]), dtype=floatX)
 
         def _step_sample(i, W_i, r_i, z):
             p_i = T.nnet.sigmoid(z[:, i])
@@ -136,8 +138,20 @@ class DARN(Layer):
         non_seqs = []
 
         (zs, x), updates = scan(_step_sample, seqs, outputs_info, non_seqs,
-                                self.dim_out)
-        return x.T[None, :, :], updates
+                                self.dim_out, name='darn_sample')
+
+        if c.ndim == 1:
+            x = x.T[None, :, :]
+        else:
+            x = x.T
+            x = x.reshape((n_samples, x.shape[0] // n_samples, x.shape[1]))
+
+        return x, updates
+
+    def step_neg_log_prob(self, x, c, War, bar):
+        W = T.tril(War, k=-1)
+        p = T.nnet.sigmoid(T.dot(x, W) + bar + c)
+        return self.f_neg_log_prob(x, p)
 
     def neg_log_prob(self, x, c):
         W = T.tril(self.War, k=-1)
@@ -145,7 +159,7 @@ class DARN(Layer):
         return self.f_neg_log_prob(x, p)
 
     def entropy(self, p):
-        raise NotImplementedError()
+        return self.f_entropy(p)
 
     def prob(self, p):
         return p
@@ -224,9 +238,6 @@ class DARN(Layer):
 
     def __call__(self, x, return_preact=False):
         params = self.get_params()
-        if return_preact:
-            x = self.preact(x, *params)
-        else:
-            x = self.step_call(x, *params)
+        x = self.step_call(x, *params)
 
         return x
