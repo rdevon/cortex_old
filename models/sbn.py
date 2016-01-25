@@ -84,6 +84,13 @@ def init_inference_args(model,
         model.params_infer = model._params_adapt
         model.strict = False
         model.init_variational_params = model._init_variational_params_adapt
+    elif inference_method == 'adaptive_darn':
+        model.step_infer = model._step_adapt_darn
+        model.init_infer = model._init_adapt
+        model.unpack_infer = model._unpack_adapt
+        model.params_infer = model._params_adapt
+        model.strict = False
+        model.init_variational_params = model._init_variational_params_adapt
     elif inference_method == 'adaptive_assign':
         model.step_infer = model._step_adapt_assign
         model.init_infer = model._init_adapt
@@ -217,8 +224,13 @@ class SigmoidBeliefNetwork(Layer):
         mlps = {}
 
         if recognition_net is not None:
-            assert not 'type' in recognition_net.keys()
-            posterior = MLP.factory(**recognition_net)
+            t = generation_net.get('type', None)
+            if t is None:
+                posterior = MLP.factory(**recognition_net)
+            elif t == 'darn':
+                posteior = DARN.factory(**recognition_net)
+            else:
+                raise ValueError(t)
             mlps['posterior'] = posterior
 
         if generation_net is not None:
@@ -230,7 +242,7 @@ class SigmoidBeliefNetwork(Layer):
             elif t == 'MMMLP':
                 conditional = MultiModalMLP.factory(**generation_net)
             else:
-                raise ValueError()
+                raise ValueError(t)
             mlps['conditional'] = conditional
 
         return mlps
@@ -276,9 +288,16 @@ class SigmoidBeliefNetwork(Layer):
         params = list(params)
         return params[:self.prior.n_params]
 
+    def get_posterior_params(self, *params):
+        params = list(params)
+        start = self.prior.n_params + self.conditional.n_params
+        stop = start + self.posterior.n_params
+        return params[start:stop]
+
     def p_y_given_h(self, h, *params):
-        start = len(self.prior.get_params())
-        params = params[start:start+len(self.conditional.get_params())]
+        start = self.prior.n_params
+        stop = start + self.conditional.n_params
+        params = params[start:stop]
         return self.conditional.step_call(h, *params)
 
     def sample_from_prior(self, n_samples=100):
@@ -292,9 +311,9 @@ class SigmoidBeliefNetwork(Layer):
     def get_center(self, p):
         return self.conditional.prob(p)
 
-    def importance_weights(self, y, h, py, q, prior, normalize=True):
+    def importance_weights(self, y, h, py, q, normalize=True):
         y_energy = self.conditional.neg_log_prob(y, py)
-        prior_energy = self.posterior.neg_log_prob(h, prior)
+        prior_energy = self.prior.neg_log_prob(h)
         entropy_term = self.posterior.neg_log_prob(h, q)
 
         log_p = -y_energy - prior_energy + entropy_term
@@ -328,6 +347,7 @@ class SigmoidBeliefNetwork(Layer):
         return prior_term - entropy_term
 
     def e_step(self, y, z, *params):
+        raise NotImplementedError()
         prior_params = self.get_prior_params(*params)
         q = T.nnet.sigmoid(z)
         py = self.p_y_given_h(q, *params)
@@ -345,26 +365,6 @@ class SigmoidBeliefNetwork(Layer):
 
         return cost, grad
 
-    def m_step(self, x, y, z, n_samples=10):
-        constants = []
-        q = T.nnet.sigmoid(z)
-        p_h = self.posterior(x)
-
-        h, _ = self.posterior.sample(q, n_samples=n_samples)
-        py = self.conditional(h)
-
-        entropy = self.posterior.entropy(q).mean()
-
-        if self.prior.must_sample:
-            prior_term = self.kl_divergence(h)
-        else:
-            prior_term = self.kl_divergence(q)
-        prior_energy = prior_term.mean()
-        y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean()
-        h_energy = self.posterior.neg_log_prob(q, p_h).mean()
-
-        return (prior_energy, h_energy, y_energy, entropy), constants
-
     def step_infer(self, *params):
         raise NotImplementedError()
     def init_infer(self, z):
@@ -375,14 +375,19 @@ class SigmoidBeliefNetwork(Layer):
         raise NotImplementedError()
 
     # Importance Sampling
-    def _step_adapt(self, y, q, *params):
+    def _step_adapt(self, r, q, y, c, *params):
         prior_params = self.get_prior_params(*params)
-        h, _ = self.posterior.sample(q, n_samples=self.n_inference_samples)
+        posterior_params = self.get_posterior_params(*params)
+
+        h = (q[None, :, :] <= r).astype(floatX)
 
         py = self.p_y_given_h(h, *params)
         y_energy = self.conditional.neg_log_prob(y[None, :, :], py)
         prior_term = self.prior.step_neg_log_prob(h, *prior_params)
-        entropy_term = self.posterior.neg_log_prob(h, q[None, :, :])
+        if self.posterior.must_sample:
+            entropy_term = self.posterior.step_neg_log_prob(h, c, *(posterior_params[-2:]))
+        else:
+            entropy_term = self.posterior.neg_log_prob(h, q[None, :, :])
 
         log_p = -y_energy - prior_term + entropy_term
         log_p_max = T.max(log_p, axis=0, keepdims=True)
@@ -481,16 +486,36 @@ class SigmoidBeliefNetwork(Layer):
 
         return z0
 
+    def m_step(self, x, y, z, n_samples=10):
+        constants = []
+        q = T.nnet.sigmoid(z)
+        p_h = self.posterior(x)
+
+        h, _ = self.posterior.sample(q, n_samples=n_samples)
+        py = self.conditional(h)
+        entropy = self.posterior.entropy(q).mean()
+
+        if self.prior.must_sample:
+            prior_energy = self.prior.neg_log_prob(h).mean()
+            h_energy = self.posterior.neg_log_prob(h, p_h).mean()
+        else:
+            prior_energy = self.prior.neg_log_prob(q).mean()
+            h_energy = self.posterior.neg_log_prob(q, p_h).mean()
+
+        y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean()
+
+        return (prior_energy, h_energy, y_energy, entropy), constants
+
     def infer_q(self, x, y, n_inference_steps):
         updates = theano.OrderedUpdates()
 
-        ys = T.alloc(0., n_inference_steps + 1, y.shape[0], y.shape[1]) + y[None, :, :]
         p_h_logit = self.posterior(x, return_preact=True)
         z0 = self.init_variational_params(p_h_logit)
+        rs = self.trng.binomial((n_inference_steps, self.n_inference_samples, y.shape[0], self.dim_h)).astype(floatX)
 
-        seqs = [ys]
+        seqs = [rs]
         outputs_info = [z0] + self.init_infer(z0) + [None]
-        non_seqs = self.params_infer() + self.get_params()
+        non_seqs = [y, p_h_logit] + self.params_infer() + self.get_params()
 
         print ('Doing %d inference steps and a rate of %.2f with %d '
                'inference samples'
@@ -512,7 +537,7 @@ class SigmoidBeliefNetwork(Layer):
             zs, i_costs = self.unpack_infer(z0, outs)
 
         elif n_inference_steps == 1:
-            inps = [ys[0]] + outputs_info[:-1] + non_seqs
+            inps = [rs[0]] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
             zs, i_costs = self.unpack_infer(z0, outs)
 
@@ -523,7 +548,7 @@ class SigmoidBeliefNetwork(Layer):
 
     # Inference
     def inference(self, x, y, n_inference_steps=20, n_samples=100, pass_gradients=False):
-        (zs, _), updates = self.infer_q(x, y, n_inference_steps)
+        (zs, extra), updates = self.infer_q(x, y, n_inference_steps)
         z = zs[-1]
 
         (prior_energy, h_energy, y_energy, entropy), m_constants = self.m_step(
@@ -552,6 +577,9 @@ class SigmoidBeliefNetwork(Layer):
         lower_bounds = []
         nlls = []
         pys = []
+
+        p_h_logit = self.posterior(x, return_preact=True)
+
         for i in steps:
             z = zs[i-1]
             q = T.nnet.sigmoid(z)
@@ -561,9 +589,16 @@ class SigmoidBeliefNetwork(Layer):
             pys.append(py)
             cond_term = self.conditional.neg_log_prob(y[None, :, :], py).mean()
             if self.prior.must_sample:
-                kl_term = self.kl_divergence(h).mean()
+                prior_term = self.prior.neg_log_prob(h).mean(axis=0)
             else:
-                kl_term = self.kl_divergence(q).mean()
+                prior_term = self.prior.neg_log_prob(q)
+
+            if self.posterior.must_sample:
+                entropy_term = self.posterior.neg_log_prob(h, p_h_logit).mean(axis=0)
+            else:
+                entropy_term = self.posterior.entropy(q)
+
+            kl_term = (prior_term - entropy_term).mean()
             lower_bounds.append(cond_term + kl_term)
 
             if calculate_log_marginal:
