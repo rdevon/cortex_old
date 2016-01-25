@@ -9,6 +9,7 @@ from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from layers import Layer
+from models.darn import DARN
 from models.distributions import Bernoulli
 from models.mlp import (
     MLP,
@@ -191,6 +192,7 @@ def unpack(dim_in=None,
 class SigmoidBeliefNetwork(Layer):
     def __init__(self, dim_in, dim_h,
                  posterior=None, conditional=None,
+                 prior=None,
                  z_init=None,
                  name='sbn',
                  **kwargs):
@@ -200,6 +202,7 @@ class SigmoidBeliefNetwork(Layer):
 
         self.posterior = posterior
         self.conditional = conditional
+        self.prior = prior
 
         self.z_init = z_init
 
@@ -222,6 +225,8 @@ class SigmoidBeliefNetwork(Layer):
             t = generation_net.get('type', None)
             if t is None:
                 conditional = MLP.factory(**generation_net)
+            elif t == 'darn':
+                conditional = DARN.factory(**generation_net)
             elif t == 'MMMLP':
                 conditional = MultiModalMLP.factory(**generation_net)
             else:
@@ -232,7 +237,9 @@ class SigmoidBeliefNetwork(Layer):
 
     def set_params(self):
         self.params = OrderedDict()
-        self.prior = Bernoulli(self.dim_h)
+
+        if self.prior is None:
+            self.prior = Bernoulli(self.dim_h)
 
         if self.posterior is None:
             self.posterior = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
@@ -265,14 +272,17 @@ class SigmoidBeliefNetwork(Layer):
         params = self.prior.get_params() + self.conditional.get_params() + self.posterior.get_params()
         return params
 
+    def get_prior_params(self, *params):
+        params = list(params)
+        return params[:self.prior.n_params]
+
     def p_y_given_h(self, h, *params):
         start = len(self.prior.get_params())
         params = params[start:start+len(self.conditional.get_params())]
         return self.conditional.step_call(h, *params)
 
     def sample_from_prior(self, n_samples=100):
-        size = (n_samples, self.dim_h)
-        return self.prior.sample(size=size)
+        return self.prior.sample(n_samples)
 
     def generate_from_latent(self, h):
         py = self.conditional(h)
@@ -296,9 +306,9 @@ class SigmoidBeliefNetwork(Layer):
 
         return w
 
-    def log_marginal(self, y, h, py, q, prior):
+    def log_marginal(self, y, h, py, q):
         y_energy = self.conditional.neg_log_prob(y, py)
-        prior_energy = self.posterior.neg_log_prob(h, prior)
+        prior_energy = self.prior.neg_log_prob(h)
         entropy_term = self.posterior.neg_log_prob(h, q)
 
         log_p = -y_energy - prior_energy + entropy_term
@@ -307,20 +317,28 @@ class SigmoidBeliefNetwork(Layer):
 
         return (T.log(w.mean(axis=0, keepdims=True)) + log_p_max).mean()
 
-    def kl_divergence(self, p, q):
+    def kl_divergence(self, p):
         entropy_term = self.posterior.entropy(p)
-        prior_term = self.posterior.neg_log_prob(p, q)
+        prior_term = self.prior.neg_log_prob(p)
+        return prior_term - entropy_term
+
+    def step_kl_diverence(self, p, *params):
+        entropy_term = self.posterior.entropy(p)
+        prior_term = self.prior.step_neg_log_prob(p, *params)
         return prior_term - entropy_term
 
     def e_step(self, y, z, *params):
-        prior = params[0]
+        prior_params = self.get_prior_params(*params)
         q = T.nnet.sigmoid(z)
         py = self.p_y_given_h(q, *params)
 
         consider_constant = [y, prior]
         cond_term = self.conditional.neg_log_prob(y, py)
 
-        kl_term = self.kl_divergence(q, prior[None, :])
+        if self.prior.must_sample:
+            raise NotImplementedError()
+
+        kl_term = self.step_kl_divergence(q, *prior_params)
         cost = (cond_term + kl_term).sum(axis=0)
 
         grad = theano.grad(cost, wrt=z, consider_constant=consider_constant)
@@ -330,16 +348,18 @@ class SigmoidBeliefNetwork(Layer):
     def m_step(self, x, y, z, n_samples=10):
         constants = []
         q = T.nnet.sigmoid(z)
-        prior = concatenate(self.prior.get_params())
         p_h = self.posterior(x)
 
-        h = self.posterior.sample(
-            q, size=(n_samples, q.shape[0], q.shape[1]))
+        h, _ = self.posterior.sample(q, n_samples=n_samples)
         py = self.conditional(h)
 
         entropy = self.posterior.entropy(q).mean()
 
-        prior_energy = self.posterior.neg_log_prob(q, prior[None, :]).mean()
+        if self.prior.must_sample:
+            prior_term = self.kl_divergence(h)
+        else:
+            prior_term = self.kl_divergence(q)
+        prior_energy = prior_term.mean()
         y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean()
         h_energy = self.posterior.neg_log_prob(q, p_h).mean()
 
@@ -356,17 +376,15 @@ class SigmoidBeliefNetwork(Layer):
 
     # Importance Sampling
     def _step_adapt(self, y, q, *params):
-        prior = params[0]
-        h = self.posterior.sample(
-            q, size=(self.n_inference_samples, q.shape[0], q.shape[1]))
+        prior_params = self.get_prior_params(*params)
+        h, _ = self.posterior.sample(q, n_samples=self.n_inference_samples)
 
         py = self.p_y_given_h(h, *params)
-
         y_energy = self.conditional.neg_log_prob(y[None, :, :], py)
-        prior_energy = self.posterior.neg_log_prob(h, prior[None, None, :])
+        prior_term = self.prior.step_neg_log_prob(h, *prior_params)
         entropy_term = self.posterior.neg_log_prob(h, q[None, :, :])
 
-        log_p = -y_energy - prior_energy + entropy_term
+        log_p = -y_energy - prior_term + entropy_term
         log_p_max = T.max(log_p, axis=0, keepdims=True)
         w = T.exp(log_p - log_p_max)
 
@@ -519,7 +537,6 @@ class SigmoidBeliefNetwork(Layer):
                  calculate_log_marginal=False, stride=0):
         outs = OrderedDict()
         updates = theano.OrderedUpdates()
-        prior = concatenate(self.prior.get_params())
 
         (zs, i_costs), updates_i = self.infer_q(x, y, n_inference_steps)
         updates.update(updates_i)
@@ -538,14 +555,15 @@ class SigmoidBeliefNetwork(Layer):
         for i in steps:
             z = zs[i-1]
             q = T.nnet.sigmoid(z)
-            h = self.posterior.sample(
-                q, size=(n_samples, q.shape[0], q.shape[1]))
-
+            h, _ = self.posterior.sample(q, n_samples=n_samples)
             py = self.conditional(h)
 
             pys.append(py)
             cond_term = self.conditional.neg_log_prob(y[None, :, :], py).mean()
-            kl_term = self.kl_divergence(q, prior[None, :]).mean()
+            if self.prior.must_sample:
+                kl_term = self.kl_divergence(h).mean()
+            else:
+                kl_term = self.kl_divergence(q).mean()
             lower_bounds.append(cond_term + kl_term)
 
             if calculate_log_marginal:
