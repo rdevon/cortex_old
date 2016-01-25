@@ -27,7 +27,6 @@ class Distribution(Layer):
         kwargs = init_rngs(self, **kwargs)
 
         super(Distribution, self).__init__(name=name)
-        self.n_params = len(self.params)
 
     def set_params(self):
         raise NotImplementedError()

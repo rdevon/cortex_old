@@ -42,6 +42,8 @@ class MLP(Layer):
         self.n_layers = n_layers
         assert n_layers > 0
 
+        self.must_sample = False
+
         self.h_act = h_act
         self.out_act = out_act
 
