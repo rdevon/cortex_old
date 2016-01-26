@@ -78,7 +78,7 @@ class AutoRegressor(Distribution):
 
     def neg_log_prob(self, x, axis=None, scale=1.0):
         p = self.get_prob(x, *self.get_params())
-        return self.f_neg_log_prob(x, p, axis=None, scale=scale)
+        return self.f_neg_log_prob(x, p, axis=axis, scale=scale)
 
     def entropy(self, axis=None):
         raise NotImplementedError('We aren\'t going to try to use MC to do this.')
