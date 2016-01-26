@@ -377,9 +377,12 @@ class SigmoidBeliefNetwork(Layer):
 
     def m_step(self, x, y, q, n_samples=10):
         constants = []
+        updates = theano.OrderedUpdates()
         p_h = self.posterior(x)
 
-        h, updates = self.posterior.sample(q, n_samples=n_samples)
+        r = self.trng.uniform((n_samples, y.shape[0], self.dim_h), dtype=floatX) 
+        h = (r <= q[None, :, :]).astype(floatX)
+        #h, updates = self.posterior.sample(q, n_samples=n_samples)
         py = self.conditional(h)
         entropy = self.posterior.entropy(q).mean()
 
@@ -479,8 +482,10 @@ class SigmoidBeliefNetwork(Layer):
 
         for i in steps:
             q = qs[i-1]
-            h, updates_s = self.posterior.sample(q, n_samples=n_samples)
-            updates.update(updates_s)
+            r = self.trng.uniform((n_samples, y.shape[0], self.dim_h), dtype=floatX)
+            h = (r <= q[None, :, :]).astype(floatX)      
+            #h, updates_s = self.posterior.sample(q, n_samples=n_samples)
+            #updates.update(updates_s)
 
             py = self.conditional(h)
 
