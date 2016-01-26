@@ -85,6 +85,8 @@ class AutoRegressor(Distribution):
 
 
 class DARN(Layer):
+    must_sample = True
+
     def __init__(self, dim_in, dim_h, dim_out, n_layers,
                  h_act='T.nnet.sigmoid', out_act='T.nnet.sigmoid',
                  name='DARN',
@@ -95,7 +97,6 @@ class DARN(Layer):
         self.dim_out = dim_out
         self.n_layers = n_layers
         assert n_layers > 0
-        self.must_sample = True
 
         self.h_act = h_act
         self.out_act = out_act
@@ -115,7 +116,7 @@ class DARN(Layer):
 
         super(DARN, self).__init__(name=name)
 
-    def sample(self, c, n_samples=1):
+    def sample(self, c, n_samples=1, return_probs=False):
         if c.ndim == 1:
             c = c[None, :]
         elif c.ndim > 2:
@@ -131,22 +132,28 @@ class DARN(Layer):
             p_i = T.nnet.sigmoid(z[:, i])
             x_i = (r_i <= p_i).astype(floatX)
             z += T.outer(x_i, W_i)
-            return z, x_i
+            return z, x_i, p_i
 
         seqs = [T.arange(self.dim_out), self.War, rs]
-        outputs_info = [z, None]
+        outputs_info = [z, None, None]
         non_seqs = []
 
-        (zs, x), updates = scan(_step_sample, seqs, outputs_info, non_seqs,
+        (zs, x, p), updates = scan(_step_sample, seqs, outputs_info, non_seqs,
                                 self.dim_out, name='darn_sample')
 
         if c.ndim == 1:
             x = x.T[None, :, :]
+            p = p.T[None, :, :]
         else:
             x = x.T
             x = x.reshape((n_samples, x.shape[0] // n_samples, x.shape[1]))
+            p = p.T
+            p = p.reshape((n_samples, p.shape[0] // n_samples, p.shape[1]))
 
-        return x, updates
+        if return_probs:
+            return p, updates
+        else:
+            return x, updates
 
     def step_neg_log_prob(self, x, c, War, bar):
         W = T.tril(War, k=-1)
