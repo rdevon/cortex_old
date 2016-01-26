@@ -9,6 +9,7 @@ from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from layers import Layer
+from models.distributions import Bernoulli
 from models.mlp import (
     MLP,
     MultiModalMLP
@@ -35,6 +36,7 @@ from utils.tools import (
 class DeepSBN(Layer):
     def __init__(self, dim_in, dim_h=None, n_layers=2, dim_hs=None,
                  posteriors=None, conditionals=None,
+                 prior=None,
                  z_init=None,
                  name='sbn',
                  **kwargs):
@@ -50,6 +52,7 @@ class DeepSBN(Layer):
 
         self.posteriors = posteriors
         self.conditionals = conditionals
+        self.prior = prior
 
         self.z_init = z_init
 
@@ -60,9 +63,12 @@ class DeepSBN(Layer):
         super(DeepSBN, self).__init__(name=name)
 
     def set_params(self):
-        z = np.zeros((self.dim_hs[-1],)).astype(floatX)
+        self.params = OrderedDict()
 
-        self.params = OrderedDict(z=z)
+        print self.prior
+        if self.prior is None:
+            self.prior = Bernoulli(self.dim_hs[-1])
+        print self.prior
 
         if self.posteriors is None:
             self.posteriors = [None for _ in xrange(self.n_layers)]
@@ -82,7 +88,7 @@ class DeepSBN(Layer):
 
             if self.posteriors[l] is None:
                 self.posteriors[l] = MLP(
-                    dim_in, dim_h, dim_h, 2,
+                    dim_in, dim_h, dim_h, 1,
                     rng=self.rng, trng=self.trng,
                     h_act='T.nnet.softplus',
                     out_act='T.nnet.sigmoid')
@@ -105,6 +111,7 @@ class DeepSBN(Layer):
         excludes = ['{name}_{key}'.format(name=self.name, key=key)
                     for key in excludes]
         tparams = super(DeepSBN, self).set_tparams()
+        tparams.update(**self.prior.set_tparams())
 
         for l in xrange(self.n_layers):
             tparams.update(**self.posteriors[l].set_tparams())
@@ -116,47 +123,40 @@ class DeepSBN(Layer):
         return tparams
 
     def get_params(self):
-        params = [self.z]
+        params = self.prior.get_params()
         for l in xrange(self.n_layers):
             params += self.conditionals[l].get_params()
         return params
 
+    def get_prior_params(self, *params):
+        params = list(params)
+        return params[:self.prior.n_params]
+
     def p_y_given_h(self, h, level, *params):
         start = 1
         for l in xrange(level):
-            start += len(self.conditionals[l].get_params())
-        end = start + len(self.conditionals[level].get_params())
+            start += self.conditionals[l].n_params
+        end = start + self.conditionals[level].n_params
 
         params = params[start:end]
         return self.conditionals[level].step_call(h, *params)
 
     def sample_from_prior(self, n_samples=100):
-        p = T.nnet.sigmoid(self.z)
-        h = self.posteriors[-1].sample(p=p, size=(n_samples, self.dim_hs[-1]))
-
+        h, updates = self.prior.sample(n_samples)
         for conditional in self.conditionals[::-1]:
             p = conditional(h)
-            h = conditional.sample(p)
+            h, _ = conditional.sample(p)
+            h = h[0]
 
-        return p
-
-    def kl_divergence(self, p, q):
-        '''
-        Negative KL divergence actually.
-        '''
-        p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
-        q = T.clip(q, 1e-7, 1.0 - 1e-7)
-
-        entropy_term = T.nnet.binary_crossentropy(p_c, p)
-        prior_term = T.nnet.binary_crossentropy(q, p)
-        return (prior_term - entropy_term).sum(axis=entropy_term.ndim-1)
+        return p, updates
 
     def m_step(self, x, y, qks, n_samples=10):
         constants = []
 
         hs = []
         for l, qk in enumerate(qks):
-            h = self.posteriors[l].sample(qk, size=(n_samples, qk.shape[0], qk.shape[1]))
+            r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
+            h = (r <= qk[None, :, :]).astype(floatX)
             hs.append(h)
         p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
         ys = [y[None, :, :]] + hs[:-1]
@@ -177,8 +177,7 @@ class DeepSBN(Layer):
             conditional_energy += self.conditionals[l].neg_log_prob(
                 ys[l], p_ys[l]).mean(axis=0)
 
-        prior = T.nnet.sigmoid(self.z)
-        prior_energy = self.posteriors[-1].neg_log_prob(qks[-1], prior[None, :])
+        prior_energy = self.prior.neg_log_prob(qks[-1])
 
         return (prior_energy.mean(axis=0), posterior_energy.mean(axis=0),
                 conditional_energy.mean(axis=0)), constants
@@ -193,25 +192,26 @@ class DeepSBN(Layer):
         raise NotImplementedError()
 
     # Importance Sampling
-    def _step_adapt(self, y, *params):
+    def _step_adapt(self, *params):
         print 'AdIS'
         params = list(params)
-        qs = params[:self.n_layers]
-        params = params[self.n_layers:]
-        prior = T.nnet.sigmoid(params[0])
+        rs = params[:self.n_layers]
+        qs = params[self.n_layers:2*self.n_layers]
+        y = params[2*self.n_layers]
+        params = params[1+2*self.n_layers:]
+        prior_params = self.get_prior_params(*params)
 
         hs = []
         new_qs = []
 
-        for l, q in enumerate(qs):
-            h = self.posteriors[l].sample(
-                q, size=(self.n_inference_samples, q.shape[0], q.shape[1]))
+        for l, (q, r) in enumerate(zip(qs, rs)):
+            h = (r <= q[None, :, :]).astype(floatX)
             hs.append(h)
 
         ys = [y[None, :, :]] + hs[:-1]
         p_ys = [self.p_y_given_h(h, l, *params) for l, h in enumerate(hs)]
 
-        log_w = -self.posteriors[-1].neg_log_prob(hs[-1], prior[None, None, :])
+        log_w = -self.prior.step_neg_log_prob(hs[-1], *prior_params)
 
         for l in xrange(self.n_layers):
             cond_term = -self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
@@ -234,7 +234,7 @@ class DeepSBN(Layer):
     def _init_adapt(self, qs):
         return []
 
-    def _init_variational_params_adapt(self, state):
+    def init_q(self, state):
         print 'Initializing variational params for AdIS'
         q0s = []
 
@@ -284,11 +284,18 @@ class DeepSBN(Layer):
     def infer_q(self, x, y, n_inference_steps):
         updates = theano.OrderedUpdates()
 
-        q0s = self.init_variational_params(x)
-        ys = T.alloc(0., n_inference_steps + 1, y.shape[0], y.shape[1]) + y[None, :, :]
-        seqs = [ys]
-        outputs_info = q0s + self.init_infer(q0s) + [None]
-        non_seqs = self.params_infer() + self.get_params()
+        q0s = self.init_q(x)
+        rs = []
+        for l in xrange(self.n_layers):
+            r = self.trng.uniform((n_inference_steps,
+                                   self.n_inference_samples,
+                                   y.shape[0],
+                                   self.dim_hs[l]), dtype=floatX)
+            rs.append(r)
+
+        seqs = rs
+        outputs_info = q0s + [None]
+        non_seqs = [y] + self.params_infer() + self.get_params()
 
         print 'Doing %d inference steps and a rate of %.2f with %d inference samples' % (n_inference_steps, self.inference_rate, self.n_inference_samples)
 
@@ -308,7 +315,7 @@ class DeepSBN(Layer):
 
         elif n_inference_steps == 1:
             print 'Simple call inference'
-            inps = [ys[0]] + outputs_info[:-1] + non_seqs
+            inps = [r[0] for r in rs] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
             qss, i_costs = self.unpack_infer(q0s, None)
         else:
@@ -335,7 +342,6 @@ class DeepSBN(Layer):
 
         outs = OrderedDict()
         updates = theano.OrderedUpdates()
-        prior = T.nnet.sigmoid(self.z)
 
         (qss, i_costs), updates_i = self.infer_q(x, y, n_inference_steps)
         updates.update(updates_i)
@@ -356,15 +362,15 @@ class DeepSBN(Layer):
             qs = [q[i] for q in qss]
             hs = []
             for l, q in enumerate(qs):
-                h = self.posteriors[l].sample(
-                    q, size=(n_samples, q.shape[0], q.shape[1]))
+                r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
+                h = (r <= q[None, :, :]).astype(floatX)
                 hs.append(h)
 
             ys = [y[None, :, :]] + hs[:-1]
             p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
             pys.append(p_ys[0])
 
-            lower_bound = self.posteriors[-1].neg_log_prob(hs[-1], prior[None, None, :]).mean(axis=(0, 1))
+            lower_bound = self.prior.neg_log_prob(qs[-1]).mean(axis=0)
             for l in xrange(self.n_layers):
                 post_term = self.posteriors[l].entropy(qs[l])
                 cond_term = self.conditionals[l].neg_log_prob(ys[l], p_ys[l]).mean(axis=0)
@@ -373,7 +379,7 @@ class DeepSBN(Layer):
             lower_bounds.append(lower_bound)
 
             if calculate_log_marginal:
-                log_w = -self.posteriors[-1].neg_log_prob(hs[-1], prior[None, None, :])
+                log_w = -self.prior.neg_log_prob(hs[-1])
                 for l in xrange(self.n_layers):
                     cond_term = -self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
                     post_term = -self.posteriors[l].neg_log_prob(hs[l], qs[l][None, :, :])
