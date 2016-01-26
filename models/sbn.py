@@ -9,8 +9,8 @@ from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from layers import Layer
-from models.darn import DARN
-from models.distributions import Bernoulli
+from models.darn import AutoRegressor, DARN
+from models.distributions import Bernoulli, Gaussian
 from models.mlp import (
     MLP,
     MultiModalMLP
@@ -145,6 +145,10 @@ def unpack(dim_in=None,
     generation_net = generation_net[()]
     if prior == 'logistic':
         out_act = 'T.nnet.sigmoid'
+        prior_model = Bernoulli(dim_h)
+    elif prior == 'darn':
+        out_act = 'T.nnet.sigmoid'
+        prior_model = AutoRegressor(dim_h)
     elif prior == 'gaussian':
         out_act = 'lambda x: x'
     else:
@@ -156,16 +160,11 @@ def unpack(dim_in=None,
                            generation_net=generation_net)
 
     models += mlps.values()
-
-    if prior == 'logistic':
-        C = SigmoidBeliefNetwork
-    elif prior == 'gaussian':
-        C = GBN
-    else:
-        raise ValueError('%s prior not known' % prior)
+    models.append(prior)
 
     kwargs.update(**mlps)
-    model = C(dim_in, dim_h, **kwargs)
+    kwargs['prior'] = prior
+    model = SigmoidBeliefNetwork(dim_in, dim_h, **kwargs)
     models.append(model)
     return models, model_args, dict(
         dataset=dataset,
@@ -377,9 +376,12 @@ class SigmoidBeliefNetwork(Layer):
 
     def m_step(self, x, y, q, n_samples=10):
         constants = []
+        updates = theano.OrderedUpdates()
         p_h = self.posterior(x)
 
-        h, updates = self.posterior.sample(q, n_samples=n_samples)
+        r = self.trng.uniform((n_samples, y.shape[0], self.dim_h), dtype=floatX)
+        h = (r <= q[None, :, :]).astype(floatX)
+        #h, updates = self.posterior.sample(q, n_samples=n_samples)
         py = self.conditional(h)
         entropy = self.posterior.entropy(q).mean()
 
@@ -479,8 +481,10 @@ class SigmoidBeliefNetwork(Layer):
 
         for i in steps:
             q = qs[i-1]
-            h, updates_s = self.posterior.sample(q, n_samples=n_samples)
-            updates.update(updates_s)
+            r = self.trng.uniform((n_samples, y.shape[0], self.dim_h), dtype=floatX)
+            h = (r <= q[None, :, :]).astype(floatX)
+            #h, updates_s = self.posterior.sample(q, n_samples=n_samples)
+            #updates.update(updates_s)
 
             py = self.conditional(h)
 
