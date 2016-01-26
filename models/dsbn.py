@@ -150,38 +150,6 @@ class DeepSBN(Layer):
 
         return p, updates
 
-    def m_step(self, x, y, qks, n_samples=10):
-        constants = []
-
-        hs = []
-        for l, qk in enumerate(qks):
-            r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
-            h = (r <= qk[None, :, :]).astype(floatX)
-            hs.append(h)
-        p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
-        ys = [y[None, :, :]] + hs[:-1]
-
-        #q0s = self.init_variational_params(x)
-
-        q0s = []
-        state = x
-        for l in xrange(self.n_layers):
-            q0 = self.posteriors[l](state)
-            q0s.append(q0)
-            state = qks[l]
-
-        conditional_energy = T.constant(0.).astype(floatX)
-        posterior_energy = T.constant(0.).astype(floatX)
-        for l in xrange(self.n_layers):
-            posterior_energy += self.posteriors[l].neg_log_prob(qks[l], q0s[l])
-            conditional_energy += self.conditionals[l].neg_log_prob(
-                ys[l], p_ys[l]).mean(axis=0)
-
-        prior_energy = self.prior.neg_log_prob(qks[-1])
-
-        return (prior_energy.mean(axis=0), posterior_energy.mean(axis=0),
-                conditional_energy.mean(axis=0)), constants
-
     def step_infer(self, *params):
         raise NotImplementedError()
     def init_infer(self, z):
@@ -194,40 +162,38 @@ class DeepSBN(Layer):
     # Importance Sampling
     def _step_adapt(self, *params):
         print 'AdIS'
-        params = list(params)
-        rs = params[:self.n_layers]
-        qs = params[self.n_layers:2*self.n_layers]
-        y = params[2*self.n_layers]
-        params = params[1+2*self.n_layers:]
+        params       = list(params)
+        rs           = params[:self.n_layers]
+        qs           = params[self.n_layers:2*self.n_layers]
+        y            = params[2*self.n_layers]
+        params       = params[1+2*self.n_layers:]
         prior_params = self.get_prior_params(*params)
 
-        hs = []
+        hs     = []
         new_qs = []
 
         for l, (q, r) in enumerate(zip(qs, rs)):
             h = (r <= q[None, :, :]).astype(floatX)
             hs.append(h)
 
-        ys = [y[None, :, :]] + hs[:-1]
+        ys   = [y[None, :, :]] + hs[:-1]
         p_ys = [self.p_y_given_h(h, l, *params) for l, h in enumerate(hs)]
 
         log_w = -self.prior.step_neg_log_prob(hs[-1], *prior_params)
-
         for l in xrange(self.n_layers):
             cond_term = -self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
             post_term = -self.posteriors[l].neg_log_prob(hs[l], qs[l][None, :, :])
-            log_w += cond_term - post_term
+            assert cond_term.ndim == post_term.ndim == log_w.ndim
+            log_w     = log_w + cond_term - post_term
 
         log_w_max = T.max(log_w, axis=0, keepdims=True)
-        w = T.exp(log_w - log_w_max)
-        w_tilde = w / w.sum(axis=0, keepdims=True)
+        w         = T.exp(log_w - log_w_max)
+        w_tilde   = w / w.sum(axis=0, keepdims=True)
+        cost      = -T.log(w).mean()
 
-        for l in xrange(self.n_layers):
-            h = hs[l]
-            q = (w_tilde[:, :, None] * h).sum(axis=0)
-            new_qs.append((1.0 - self.inference_rate) * qs[l] + self.inference_rate * q)
-
-        cost = -T.log(w).mean()
+        for q, h in zip(qs, hs):
+            q_ = (w_tilde[:, :, None] * h).sum(axis=0)
+            new_qs.append(self.inference_rate * q_ + (1 - self.inference_rate) * q)
 
         return tuple(new_qs) + (cost,)
 
@@ -281,11 +247,43 @@ class DeepSBN(Layer):
     def _params_momentum(self): pass
     def init_variational_params(self, state): pass
 
+    # Learning -----------------------------------------------------------------
+
+    def m_step(self, x, y, qks, n_samples=10):
+        constants = []
+
+        hs = []
+        for l, qk in enumerate(qks):
+            r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
+            h = (r <= qk[None, :, :]).astype(floatX)
+            hs.append(h)
+        p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
+        ys   = [y[None, :, :]] + hs[:-1]
+
+        q0s   = []
+        state = x
+        for l in xrange(self.n_layers):
+            q0 = self.posteriors[l](state)
+            q0s.append(q0)
+            state = qks[l]
+
+        conditional_energy = T.constant(0.).astype(floatX)
+        posterior_energy   = T.constant(0.).astype(floatX)
+        for l in xrange(self.n_layers):
+            posterior_energy += self.posteriors[l].neg_log_prob(qks[l], q0s[l])
+            conditional_energy += self.conditionals[l].neg_log_prob(
+                ys[l], p_ys[l]).mean(axis=0)
+
+        prior_energy = self.prior.neg_log_prob(qks[-1])
+
+        return (prior_energy.mean(axis=0), posterior_energy.mean(axis=0),
+                conditional_energy.mean(axis=0)), constants
+
     def infer_q(self, x, y, n_inference_steps):
         updates = theano.OrderedUpdates()
 
         q0s = self.init_q(x)
-        rs = []
+        rs  = []
         for l in xrange(self.n_layers):
             r = self.trng.uniform((n_inference_steps,
                                    self.n_inference_samples,
@@ -370,7 +368,7 @@ class DeepSBN(Layer):
             p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
             pys.append(p_ys[0])
 
-            lower_bound = self.prior.neg_log_prob(qs[-1]).mean(axis=0)
+            lower_bound = self.prior.neg_log_prob(qs[-1]).mean()
             for l in xrange(self.n_layers):
                 post_term = self.posteriors[l].entropy(qs[l])
                 cond_term = self.conditionals[l].neg_log_prob(ys[l], p_ys[l]).mean(axis=0)
