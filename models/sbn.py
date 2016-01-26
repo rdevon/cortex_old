@@ -83,29 +83,6 @@ def init_inference_args(model,
         model.unpack_infer = model._unpack_adapt
         model.params_infer = model._params_adapt
         model.strict = False
-        model.init_variational_params = model._init_variational_params_adapt
-    elif inference_method == 'adaptive_darn':
-        model.step_infer = model._step_adapt_darn
-        model.init_infer = model._init_adapt
-        model.unpack_infer = model._unpack_adapt
-        model.params_infer = model._params_adapt
-        model.strict = False
-        model.init_variational_params = model._init_variational_params_adapt
-    elif inference_method == 'adaptive_assign':
-        model.step_infer = model._step_adapt_assign
-        model.init_infer = model._init_adapt
-        model.unpack_infer = model._unpack_adapt
-        model.params_infer = model._params_adapt
-        model.strict = False
-        model.init_variational_params = model._init_variational_params_adapt
-    elif inference_method == 'momentum_then_adapt':
-        model.step_infer = model._step_momentum_then_adapt
-        model.init_infer = model._init_momentum
-        model.unpack_infer = model._unpack_momentum_then_adapt
-        model.params_infer = model._params_momentum
-        model.init_variational_params = model._init_variational_params_adapt
-        model.strict = False
-        kwargs = init_momentum_args(model, **extra_inference_args)
     else:
         raise ValueError('Inference method <%s> not supported' % inference_method)
 
@@ -341,30 +318,6 @@ class SigmoidBeliefNetwork(Layer):
         prior_term = self.prior.neg_log_prob(p)
         return prior_term - entropy_term
 
-    def step_kl_diverence(self, p, *params):
-        entropy_term = self.posterior.entropy(p)
-        prior_term = self.prior.step_neg_log_prob(p, *params)
-        return prior_term - entropy_term
-
-    def e_step(self, y, z, *params):
-        raise NotImplementedError()
-        prior_params = self.get_prior_params(*params)
-        q = T.nnet.sigmoid(z)
-        py = self.p_y_given_h(q, *params)
-
-        consider_constant = [y, prior]
-        cond_term = self.conditional.neg_log_prob(y, py)
-
-        if self.prior.must_sample:
-            raise NotImplementedError()
-
-        kl_term = self.step_kl_divergence(q, *prior_params)
-        cost = (cond_term + kl_term).sum(axis=0)
-
-        grad = theano.grad(cost, wrt=z, consider_constant=consider_constant)
-
-        return cost, grad
-
     def step_infer(self, *params):
         raise NotImplementedError()
     def init_infer(self, z):
@@ -379,11 +332,12 @@ class SigmoidBeliefNetwork(Layer):
         prior_params = self.get_prior_params(*params)
         posterior_params = self.get_posterior_params(*params)
 
-        h = (q[None, :, :] <= r).astype(floatX)
+        h = (r <= q[None, :, :]).astype(floatX)
 
         py = self.p_y_given_h(h, *params)
         y_energy = self.conditional.neg_log_prob(y[None, :, :], py)
         prior_term = self.prior.step_neg_log_prob(h, *prior_params)
+
         if self.posterior.must_sample:
             entropy_term = self.posterior.step_neg_log_prob(h, c, *(posterior_params[-2:]))
         else:
@@ -404,15 +358,6 @@ class SigmoidBeliefNetwork(Layer):
     def _init_adapt(self, q):
         return []
 
-    def _init_variational_params_adapt(self, p_h_logit):
-        if self.z_init == 'recognition_net':
-            print 'Starting z0 at recognition net'
-            q0 = T.nnet.sigmoid(p_h_logit)
-        else:
-            q0 = T.alloc(0.5, p_h_logit.shape[0], self.dim_h).astype(floatX)
-
-        return q0
-
     def _unpack_adapt(self, q0, outs):
         if outs is not None:
             qs, costs = outs
@@ -425,97 +370,48 @@ class SigmoidBeliefNetwork(Layer):
         else:
             qs = q0[None, :, :]
             costs = [T.constant(0.).astype(floatX)]
-        return logit(qs), costs
+        return qs, costs
 
     def _params_adapt(self):
         return []
 
-    # SGD
-    def _step_sgd(self, y, z, l, *params):
-        cost, grad = self.e_step(y, z, *params)
-        z = (z - l * grad).astype(floatX)
-        l *= self.inference_decay
-        return z, l, cost
-
-    def _init_sgd(self, ph, y, z):
-        return [self.inference_rate]
-
-    def _unpack_sgd(self, outs):
-        zs, ls, costs = outs
-        return zs, costs
-
-    def _params_sgd(self):
-        return []
-
-    # Momentum
-    def _step_momentum(self, y, z, dz_, m, *params):
-        l = self.inference_rate
-        cost, grad = self.e_step(y, z, *params)
-        dz = (-l * grad + m * dz_).astype(floatX)
-        z = (z + dz).astype(floatX)
-        return z, dz, cost
-
-    def _init_momentum(self, z):
-        return [T.zeros_like(z)]
-
-    def _unpack_momentum(self, z0, outs):
-        if outs is not None:
-            zs, dzs, costs = outs
-            if zs.ndim == 2:
-                zs = zs[None, :, :]
-                costs = [costs]
-            zs = concatenate([z0[None, :, :], zs])
-        else:
-            zs = z0[None, :, :]
-            costs = [T.constant(0.).astype(floatX)]
-        return zs, costs
-
-    def _unpack_momentum_then_adapt(self, outs):
-        qs, ls, dqs, costs = outs
-        return logit(qs), costs
-
-    def _params_momentum(self):
-        return [T.constant(self.momentum).astype('float32')]
-
-    def init_variational_params(self, p_h_logit):
-        if self.z_init == 'recognition_net':
-            print 'Starting z0 at recognition net'
-            z0 = p_h_logit
-        else:
-            z0 = T.alloc(0., p_h_logit.shape[0], self.dim_h).astype(floatX)
-
-        return z0
-
-    def m_step(self, x, y, z, n_samples=10):
+    def m_step(self, x, y, q, n_samples=10):
         constants = []
-        q = T.nnet.sigmoid(z)
         p_h = self.posterior(x)
 
-        h, _ = self.posterior.sample(q, n_samples=n_samples)
+        h, updates = self.posterior.sample(q, n_samples=n_samples)
         py = self.conditional(h)
         entropy = self.posterior.entropy(q).mean()
 
         if self.prior.must_sample:
             prior_energy = self.prior.neg_log_prob(h).mean()
-            h_energy = self.posterior.neg_log_prob(h, p_h).mean()
         else:
             prior_energy = self.prior.neg_log_prob(q).mean()
+
+        if self.posterior.must_sample:
+            h_energy = self.posterior.neg_log_prob(h, p_h).mean()
+        else:
             h_energy = self.posterior.neg_log_prob(q, p_h).mean()
 
         y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean()
 
-        return (prior_energy, h_energy, y_energy, entropy), constants
+        return (prior_energy, h_energy, y_energy, entropy), constants, updates
 
     def infer_q(self, x, y, n_inference_steps):
         updates = theano.OrderedUpdates()
 
-        p_h_logit = self.posterior(x, return_preact=True)
-        z0 = self.init_variational_params(p_h_logit)
+        post_preact = self.posterior(x, return_preact=True)
+
+        if self.posterior.must_sample:
+            q0, updates = self.posterior.sample(post_preact, n_samples=self.n_inference_samples, return_probs=True)
+            q0 = q0.mean(axis=0)
+        else:
+            q0 = T.nnet.sigmoid(post_preact)
         rs = self.trng.binomial((n_inference_steps, self.n_inference_samples, y.shape[0], self.dim_h)).astype(floatX)
 
         seqs = [rs]
-        outputs_info = [z0] + self.init_infer(z0) + [None]
-        non_seqs = [y, p_h_logit] + self.params_infer() + self.get_params()
+        outputs_info = [q0] + self.init_infer(q0) + [None]
+        non_seqs = [y, post_preact] + self.params_infer() + self.get_params()
 
         print ('Doing %d inference steps and a rate of %.2f with %d '
                'inference samples'
@@ -534,36 +430,37 @@ class SigmoidBeliefNetwork(Layer):
             )
             updates.update(updates_2)
 
-            zs, i_costs = self.unpack_infer(z0, outs)
+            qs, i_costs = self.unpack_infer(q0, outs)
 
         elif n_inference_steps == 1:
             inps = [rs[0]] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
-            zs, i_costs = self.unpack_infer(z0, outs)
+            qs, i_costs = self.unpack_infer(q0, outs)
 
         elif n_inference_steps == 0:
-            zs, i_costs = self.unpack_infer(z0, None)
+            qs, i_costs = self.unpack_infer(q0, None)
 
-        return (zs, i_costs), updates
+        return (qs, i_costs), updates
 
     # Inference
     def inference(self, x, y, n_inference_steps=20, n_samples=100, pass_gradients=False):
-        (zs, extra), updates = self.infer_q(x, y, n_inference_steps)
-        z = zs[-1]
+        (qs, extra), updates = self.infer_q(x, y, n_inference_steps)
+        q = qs[-1]
 
-        (prior_energy, h_energy, y_energy, entropy), m_constants = self.m_step(
-            x, y, z, n_samples=n_samples)
+        (prior_energy, h_energy, y_energy, entropy), m_constants, updates_s = self.m_step(
+            x, y, q, n_samples=n_samples)
+        updates.update(updates_s)
 
-        constants = [z, entropy] + m_constants
+        constants = [q, entropy] + m_constants
 
-        return (z, prior_energy, h_energy, y_energy, entropy), updates, constants
+        return (q, prior_energy, h_energy, y_energy, entropy), updates, constants
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
                  calculate_log_marginal=False, stride=0):
         outs = OrderedDict()
         updates = theano.OrderedUpdates()
 
-        (zs, i_costs), updates_i = self.infer_q(x, y, n_inference_steps)
+        (qs, i_costs), updates_i = self.infer_q(x, y, n_inference_steps)
         updates.update(updates_i)
 
         if n_inference_steps > stride and stride != 0:
@@ -581,9 +478,10 @@ class SigmoidBeliefNetwork(Layer):
         p_h_logit = self.posterior(x, return_preact=True)
 
         for i in steps:
-            z = zs[i-1]
-            q = T.nnet.sigmoid(z)
-            h, _ = self.posterior.sample(q, n_samples=n_samples)
+            q = qs[i-1]
+            h, updates_s = self.posterior.sample(q, n_samples=n_samples)
+            updates.update(updates_s)
+
             py = self.conditional(h)
 
             pys.append(py)
