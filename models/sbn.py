@@ -130,7 +130,6 @@ def unpack(dim_in=None,
     from gbn import GaussianBeliefNet as GBN
 
     kwargs = dict(
-        prior=prior,
         inference_method=inference_method,
         inference_rate=inference_rate,
         n_inference_steps=n_inference_steps,
@@ -151,19 +150,20 @@ def unpack(dim_in=None,
         prior_model = AutoRegressor(dim_h)
     elif prior == 'gaussian':
         out_act = 'lambda x: x'
+        prior_model = Gaussian(dim_h)
     else:
         raise ValueError('%s prior not known' % prior)
 
     models = []
 
     mlps = SigmoidBeliefNetwork.mlp_factory(recognition_net=recognition_net,
-                           generation_net=generation_net)
+                                            generation_net=generation_net)
 
     models += mlps.values()
-    models.append(prior)
+    models.append(prior_model)
 
     kwargs.update(**mlps)
-    kwargs['prior'] = prior
+    kwargs['prior'] = prior_model
     model = SigmoidBeliefNetwork(dim_in, dim_h, **kwargs)
     models.append(model)
     return models, model_args, dict(
@@ -276,8 +276,9 @@ class SigmoidBeliefNetwork(Layer):
         params = params[start:stop]
         return self.conditional.step_call(h, *params)
 
-    def sample_from_prior(self, n_samples=100):
-        return self.prior.sample(n_samples)
+    def sample_from_prior(self, n_samples=97):
+        h, updates = self.prior.sample(n_samples)
+        return self.conditional(h), updates
 
     def generate_from_latent(self, h):
         py = self.conditional(h)
@@ -504,7 +505,7 @@ class SigmoidBeliefNetwork(Layer):
             lower_bounds.append(cond_term + kl_term)
 
             if calculate_log_marginal:
-                nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :], prior[None, None, :])
+                nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :])
                 nlls.append(nll)
 
         outs.update(
