@@ -30,6 +30,8 @@ from utils.tools import (
 
 
 class MLP(Layer):
+    must_sample = False
+
     def __init__(self, dim_in, dim_h, dim_out, n_layers,
                  f_sample=None, f_neg_log_prob=None, f_entropy=None,
                  h_act='T.nnet.sigmoid', out_act='T.nnet.sigmoid',
@@ -41,8 +43,6 @@ class MLP(Layer):
         self.dim_out = dim_out
         self.n_layers = n_layers
         assert n_layers > 0
-
-        self.must_sample = False
 
         self.h_act = h_act
         self.out_act = out_act
