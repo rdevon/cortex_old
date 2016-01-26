@@ -332,7 +332,7 @@ class SigmoidBeliefNetwork(Layer):
         prior_params = self.get_prior_params(*params)
         posterior_params = self.get_posterior_params(*params)
 
-        h = (q[None, :, :] <= r).astype(floatX)
+        h = (r <= q[None, :, :]).astype(floatX)
 
         py = self.p_y_given_h(h, *params)
         y_energy = self.conditional.neg_log_prob(y[None, :, :], py)
