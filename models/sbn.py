@@ -407,7 +407,7 @@ class SigmoidBeliefNetwork(Layer):
             q0 = q0.mean(axis=0)
         else:
             q0 = T.nnet.sigmoid(post_preact)
-        rs = self.trng.binomial((n_inference_steps, self.n_inference_samples, y.shape[0], self.dim_h)).astype(floatX)
+        rs = self.trng.uniform((n_inference_steps, self.n_inference_samples, y.shape[0], self.dim_h), dtype=floatX)
 
         seqs = [rs]
         outputs_info = [q0] + self.init_infer(q0) + [None]
