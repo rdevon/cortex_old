@@ -54,22 +54,23 @@ class AutoRegressor(Distribution):
         '''
         Inspired by jbornschein's implementation.
         '''
-        x = T.zeros((n_samples, self.dim)).astype(floatX)
-        z = T.zeros((n_samples, self.dim,)).astype(floatX) + self.b[None, :]
+
+        z0 = T.zeros((n_samples, self.dim,)).astype(floatX) + T.shape_padleft(self.b)
         rs = self.trng.uniform((self.dim, n_samples), dtype=floatX)
 
         def _step_sample(i, W_i, r_i, z):
             p_i = T.nnet.sigmoid(z[:, i])
             x_i = (r_i <= p_i).astype(floatX)
-            z += T.outer(x_i, W_i)
+            z   = z + T.outer(x_i, W_i)
             return z, x_i
 
         seqs = [T.arange(self.dim), self.W, rs]
-        outputs_info = [z, None]
+        outputs_info = [z0, None]
         non_seqs = []
 
         (zs, x), updates = scan(_step_sample, seqs, outputs_info, non_seqs,
                                 self.dim)
+
         return x.T, updates
 
     def step_neg_log_prob(self, x, *params):
