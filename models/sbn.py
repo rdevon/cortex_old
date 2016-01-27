@@ -9,9 +9,9 @@ from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from layers import Layer
-from models.darn import AutoRegressor, DARN
-from models.distributions import Bernoulli, Gaussian
-from models.mlp import (
+from darn import AutoRegressor, DARN
+from distributions import Bernoulli, Gaussian
+from mlp import (
     MLP,
     MultiModalMLP
 )
@@ -145,12 +145,15 @@ def unpack(dim_in=None,
     if prior == 'logistic':
         out_act = 'T.nnet.sigmoid'
         prior_model = Bernoulli(dim_h)
+        C = SigmoidBeliefNetwork
     elif prior == 'darn':
         out_act = 'T.nnet.sigmoid'
         prior_model = AutoRegressor(dim_h)
+        C = SigmoidBeliefNetwork
     elif prior == 'gaussian':
         out_act = 'lambda x: x'
         prior_model = Gaussian(dim_h)
+        C = GBN 
     else:
         raise ValueError('%s prior not known' % prior)
 
@@ -164,7 +167,7 @@ def unpack(dim_in=None,
 
     kwargs.update(**mlps)
     kwargs['prior'] = prior_model
-    model = SigmoidBeliefNetwork(dim_in, dim_h, **kwargs)
+    model = C(dim_in, dim_h, **kwargs)
     models.append(model)
     return models, model_args, dict(
         dataset=dataset,
@@ -396,8 +399,8 @@ class SigmoidBeliefNetwork(Layer):
 
         assert prior_energy.ndim == h_energy.ndim == entropy.ndim == y_energy.ndim
 
-        return (prior_energy.mean(), h_energy.mean(),
-                y_energy.mean(), entropy.mean()), constants, updates
+        return (prior_energy, h_energy,
+                y_energy, entropy), constants, updates
 
     def infer_q(self, x, y, n_inference_steps):
         updates = theano.OrderedUpdates()
@@ -460,10 +463,8 @@ class SigmoidBeliefNetwork(Layer):
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
                  calculate_log_marginal=False, stride=10):
         outs = OrderedDict()
-        updates = theano.OrderedUpdates()
 
-        (qs, i_costs), updates_i = self.infer_q(x, y, n_inference_steps)
-        updates.update(updates_i)
+        (qs, i_costs), updates = self.infer_q(x, y, n_inference_steps)
 
         if n_inference_steps > stride and stride != 0:
             steps = [0, 1] + range(stride, n_inference_steps, stride)
