@@ -252,20 +252,25 @@ class DeepSBN(Layer):
     def m_step(self, x, y, qks, n_samples=10):
         constants = []
 
+        q0s   = []
+        q0s_c = []
+        state = x
+        for l in xrange(self.n_layers):
+            q0 = self.posteriors[l](state)
+            q0_c = T.zeros_like(q0) + q0
+            constants.append(q0_c)
+            q0s_c.append(q0_c)
+            q0s.append(q0)
+            state = q0
+            #state = qks[l]
+
         hs = []
-        for l, qk in enumerate(qks):
+        for l, qk in enumerate(q0s_c):#qks):
             r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
             h = (r <= qk[None, :, :]).astype(floatX)
             hs.append(h)
         p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
         ys   = [y[None, :, :]] + hs[:-1]
-
-        q0s   = []
-        state = x
-        for l in xrange(self.n_layers):
-            q0 = self.posteriors[l](state)
-            q0s.append(q0)
-            state = qks[l]
 
         conditional_energy = T.constant(0.).astype(floatX)
         posterior_energy   = T.constant(0.).astype(floatX)
@@ -274,8 +279,8 @@ class DeepSBN(Layer):
             conditional_energy += self.conditionals[l].neg_log_prob(
                 ys[l], p_ys[l]).mean(axis=0)
 
-        prior_energy = self.prior.neg_log_prob(qks[-1])
-
+        #prior_energy = self.prior.neg_log_prob(qks[-1])
+        prior_energy = self.prior.neg_log_prob(q0s_c[-1])
         return (prior_energy.mean(axis=0), posterior_energy.mean(axis=0),
                 conditional_energy.mean(axis=0)), constants
 
@@ -336,7 +341,7 @@ class DeepSBN(Layer):
         return (qks, prior_energy, h_energy, y_energy), updates, constants
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
-                 calculate_log_marginal=False, stride=0):
+                 calculate_log_marginal=False, stride=1):
 
         outs = OrderedDict()
         updates = theano.OrderedUpdates()
@@ -345,10 +350,12 @@ class DeepSBN(Layer):
         updates.update(updates_i)
 
         if n_inference_steps > stride and stride != 0:
-            steps = [0] + range(n_inference_steps // stride, n_inference_steps + 1, n_inference_steps // stride)
-            steps = steps[:-1] + [n_inference_steps]
-        elif n_inference_steps > 0:
-            steps = [0, n_inference_steps]
+            steps = [0] + range(stride, n_inference_steps, stride)
+            steps = steps[:-1] + [n_inference_steps - 1]
+        elif n_inference_steps > 1:
+            steps = [0, 1, n_inference_steps - 1]
+        elif n_inference_steps == 1:
+            steps = [0, 1]
         else:
             steps = [0]
 
@@ -460,8 +467,6 @@ class DeepSBN_AR(DeepSBN):
             hs.append(h)
         p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
         ys = [y[None, :, :]] + hs[:-1]
-
-        #q0s = self.init_variational_params(x)
 
         q0s = self.init_variational_params(x)
 

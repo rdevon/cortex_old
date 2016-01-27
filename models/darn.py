@@ -38,7 +38,7 @@ class AutoRegressor(Distribution):
 
     def set_params(self):
         b = np.zeros((self.dim,)).astype(floatX)
-        W = norm_weight(self.dim, self.dim, scale=self.weight_scale,
+        W = norm_weight(self.dim, self.dim, scale=0.001,
                         ortho=False)
         self.params = OrderedDict(W=W, b=b)
 
@@ -49,6 +49,10 @@ class AutoRegressor(Distribution):
         W = T.tril(W, k=-1)
         p = T.nnet.sigmoid(T.dot(x, W) + b)
         return p
+
+    def get_L2_weight_cost(self, gamma):
+        cost = gamma * (self.W ** 2).sum()
+        return cost 
 
     def sample(self, n_samples):
         '''
