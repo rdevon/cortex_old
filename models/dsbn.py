@@ -276,8 +276,8 @@ class DeepSBN(Layer):
 
         prior_energy = self.prior.neg_log_prob(qks[-1])
 
-        return (prior_energy.mean(axis=0), posterior_energy.mean(axis=0),
-                conditional_energy.mean(axis=0)), constants
+        return (prior_energy, posterior_energy,
+                conditional_energy), constants
 
     def infer_q(self, x, y, n_inference_steps):
         updates = theano.OrderedUpdates()
@@ -459,21 +459,16 @@ class DeepSBN_AR(DeepSBN):
             h = self.posteriors[l].sample(qk, size=(n_samples, qk.shape[0], qk.shape[1]))
             hs.append(h)
         p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
-        ys = [y[None, :, :]] + hs[:-1]
+        ys   = [y[None, :, :]] + hs[:-1]
+        q0s  = self.init_variational_params(x)
 
-        #q0s = self.init_variational_params(x)
-
-        q0s = self.init_variational_params(x)
-
+        prior_energy       = self.prior.neg_log_prob(qks[-1])
         conditional_energy = T.constant(0.).astype(floatX)
-        posterior_energy = T.constant(0.).astype(floatX)
+        posterior_energy   = T.constant(0.).astype(floatX)
         for l in xrange(self.n_layers):
             posterior_energy += self.posteriors[l].neg_log_prob(qks[l], q0s[l])
             conditional_energy += self.conditionals[l].neg_log_prob(
                 ys[l], p_ys[l]).mean(axis=0)
-
-        prior = T.nnet.sigmoid(self.z)
-        prior_energy = self.posteriors[-1].neg_log_prob(qks[-1], prior[None, :])
 
         return (prior_energy.mean(axis=0), posterior_energy.mean(axis=0),
                 conditional_energy.mean(axis=0)), constants
