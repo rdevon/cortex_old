@@ -25,7 +25,7 @@ def test_autoregressor(dim=3, n_samples=5):
 
     X = T.matrix('X', dtype=floatX)
     nlp = ar.neg_log_prob(X)
-    p = ar.get_prob(X)
+    p = ar.get_prob(X, *ar.get_params())
     W = T.tril(ar.W, k=-1)
     z = T.dot(X, W) + ar.b
 
@@ -33,6 +33,7 @@ def test_autoregressor(dim=3, n_samples=5):
 
     f = theano.function([X], [nlp, p, z, W])
     nlp_t, p_t, z_t, W_t = f(x)
+    print x.shape, nlp_t.shape
     z_np = np.zeros((n_samples, dim)).astype(floatX) + ar.params['b'][None, :]
 
     for i in xrange(dim):
