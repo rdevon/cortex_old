@@ -71,7 +71,6 @@ class GaussianBeliefNet(Layer):
         self.conditional.name = self.name + '_conditional'
 
     def set_tparams(self, excludes=[]):
-        excludes = [ex for ex in excludes if ex in self.params.keys()]
         print 'Excluding the following parameters from learning: %s' % excludes
         tparams = super(GaussianBeliefNet, self).set_tparams()
         tparams.update(**self.posterior.set_tparams())
@@ -202,18 +201,7 @@ class GaussianBeliefNet(Layer):
     def m_step(self, x, y, qk, n_samples=10):
         constants = []
         q0 = self.posterior(x)
-        epsilon = self.trng.normal(
-            avg=0, std=1.0,
-            size=(n_samples, qk.shape[0], qk.shape[1] // 2),
-            dtype=x.dtype)
-
-        mu_q = _slice(qk, 0, self.dim_h)
-        log_sigma_q = _slice(qk, 1, self.dim_h)
-
-        h = mu_q[None, :, :] + epsilon * T.exp(log_sigma_q[None, :, :])
-
-        #h, updates = self.posterior.sample(p=qk, n_samples=n_samples)
-        #h = h.reshape((h.shape[0] * h.shape[1], h.shape[2]))
+        h, updates = self.posterior.sample(p=qk, n_samples=n_samples)
         p_y = self.conditional(h)
 
         y_energy = self.conditional.neg_log_prob(y[None, :, :], p_y).mean(axis=0)
@@ -307,33 +295,26 @@ class GaussianBeliefNet(Layer):
         else:
             steps = [0]
 
-        lower_bounds = []
-        nlls = []
-        pys = []
-        energies = []
-        prior_terms = []
+        lower_bounds  = []
+        nlls          = []
+        pys           = []
+        energies      = []
+        prior_terms   = []
         entropy_terms = []
 
         for i in steps:
             qk = qs[i]
-            epsilon = self.trng.normal(
-                avg=0, std=1.0,
-                size=(n_samples, qk.shape[0], qk.shape[1] // 2),
-                dtype=x.dtype)
 
-            mu_q = _slice(qk, 0, self.dim_h)
-            log_sigma_q = _slice(qk, 1, self.dim_h)
-
-            h = mu_q[None, :, :] + epsilon * T.exp(log_sigma_q[None, :, :])
-
-            py = self.conditional(h)
-            y_energy_b = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=0)
-            energies.append(y_energy_b)
-            y_energy = y_energy_b.mean(axis=0)
-            kl_term = self.prior.kl_divergence(qk).mean()
+            h, _        = self.posterior.sample(p=qk, n_samples=n_samples)
+            py          = self.conditional(h)
+            y_energy_b  = self.conditional.neg_log_prob(
+                y[None, :, :], py).mean(axis=0)
+            y_energy    = y_energy_b.mean(axis=0)
+            kl_term     = self.prior.kl_divergence(qk).mean()
             lower_bound = y_energy + kl_term
-            lower_bounds.append(lower_bound)
 
+            lower_bounds.append(lower_bound)
+            energies.append(y_energy_b)
             prior_terms.append(kl_term.mean())
             entropy_terms.append(T.constant(0.).astype(floatX))
 
