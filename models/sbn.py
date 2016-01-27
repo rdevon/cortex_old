@@ -390,8 +390,8 @@ class SigmoidBeliefNetwork(Layer):
 
         assert prior_energy.ndim == h_energy.ndim == entropy.ndim == y_energy.ndim
 
-        return (prior_energy.mean(), h_energy.mean(),
-                y_energy.mean(), entropy.mean()), constants, updates
+        return (prior_energy, h_energy,
+                y_energy, entropy), constants, updates
 
     def infer_q(self, x, y, n_inference_steps):
         updates = theano.OrderedUpdates()
@@ -489,7 +489,7 @@ class SigmoidBeliefNetwork(Layer):
             cond_term    = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=0)
             entropy_term = self.posterior.entropy(q)
 
-            assert prior_term.ndim == entropy_term.ndim
+            assert prior_term.ndim == entropy_term.ndim == cond_term.ndim
 
             kl_term = (prior_term - entropy_term)
             lower_bounds.append((cond_term + kl_term).mean())
