@@ -145,12 +145,15 @@ def unpack(dim_in=None,
     if prior == 'logistic':
         out_act = 'T.nnet.sigmoid'
         prior_model = Bernoulli(dim_h)
+        C = SigmoidBeliefNetwork
     elif prior == 'darn':
         out_act = 'T.nnet.sigmoid'
         prior_model = AutoRegressor(dim_h)
+        C = SigmoidBeliefNetwork
     elif prior == 'gaussian':
         out_act = 'lambda x: x'
         prior_model = Gaussian(dim_h)
+        C = GBN 
     else:
         raise ValueError('%s prior not known' % prior)
 
@@ -164,7 +167,7 @@ def unpack(dim_in=None,
 
     kwargs.update(**mlps)
     kwargs['prior'] = prior_model
-    model = SigmoidBeliefNetwork(dim_in, dim_h, **kwargs)
+    model = C(dim_in, dim_h, **kwargs)
     models.append(model)
     return models, model_args, dict(
         dataset=dataset,

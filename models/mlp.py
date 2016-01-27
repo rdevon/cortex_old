@@ -82,12 +82,16 @@ class MLP(Layer):
         super(MLP, self).__init__(name=name)
 
     def sample(self, p, n_samples=1):
+        if self.out_act == 'lambda x: x':
+            scale = 2
+        else:
+            scale = 1
         if p.ndim == 1:
-            size = (n_samples, p.shape[0])
+            size = (n_samples, p.shape[0] // scale)
         elif p.ndim == 2:
-            size = (n_samples, p.shape[0], p.shape[1])
+            size = (n_samples, p.shape[0], p.shape[1] // scale)
         elif p.ndim == 3:
-            size = (n_samples, p.shape[0], p.shape[1], p.shape[2])
+            size = (n_samples, p.shape[0], p.shape[1], p.shape[2] // scale)
         else:
             raise ValueError()
         return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
