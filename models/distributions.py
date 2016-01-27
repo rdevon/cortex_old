@@ -103,9 +103,9 @@ class Gaussian(Distribution):
         mu_q = _slice(q, 0, self.dim)
         log_sigma_q = _slice(q, 1, self.dim)
 
-        kl = log_sigma_q - log_sigma + 0.5 * (
-            (T.exp(2 * log_sigma) + (mu - mu_q) ** 2) /
-            T.exp(2 * log_sigma_q)
+        kl = log_sigma - log_sigma_q + 0.5 * (
+            (T.exp(2 * log_sigma_q) + (mu - mu_q) ** 2) /
+            T.exp(2 * log_sigma)
             - 1)
         return kl.sum(axis=kl.ndim-1)
 

@@ -206,7 +206,7 @@ class GaussianBeliefNet(Layer):
 
         y_energy = self.conditional.neg_log_prob(y[None, :, :], p_y).mean(axis=0)
         prior_energy = self.prior.kl_divergence(qk)
-        h_energy = self.kl_divergence(qk, q0)
+        h_energy = self.kl_divergence(q0, qk)
         entropy = self.posterior.entropy(qk)
 
         return (prior_energy, h_energy, y_energy, entropy), constants, theano.OrderedUpdates()
