@@ -9,6 +9,7 @@ from theano import tensor as T
 
 from models.layers import Layer
 from utils.tools import (
+    concatenate,
     e,
     floatX,
     init_rngs,
@@ -48,13 +49,16 @@ class Distribution(Layer):
         p = self.get_prob(*params)
         return self.f_neg_log_prob(x, p)
 
-    def neg_log_prob(self, x, axis=None, scale=1.0):
+    def neg_log_prob(self, x):
         p = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(x, p, axis=None, scale=scale)
+        return self.f_neg_log_prob(x, p)
 
-    def entropy(self, axis=None):
+    def entropy(self):
         p = self.get_prob(*self.get_params())
-        return self.f_entropy(p, axis=None)
+        return self.f_entropy(p)
+
+    def kl_divergence(self, q):
+        raise NotImplementedError()
 
 
 class Bernoulli(Distribution):
@@ -83,8 +87,8 @@ class Gaussian(Distribution):
         super(Gaussian, self).__init__(dim, name=name, **kwargs)
 
     def set_params(self):
-        mu = np.zeros((self.dim_h,)).astype(floatX)
-        log_sigma = np.zeros((self.dim_h,)).astype(floatX)
+        mu = np.zeros((self.dim,)).astype(floatX)
+        log_sigma = np.zeros((self.dim,)).astype(floatX)
 
         self.params = OrderedDict(
             mu=mu, log_sigma=log_sigma)
@@ -94,6 +98,19 @@ class Gaussian(Distribution):
 
     def get_prob(self, mu, log_sigma):
         return concatenate([mu, log_sigma])
+
+    def step_kl_divergence(self, q, mu, log_sigma):
+        mu_q = _slice(q, 0, self.dim)
+        log_sigma_q = _slice(q, 1, self.dim)
+
+        kl = log_sigma_q - log_sigma + 0.5 * (
+            (T.exp(2 * log_sigma) + (mu - mu_q) ** 2) /
+            T.exp(2 * log_sigma_q)
+            - 1)
+        return kl.sum(axis=kl.ndim-1)
+
+    def kl_divergence(self, q):
+        return self.step_kl_divergence(q, *self.get_params())
 
 
 # BERNOULLI --------------------------------------------------------------------
@@ -108,21 +125,15 @@ def _centered_binomial(trng, p, size=None):
         size = p.shape
     return 2 * trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
 
-def _cross_entropy(x, p, axis=None, scale=1.0):
+def _cross_entropy(x, p):
     p = T.clip(p, 1e-7, 1.0 - 1e-7)
     energy = T.nnet.binary_crossentropy(p, x)
-    if axis is None:
-        axis = energy.ndim - 1
-    energy = energy.sum(axis=axis)
-    return (scale * energy).astype('float32')
+    return energy.sum(axis=energy.ndim-1)
 
-def _binary_entropy(p, axis=None):
+def _binary_entropy(p):
     p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
     entropy = T.nnet.binary_crossentropy(p_c, p)
-    if axis is None:
-        axis = entropy.ndim - 1
-    entropy = entropy.sum(axis=axis)
-    return entropy
+    return entropy.sum(axis=entropy.ndim-1)
 
 # SOFTMAX ----------------------------------------------------------------------
 
@@ -138,16 +149,12 @@ def _sample_softmax(trng, p, size=None):
         size = p.shape
     return trng.multinomial(pvals=p, size=size).astype('float32')
 
-def _categorical_cross_entropy(x, p, axis=None, scale=1.0):
+def _categorical_cross_entropy(x, p):
     p = T.clip(p, 1e-7, 1.0 - 1e-7)
-    #energy = T.nnet.categorical_crossentropy(p, x)
-    energy = T.nnet.binary_crossentropy(p, x)
-    if axis is None:
-        axis = x.ndim - 1
-    energy = energy.sum(axis=axis)
-    return (scale * energy / p.shape[p.ndim-1]).astype('float32')
+    energy = T.nnet.binary_crossentropy(p, x).sum(axis=x.ndim-1)
+    return (energy / p.shape[p.ndim-1]).astype('float32')
 
-def _categorical_entropy(p, axis=None):
+def _categorical_entropy(p):
     p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
     entropy = T.nnet.categorical_crossentropy(p_c, p)
     return entropy
@@ -168,24 +175,16 @@ def _normal_prob(p):
     mu = _slice(p, 0, dim)
     return mu
 
-def _neg_normal_log_prob(x, p, axis=None, scale=1.0):
+def _neg_normal_log_prob(x, p):
     dim = p.shape[p.ndim-1] // 2
     mu = _slice(p, 0, dim)
     log_sigma = _slice(p, 1, dim)
     energy = 0.5 * (
         (x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
+    return energy.sum(axis=energy.ndim-1)
 
-    if axis is None:
-        axis = energy.ndim - 1
-    energy = energy.sum(axis=axis)
-    return (scale * energy).astype('float32')
-
-def _normal_entropy(p, axis=None):
+def _normal_entropy(p):
     dim = p.shape[p.ndim-1] // 2
     log_sigma = _slice(p, 1, dim)
-
     entropy = 0.5 * T.log(2 * pi * e) + log_sigma
-    if axis is None:
-        axis = entropy.ndim - 1
-    entropy = entropy.sum(axis=axis)
-    return entropy
+    return entropy.sum(axis=entropy.ndim-1)

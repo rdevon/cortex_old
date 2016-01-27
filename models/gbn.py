@@ -8,6 +8,7 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
+from distributions import Gaussian
 from layers import Layer
 from mlp import MLP
 from sbn import init_inference_args
@@ -31,6 +32,7 @@ pi = theano.shared(np.pi).astype('float32')
 class GaussianBeliefNet(Layer):
     def __init__(self, dim_in, dim_h,
                  posterior=None, conditional=None,
+                 prior=None,
                  z_init=None,
                  name='gbn',
                  **kwargs):
@@ -41,6 +43,7 @@ class GaussianBeliefNet(Layer):
 
         self.posterior = posterior
         self.conditional = conditional
+        self.prior = prior
 
         self.z_init = z_init
 
@@ -51,11 +54,7 @@ class GaussianBeliefNet(Layer):
         super(GaussianBeliefNet, self).__init__(name=name)
 
     def set_params(self):
-        mu = np.zeros((self.dim_h,)).astype(floatX)
-        log_sigma = np.zeros((self.dim_h,)).astype(floatX)
-
-        self.params = OrderedDict(
-            mu=mu, log_sigma=log_sigma)
+        self.params = OrderedDict()
 
         if self.posterior is None:
             self.posterior = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
@@ -74,67 +73,57 @@ class GaussianBeliefNet(Layer):
     def set_tparams(self, excludes=[]):
         excludes = [ex for ex in excludes if ex in self.params.keys()]
         print 'Excluding the following parameters from learning: %s' % excludes
-        excludes = ['{name}_{key}'.format(name=self.name, key=key)
-                    for key in excludes]
         tparams = super(GaussianBeliefNet, self).set_tparams()
         tparams.update(**self.posterior.set_tparams())
         tparams.update(**self.conditional.set_tparams())
+        tparams.update(**self.prior.set_tparams())
         tparams = OrderedDict((k, v) for k, v in tparams.iteritems()
             if k not in excludes)
 
         return tparams
 
     def get_params(self):
-        params = [self.mu, self.log_sigma] + self.conditional.get_params()
+        params = self.prior.get_params() + self.conditional.get_params()
         return params
 
-    def p_y_given_h(self, h, *params):
-        params = params[2:]
-        return self.conditional.step_call(h, *params)
+    def get_prior_params(self, *params):
+        params = list(params)
+        return params[:self.prior.n_params]
+
+    # Latent sampling ---------------------------------------------------------
 
     def sample_from_prior(self, n_samples=100):
-        p = T.concatenate([self.mu, self.log_sigma])
-        h = self.posterior.sample(p=p, size=(n_samples, self.dim_h))
+        h, updates = self.prior.sample(n_samples)
         py = self.conditional(h)
-        return self.get_center(py)
+        return self.get_center(py), updates
+
+    # Misc --------------------------------------------------------------------
 
     def get_center(self, p):
         return self.conditional.prob(p)
 
-    def importance_weights(self, y, h, py, q, prior, normalize=True):
-        y_energy = self.conditional.neg_log_prob(y, py)
-        prior_energy = self.posterior.neg_log_prob(h, prior)
-        entropy_term = self.posterior.neg_log_prob(h, q)
+    def log_marginal(self, y, h, py, q):
+        log_py_h = -self.conditional.neg_log_prob(y, py)
+        log_ph   = -self.prior.neg_log_prob(h)
+        log_qh   = -self.posterior.neg_log_prob(h, q)
+        assert log_py_h.ndim == log_ph.ndim == log_qh.ndim
 
-        log_p = -y_energy + entropy_term - prior_energy
+        log_p     = log_py_h + log_ph - log_qh
         log_p_max = T.max(log_p, axis=0, keepdims=True)
-        w = T.exp(log_p - log_p_max)
+        w         = T.exp(log_p - log_p_max)
 
-        if normalize:
-            w /= w.sum(axis=0, keepdims=True)
+        return (T.log(w.mean(axis=0, keepdims=True)) + log_p_max).mean()
 
-        return w
-
-    def log_marginal(self, y, h, py, q, prior):
-        '''
-        Computes the negative log marginal.
-        '''
-
-        y_energy = self.conditional.neg_log_prob(y, py)
-        prior_energy = self.posterior.neg_log_prob(h, prior)
-        entropy_term = self.posterior.neg_log_prob(h, q)
-
-        log_p = -y_energy - prior_energy + entropy_term
-        log_p_max = T.max(log_p, axis=0, keepdims=True)
-        w = T.exp(log_p - log_p_max)
-
-        return (T.log(T.mean(w, axis=0, keepdims=True)) + log_p_max).mean()
+    def p_y_given_h(self, h, *params):
+        start  = self.prior.n_params
+        stop   = start + self.conditional.n_params
+        params = params[start:stop]
+        return self.conditional.step_call(h, *params)
 
     def kl_divergence(self, p, q):
         '''
-        Computes the negative KL divergence.
+        Only works with Gaussian dists ATM.
         '''
-
         dim = self.dim_h
         mu_p = _slice(p, 0, dim)
         log_sigma_p = _slice(p, 1, dim)
@@ -147,11 +136,13 @@ class GaussianBeliefNet(Layer):
             - 1)
         return kl.sum(axis=kl.ndim-1)
 
-    def e_step(self, y, epsilon, q, *params):
+    # Inference ----------------------------------------------------------------
+
+    def e_step(self, epsilon, q, y, *params):
         '''
         E step for IRVI.
         '''
-        prior = concatenate([params[0][None, :], params[1][None, :]], axis=1)
+        prior_params = self.get_prior_params(*params)
 
         mu_q = _slice(q, 0, self.dim_h)
         log_sigma_q = _slice(q, 1, self.dim_h)
@@ -160,29 +151,12 @@ class GaussianBeliefNet(Layer):
 
         consider_constant = [y] + list(params)
         cond_term = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=0)
-        kl_term = self.kl_divergence(q, prior)
+        kl_term = self.prior.step_kl_divergence(q, *prior_params)
 
         cost = (cond_term + kl_term).sum(axis=0)
         grad = theano.grad(cost, wrt=q, consider_constant=consider_constant)
 
         return cost, grad
-
-    def m_step(self, x, y, q, n_samples=10):
-        '''
-        M step for IRVI in GBNs.
-        '''
-        constants = []
-        prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
-        p_h = self.posterior(x)
-        h = self.posterior.sample(p=q, size=(n_samples, q.shape[0], q.shape[1] // 2))
-        p_y = self.conditional(h)
-
-        y_energy = self.conditional.neg_log_prob(y[None, :, :], p_y).mean()
-        prior_energy = self.kl_divergence(q, prior).mean()
-        h_energy = self.kl_divergence(q, p_h).mean()
-        entropy = self.posterior.entropy(q).mean()
-
-        return (prior_energy, h_energy, y_energy, entropy), constants
 
     def step_infer(self, *params):
         raise NotImplementedError()
@@ -197,9 +171,9 @@ class GaussianBeliefNet(Layer):
         raise NotImplementedError()
 
     # Momentum
-    def _step_momentum(self, y, epsilon, q, dq_, m, *params):
+    def _step_momentum(self, epsilon, q, dq_, y, m, *params):
         l = self.inference_rate
-        cost, grad = self.e_step(y, epsilon, q, *params)
+        cost, grad = self.e_step(epsilon, q, y, *params)
         dq = (-l * grad + m * dq_).astype(floatX)
         q = (q + dq).astype(floatX)
         return q, dq, cost
@@ -223,12 +197,36 @@ class GaussianBeliefNet(Layer):
 
         return q0
 
+    # Learning -----------------------------------------------------------------
+
+    def m_step(self, x, y, qk, n_samples=10):
+        constants = []
+        q0 = self.posterior(x)
+        epsilon = self.trng.normal(
+            avg=0, std=1.0,
+            size=(n_samples, qk.shape[0], qk.shape[1] // 2),
+            dtype=x.dtype)
+
+        mu_q = _slice(qk, 0, self.dim_h)
+        log_sigma_q = _slice(qk, 1, self.dim_h)
+
+        h = mu_q[None, :, :] + epsilon * T.exp(log_sigma_q[None, :, :])
+
+        #h, updates = self.posterior.sample(p=qk, n_samples=n_samples)
+        #h = h.reshape((h.shape[0] * h.shape[1], h.shape[2]))
+        p_y = self.conditional(h)
+
+        y_energy = self.conditional.neg_log_prob(y[None, :, :], p_y).mean(axis=0)
+        prior_energy = self.prior.kl_divergence(qk)
+        h_energy = self.kl_divergence(qk, q0)
+        entropy = self.posterior.entropy(qk)
+
+        return (prior_energy, h_energy, y_energy, entropy), constants, theano.OrderedUpdates()
+
     def infer_q(self, x, y, n_inference_steps):
         updates = theano.OrderedUpdates()
 
-        ys = T.alloc(0., n_inference_steps + 1, y.shape[0], y.shape[1]) + y[None, :, :]
-        ph = self.posterior(x)
-        q0 = self.init_variational_inference(ph)
+        q0 = self.posterior(x)
 
         epsilons = self.trng.normal(
             avg=0, std=1.0,
@@ -236,9 +234,9 @@ class GaussianBeliefNet(Layer):
                   x.shape[0], self.dim_h),
             dtype=x.dtype)
 
-        seqs = [ys, epsilons]
+        seqs = [epsilons]
         outputs_info = [q0] + self.init_infer(q0) + [None]
-        non_seqs = self.params_infer() + self.get_params()
+        non_seqs = [y] + self.params_infer() + self.get_params()
 
         print ('Doing %d inference steps and a rate of %.5f with %d '
                'inference samples'
@@ -262,7 +260,7 @@ class GaussianBeliefNet(Layer):
 
         elif n_inference_steps == 1:
             print 'Single inference step'
-            inps = [ys[0], epsilons[0]] + outputs_info[:-1] + non_seqs
+            inps = [epsilons[0]] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
             q, i_cost = self.unpack_infer(outs)
             qs = T.concatenate([q0[None, :, :], q[None, :, :]], axis=0)
@@ -279,33 +277,33 @@ class GaussianBeliefNet(Layer):
     def inference(self, x, y, n_inference_steps=20, n_sampling_steps=None,
                   n_samples=100, pass_gradients=False):
         (qs, _), updates = self.infer_q(x, y, n_inference_steps)
-        q = qs[-1]
+        qk = qs[-1]
 
-        (prior_energy, h_energy, y_energy, entropy), m_constants = self.m_step(
-            x, y, q, n_samples=n_samples)
+        (prior_energy, h_energy, y_energy, entropy), m_constants, m_updates = self.m_step(
+            x, y, qk, n_samples=n_samples)
+        updates.update(m_updates)
 
         constants = [entropy] + m_constants
-        if n_inference_steps > 0 or pass_gradients:
+        if n_inference_steps == 0 or pass_gradients:
             print 'Passing the gradient through latent variables'
+        else:
             constants.append(qs)
 
-        return (q, prior_energy, h_energy, y_energy, entropy), updates, constants
+        return (qk, prior_energy, h_energy, y_energy, entropy), updates, constants
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
-                 calculate_log_marginal=False, stride=0):
-
+                 calculate_log_marginal=False, stride=10):
         outs = OrderedDict()
-        prior = T.concatenate([self.mu[None, :], self.log_sigma[None, :]], axis=1)
 
         (qs, i_costs), updates = self.infer_q(x, y, n_inference_steps)
 
         if n_inference_steps > stride and stride != 0:
-            steps = [0] + range(stride,
-                                n_inference_steps + 1,
-                                stride)
-            steps = steps[:-1] + [n_inference_steps]
-        elif n_inference_steps > 0:
-            steps = [0, n_inference_steps]
+            steps = [0, 1] + range(stride, n_inference_steps, stride)
+            steps = steps[:-1] + [n_inference_steps - 1]
+        elif n_inference_steps > 0 and n_inference_steps != 1:
+            steps = [0, 1, n_inference_steps - 1]
+        elif n_inference_steps == 1:
+            steps = [0, 1]
         else:
             steps = [0]
 
@@ -313,25 +311,42 @@ class GaussianBeliefNet(Layer):
         nlls = []
         pys = []
         energies = []
+        prior_terms = []
+        entropy_terms = []
+
         for i in steps:
-            q = qs[i]
-            h = self.posterior.sample(q, size=(n_samples, q.shape[0], q.shape[1] // 2))
+            qk = qs[i]
+            epsilon = self.trng.normal(
+                avg=0, std=1.0,
+                size=(n_samples, qk.shape[0], qk.shape[1] // 2),
+                dtype=x.dtype)
+
+            mu_q = _slice(qk, 0, self.dim_h)
+            log_sigma_q = _slice(qk, 1, self.dim_h)
+
+            h = mu_q[None, :, :] + epsilon * T.exp(log_sigma_q[None, :, :])
 
             py = self.conditional(h)
             y_energy_b = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=0)
             energies.append(y_energy_b)
             y_energy = y_energy_b.mean(axis=0)
-            kl_term = self.kl_divergence(q, prior).mean(axis=0)
+            kl_term = self.prior.kl_divergence(qk).mean()
             lower_bound = y_energy + kl_term
             lower_bounds.append(lower_bound)
 
+            prior_terms.append(kl_term.mean())
+            entropy_terms.append(T.constant(0.).astype(floatX))
+
             if calculate_log_marginal:
-                nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :], prior[None, :, :])
+                nll = -self.log_marginal(y[None, :, :], h, py, qk[None, :, :])
                 nlls.append(nll)
 
             pys.append(py)
 
         outs.update(
+            i_costs=i_costs[steps],
+            prior_terms=prior_terms,
+            entropy_terms=entropy_terms,
             energies=energies,
             py=py,
             pys=pys,
@@ -453,13 +468,13 @@ class DeepGBN(Layer):
 
     def sample_from_prior(self, n_samples=100):
         p = T.concatenate([self.mu, self.log_sigma])
-        h = self.posteriors[-1].sample(p=p, size=(n_samples, self.dim_h))
+        h, updates = self.posteriors[-1].sample(p=p, size=(n_samples, self.dim_h))
 
         for conditional in self.conditionals[::-1]:
             p = conditional(h)
             h = conditional.sample(p)
 
-        return p
+        return p, updates
 
     def kl_divergence(self, p, q,
                       entropy_scale=1.0):
