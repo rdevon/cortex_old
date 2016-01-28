@@ -153,7 +153,7 @@ def unpack(dim_in=None,
     elif prior == 'gaussian':
         out_act = 'lambda x: x'
         prior_model = Gaussian(dim_h)
-        C = GBN 
+        C = GBN
     else:
         raise ValueError('%s prior not known' % prior)
 
