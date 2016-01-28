@@ -456,7 +456,7 @@ class SigmoidBeliefNetwork(Layer):
 
         constants = [qk, entropy] + m_constants
 
-        return (qk, prior_energy, h_energy, y_energy, i_costs), updates, constants
+        return (qk, prior_energy, h_energy, y_energy, entropy), updates, constants
 
     # Sampling and test --------------------------------------------------------
 
