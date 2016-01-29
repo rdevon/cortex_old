@@ -47,7 +47,7 @@ class AutoRegressor(Distribution):
 
     def get_prob(self, x, W, b):
         W = T.tril(W, k=-1)
-        p = T.nnet.sigmoid(T.dot(x, W) + b)
+        p = T.nnet.sigmoid(T.dot(x, W) + b) * 0.9999 + 0.000005
         return p
 
     def get_L2_weight_cost(self, gamma):
@@ -63,7 +63,7 @@ class AutoRegressor(Distribution):
         rs = self.trng.uniform((self.dim, n_samples), dtype=floatX)
 
         def _step_sample(i, W_i, r_i, z):
-            p_i = T.nnet.sigmoid(z[:, i])
+            p_i = T.nnet.sigmoid(z[:, i]) * 0.9999 + 0.000005
             x_i = (r_i <= p_i).astype(floatX)
             z   = z + T.outer(x_i, W_i)
             return z, x_i
@@ -79,14 +79,16 @@ class AutoRegressor(Distribution):
 
     def step_neg_log_prob(self, x, *params):
         p = self.get_prob(x, *params)
-        return self.f_neg_log_prob(x, p)
-
+        nlp = -x * T.log(p) - (1 - x) * T.log(1 - p)
+        return nlp.sum(axis=nlp.ndim-1)
+        
     def neg_log_prob(self, x):
-        p = self.get_prob(x, *self.get_params())
-        return self.f_neg_log_prob(x, p)
+        return self.step_neg_log_prob(x, *self.get_params())
 
     def entropy(self):
-        raise NotImplementedError('We aren\'t going to try to use MC to do this.')
+        p = self.get_prob(*self.get_params())
+        entropy = -p * T.log(p) - (1 - p) * T.log(1 - p)
+        return entropy.sum(axis=entropy.ndim-1)
 
 
 class DARN(Layer):
