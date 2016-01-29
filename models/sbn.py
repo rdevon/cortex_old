@@ -378,23 +378,27 @@ class SigmoidBeliefNetwork(Layer):
     # Learning -----------------------------------------------------------------
 
     def m_step(self, x, y, qk, n_samples=10):
-        constants = []
+        constants = [qk]
         updates = theano.OrderedUpdates()
 
         q0  = self.posterior(x)
-        q0_c = T.zeros_like(q0) + q0
-        constants.append(q0_c)
+        #q0_c = T.zeros_like(q0) + q0
+        #constants.append(q0_c)
         r   = self.trng.uniform((n_samples, y.shape[0], self.dim_h), dtype=floatX)
-        h   = (r <= q0[None, :, :]).astype(floatX)
+        #h   = (r <= q0[None, :, :]).astype(floatX)
+        h   = (r <= qk[None, :, :]).astype(floatX)
         py  = self.conditional(h)
 
         if self.prior.must_sample:
             prior_energy = self.prior.neg_log_prob(h).mean(axis=0)
         else:
-            prior_energy = self.prior.neg_log_prob(q0_c)
+            #prior_energy = self.prior.neg_log_prob(q0)
+            prior_energy = self.prior.neg_log_prob(qk)
 
         entropy  = self.posterior.entropy(qk)
-        h_energy = self.posterior.neg_log_prob(qk, q0)
+        h_energy = self.posterior.neg_log_prob(qk, q0) - self.posterior.entropy(qk)
+        #h_energy = self.posterior.neg_log_prob(qk, q0)# - self.posterior.entropy(q0)
+        #h_energy = self.posterior.neg_log_prob(q0, qk) - self.posterior.entropy(q0)
         y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=0)
 
         assert prior_energy.ndim == h_energy.ndim == entropy.ndim == y_energy.ndim
@@ -412,6 +416,7 @@ class SigmoidBeliefNetwork(Layer):
              y.shape[0],
              self.dim_h),
             dtype=floatX)
+        constants = [q0]
 
         seqs = [rs]
         outputs_info = [q0, None]
@@ -444,17 +449,17 @@ class SigmoidBeliefNetwork(Layer):
         elif n_inference_steps == 0:
             qs, i_costs = self.unpack_infer(q0, None)
 
-        return (qs, rs), updates
+        return (qs, i_costs), constants, updates
 
     def inference(self, x, y, n_inference_steps=20, n_samples=100, pass_gradients=False):
-        (qs, i_costs), updates = self.infer_q(x, y, n_inference_steps)
+        (qs, i_costs), q_constants, updates = self.infer_q(x, y, n_inference_steps)
         qk = qs[-1]
 
         (prior_energy, h_energy, y_energy, entropy), m_constants, updates_s = self.m_step(
             x, y, qk, n_samples=n_samples)
         updates.update(updates_s)
 
-        constants = [qk, entropy] + m_constants
+        constants = [qs] + m_constants + q_constants
 
         return (qk, prior_energy, h_energy, y_energy, entropy), updates, constants
 
@@ -464,7 +469,7 @@ class SigmoidBeliefNetwork(Layer):
                  calculate_log_marginal=False, stride=10):
         outs = OrderedDict()
 
-        (qs, i_costs), updates = self.infer_q(x, y, n_inference_steps)
+        (qs, i_costs), _, updates = self.infer_q(x, y, n_inference_steps)
 
         if n_inference_steps > stride and stride != 0:
             steps = [0, 1] + range(stride, n_inference_steps, stride)

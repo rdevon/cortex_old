@@ -250,37 +250,38 @@ class DeepSBN(Layer):
     # Learning -----------------------------------------------------------------
 
     def m_step(self, x, y, qks, n_samples=10):
-        constants = []
+        constants = qks
 
         q0s   = []
         q0s_c = []
         state = x
         for l in xrange(self.n_layers):
             q0 = self.posteriors[l](state)
-            q0_c = T.zeros_like(q0) + q0
-            constants.append(q0_c)
-            q0s_c.append(q0_c)
+            #q0_c = T.zeros_like(q0) + q0
+            #constants.append(q0_c)
+            #q0s_c.append(q0_c)
             q0s.append(q0)
             state = q0
             #state = qks[l]
 
         hs = []
-        for l, qk in enumerate(q0s_c):#qks):
+        for l, qk in enumerate(qks):
             r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
             h = (r <= qk[None, :, :]).astype(floatX)
             hs.append(h)
+
         p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
         ys   = [y[None, :, :]] + hs[:-1]
 
         conditional_energy = T.constant(0.).astype(floatX)
         posterior_energy   = T.constant(0.).astype(floatX)
         for l in xrange(self.n_layers):
-            posterior_energy += self.posteriors[l].neg_log_prob(qks[l], q0s[l])
+            posterior_energy += self.posteriors[l].neg_log_prob(qks[l], q0s[l]) - self.posteriors[l].entropy(qks[l])
             conditional_energy += self.conditionals[l].neg_log_prob(
                 ys[l], p_ys[l]).mean(axis=0)
 
-        #prior_energy = self.prior.neg_log_prob(qks[-1])
-        prior_energy = self.prior.neg_log_prob(q0s_c[-1])
+        prior_energy = self.prior.neg_log_prob(qks[-1])
+        #prior_energy = self.prior.neg_log_prob(q0s_c[-1])
 
         return (prior_energy, posterior_energy,
                 conditional_energy), constants
@@ -289,6 +290,7 @@ class DeepSBN(Layer):
         updates = theano.OrderedUpdates()
 
         q0s = self.init_q(x)
+        constants = q0s
         rs  = []
         for l in xrange(self.n_layers):
             r = self.trng.uniform((n_inference_steps,
@@ -326,18 +328,18 @@ class DeepSBN(Layer):
             print 'No refinement inference'
             qss, i_costs = self.unpack_infer(q0s, None)
 
-        return (qss, i_costs), updates
+        return (qss, i_costs), constants, updates
 
     # Inference
     def inference(self, x, y, n_inference_steps=20, n_samples=100):
-        (qss, _), updates = self.infer_q(x, y, n_inference_steps)
+        (qss, _), q_constants, updates = self.infer_q(x, y, n_inference_steps)
 
         qks = [q[-1] for q in qss]
 
         (prior_energy, h_energy, y_energy), m_constants = self.m_step(
             x, y, qks, n_samples=n_samples)
 
-        constants = m_constants + qks
+        constants = q_constants + m_constants + qss
 
         return (qks, prior_energy, h_energy, y_energy), updates, constants
 
@@ -347,7 +349,7 @@ class DeepSBN(Layer):
         outs = OrderedDict()
         updates = theano.OrderedUpdates()
 
-        (qss, i_costs), updates_i = self.infer_q(x, y, n_inference_steps)
+        (qss, i_costs), _, updates_i = self.infer_q(x, y, n_inference_steps)
         updates.update(updates_i)
 
         if n_inference_steps > stride and stride != 0:
