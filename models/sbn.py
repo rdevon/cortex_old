@@ -558,6 +558,6 @@ class SigmoidBeliefNetwork(Layer):
         results = OrderedDict()
         for k, v in full_results.iteritems():
             results[k] = v[-1]
-            results['d_' + k] = v[-1] - v[0]
+            results['d_' + k] = v[0] - v[-1]
 
         return results, samples, full_results, updates
