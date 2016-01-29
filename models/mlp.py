@@ -51,6 +51,7 @@ class MLP(Layer):
             out_act = 'T.nnet.sigmoid'
 
         if out_act == 'T.nnet.sigmoid':
+            self.out_act = 'lambda x: T.nnet.sigmoid(x) * 0.9999 + 0.000005'
             self.f_sample = _binomial
             self.f_neg_log_prob = _cross_entropy
             self.f_entropy = _binary_entropy

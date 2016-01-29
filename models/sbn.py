@@ -284,11 +284,11 @@ class SigmoidBeliefNetwork(Layer):
     # Latent sampling ---------------------------------------------------------
 
     def sample_from_prior(self, n_samples=99):
-        h, updates = self.prior.sample(n_samples)
-        #p = T.nnet.sigmoid(self.prior.z)
-        #r = self.trng.uniform((n_samples, self.prior.dim), dtype=floatX)
-        #h = (r <= p[None, :]).astype(floatX)
-        #updates = theano.OrderedUpdates()
+        #h, updates = self.prior.sample(n_samples)
+        p = T.nnet.sigmoid(self.prior.z)
+        r = self.trng.uniform((n_samples, self.prior.dim), dtype=floatX)
+        h = (r <= p[None, :]).astype(floatX)
+        updates = theano.OrderedUpdates()
         return self.conditional(h), updates
 
     def generate_from_latent(self, h):
@@ -389,36 +389,106 @@ class SigmoidBeliefNetwork(Layer):
         h   = (r <= qk[None, :, :]).astype(floatX)
         py  = self.conditional(h)
 
+        '''
+        log_py_h = -self.conditional.neg_log_prob(y[None, :, :], py)
+        log_ph   = -self.prior.neg_log_prob(h)
+        log_qh   = -self.posterior.neg_log_prob(h, qk[None, :, :])
+        log_q0h  = -self.posterior.neg_log_prob(h, q0[None, :, :])
+        '''
+
         if self.prior.must_sample:
-            prior_energy = self.prior.neg_log_prob(h).mean(axis=0)
+            prior_energy = self.prior.neg_log_prob(h)
         else:
             #prior_energy = self.prior.neg_log_prob(q0)
-            prior_energy = self.prior.neg_log_prob(qk)
+            #prior_energy = self.prior.neg_log_prob(qk)
+            prior_energy = self.prior.neg_log_prob(h).mean(axis=0)
 
-        entropy  = self.posterior.entropy(qk)
-        h_energy = self.posterior.neg_log_prob(qk, q0) - self.posterior.entropy(qk)
+        '''
+        log_p     = log_py_h + log_ph - log_qh
+        log_p_max = T.max(log_p, axis=0, keepdims=True)
+
+        w       = T.exp(log_p - log_p_max)
+        w_tilde = w / w.sum(axis=0, keepdims=True)
+        cost    = -log_p.mean()
+        constants.append(w_tilde)
+
+        y_energy = -(w_tilde * log_py_h).sum(axis=0)
+        prior_energy = -(w_tilde * log_ph).sum(axis=0)
+        h_energy = -(w_tilde * log_q0h).sum(axis=0)
+        entropy = h_energy
+
+        assert log_py_h.ndim == log_ph.ndim == log_qh.ndim
+        '''
+
+        h_energy = self.posterior.neg_log_prob(h, q0[None, :, :]).mean(axis=0)
+        #h_energy = self.posterior.neg_log_prob(qk, q0) - self.posterior.entropy(qk)
         #h_energy = self.posterior.neg_log_prob(qk, q0)# - self.posterior.entropy(q0)
         #h_energy = self.posterior.neg_log_prob(q0, qk) - self.posterior.entropy(q0)
         y_energy = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=0)
+        log_p = 
 
         assert prior_energy.ndim == h_energy.ndim == entropy.ndim == y_energy.ndim
 
+
         return (prior_energy, h_energy,
                 y_energy, entropy), constants, updates
+
+    def rws(self, x, y, n_samples):
+        def log_prob(x, p):
+            return (x * T.log(p) + (1 - x) * T.log(1 - p)).sum(axis=2)
+        def sigmoid(x):
+            return T.nnet.sigmoid(x) * 0.9999 + 0.000005
+
+        print 'Doing RWS, %d samples' % n_samples
+        #q   = self.posterior(x)
+        q = sigmoid(T.dot(x, self.posterior.W0) + self.posterior.b0)
+        q_c = q.copy()
+        
+        r   = self.trng.uniform((n_samples, y.shape[0], self.dim_h), dtype=floatX)
+        h   = (r <= q_c[None, :, :]).astype(floatX)                                                
+        #py  = self.conditional(h)
+        py = sigmoid(T.dot(h, self.conditional.W0) + self.conditional.b0)
+
+        log_py_h = log_prob(y[None, :, :], py)
+        #log_py_h = -self.conditional.neg_log_prob(y[None, :, :], py)
+        log_ph = log_prob(h, sigmoid(self.prior.z))
+        #log_ph   = -self.prior.neg_log_prob(h)
+        log_qh = log_prob(h, q[None, :, :])
+        #log_qh   = -self.posterior.neg_log_prob(h, q[None, :, :])
+
+        assert log_py_h.ndim == log_ph.ndim == log_qh.ndim
+
+        def f_logsumexp(A, axis=None):
+            A_max = T.max(A, axis=axis, keepdims=True)
+            B = T.log(T.sum(T.exp(A - A_max), axis=axis, keepdims=True)) + A_max
+            B = T.sum(B, axis=axis)
+            return B
+
+        log_p     = f_logsumexp(log_py_h + log_ph - log_qh, axis=0) - T.log(n_samples)
+        log_pq    = log_py_h + log_ph - log_qh - T.log(n_samples)  
+        #log_p_max = T.max(log_p, axis=0, keepdims=True)
+
+        w_norm    = f_logsumexp(log_pq, axis=0)
+        #w       = T.exp(log_p - log_p_max)
+        #w_tilde = w / w.sum(axis=0, keepdims=True)
+        #cost    = -log_p.mean()
+        log_w = log_pq - T.shape_padleft(w_norm)
+        w_tilde = T.exp(log_w)
+ 
+        y_energy = -(w_tilde * log_py_h).sum(axis=0)
+        prior_energy = -(w_tilde * log_ph).sum(axis=0)
+        h_energy = -(w_tilde * log_qh).sum(axis=0)
+        entropy = -log_p
+
+        assert prior_energy.ndim == h_energy.ndim == y_energy.ndim, (prior_energy.ndim, h_energy.ndim, y_energy.ndim)
+
+        return (prior_energy, h_energy, y_energy, entropy), [w_tilde, q_c], theano.OrderedUpdates()
 
     def infer_q(self, x, y, n_inference_steps):
         updates = theano.OrderedUpdates()
 
         q0 = self.posterior(x)
-        rs = self.trng.uniform(
-            (n_inference_steps,
-             self.n_inference_samples,
-             y.shape[0],
-             self.dim_h),
-            dtype=floatX)
         constants = [q0]
-
-        seqs = [rs]
         outputs_info = [q0, None]
         non_seqs = [y, q0] + self.params_infer() + self.get_params()
 
@@ -427,6 +497,13 @@ class SigmoidBeliefNetwork(Layer):
                % (n_inference_steps, self.inference_rate, self.n_inference_samples))
 
         if isinstance(n_inference_steps, T.TensorVariable) or n_inference_steps > 1:
+            rs = self.trng.uniform(
+                (n_inference_steps,
+                 self.n_inference_samples,
+                 y.shape[0],
+                 self.dim_h),
+                dtype=floatX)
+            seqs = [rs]
             outs, updates_2 = theano.scan(
                 self.step_infer,
                 sequences=seqs,
@@ -442,12 +519,19 @@ class SigmoidBeliefNetwork(Layer):
             qs, i_costs = self.unpack_infer(q0, outs)
 
         elif n_inference_steps == 1:
-            inps = [rs[0]] + outputs_info[:-1] + non_seqs
+            r = self.trng.uniform(
+                (self.n_inference_samples,
+                 y.shape[0],
+                 self.dim_h),
+                dtype=floatX)
+            inps = [r] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
             qs, i_costs = self.unpack_infer(q0, outs)
 
         elif n_inference_steps == 0:
-            qs, i_costs = self.unpack_infer(q0, None)
+            #qs, i_costs = self.unpack_infer(q0, None)
+            qs = q0[None, :, :]
+            i_costs = [T.constant(0.).astype(floatX)]
 
         return (qs, i_costs), constants, updates
 
@@ -455,9 +539,13 @@ class SigmoidBeliefNetwork(Layer):
         (qs, i_costs), q_constants, updates = self.infer_q(x, y, n_inference_steps)
         qk = qs[-1]
 
-        (prior_energy, h_energy, y_energy, entropy), m_constants, updates_s = self.m_step(
-            x, y, qk, n_samples=n_samples)
-        updates.update(updates_s)
+        if n_inference_steps > 0:
+            (prior_energy, h_energy, y_energy, entropy), m_constants, updates_s = self.m_step(
+                x, y, qk, n_samples=n_samples)
+            updates.update(updates_s)
+        else:
+            (prior_energy, h_energy, y_energy, entropy), m_constants, updates_s = self.rws(
+                x, y, n_samples=n_samples)
 
         constants = [qs] + m_constants + q_constants
 
@@ -516,6 +604,9 @@ class SigmoidBeliefNetwork(Layer):
             if calculate_log_marginal:
                 nll = -self.log_marginal(y[None, :, :], h, py, q[None, :, :])
                 nlls.append(nll)
+
+        if len(steps) == 1:
+            steps = 0
 
         outs.update(
             i_costs=i_costs[steps],
