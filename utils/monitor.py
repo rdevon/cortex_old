@@ -3,41 +3,63 @@ Module for monitor class.
 '''
 import matplotlib
 matplotlib.use('Agg')
-import numpy as np
-import cPickle as pkl
-import os
-import time
-import signal
-
-from collections import OrderedDict
-from tools import check_bad_nums
 from matplotlib import pylab as plt
+from collections import OrderedDict
+import cPickle as pkl
+import numpy as np
+import os
+import pprint
+import signal
+import time
+
+from tools import check_bad_nums
+from tools import update_dict_of_lists
+
+
+np.set_printoptions(precision=4)
 
 
 class SimpleMonitor(object):
     def __init__(self, *args):
         self.d = OrderedDict()
+        self.d_valid = OrderedDict()
 
     def update(self, **kwargs):
-        for k, v in kwargs.iteritems():
-            if not self.d.get(k, False):
-                self.d[k] = [v]
-            else:
-                self.d[k].append(v)
+        update_dict_of_lists(self.d, **kwargs)
+
+    def update_valid(self, **kwargs):
+        update_dict_of_lists(self.d_valid, **kwargs)
 
     def add(self, **kwargs):
         for k, v in kwargs.iteritems():
             self.d[k] = v
 
-    def display(self, e, s):
-        s = 'Epoch: %d, step: %d' % (e, s)
-        for k, v in self.d.iteritems():
-            try:
-                s += ' | %s: %.5f' % (k, v[-1])
-            except TypeError as e:
-                print 'Error: %s, %s' % (k, v[-1])
-                raise e
-        print s
+    def display(self):
+        d = OrderedDict()
+        for k in sorted(self.d):
+            if not k.startswith('d_'):
+                d[k] = [self.d[k][-1]]
+                if k in self.d_valid.keys():
+                    d[k].append(self.d_valid[k][-1])
+                else:
+                    d[k].append(None)
+
+        for k in self.d.keys():
+            if k.startswith('d_'):
+                d[k[2:]].append(self.d[k][-1])
+
+        length = len('\t' ) + max(len(k) for k in d.keys()) + len(' (train / valid) |')
+        for k, vs in d.iteritems():
+            s = '\t%s' % k
+            if len(vs) > 1 and vs[1] is not None:
+                s += ' (train / valid)'
+            s += ' ' * (length - len(s))
+            s += ' |\t%.4f' % vs[0]
+            if len(vs) > 1 and vs[1] is not None:
+                s += ' / %.4f  ' % vs[1]
+            if len(vs) > 2:
+                s += '\t' + unichr(0x394).encode('utf-8') + '=%.4f' % vs[2]
+            print s
 
     def save(self, out_path):
         plt.clf()
@@ -50,6 +72,8 @@ class SimpleMonitor(object):
         for j, (k, v) in enumerate(self.d.iteritems()):
             ax = axes[j // x, j % x]
             ax.plot(v, label=k)
+            if k in self.d_valid.keys():
+                ax.plot(self.d_valid[k], label=k + '(valid)')
             ax.set_title(k)
             ax.legend()
             ax.patch.set_alpha(0.5)
@@ -57,6 +81,10 @@ class SimpleMonitor(object):
         plt.tight_layout()
         plt.savefig(out_path, facecolor=fig.get_facecolor(), edgecolor='none', transparent=True)
         plt.close()
+
+    def save_stats(self, out_path):
+        np.savez(out_path, **self.d)
+        np.savez(out_path, **self.d_valid)
 
 
 class Monitor(object):

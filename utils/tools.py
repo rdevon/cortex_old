@@ -23,6 +23,13 @@ profile = False
 
 f_clip = lambda x, y, z: T.clip(x, y, 1.)
 
+def update_dict_of_lists(d_to_update, **d):
+    for k, v in d.iteritems():
+        if k in d_to_update.keys():
+            d_to_update[k].append(v)
+        else:
+            d_to_update[k] = [v]
+
 def debug_shape(X, x, t_out, updates=None):
     f = theano.function([X], t_out, updates=updates)
     out = f(x)
@@ -173,10 +180,10 @@ def check_bad_nums(rvals, names):
     found = False
     for k, out in zip(names, rvals):
         if np.any(np.isnan(out)):
-            print k, 'nan'
+            print 'Found nan num ', k, '(nan)'
             found = True
         elif np.any(np.isinf(out)):
-            print k, 'inf'
+            print 'Found inf ', k, '(inf)'
             found = True
     return found
 

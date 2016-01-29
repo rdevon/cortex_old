@@ -79,19 +79,6 @@ class Bernoulli(Distribution):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
         #return T.nnet.sigmoid(z)
 
-    def step_neg_log_prob(self, x, *params):
-        p = self.get_prob(*params)
-        nlp = -x * T.log(p) - (1 - x) * T.log(1 - p)
-        return nlp.sum(axis=nlp.ndim-1)
-
-    def neg_log_prob(self, x):
-        return self.step_neg_log_prob(x, *self.get_params())
-
-    def entropy(self):
-        p = self.get_prob(*self.get_params())
-        entropy = -p * T.log(p) - (1 - p) * T.log(1 - p)
-        return entropy.sum(axis=entropy.ndim-1)
-
 class Gaussian(Distribution):
     def __init__(self, dim, name='gaussian', **kwargs):
         self.f_sample = _normal
@@ -139,13 +126,13 @@ def _centered_binomial(trng, p, size=None):
     return 2 * trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
 
 def _cross_entropy(x, p):
-    #p = T.clip(p, 1e-7, 1.0 - 1e-7)
     energy = -x * T.log(p) - (1 - x) * T.log(1 - p)
+    #p = T.clip(p, 1e-7, 1.0 - 1e-7)
     #energy = T.nnet.binary_crossentropy(p, x)
     return energy.sum(axis=energy.ndim-1)
 
 def _binary_entropy(p):
-    p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
+    #p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
     #entropy = T.nnet.binary_crossentropy(p_c, p)
     entropy = -p * T.log(p) - (1 - p) * T.log(1 - p)
     return entropy.sum(axis=entropy.ndim-1)

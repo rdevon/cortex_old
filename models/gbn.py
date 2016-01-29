@@ -60,12 +60,12 @@ class GaussianBeliefNet(Layer):
             self.posterior = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
                                  rng=self.rng, trng=self.trng,
                                  h_act='T.nnet.sigmoid',
-                                 out_act='lambda x: x')
+                                 out_act='T.nnet.sigmoid')
         if self.conditional is None:
             self.conditional = MLP(self.dim_h, self.dim_h, self.dim_in, 1,
                                    rng=self.rng, trng=self.trng,
                                    h_act='T.nnet.sigmoid',
-                                   out_act='T.nnet.sigmoid')
+                                   out_act='lambda x: x')
 
         self.posterior.name = self.name + '_posterior'
         self.conditional.name = self.name + '_conditional'

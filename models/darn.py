@@ -81,14 +81,12 @@ class AutoRegressor(Distribution):
         p = self.get_prob(x, *params)
         nlp = -x * T.log(p) - (1 - x) * T.log(1 - p)
         return nlp.sum(axis=nlp.ndim-1)
-        
+
     def neg_log_prob(self, x):
         return self.step_neg_log_prob(x, *self.get_params())
 
     def entropy(self):
-        p = self.get_prob(*self.get_params())
-        entropy = -p * T.log(p) - (1 - p) * T.log(1 - p)
-        return entropy.sum(axis=entropy.ndim-1)
+        return T.constant(0.).astype(floatX)
 
 
 class DARN(Layer):
