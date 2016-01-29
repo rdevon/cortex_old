@@ -461,10 +461,14 @@ class SigmoidBeliefNetwork(Layer):
         constants = [qk]
         return results, samples, theano.OrderedUpdates(), constants
 
-    def rws(self, x, y, n_samples):
+    def rws(self, x, y, n_samples=10, qk=None):
         print 'Doing RWS, %d samples' % n_samples
         q   = self.posterior(x)
-        q_c = q.copy()
+
+        if qk is None:
+            q_c = q.copy()
+        else:
+            q_c = qk
 
         r  = self.trng.uniform((n_samples, y.shape[0], self.dim_h), dtype=floatX)
         h  = (r <= q_c[None, :, :]).astype(floatX)
@@ -476,7 +480,12 @@ class SigmoidBeliefNetwork(Layer):
 
         assert log_py_h.ndim == log_ph.ndim == log_qh.ndim
 
-        log_p    = log_sum_exp(log_py_h + log_ph - log_qh, axis=0) - T.log(n_samples)
+        if qk is None:
+            log_p = log_sum_exp(log_py_h + log_ph - log_qh, axis=0) - T.log(n_samples)
+        else:
+            log_qkh = -self.posterior.neg_log_prob(h, qk[None, :, :])
+            log_p = log_sum_exp(log_py_h + log_ph - log_qkh, axis=0) - T.log(n_samples)
+
         log_pq   = log_py_h + log_ph - log_qh - T.log(n_samples)
         w_norm   = log_sum_exp(log_pq, axis=0)
         log_w    = log_pq - T.shape_padleft(w_norm)
@@ -488,7 +497,7 @@ class SigmoidBeliefNetwork(Layer):
 
         nll           = -log_p
         prior_entropy = self.prior.entropy()
-        q_entropy     = self.posterior.entropy(q)
+        q_entropy     = self.posterior.entropy(q_c)
 
         assert prior_energy.ndim == h_energy.ndim == y_energy.ndim, (prior_energy.ndim, h_energy.ndim, y_energy.ndim)
 
@@ -515,10 +524,16 @@ class SigmoidBeliefNetwork(Layer):
 
     def inference(self, x, y, n_inference_steps=20, n_samples=100, pass_gradients=False):
         constants = []
-        if self.inference_method == 'rws':
+        if self.inference_method == 'rws' and n_inference_steps == 0:
             print 'RWS'
             results, _, updates, m_constants = self.rws(x, y, n_samples=n_samples)
             constants += m_constants
+        elif self.inference_method == 'rws':
+            print 'AIR and RWS'
+            (qs, i_costs), q_constants, updates = self.infer_q(x, y, n_inference_steps)
+            qk = qs[-1]
+            results, _, updates, m_constants = self.rws(x, y, n_samples=n_samples, qk=qk)
+            constants = [qs] + m_constants + q_constants
         elif self.inference_method == 'adaptive':
             print 'AIR'
             (qs, i_costs), q_constants, updates = self.infer_q(x, y, n_inference_steps)
