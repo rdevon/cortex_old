@@ -84,6 +84,8 @@ class SimpleMonitor(object):
 
     def save_stats(self, out_path):
         np.savez(out_path, **self.d)
+
+    def save_stats_valid(self, out_path):
         np.savez(out_path, **self.d_valid)
 
 
