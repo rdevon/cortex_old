@@ -365,7 +365,7 @@ class SigmoidBeliefNetwork(Layer):
 
     # Learning -----------------------------------------------------------------
 
-    def infer_q(self, x, y, n_inference_steps):
+    def infer_q(self, x, y, n_inference_steps, n_inference_samples):
         updates = theano.OrderedUpdates()
 
         q0 = self.posterior(x)
@@ -375,12 +375,12 @@ class SigmoidBeliefNetwork(Layer):
 
         print ('Doing %d inference steps and a rate of %.2f with %d '
                'inference samples'
-               % (n_inference_steps, self.inference_rate, self.n_inference_samples))
+               % (n_inference_steps, self.inference_rate, n_inference_samples))
 
         if isinstance(n_inference_steps, T.TensorVariable) or n_inference_steps > 1:
             rs = self.trng.uniform(
                 (n_inference_steps,
-                 self.n_inference_samples,
+                 n_inference_samples,
                  y.shape[0],
                  self.dim_h),
                 dtype=floatX)
@@ -401,7 +401,7 @@ class SigmoidBeliefNetwork(Layer):
 
         elif n_inference_steps == 1:
             r = self.trng.uniform(
-                (self.n_inference_samples,
+                (n_inference_samples,
                  y.shape[0],
                  self.dim_h),
                 dtype=floatX)
@@ -522,7 +522,9 @@ class SigmoidBeliefNetwork(Layer):
         constants =  [w_tilde, q_c]
         return results, samples, theano.OrderedUpdates(), constants
 
-    def inference(self, x, y, n_inference_steps=20, n_samples=100, pass_gradients=False):
+    def inference(self, x, y, n_inference_steps=20, n_inference_samples=20,
+                  n_samples=100, pass_gradients=False,
+                  ):
         constants = []
         if self.inference_method == 'rws' and n_inference_steps == 0:
             print 'RWS'
@@ -530,13 +532,15 @@ class SigmoidBeliefNetwork(Layer):
             constants += m_constants
         elif self.inference_method == 'rws':
             print 'AIR and RWS'
-            (qs, i_costs), q_constants, updates = self.infer_q(x, y, n_inference_steps)
+            (qs, i_costs), q_constants, updates = self.infer_q(
+                x, y, n_inference_steps, n_inference_samples=n_inference_samples)
             qk = qs[-1]
             results, _, updates, m_constants = self.rws(x, y, n_samples=n_samples, qk=qk)
             constants = [qs] + m_constants + q_constants
         elif self.inference_method == 'adaptive':
             print 'AIR'
-            (qs, i_costs), q_constants, updates = self.infer_q(x, y, n_inference_steps)
+            (qs, i_costs), q_constants, updates = self.infer_q(
+                x, y, n_inference_steps, n_inference_samples=n_inference_samples)
             qk = qs[-1]
             results, _, updates_m, m_constants = self.m_step(x, y, qk, n_samples=n_samples)
             updates.update(updates_m)
@@ -545,10 +549,11 @@ class SigmoidBeliefNetwork(Layer):
 
     # Sampling and test --------------------------------------------------------
 
-    def __call__(self, x, y, n_samples=100, n_inference_steps=0,
+    def __call__(self, x, y, n_samples=100, n_inference_steps=0, n_inference_samples=20,
                  calculate_log_marginal=False, stride=10):
 
-        (qs, i_costs), _, updates = self.infer_q(x, y, n_inference_steps)
+        (qs, i_costs), _, updates = self.infer_q(
+            x, y, n_inference_steps, n_inference_samples=n_inference_samples)
 
         if n_inference_steps > stride and stride != 0:
             steps = [0, 1] + range(stride, n_inference_steps, stride)
