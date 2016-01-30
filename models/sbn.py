@@ -543,15 +543,16 @@ class SigmoidBeliefNetwork(Layer):
             (qs, i_costs), q_constants, updates = self.infer_q(
                 x, y, n_inference_steps, n_inference_samples=n_inference_samples)
             qk = qs[-1]
-            results, _, updates_m, m_constants = self.m_step(x, y, qk, n_samples=n_samples)
+            results, _, updates_m, m_constants = self.m_step(
+                x, y, qk, n_samples=n_samples)
             updates.update(updates_m)
             constants = [qs] + m_constants + q_constants
         return results, updates, constants
 
     # Sampling and test --------------------------------------------------------
 
-    def __call__(self, x, y, n_samples=100, n_inference_steps=0, n_inference_samples=20,
-                 calculate_log_marginal=False, stride=10):
+    def __call__(self, x, y, n_samples=100, n_inference_steps=0,
+                 n_inference_samples=20, stride=10):
 
         (qs, i_costs), _, updates = self.infer_q(
             x, y, n_inference_steps, n_inference_samples=n_inference_samples)
@@ -568,10 +569,10 @@ class SigmoidBeliefNetwork(Layer):
 
         full_results = OrderedDict()
         samples = OrderedDict()
-        updates = theano.OrderedUpdates()
         for i in steps:
             qk  = qs[i]
-            results, samples_k, updates_m, _ = self.m_step(x, y, qk, n_samples=n_samples)
+            results, samples_k, updates_m, _ = self.m_step(
+                x, y, qk, n_samples=n_samples)
             updates.update(updates_m)
             update_dict_of_lists(full_results, **results)
             update_dict_of_lists(samples, **samples_k)

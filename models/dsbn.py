@@ -29,6 +29,7 @@ from utils.tools import (
     norm_weight,
     ortho_weight,
     pi,
+    update_dict_of_lists,
     _slice
 )
 
@@ -249,64 +250,25 @@ class DeepSBN(Layer):
 
     # Learning -----------------------------------------------------------------
 
-    def m_step(self, x, y, qks, n_samples=10):
-        constants = qks
-
-        q0s   = []
-        q0s_c = []
-        state = x
-        for l in xrange(self.n_layers):
-            q0 = self.posteriors[l](state)
-            #q0_c = T.zeros_like(q0) + q0
-            #constants.append(q0_c)
-            #q0s_c.append(q0_c)
-            q0s.append(q0)
-            state = q0
-            #state = qks[l]
-
-        hs = []
-        for l, qk in enumerate(qks):
-            r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
-            h = (r <= qk[None, :, :]).astype(floatX)
-            hs.append(h)
-
-        p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
-        ys   = [y[None, :, :]] + hs[:-1]
-
-        conditional_energy = T.constant(0.).astype(floatX)
-        posterior_energy   = T.constant(0.).astype(floatX)
-        for l in xrange(self.n_layers):
-            posterior_energy += self.posteriors[l].neg_log_prob(qks[l], q0s[l]) - self.posteriors[l].entropy(qks[l])
-            conditional_energy += self.conditionals[l].neg_log_prob(
-                ys[l], p_ys[l]).mean(axis=0)
-
-        prior_energy = self.prior.neg_log_prob(qks[-1])
-        #prior_energy = self.prior.neg_log_prob(q0s_c[-1])
-
-        return (prior_energy, posterior_energy,
-                conditional_energy), constants
-
-    def infer_q(self, x, y, n_inference_steps):
+    def infer_q(self, x, y, n_inference_steps, n_inference_samples):
         updates = theano.OrderedUpdates()
 
-        q0s = self.init_q(x)
-        constants = q0s
-        rs  = []
-        for l in xrange(self.n_layers):
-            r = self.trng.uniform((n_inference_steps,
-                                   self.n_inference_samples,
-                                   y.shape[0],
-                                   self.dim_hs[l]), dtype=floatX)
-            rs.append(r)
-
-        seqs = rs
+        q0s          = self.init_q(x)
+        constants    = q0s
         outputs_info = q0s + [None]
-        non_seqs = [y] + self.params_infer() + self.get_params()
+        non_seqs     = [y] + self.params_infer() + self.get_params()
 
         print 'Doing %d inference steps and a rate of %.2f with %d inference samples' % (n_inference_steps, self.inference_rate, self.n_inference_samples)
 
         if isinstance(n_inference_steps, T.TensorVariable) or n_inference_steps > 1:
-            print 'Scan inference'
+            rs  = []
+            for l in xrange(self.n_layers):
+                r = self.trng.uniform((n_inference_steps,
+                                       n_inference_samples,
+                                       y.shape[0],
+                                       self.dim_hs[l]), dtype=floatX)
+                rs.append(r)
+            seqs = rs
             outs, updates = theano.scan(
                 self.step_infer,
                 sequences=seqs,
@@ -320,37 +282,191 @@ class DeepSBN(Layer):
             qss, i_costs = self.unpack_infer(q0s, outs)
 
         elif n_inference_steps == 1:
+            for l in xrange(self.n_layers):
+                r = self.trng.uniform((n_inference_samples,
+                                       y.shape[0],
+                                       self.dim_hs[l]), dtype=floatX)
+                rs.append(r)
             print 'Simple call inference'
-            inps = [r[0] for r in rs] + outputs_info[:-1] + non_seqs
+            inps = rs + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
             qss, i_costs = self.unpack_infer(q0s, None)
         else:
             print 'No refinement inference'
-            qss, i_costs = self.unpack_infer(q0s, None)
+            qss, _ = self.unpack_infer(q0s, None)
+            icosts = [T.constant(0.).astype(floatX)]
 
         return (qss, i_costs), constants, updates
 
+    def m_step(self, x, y, qks, n_samples=10):
+        constants = qks
+
+        q0s   = []
+        state = x
+        for l in xrange(self.n_layers):
+            q0 = self.posteriors[l](state)
+            q0s.append(q0)
+            state = q0
+
+        hs = []
+        for l, qk in enumerate(qks):
+            r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
+            h = (r <= qk[None, :, :]).astype(floatX)
+            hs.append(h)
+
+        p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
+        ys   = [y[None, :, :]] + hs[:-1]
+
+        log_py_h = T.constant(0.).astype(floatX)
+        log_qh   = T.constant(0.).astype(floatX)
+        log_qkh  = T.constant(0.).astype(floatX)
+        for l in xrange(self.n_layers):
+            log_py_h -= self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
+            log_qh -= self.posteriors[l].neg_log_prob(hs[l], q0s[l])
+            log_qkh -= self.posteriors[l].neg_log_prob(hs[l], qks[l])
+        log_ph = -self.prior.neg_log_prob(hs[-1])
+
+        assert log_ph.ndim == log_qh.ndim == log_py_h.ndim
+
+        log_p         = log_sum_exp(log_py_h + log_ph - log_qkh, axis=0) - T.log(n_samples)
+
+        y_energy      = -log_py_h.mean(axis=0)
+        prior_energy  = -log_ph.mean(axis=0)
+        h_energy      = -log_qh.mean(axis=0)
+
+        nll           = -log_p
+        prior_entropy = self.prior.entropy()
+        q_entropy     = T.constant(0.).astype(floatX)
+        for l, qk in enumerate(qks):
+            q_entropy += self.posteriors[l].entropy(qk)
+
+        assert prior_energy.ndim == h_energy.ndim == y_energy.ndim, (prior_energy.ndim, h_energy.ndim, y_energy.ndim)
+
+        cost = (y_energy + prior_energy + h_energy).sum(0)
+        lower_bound = (y_energy + prior_energy - q_entropy).mean()
+
+        results = OrderedDict({
+            '-log p(x|h)': y_energy.mean(0),
+            '-log p(h)': prior_energy.mean(0),
+            '-log q(h)': h_energy.mean(0),
+            '-log p(x)': nll.mean(0),
+            'H(p)': prior_entropy,
+            'H(q)': q_entropy.mean(0),
+            'lower_bound': lower_bound,
+            'cost': cost
+        })
+
+        samples = OrderedDict(
+            py=p_ys[0]
+        )
+
+        constants = qks
+        return results, samples, theano.OrderedUpdates(), constants
+
+    def rws(self, x, y, n_samples=10, qks=None):
+        print 'Doing RWS, %d samples' % n_samples
+        qs   = []
+        qcs   = []
+        state = x
+        for l in xrange(self.n_layers):
+            q = self.posteriors[l](state)
+            qs.append(q)
+            state = q
+            if qks is None:
+                qcs.append(q.copy)
+            else:
+                qcs.append(qks[l])
+
+        hs = []
+        for l, qc in enumerate(qcs):
+            r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
+            h = (r <= qc[None, :, :]).astype(floatX)
+            hs.append(h)
+
+        p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
+        ys   = [y[None, :, :]] + hs[:-1]
+
+        log_py_h = T.constant(0.).astype(floatX)
+        log_qh   = T.constant(0.).astype(floatX)
+        log_qch  = T.constant(0.).astype(floatX)
+        for l in xrange(self.n_layers):
+            log_py_h -= self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
+            log_qh -= self.posteriors[l].neg_log_prob(hs[l], qs[l])
+            log_qch -= self.posteriors[l].neg_log_prob(hs[l], qcs[l])
+        log_ph = -self.prior.neg_log_prob(hs[-1])
+
+        assert log_py_h.ndim == log_ph.ndim == log_qh.ndim
+
+        log_p = log_sum_exp(log_py_h + log_ph - log_qch, axis=0) - T.log(n_samples)
+
+        log_pq   = log_py_h + log_ph - log_qh - T.log(n_samples)
+        w_norm   = log_sum_exp(log_pq, axis=0)
+        log_w    = log_pq - T.shape_padleft(w_norm)
+        w_tilde  = T.exp(log_w)
+
+        y_energy      = -(w_tilde * log_py_h).sum(axis=0)
+        prior_energy  = -(w_tilde * log_ph).sum(axis=0)
+        h_energy      = -(w_tilde * log_qh).sum(axis=0)
+
+        nll           = -log_p
+        prior_entropy = self.prior.entropy()
+        q_entropy     = T.constant(0.).astype(floatX)
+        for l, qc in enumerate(qcs):
+            q_entropy += self.posteriors[l].entropy(qc)
+
+        cost = (y_energy + prior_energy + h_energy).sum(0)
+        lower_bound = (y_energy + prior_energy - q_entropy).mean()
+
+        results = OrderedDict({
+            '-log p(x|h)': y_energy.mean(0),
+            '-log p(h)': prior_energy.mean(0),
+            '-log q(h)': h_energy.mean(0),
+            '-log p(x)': nll.mean(0),
+            'H(p)': prior_entropy,
+            'H(q)': q_entropy.mean(0),
+            'lower_bound': lower_bound,
+            'cost': cost
+        })
+
+        samples = OrderedDict(
+            py=p_ys[0]
+        )
+
+        constants = qks + [w_tilde] + qcs
+        return results, samples, theano.OrderedUpdates(), constants
+
     # Inference
-    def inference(self, x, y, n_inference_steps=20, n_samples=100):
-        (qss, _), q_constants, updates = self.infer_q(x, y, n_inference_steps)
-
-        qks = [q[-1] for q in qss]
-
-        (prior_energy, h_energy, y_energy), m_constants = self.m_step(
-            x, y, qks, n_samples=n_samples)
-
-        constants = q_constants + m_constants + qss
-
-        return (qks, prior_energy, h_energy, y_energy), updates, constants
+    def inference(self, x, y, n_inference_steps=20, n_inference_samples=20,
+                  n_samples=100):
+        constants = []
+        if self.inference_method == 'rws' and n_inference_steps == 0:
+            print 'RWS'
+            results, _, updates, m_constants = self.rws(x, y, n_samples=n_samples)
+            constants += m_constants
+        elif self.inference_method == 'rws':
+            print 'AIR and RWS'
+            (qss, _), q_constants, updates = self.infer_q(
+                x, y, n_inference_steps, n_inference_samples=n_inference_samples)
+            qks = [q[-1] for q in qss]
+            results, _, updates, m_constants = self.rws(
+                x, y, n_samples=n_samples, qks=qks)
+            constants = qss + m_constants + q_constants
+        elif self.inference_method == 'adaptive':
+            print 'AIR'
+            (qss, _), q_constants, updates = self.infer_q(
+                x, y, n_inference_steps, n_inference_samples=n_inference_samples)
+            qks = [q[-1] for q in qss]
+            results, _, updates_m, m_constants = self.m_step(
+                x, y, qks, n_samples=n_samples)
+            updates.update(updates_m)
+            constants = qss + m_constants + q_constants
+        return results, updates, constants
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
-                 calculate_log_marginal=False, stride=1):
+                 n_inference_samples=20, stride=10):
 
-        outs = OrderedDict()
-        updates = theano.OrderedUpdates()
-
-        (qss, i_costs), _, updates_i = self.infer_q(x, y, n_inference_steps)
-        updates.update(updates_i)
+        (qss, i_costs), _, updates = self.infer_q(
+            x, y, n_inference_steps, n_inference_samples=n_inference_samples)
 
         if n_inference_steps > stride and stride != 0:
             steps = [0] + range(stride, n_inference_steps, stride)
@@ -362,53 +478,22 @@ class DeepSBN(Layer):
         else:
             steps = [0]
 
-        lower_bounds = []
-        nlls = []
-        pys = []
-
+        full_results = OrderedDict()
+        samples = OrderedDict()
         for i in steps:
-            qs = [q[i] for q in qss]
-            hs = []
-            for l, q in enumerate(qs):
-                r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
-                h = (r <= q[None, :, :]).astype(floatX)
-                hs.append(h)
+            qks  = [qks[i] for qks in qss]
+            results, samples_k, updates_m, _ = self.m_step(
+                x, y, qks, n_samples=n_samples)
+            updates.update(updates_m)
+            update_dict_of_lists(full_results, **results)
+            update_dict_of_lists(samples, **samples_k)
 
-            ys = [y[None, :, :]] + hs[:-1]
-            p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
-            pys.append(p_ys[0])
+        results = OrderedDict()
+        for k, v in full_results.iteritems():
+            results[k] = v[-1]
+            results['d_' + k] = v[0] - v[-1]
 
-            lower_bound = self.prior.neg_log_prob(qs[-1]).mean()
-            for l in xrange(self.n_layers):
-                post_term = self.posteriors[l].entropy(qs[l])
-                cond_term = self.conditionals[l].neg_log_prob(ys[l], p_ys[l]).mean(axis=0)
-                lower_bound += (cond_term - post_term).mean(axis=0)
-
-            lower_bounds.append(lower_bound)
-
-            if calculate_log_marginal:
-                log_w = -self.prior.neg_log_prob(hs[-1])
-                for l in xrange(self.n_layers):
-                    cond_term = -self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
-                    post_term = -self.posteriors[l].neg_log_prob(hs[l], qs[l][None, :, :])
-                    log_w += cond_term - post_term
-
-                log_w_max = T.max(log_w, axis=0, keepdims=True)
-                w = T.exp(log_w - log_w_max)
-                nll = -(T.log(w.mean(axis=0, keepdims=True)) + log_w_max).mean()
-                nlls.append(nll)
-
-        outs.update(
-            pys=pys,
-            lower_bound=lower_bounds[-1],
-            lower_bounds=lower_bounds,
-            lower_bound_gain=(lower_bounds[0]-lower_bounds[-1])
-        )
-
-        if calculate_log_marginal:
-            outs.update(nll=nlls[-1], nlls=nlls)
-
-        return outs, updates
+        return results, samples, full_results, updates
 
 
 class DeepSBN_AR(DeepSBN):
