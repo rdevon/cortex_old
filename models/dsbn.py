@@ -48,6 +48,7 @@ def unpack(dim_hs=None,
            **model_args):
 
     dim_in = int(dim_in)
+    dataset_args = dataset_args[()]
 
     kwargs = dict(
         inference_method=inference_method,
@@ -68,6 +69,7 @@ def unpack(dim_hs=None,
     models.append(model)
     models += model.conditionals
     models += model.posteriors
+    models.append(model.prior)
 
     return models, model_args, dict(dataset=dataset, dataset_args=dataset_args)
 
@@ -294,7 +296,7 @@ class DeepSBN(Layer):
         outputs_info = q0s + [None]
         non_seqs     = [y] + self.params_infer() + self.get_params()
 
-        print 'Doing %d inference steps and a rate of %.2f with %d inference samples' % (n_inference_steps, self.inference_rate, self.n_inference_samples)
+        print 'Doing %d inference steps and a rate of %.2f with %d inference samples' % (n_inference_steps, self.inference_rate, n_inference_samples)
 
         if isinstance(n_inference_steps, T.TensorVariable) or n_inference_steps > 1:
             rs  = []
