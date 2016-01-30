@@ -174,7 +174,7 @@ def load_model(model_file, f_unpack=None, **extra_args):
         raise ValueError('ERROR: Leftover params: %s' %
                          pprint.pformat(pretrained_kwargs.keys()))
 
-    return model_dict, pretrained_kwargs
+    return model_dict, kwargs
 
 def check_bad_nums(rvals, names):
     found = False
