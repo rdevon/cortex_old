@@ -368,10 +368,10 @@ class SigmoidBeliefNetwork(Layer):
     def infer_q(self, x, y, n_inference_steps, n_inference_samples):
         updates = theano.OrderedUpdates()
 
-        q0 = self.posterior(x)
-        constants = [q0]
+        q0           = self.posterior(x)
+        constants    = [q0]
         outputs_info = [q0, None]
-        non_seqs = [y, q0] + self.params_infer() + self.get_params()
+        non_seqs     = [y, q0] + self.params_infer() + self.get_params()
 
         print ('Doing %d inference steps and a rate of %.2f with %d '
                'inference samples'
@@ -424,11 +424,12 @@ class SigmoidBeliefNetwork(Layer):
 
         log_ph   = -self.prior.neg_log_prob(h)
         log_qh   = -self.posterior.neg_log_prob(h, q0[None, :, :])
+        log_qkh  = -self.posterior.neg_log_prob(h, qk[None, :, :])
         log_py_h = -self.conditional.neg_log_prob(y[None, :, :], py)
 
         assert log_ph.ndim == log_qh.ndim == log_py_h.ndim
 
-        log_p         = log_sum_exp(log_py_h + log_ph - log_qh, axis=0) - T.log(n_samples)
+        log_p         = log_sum_exp(log_py_h + log_ph - log_qkh, axis=0) - T.log(n_samples)
 
         y_energy      = -log_py_h.mean(axis=0)
         prior_energy  = -log_ph.mean(axis=0)
