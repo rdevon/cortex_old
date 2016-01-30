@@ -69,7 +69,7 @@ def init_inference_args(model,
         model.unpack_infer = model._unpack_momentum
         model.params_infer = model._params_momentum
         kwargs = init_momentum_args(model, **extra_inference_args)
-    elif inference_method == 'adaptive' or inference_method == 'rws':
+    elif inference_method is None or inference_method == 'adaptive' or inference_method == 'rws':
         model.step_infer = model._step_adapt
         model.init_infer = model._init_adapt
         model.unpack_infer = model._unpack_adapt
