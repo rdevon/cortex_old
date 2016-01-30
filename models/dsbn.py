@@ -34,6 +34,44 @@ from utils.tools import (
 )
 
 
+def unpack(dim_hs=None,
+           dim_in=None,
+           z_init=None,
+           recognition_net=None,
+           generation_net=None,
+           n_inference_steps=None,
+           inference_method=None,
+           inference_rate=None,
+           extra_inference_args=dict(),
+           n_inference_samples=None,
+           input_mode=None, prior=None, n_layers=None, dataset=None, dataset_args=None,
+           **model_args):
+
+    dim_in = int(dim_in)
+
+    kwargs = dict(
+        inference_method=inference_method,
+        inference_rate=inference_rate,
+        n_inference_steps=n_inference_steps,
+        z_init=z_init,
+        n_inference_samples=n_inference_samples,
+        extra_inference_args=extra_inference_args
+    )
+
+    out_act = 'T.nnet.sigmoid'
+
+    models = []
+    model = DeepSBN(dim_in, dim_hs=dim_hs,
+            conditionals=None,
+            posteriors=None,
+            **kwargs)
+    models.append(model)
+    models += model.conditionals
+    models += model.posteriors
+
+    return models, model_args, dict(dataset=dataset, dataset_args=dataset_args)
+
+
 class DeepSBN(Layer):
     def __init__(self, dim_in, dim_h=None, n_layers=2, dim_hs=None,
                  posteriors=None, conditionals=None,
@@ -66,10 +104,8 @@ class DeepSBN(Layer):
     def set_params(self):
         self.params = OrderedDict()
 
-        print self.prior
         if self.prior is None:
             self.prior = Bernoulli(self.dim_hs[-1])
-        print self.prior
 
         if self.posteriors is None:
             self.posteriors = [None for _ in xrange(self.n_layers)]
