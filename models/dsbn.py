@@ -411,7 +411,7 @@ class DeepSBN(Layer):
             qs.append(q)
             state = q
             if qks is None:
-                qcs.append(q.copy)
+                qcs.append(q.copy())
             else:
                 qcs.append(qks[l])
 
@@ -470,7 +470,7 @@ class DeepSBN(Layer):
             py=p_ys[0]
         )
 
-        constants = qks + [w_tilde] + qcs
+        constants = [w_tilde] + qcs
         return results, samples, theano.OrderedUpdates(), constants
 
     # Inference
