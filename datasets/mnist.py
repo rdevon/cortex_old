@@ -27,24 +27,22 @@ def get_iter(inf=False, batch_size=128):
 class MNIST(object):
     def __init__(self, batch_size=128, source=None,
                  restrict_digits=None, mode='train', shuffle=True, inf=False,
-                 binarize=False,
+                 binarize=False, name='mnist',
                  stop=None, out_path=None):
 
         if source is None:
             raise ValueError('No source file provided')
-        print 'Loading MNIST ({mode})'.format(mode=mode)
+        print 'Loading {name} ({mode})'.format(name=name, mode=mode)
 
-        with gzip.open(source, 'rb') as f:
-            x = cPickle.load(f)
-
-        X, Y = self.get_data(x, mode)
+        X, Y = self.get_data(source, mode)
         self.mode = mode
 
         self.image_shape = (28, 28)
         self.out_path = out_path
 
+        uniques = np.unique(Y).tolist()
         if restrict_digits is None:
-            n_classes = 10
+            n_classes = len(uniques)
         else:
             n_classes = len(restrict_digits)
 
@@ -52,7 +50,8 @@ class MNIST(object):
 
         if restrict_digits is None:
             for idx in xrange(X.shape[0]):
-                O[idx, Y[idx]] = 1.;
+                i = uniques.index(Y[idx])
+                O[idx, i] = 1.;
         else:
             print 'Restricting to digits %s' % restrict_digits
             new_X = []
@@ -71,18 +70,16 @@ class MNIST(object):
         self.n = X.shape[0]
         print 'Data shape: %d x %d' % X.shape
 
-        self.dims = dict(mnist=X.shape[1], label=len(np.unique(Y)))
-        self.acts = dict(mnist='T.nnet.sigmoid', label='T.nnet.softmax')
+        self.dims = dict(label=len(np.unique(Y)))
+        self.dims[name] = X.shape[1]
+        self.acts = dict(label='T.nnet.softmax')
+        self.acts[name] = 'T.nnet.sigmoid'
 
         self.shuffle = shuffle
         self.pos = 0
         self.bs = batch_size
         self.inf = inf
         self.next = self._next
-
-        if binarize:
-            print 'Binarizing MNIST'
-            X = rng_.binomial(p=X, size=X.shape, n=1).astype('float32')
 
         self.X = X
         self.O = O
@@ -92,7 +89,10 @@ class MNIST(object):
         if self.shuffle:
             self.randomize()
 
-    def get_data(self, x, mode):
+    def get_data(self, source, mode):
+        with gzip.open(source, 'rb') as f:
+            x = cPickle.load(f)
+
         if mode == 'train':
             X = np.float32(x[0][0])
             Y = np.float32(x[0][1])
