@@ -239,13 +239,18 @@ class DeepSBN(Layer):
     def _init_adapt(self, qs):
         return []
 
-    def init_q(self, state):
+    def init_q(self, state, sample_posterior=False, n_samples=10):
         print 'Initializing variational params for AdIS'
         q0s = []
+        state = state[None, :, :]
 
         for l in xrange(self.n_layers):
-            state = self.posteriors[l](state)
-            q0s.append(state)
+            q0 = self.posteriors[l](state).mean(axis=0)
+            q0s.append(q0)
+            if sample_posterior:
+                state, _ = self.posteriors[l].sample(q0, n_samples=n_samples)
+            else:
+                state = q0[None, :, :]
 
         return q0s
 
@@ -288,10 +293,13 @@ class DeepSBN(Layer):
 
     # Learning -----------------------------------------------------------------
 
-    def infer_q(self, x, y, n_inference_steps, n_inference_samples):
+    def infer_q(self, x, y, n_inference_steps, n_inference_samples,
+                sample_posterior=False):
         updates = theano.OrderedUpdates()
 
-        q0s          = self.init_q(x)
+        q0s          = self.init_q(x,
+                                   sample_posterior=sample_posterior,
+                                   n_samples=n_inference_samples)
         constants    = q0s
         outputs_info = q0s + [None]
         non_seqs     = [y] + self.params_infer() + self.get_params()
@@ -336,15 +344,18 @@ class DeepSBN(Layer):
 
         return (qss, i_costs), constants, updates
 
-    def m_step(self, x, y, qks, n_samples=10):
+    def m_step(self, x, y, qks, n_samples=10, sample_posterior=False):
         constants = qks
 
         q0s   = []
-        state = x
+        state = x[None, :, :]
         for l in xrange(self.n_layers):
-            q0 = self.posteriors[l](state)
+            q0 = self.posteriors[l](state).mean(axis=0)
             q0s.append(q0)
-            state = q0
+            if sample_posterior:
+                state, _ = self.posteriors[l].sample(qks[l], n_samples=n_samples)
+            else:
+                state = q0[None, :, :]
 
         hs = []
         for l, qk in enumerate(qks):
@@ -360,8 +371,8 @@ class DeepSBN(Layer):
         log_qkh  = T.constant(0.).astype(floatX)
         for l in xrange(self.n_layers):
             log_py_h -= self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
-            log_qh -= self.posteriors[l].neg_log_prob(hs[l], q0s[l])
-            log_qkh -= self.posteriors[l].neg_log_prob(hs[l], qks[l])
+            log_qh   -= self.posteriors[l].neg_log_prob(hs[l], q0s[l])
+            log_qkh  -= self.posteriors[l].neg_log_prob(hs[l], qks[l])
         log_ph = -self.prior.neg_log_prob(hs[-1])
 
         assert log_ph.ndim == log_qh.ndim == log_py_h.ndim
@@ -401,15 +412,18 @@ class DeepSBN(Layer):
         constants = qks
         return results, samples, theano.OrderedUpdates(), constants
 
-    def rws(self, x, y, n_samples=10, qks=None):
+    def rws(self, x, y, n_samples=10, qks=None, sample_posterior=False):
         print 'Doing RWS, %d samples' % n_samples
         qs   = []
         qcs   = []
-        state = x
+        state = x[None, :, :]
         for l in xrange(self.n_layers):
-            q = self.posteriors[l](state)
+            q = self.posteriors[l](state).mean(axis=0)
             qs.append(q)
-            state = q
+            if sample_posterior:
+                state, _ = self.posteriors[l].sample(q, n_samples=n_samples)
+            else:
+                state = q[None, :, :]
             if qks is None:
                 qcs.append(q.copy)
             else:
@@ -475,36 +489,46 @@ class DeepSBN(Layer):
 
     # Inference
     def inference(self, x, y, n_inference_steps=20, n_inference_samples=20,
-                  n_samples=100):
+                  n_samples=100, sample_posterior=False):
+        if sample_posterior:
+            print 'Sampling posterior for inference (SBN) at each level'
         constants = []
         if self.inference_method == 'rws' and n_inference_steps == 0:
             print 'RWS'
-            results, _, updates, m_constants = self.rws(x, y, n_samples=n_samples)
+            results, _, updates, m_constants = self.rws(
+                x, y, n_samples=n_samples, sample_posterior=sample_posterior)
             constants += m_constants
         elif self.inference_method == 'rws':
             print 'AIR and RWS'
             (qss, _), q_constants, updates = self.infer_q(
-                x, y, n_inference_steps, n_inference_samples=n_inference_samples)
+                x, y, n_inference_steps, n_inference_samples=n_inference_samples,
+                sample_posterior=sample_posterior)
             qks = [q[-1] for q in qss]
             results, _, updates, m_constants = self.rws(
-                x, y, n_samples=n_samples, qks=qks)
+                x, y, n_samples=n_samples, qks=qks,
+                sample_posterior=sample_posterior)
             constants = qss + m_constants + q_constants
         elif self.inference_method == 'adaptive':
             print 'AIR'
             (qss, _), q_constants, updates = self.infer_q(
-                x, y, n_inference_steps, n_inference_samples=n_inference_samples)
+                x, y, n_inference_steps,
+                n_inference_samples=n_inference_samples,
+                sample_posterior=sample_posterior)
             qks = [q[-1] for q in qss]
             results, _, updates_m, m_constants = self.m_step(
-                x, y, qks, n_samples=n_samples)
+                x, y, qks, n_samples=n_samples,
+                sample_posterior=sample_posterior)
             updates.update(updates_m)
             constants = qss + m_constants + q_constants
         return results, updates, constants
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
-                 n_inference_samples=20, stride=10):
+                 n_inference_samples=20, stride=10,
+                 sample_posterior=False):
 
         (qss, i_costs), _, updates = self.infer_q(
-            x, y, n_inference_steps, n_inference_samples=n_inference_samples)
+            x, y, n_inference_steps, n_inference_samples=n_inference_samples,
+            sample_posterior=sample_posterior)
 
         if n_inference_steps > stride and stride != 0:
             steps = [0] + range(stride, n_inference_steps, stride)
@@ -521,7 +545,8 @@ class DeepSBN(Layer):
         for i in steps:
             qks  = [qks[i] for qks in qss]
             results, samples_k, updates_m, _ = self.m_step(
-                x, y, qks, n_samples=n_samples)
+                x, y, qks, n_samples=n_samples,
+                sample_posterior=sample_posterior)
             updates.update(updates_m)
             update_dict_of_lists(full_results, **results)
             update_dict_of_lists(samples, **samples_k)
@@ -589,7 +614,7 @@ class DeepSBN_AR(DeepSBN):
 
         hs = []
         for l, qk in enumerate(qks):
-            h = self.posteriors[l].sample(qk, size=(n_samples, qk.shape[0], qk.shape[1]))
+            h, _ = self.posteriors[l].sample(qk, size=(n_samples, qk.shape[0], qk.shape[1]))
             hs.append(h)
 
         p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
