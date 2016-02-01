@@ -139,9 +139,8 @@ def _binary_entropy(p):
 
 # SOFTMAX ----------------------------------------------------------------------
 
-def _softmax(x, axis=None):
-    if axis is None:
-        axis = x.ndim - 1
+def _softmax(x):
+    axis = x.ndim - 1
     e_x = T.exp(x - x.max(axis=axis, keepdims=True))
     out = e_x / e_x.sum(axis=axis, keepdims=True)
     return out

@@ -17,7 +17,11 @@ from distributions import (
     _normal,
     _neg_normal_log_prob,
     _normal_entropy,
-    _normal_prob
+    _normal_prob,
+    _softmax,
+    _sample_softmax,
+    _categorical_cross_entropy,
+    _categorical_entropy
 )
 from layers import Layer
 from utils.tools import (
@@ -32,17 +36,27 @@ from utils.tools import (
 class MLP(Layer):
     must_sample = False
 
-    def __init__(self, dim_in, dim_h, dim_out, n_layers,
+    def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
                  f_sample=None, f_neg_log_prob=None, f_entropy=None,
                  h_act='T.nnet.sigmoid', out_act='T.nnet.sigmoid',
                  name='MLP',
                  **kwargs):
 
         self.dim_in = dim_in
-        self.dim_h = dim_h
+
+        if dim_h is None:
+            assert dim_hs is not None
+            assert n_layers is None
+        else:
+            assert dim_hs is None
+            dim_hs = []
+            for l in xrange(n_layers - 1):
+                dim_hs.append(dim_h)
+        dim_hs.append(dim_out)
+        self.dim_hs = dim_hs
         self.dim_out = dim_out
-        self.n_layers = n_layers
-        assert n_layers > 0
+        self.n_layers = len(dim_hs)
+        assert self.n_layers > 0
 
         self.h_act = h_act
         self.out_act = out_act
@@ -64,6 +78,12 @@ class MLP(Layer):
             self.f_entropy = _normal_entropy
             self.f_prob = _normal_prob
             self.dim_out *= 2
+        elif out_act == 'T.nnet.softmax':
+            self.f_sample = _sample_softmax
+            self.f_neg_log_prob = _categorical_cross_entropy
+            self.f_entropy = _categorical_entropy
+            self.f_prob = lambda x: x
+            self.out_act = '_softmax'
         else:
             assert f_sample is not None
             assert f_neg_log_prob is not None
@@ -107,9 +127,9 @@ class MLP(Layer):
         return self.f_prob(p)
 
     @staticmethod
-    def factory(dim_in=None, dim_h=None, dim_out=None, n_layers=None,
+    def factory(dim_in=None, dim_out=None,
                 **kwargs):
-        return MLP(dim_in, dim_h, dim_out, n_layers, **kwargs)
+        return MLP(dim_in, dim_out, **kwargs)
 
     def get_L2_weight_cost(self, gamma, layers=None):
         if layers is None:
@@ -129,12 +149,8 @@ class MLP(Layer):
             if l == 0:
                 dim_in = self.dim_in
             else:
-                dim_in = self.dim_h
-
-            if l == self.n_layers - 1:
-                dim_out = self.dim_out
-            else:
-                dim_out = self.dim_h
+                dim_in = self.dim_hs[l-1]
+            dim_out = self.dim_hs[l]
 
             W = norm_weight(dim_in, dim_out,
                                   scale=self.weight_scale, ortho=False)
@@ -170,6 +186,8 @@ class MLP(Layer):
                 x = eval(activ)(T.dot(x, W) + b)
 
             if self.dropout:
+                print 'Adding dropout to layer {layer} for MLP {name}'.format(
+                    layer=l, name=self.name)
                 if activ == 'T.tanh':
                     raise NotImplementedError('dropout for tanh units not implemented yet')
                 elif activ in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
