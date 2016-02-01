@@ -533,10 +533,8 @@ class DeepSBN(Layer):
         if n_inference_steps > stride and stride != 0:
             steps = [0] + range(stride, n_inference_steps, stride)
             steps = steps[:-1] + [n_inference_steps - 1]
-        elif n_inference_steps > 1:
-            steps = [0, 1, n_inference_steps - 1]
-        elif n_inference_steps == 1:
-            steps = [0, 1]
+        elif n_inference_steps > 0:
+            steps = [0, n_inference_steps - 1]
         else:
             steps = [0]
 
