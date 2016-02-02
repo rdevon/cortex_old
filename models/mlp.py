@@ -81,6 +81,7 @@ class MLP(Layer):
         elif out_act == 'T.nnet.softmax':
             self.f_sample = _sample_softmax
             self.f_neg_log_prob = _categorical_cross_entropy
+            #self.f_neg_log_prob = _cross_entropy
             self.f_entropy = _categorical_entropy
             self.f_prob = lambda x: x
             self.out_act = '_softmax'
@@ -170,7 +171,7 @@ class MLP(Layer):
     def preact(self, x, *params):
         # Used within scan with `get_params`
         params = list(params)
-
+        outs = OrderedDict(x=x)
         for l in xrange(self.n_layers):
             W = params.pop(0)
             b = params.pop(0)
@@ -179,13 +180,15 @@ class MLP(Layer):
                 print 'Using weight noise in layer %d for MLP %s' % (l, self.name)
                 W += self.trng.normal(avg=0., std=self.weight_noise, size=W.shape)
 
+            outs['preact%d' % l] = T.dot(x, W) + b
             if l == self.n_layers - 1:
                 x = T.dot(x, W) + b
             else:
                 activ = self.h_act
                 x = eval(activ)(T.dot(x, W) + b)
+            outs[l] = x
 
-            if self.dropout:
+            if self.dropout and l != self.n_layers - 1:
                 print 'Adding dropout to layer {layer} for MLP {name}'.format(
                     layer=l, name=self.name)
                 if activ == 'T.tanh':
@@ -198,20 +201,23 @@ class MLP(Layer):
                     raise NotImplementedError('No dropout for %s yet' % activ)
 
         assert len(params) == 0, params
-        return x
+        return x, outs
 
     def step_call(self, x, *params):
-        x = self.preact(x, *params)
+        x, outs = self.preact(x, *params)
         return eval(self.out_act)(x)
 
     def __call__(self, x, return_preact=False):
         params = self.get_params()
         if return_preact:
-            x = self.preact(x, *params)
+            x, outs = self.preact(x, *params)
         else:
             x = self.step_call(x, *params)
-
         return x
+
+    def debug_call(self, x):
+        x, outs = self.preact(x, *self.get_params())
+        return eval(self.out_act)(x), outs
 
 # MULTIMODAL MLP CLASS --------------------------------------------------------
 

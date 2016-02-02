@@ -3,6 +3,7 @@ Module for Deep Sigmoid Belief Networks
 '''
 
 from collections import OrderedDict
+from copy import copy
 import numpy as np
 import theano
 from theano import tensor as T
@@ -120,6 +121,7 @@ class DeepSBN(Layer):
             assert len(self.conditionals) == self.n_layers
 
         for l, dim_h in enumerate(self.dim_hs):
+
             if l == 0:
                 dim_in = self.dim_in
             else:
@@ -127,14 +129,14 @@ class DeepSBN(Layer):
 
             if self.posteriors[l] is None:
                 self.posteriors[l] = MLP(
-                    dim_in, dim_h, dim_h, 1,
+                    dim_in, dim_h, dim_h=dim_h, n_layers=1,
                     rng=self.rng, trng=self.trng,
                     h_act='T.nnet.softplus',
                     out_act='T.nnet.sigmoid')
 
             if self.conditionals[l] is None:
                 self.conditionals[l] = MLP(
-                    dim_h, dim_h, dim_in, 1,
+                    dim_h, dim_in, dim_h=dim_h, n_layers=1,
                     rng=self.rng, trng=self.trng,
                     h_act='T.nnet.softplus',
                     out_act='T.nnet.sigmoid')
