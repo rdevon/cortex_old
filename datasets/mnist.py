@@ -81,6 +81,9 @@ class MNIST(object):
         self.inf = inf
         self.next = self._next
 
+        if binarize:
+            X = rng_.binomial(p=X, size=X.shape, n=1).astype('float32')
+
         self.X = X
         self.O = O
 
