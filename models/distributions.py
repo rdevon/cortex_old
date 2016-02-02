@@ -152,8 +152,7 @@ def _sample_softmax(trng, p, size=None):
 
 def _categorical_cross_entropy(x, p):
     p = T.clip(p, 1e-7, 1.0 - 1e-7)
-    energy = T.nnet.binary_crossentropy(p, x).sum(axis=x.ndim-1)
-    return (energy / p.shape[p.ndim-1]).astype('float32')
+    return T.nnet.binary_crossentropy(p, x).sum(axis=x.ndim-1)
 
 def _categorical_entropy(p):
     p_c = T.clip(p, 1e-7, 1.0 - 1e-7)

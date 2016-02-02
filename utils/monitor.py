@@ -34,6 +34,14 @@ class SimpleMonitor(object):
         for k, v in kwargs.iteritems():
             self.d[k] = v
 
+    def simple_display(self, d):
+        length = len('\t' ) + max(len(k) for k in d.keys())
+        for k, vs in d.iteritems():
+            s = '\t%s' % k
+            s += ' ' * (length - len(s))
+            s += ' |\t%.4f' % vs
+            print s
+
     def display(self):
         d = OrderedDict()
         for k in sorted(self.d):
