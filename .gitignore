@@ -1,4 +1,6 @@
 *.pdf
+*.gz
+*.zip
 
 mine_tweets.py
 # Byte-compiled / optimized / DLL files
