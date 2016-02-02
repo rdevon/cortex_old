@@ -38,6 +38,8 @@ class MNIST(object):
         self.mode = mode
 
         self.image_shape = (28, 28)
+        print Y[:50]
+        self.save_images(X[:50], '/Users/devon/tmp/mnist_test.png')
         self.out_path = out_path
 
         uniques = np.unique(Y).tolist()
@@ -80,6 +82,9 @@ class MNIST(object):
         self.bs = batch_size
         self.inf = inf
         self.next = self._next
+
+        if binarize:
+            X = rng_.binomial(p=X, size=X.shape, n=1).astype('float32')
 
         self.X = X
         self.O = O
