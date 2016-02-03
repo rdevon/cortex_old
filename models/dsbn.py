@@ -524,12 +524,6 @@ class DeepSBN(Layer):
             updates.update(updates_m)
             constants = qss + m_constants + q_constants
 
-
-        results['extra'] = i_costs
-        for i, qs in enumerate(qss):
-            for s in xrange(n_inference_steps):
-                results['qs%d_%s' % (i, s)] = qs[s]
-
         return results, updates, constants
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
