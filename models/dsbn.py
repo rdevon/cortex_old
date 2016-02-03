@@ -220,17 +220,18 @@ class DeepSBN(Layer):
         ys   = [y[None, :, :]] + hs[:-1]
         p_ys = [self.p_y_given_h(h, l, *params) for l, h in enumerate(hs)]
 
-        log_w = -self.prior.step_neg_log_prob(hs[-1], *prior_params)
+        log_ph = -self.prior.step_neg_log_prob(hs[-1], *prior_params)
+        log_py_h = T.constant(0.).astype(floatX)
+        log_qh = T.constant(0.).astype(floatX)
         for l in xrange(self.n_layers):
-            cond_term = -self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
-            post_term = -self.posteriors[l].neg_log_prob(hs[l], qs[l][None, :, :])
-            assert cond_term.ndim == post_term.ndim == log_w.ndim
-            log_w     = log_w + cond_term - post_term
+            log_py_h += -self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
+            log_qh += -self.posteriors[l].neg_log_prob(hs[l], qs[l][None, :, :])
 
-        log_w_max = T.max(log_w, axis=0, keepdims=True)
-        w         = T.exp(log_w - log_w_max)
-        w_tilde   = w / w.sum(axis=0, keepdims=True)
-        cost      = -T.log(w).mean()
+        log_pq  = log_py_h + log_ph - log_qh - T.log(rs[0].shape[0]).astype(floatX)
+        w_norm  = log_sum_exp(log_pq, axis=0)
+        log_w   = log_pq - T.shape_padleft(w_norm)
+        w_tilde = T.exp(log_w)
+        cost    = -log_pq.mean()
 
         for q, h in zip(qs, hs):
             q_ = (w_tilde[:, :, None] * h).sum(axis=0)
@@ -344,7 +345,7 @@ class DeepSBN(Layer):
             qss, _ = self.unpack_infer(q0s, None)
             icosts = [T.constant(0.).astype(floatX)]
 
-        return (qss, i_costs), constants, updates
+        return (qss, q0s[0]), constants, updates
 
     def m_step(self, x, y, qks, n_samples=10, sample_posterior=False):
         constants = qks
@@ -512,7 +513,7 @@ class DeepSBN(Layer):
             constants = qss + m_constants + q_constants
         elif self.inference_method == 'adaptive':
             print 'AIR'
-            (qss, _), q_constants, updates = self.infer_q(
+            (qss, i_costs), q_constants, updates = self.infer_q(
                 x, y, n_inference_steps,
                 n_inference_samples=n_inference_samples,
                 sample_posterior=sample_posterior)
@@ -522,6 +523,13 @@ class DeepSBN(Layer):
                 sample_posterior=sample_posterior)
             updates.update(updates_m)
             constants = qss + m_constants + q_constants
+
+
+        results['extra'] = i_costs
+        for i, qs in enumerate(qss):
+            for s in xrange(n_inference_steps):
+                results['qs%d_%s' % (i, s)] = qs[s]
+
         return results, updates, constants
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
