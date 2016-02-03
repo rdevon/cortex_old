@@ -15,7 +15,7 @@ from utils.tools import (
 
 class UCI(object):
     def __init__(self, batch_size=100, source=None, mode='train', shuffle=True,
-                 inf=False, name='UCI', stop=None):
+                 inf=False, name='uci', stop=None):
 
         if source is None:
             raise ValueError('No source file provided')
@@ -85,5 +85,3 @@ class UCI(object):
 
     def save_images(self, x, imgfile, transpose=False, x_limit=None):
         pass
-
-
