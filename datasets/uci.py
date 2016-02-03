@@ -44,7 +44,7 @@ class UCI(object):
             self.randomize()
 
     def get_data(self, source, mode):
-        with h5py.File('/Users/devon/Data/adult.h5', 'r') as f:
+        with h5py.File(source, 'r') as f:
             X = f[mode]
             X = X[:X.shape[0]].astype(floatX)
 
