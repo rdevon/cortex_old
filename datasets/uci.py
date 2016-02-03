@@ -15,7 +15,7 @@ from utils.tools import (
 
 class UCI(object):
     def __init__(self, batch_size=100, source=None, mode='train', shuffle=True,
-                 inf=False, name='UCI', stop=None):
+                 inf=False, name='uci', stop=None):
 
         if source is None:
             raise ValueError('No source file provided')
@@ -44,7 +44,7 @@ class UCI(object):
             self.randomize()
 
     def get_data(self, source, mode):
-        with h5py.File('/Users/devon/Data/adult.h5', 'r') as f:
+        with h5py.File(source, 'r') as f:
             X = f[mode]
             X = X[:X.shape[0]].astype(floatX)
 
@@ -85,5 +85,3 @@ class UCI(object):
 
     def save_images(self, x, imgfile, transpose=False, x_limit=None):
         pass
-
-
