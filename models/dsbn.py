@@ -227,11 +227,12 @@ class DeepSBN(Layer):
             log_py_h += -self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
             log_qh += -self.posteriors[l].neg_log_prob(hs[l], qs[l][None, :, :])
 
-        log_pq  = log_py_h + log_ph - log_qh - T.log(rs[0].shape[0]).astype(floatX)
-        w_norm  = log_sum_exp(log_pq, axis=0)
-        log_w   = log_pq - T.shape_padleft(w_norm)
-        w_tilde = T.exp(log_w)
-        cost    = -log_pq.mean()
+        log_p     = log_py_h + log_ph - log_qh
+        log_p_max = T.max(log_p, axis=0, keepdims=True)
+
+        w       = T.exp(log_p - log_p_max)
+        w_tilde = w / w.sum(axis=0, keepdims=True)
+        cost = w.mean()
 
         for q, h in zip(qs, hs):
             q_ = (w_tilde[:, :, None] * h).sum(axis=0)
