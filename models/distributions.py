@@ -78,8 +78,8 @@ class Bernoulli(Distribution):
         return [self.z]
 
     def get_prob(self, z):
-        return T.nnet.sigmoid(z) * 0.9999 + 0.000005
-        #return T.nnet.sigmoid(z)
+        #return T.nnet.sigmoid(z) * 0.9999 + 0.000005
+        return T.nnet.sigmoid(z)
 
 class Gaussian(Distribution):
     def __init__(self, dim, name='gaussian', **kwargs):
