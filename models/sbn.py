@@ -456,7 +456,8 @@ class SigmoidBeliefNetwork(Layer):
         })
 
         samples = OrderedDict(
-            py=py
+            py=py,
+            batch_energies=y_energy
         )
 
         constants = [qk]
