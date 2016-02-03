@@ -19,6 +19,8 @@ from utils.tools import (
 )
 
 
+_clip = 1e-7
+
 class Distribution(Layer):
     def __init__(self, dim, name='distribution', must_sample=False, **kwargs):
         self.dim = dim
@@ -127,14 +129,14 @@ def _centered_binomial(trng, p, size=None):
 
 def _cross_entropy(x, p):
     energy = -x * T.log(p) - (1 - x) * T.log(1 - p)
-    #p = T.clip(p, 1e-7, 1.0 - 1e-7)
+    #p = T.clip(p, _clip, 1.0 - _clip)
     #energy = T.nnet.binary_crossentropy(p, x)
     return energy.sum(axis=energy.ndim-1)
 
 def _binary_entropy(p):
-    #p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
-    #entropy = T.nnet.binary_crossentropy(p_c, p)
     entropy = -p * T.log(p) - (1 - p) * T.log(1 - p)
+    #p_c = T.clip(p, _clip, 1.0 - _clip)
+    #entropy = T.nnet.binary_crossentropy(p_c, p)
     return entropy.sum(axis=entropy.ndim-1)
 
 # SOFTMAX ----------------------------------------------------------------------
@@ -151,11 +153,11 @@ def _sample_softmax(trng, p, size=None):
     return trng.multinomial(pvals=p, size=size).astype('float32')
 
 def _categorical_cross_entropy(x, p):
-    p = T.clip(p, 1e-7, 1.0 - 1e-7)
+    p = T.clip(p, _clip, 1.0 - _clip)
     return T.nnet.binary_crossentropy(p, x).sum(axis=x.ndim-1)
 
 def _categorical_entropy(p):
-    p_c = T.clip(p, 1e-7, 1.0 - 1e-7)
+    p_c = T.clip(p, _clip, 1.0 - _clip)
     entropy = T.nnet.categorical_crossentropy(p_c, p)
     return entropy
 
