@@ -1,6 +1,11 @@
 *.pdf
 *.gz
 *.zip
+*.aux
+*.log
+*.blg
+*.bbl
+*.out
 
 mine_tweets.py
 # Byte-compiled / optimized / DLL files
