@@ -357,6 +357,7 @@ class DeepSBN(Layer):
             q0 = self.posteriors[l](state).mean(axis=0)
             q0s.append(q0)
             if sample_posterior:
+                raise NotImplementedError()
                 state, _ = self.posteriors[l].sample(qks[l], n_samples=n_samples)
             else:
                 state = q0[None, :, :]
@@ -367,21 +368,35 @@ class DeepSBN(Layer):
             h = (r <= qk[None, :, :]).astype(floatX)
             hs.append(h)
 
+        h0s = []
+        for l, q0 in enumerate(q0s):
+            r = self.trng.uniform((n_samples, y.shape[0], self.dim_hs[l]), dtype=floatX)
+            h = (r <= q0[None, :, :]).astype(floatX)
+            h0s.append(h)
+
         p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
+        p_y0s = [conditional(h0) for h0, conditional in zip(h0s, self.conditionals)]
         ys   = [y[None, :, :]] + hs[:-1]
+        y0s   = [y[None, :, :]] + h0s[:-1]  
 
         log_py_h = T.constant(0.).astype(floatX)
+        log_py_h0 = T.constant(0.).astype(floatX)
         log_qh   = T.constant(0.).astype(floatX)
+        log_qh0  = T.constant(0.).astype(floatX)
         log_qkh  = T.constant(0.).astype(floatX)
         for l in xrange(self.n_layers):
             log_py_h -= self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
+            log_py_h0 -= self.conditionals[l].neg_log_prob(y0s[l], p_y0s[l]) 
             log_qh   -= self.posteriors[l].neg_log_prob(hs[l], q0s[l])
+            log_qh0  -= self.posteriors[l].neg_log_prob(h0s[l], q0s[l])
             log_qkh  -= self.posteriors[l].neg_log_prob(hs[l], qks[l])
         log_ph = -self.prior.neg_log_prob(hs[-1])
+        log_ph0 = -self.prior.neg_log_prob(h0s[-1])
 
         assert log_ph.ndim == log_qh.ndim == log_py_h.ndim
 
         log_p         = log_sum_exp(log_py_h + log_ph - log_qkh, axis=0) - T.log(n_samples)
+        log_p0        = log_sum_exp(log_py_h0 + log_ph0 - log_qh0, axis=0) - T.log(n_samples)
 
         y_energy      = -log_py_h.mean(axis=0)
         prior_energy  = -log_ph.mean(axis=0)
@@ -399,6 +414,7 @@ class DeepSBN(Layer):
         lower_bound = (y_energy + prior_energy - q_entropy).mean()
 
         results = OrderedDict({
+            'log p0': log_p0.mean(0),
             '-log p(x|h)': y_energy.mean(0),
             '-log p(h)': prior_energy.mean(0),
             '-log q(h)': h_energy.mean(0),
