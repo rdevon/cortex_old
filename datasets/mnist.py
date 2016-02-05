@@ -156,17 +156,19 @@ class MNIST(object):
                 axis=0)
             x = x.reshape((x_limit, x.shape[0] * x.shape[1] // x_limit, x.shape[2]))
 
+        if transpose:
+            x = x.reshape((x.shape[0], x.shape[1], self.image_shape[0], self.image_shape[1]))
+            x = x.transpose(0, 1, 3, 2)
+            x = x.reshape((x.shape[0], x.shape[1], self.image_shape[0] * self.image_shape[1]))
+
         tshape = x.shape[0], x.shape[1]
         x = x.reshape((x.shape[0] * x.shape[1], x.shape[2]))
-        image = self.show(x.T, tshape, transpose=transpose)
+        image = self.show(x.T, tshape)
         image.save(imgfile)
 
-    def show(self, image, tshape, transpose=False):
+    def show(self, image, tshape):
         fshape = self.image_shape
-        if transpose:
-            X = image
-        else:
-            X = image.T
+        X = image.T
 
         return PIL.Image.fromarray(tile_raster_images(
             X=X, img_shape=fshape, tile_shape=tshape,

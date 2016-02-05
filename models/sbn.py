@@ -365,10 +365,11 @@ class SigmoidBeliefNetwork(Layer):
 
     # Learning -----------------------------------------------------------------
 
-    def infer_q(self, x, y, n_inference_steps, n_inference_samples):
+    def infer_q(self, x, y, n_inference_steps, n_inference_samples, q0=None):
         updates = theano.OrderedUpdates()
 
-        q0           = self.posterior(x)
+        if q0 is None:
+            q0 = self.posterior(x)
         constants    = [q0]
         outputs_info = [q0, None]
         non_seqs     = [y, q0] + self.params_infer() + self.get_params()
@@ -553,10 +554,10 @@ class SigmoidBeliefNetwork(Layer):
     # Sampling and test --------------------------------------------------------
 
     def __call__(self, x, y, n_samples=100, n_inference_steps=0,
-                 n_inference_samples=20, stride=10):
+                 n_inference_samples=20, stride=10, q0=None):
 
         (qs, i_costs), _, updates = self.infer_q(
-            x, y, n_inference_steps, n_inference_samples=n_inference_samples)
+            x, y, n_inference_steps, n_inference_samples=n_inference_samples, q0=q0)
 
         if n_inference_steps > stride and stride != 0:
             steps = [0, 1] + range(stride, n_inference_steps, stride)
@@ -572,6 +573,7 @@ class SigmoidBeliefNetwork(Layer):
             qk  = qs[i]
             results, samples_k, updates_m, _ = self.m_step(
                 x, y, qk, n_samples=n_samples)
+            samples_k['q'] = qk
             updates.update(updates_m)
             update_dict_of_lists(full_results, **results)
             update_dict_of_lists(samples, **samples_k)
