@@ -9,6 +9,7 @@ import random
 import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+import warnings
 import yaml
 
 
@@ -22,6 +23,11 @@ rng_ = np.random.RandomState(random_seed)
 profile = False
 
 f_clip = lambda x, y, z: T.clip(x, y, 1.)
+
+def warn_kwargs(c, **kwargs):
+    if len(kwargs) > 0:
+        warngings.warn('Class instance %s has leftover kwargs %s'
+                       % (type(c), kwargs), RuntimeWarning)
 
 def update_dict_of_lists(d_to_update, **d):
     for k, v in d.iteritems():
@@ -245,12 +251,6 @@ def parzen_estimation(samples, tests, h=1.0):
         e = log_mean_exp((-.5 * d_s ** 2).sum(axis=1), as_numpy=True, axis=0)
         log_p += e - z
     return log_p / float(tests.shape[0])
-
-def tanh(x):
-    return T.tanh(x)
-
-def linear(x):
-    return x
 
 def log_mean_exp(x, axis=None, as_numpy=False):
     if as_numpy:
