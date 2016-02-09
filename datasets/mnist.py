@@ -1,3 +1,8 @@
+'''
+MNIST dataset
+'''
+
+from collections import OrderedDict
 import cPickle
 import gzip
 import multiprocessing as mp
@@ -12,6 +17,7 @@ from theano import tensor as T
 import time
 import traceback
 
+from . import Dataset
 from utils.tools import (
     concatenate,
     init_rngs,
@@ -21,14 +27,11 @@ from utils.tools import (
 from utils.vis_utils import tile_raster_images
 
 
-def get_iter(inf=False, batch_size=128):
-    return mnist_iterator(inf=inf, batch_size=batch_size)
-
-class MNIST(object):
-    def __init__(self, batch_size=128, source=None,
-                 restrict_digits=None, mode='train', shuffle=True, inf=False,
+class MNIST(Dataset):
+    def __init__(self, source=None, restrict_digits=None, mode='train',
                  binarize=False, name='mnist',
-                 stop=None, out_path=None):
+                 out_path=None, **kwargs):
+        super(MNIST, self).__init__(name=name, **kwargs)
 
         if source is None:
             raise ValueError('No source file provided')
@@ -62,24 +65,16 @@ class MNIST(object):
                     c_idx = restrict_digits.index(Y[j])
                     O[i, c_idx] = 1.;
                     i += 1
-            X = np.float32(new_X)
+            X = new_X.astype(floatX)
 
-        if stop is not None:
-            X = X[:stop]
-
+        if self.stop is not None:
+            X = X[:self.stop]
         self.n = X.shape[0]
-        print 'Data shape: %d x %d' % X.shape
 
         self.dims = dict(label=len(np.unique(Y)))
         self.dims[name] = X.shape[1]
         self.acts = dict(label='T.nnet.softmax')
         self.acts[name] = 'T.nnet.sigmoid'
-
-        self.shuffle = shuffle
-        self.pos = 0
-        self.bs = batch_size
-        self.inf = inf
-        self.next = self._next
 
         if binarize:
             X = rng_.binomial(p=X, size=X.shape, n=1).astype('float32')
@@ -110,25 +105,14 @@ class MNIST(object):
 
         return X, Y
 
-    def __iter__(self):
-        return self
-
     def randomize(self):
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
         self.X = self.X[rnd_idx, :]
         self.O = self.O[rnd_idx, :]
 
-    def next(self):
-        raise NotImplementedError()
-
-    def reset(self):
-        self.pos = 0
-        if self.shuffle:
-            self.randomize()
-
-    def _next(self, batch_size=None):
+    def next(self, batch_size=None):
         if batch_size is None:
-            batch_size = self.bs
+            batch_size = self.batch_size
 
         if self.pos == -1:
             self.reset()
@@ -143,7 +127,11 @@ class MNIST(object):
         if self.pos + batch_size > self.n:
             self.pos = -1
 
-        return x, y
+        rval = OrderedDict()
+        rval[self.name] = x
+        rval['label'] = y
+
+        return rval
 
     def save_images(self, x, imgfile, transpose=False, x_limit=None):
         if len(x.shape) == 2:

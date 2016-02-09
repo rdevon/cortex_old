@@ -14,6 +14,7 @@ class Dataset(object):
         self.inf = inf
         self.name = name
         self.pos = 0
+        self.stop = stop
 
         return kwargs
 
@@ -24,3 +25,6 @@ class Dataset(object):
         self.pos = 0
         if self.shuffle:
             self.randomize()
+
+    def __iter__(self):
+        return self
