@@ -24,9 +24,13 @@ profile = False
 
 f_clip = lambda x, y, z: T.clip(x, y, 1.)
 
+def get_trng():
+    trng = RandomStreams(random.randint(0, 1000000))
+    return trng
+
 def warn_kwargs(c, **kwargs):
     if len(kwargs) > 0:
-        warngings.warn('Class instance %s has leftover kwargs %s'
+        warnings.warn('Class instance %s has leftover kwargs %s'
                        % (type(c), kwargs), RuntimeWarning)
 
 def update_dict_of_lists(d_to_update, **d):
@@ -57,16 +61,16 @@ def shuffle_columns(x, srng):
         name='shuffle', strict=False)
     return y.transpose(1, 0, 2)
 
-def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan', strict=True):
+def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan', strict=False):
     return theano.scan(
         f_scan,
         sequences=seqs,
-            outputs_info=outputs_info,
-            non_sequences=non_seqs,
-            name=name,
-            n_steps=n_steps,
-            profile=profile,
-            strict=strict
+        outputs_info=outputs_info,
+        non_sequences=non_seqs,
+        name=name,
+        n_steps=n_steps,
+        profile=profile,
+        strict=strict
     )
 
 def init_weights(model, weight_noise=False, weight_scale=0.01, dropout=False, **kwargs):
@@ -127,21 +131,16 @@ def load_experiment(experiment_yaml):
     print('Experiment hyperparams: %s' % pprint.pformat(exp_dict))
     return exp_dict
 
-def load_model(model_file, f_unpack=None, **extra_args):
+def load_model(model_file, f_unpack=None):
     '''
     Loads pretrained model.
     '''
 
     print 'Loading model from %s' % model_file
     params = np.load(model_file)
-    d = dict(params)
-    d.update(**extra_args)
-    for k, v in d.iteritems():
-        try:
-            if v == np.array(None, dtype=object):
-                d[k] = None
-        except ValueError:
-            pass
+    d = dict()
+    for k in params.keys():
+        d[k] = params[k].item()
 
     models, pretrained_kwargs, kwargs = f_unpack(**d)
 

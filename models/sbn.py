@@ -32,10 +32,6 @@ from utils.tools import (
 )
 
 
-def init_momentum_args(model, momentum=0.9, **kwargs):
-    model.momentum = momentum
-    return kwargs
-
 def init_sgd_args(model, **kwargs):
     return kwargs
 
@@ -229,7 +225,8 @@ class SigmoidBeliefNetwork(Layer):
                                       'Try gbn.py')
 
         if self.posterior is None:
-            self.posterior = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
+            self.posterior = MLP(self.dim_in, self.dim_h,
+                                 dim_hs=[self.dim_h],
                                  rng=self.rng, trng=self.trng,
                                  h_act='T.nnet.sigmoid',
                                  out_act='T.nnet.sigmoid')
@@ -237,7 +234,8 @@ class SigmoidBeliefNetwork(Layer):
             raise ValueError('DARN posterior not supported ATM')
 
         if self.conditional is None:
-            self.conditional = MLP(self.dim_h, self.dim_h, self.dim_in, 1,
+            self.conditional = MLP(self.dim_h, self.dim_in,
+                                   dim_hs=[self.dim_h],
                                    rng=self.rng, trng=self.trng,
                                    h_act='T.nnet.sigmoid',
                                    out_act='T.nnet.sigmoid')
@@ -277,12 +275,12 @@ class SigmoidBeliefNetwork(Layer):
 
     def sample_from_prior(self, n_samples=99):
         h, updates = self.prior.sample(n_samples)
-        return self.conditional(h), updates
+        return self.conditional.feed(h), updates
 
     def generate_from_latent(self, h):
-        py = self.conditional(h)
-        prob = self.conditional.prob(py)
-        return prob
+        py = self.conditional.feed(h)
+        cetner = self.conditional.get_center(py)
+        return center
 
     # Misc --------------------------------------------------------------------
 
@@ -305,7 +303,7 @@ class SigmoidBeliefNetwork(Layer):
         start  = self.prior.n_params
         stop   = start + self.conditional.n_params
         params = params[start:stop]
-        return self.conditional.step_call(h, *params)
+        return self.conditional.step_feed(h, *params)
 
     # Inference ---------------------------------------------------------------
     # Note: only AIR here
@@ -369,7 +367,7 @@ class SigmoidBeliefNetwork(Layer):
         updates = theano.OrderedUpdates()
 
         if q0 is None:
-            q0 = self.posterior(x)
+            q0 = self.posterior.feed(x)
         constants    = [q0]
         outputs_info = [q0, None]
         non_seqs     = [y, q0] + self.params_infer() + self.get_params()
@@ -418,10 +416,10 @@ class SigmoidBeliefNetwork(Layer):
         return (qs, i_costs), constants, updates
 
     def m_step(self, x, y, qk, n_samples=10):
-        q0  = self.posterior(x)
+        q0  = self.posterior.feed(x)
         r   = self.trng.uniform((n_samples, y.shape[0], self.dim_h), dtype=floatX)
         h   = (r <= qk[None, :, :]).astype(floatX)
-        py  = self.conditional(h)
+        py  = self.conditional.feed(h)
 
         log_ph   = -self.prior.neg_log_prob(h)
         log_qh   = -self.posterior.neg_log_prob(h, q0[None, :, :])
@@ -443,7 +441,7 @@ class SigmoidBeliefNetwork(Layer):
         assert prior_energy.ndim == h_energy.ndim == y_energy.ndim, (prior_energy.ndim, h_energy.ndim, y_energy.ndim)
 
         cost = (y_energy + prior_energy + h_energy).sum(0)
-        lower_bound = (y_energy + prior_energy - q_entropy).mean()
+        lower_bound = -(y_energy + prior_energy - q_entropy).mean()
 
         results = OrderedDict({
             '-log p(x|h)': y_energy.mean(0),
@@ -466,7 +464,7 @@ class SigmoidBeliefNetwork(Layer):
 
     def rws(self, x, y, n_samples=10, qk=None):
         print 'Doing RWS, %d samples' % n_samples
-        q   = self.posterior(x)
+        q   = self.posterior.feed(x)
 
         if qk is None:
             q_c = q.copy()
@@ -475,7 +473,7 @@ class SigmoidBeliefNetwork(Layer):
 
         r  = self.trng.uniform((n_samples, y.shape[0], self.dim_h), dtype=floatX)
         h  = (r <= q_c[None, :, :]).astype(floatX)
-        py = self.conditional(h)
+        py = self.conditional.feed(h)
 
         log_py_h = -self.conditional.neg_log_prob(y[None, :, :], py)
         log_ph   = -self.prior.neg_log_prob(h)

@@ -1,15 +1,14 @@
-"""
+'''
 Module for RNN layers
-"""
+'''
 
 import copy
 from collections import OrderedDict
 import numpy as np
 import theano
 from theano import tensor as T
-from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from layers import Layer
+from . import Layer
 from mlp import MLP
 from utils import tools
 from utils.tools import (
@@ -117,7 +116,8 @@ class RNN(Layer):
             self.input_net = MLP(
                 self.dim_in, self.dim_h, self.dim_h, 1,
                 rng=self.rng, trng=self.trng,
-                h_act='T.nnet.sigmoid', out_act='T.tanh',
+                h_act='T.nnet.sigmoid',
+                distribution='centered_binomial',
                 name='input_net')
         else:
             assert self.input_net.dim_in == self.dim_in
@@ -128,7 +128,8 @@ class RNN(Layer):
             self.output_net = MLP(
                 self.dim_h, self.dim_h, self.dim_out, 1,
                 rng=self.rng, trng=self.trng,
-                h_act='T.nnet.sigmoid', out_act='T.nnet.sigmoid',
+                h_act='T.nnet.sigmoid',
+                distribution='binomial',
                 name='output_net')
         else:
             assert self.output_net.dim_in == self.dim_h
@@ -199,46 +200,48 @@ class RNN(Layer):
     # Sample functions ---------------------------------------------------------
 
     def step_sample_preact(self, h_, x_, *params):
-        Ur = self.get_recurrent_args(*params)[0]
-        input_params = self.get_input_args(*params)
+        Ur            = self.get_recurrent_args(*params)[0]
+        input_params  = self.get_input_args(*params)
         output_params = self.get_output_args(*params)
 
-        y = self.input_net.preact(x_, *input_params)
+        y = self.input_net.step_preact(x_, *input_params)
         h = self._step(y, h_, Ur)
 
-        preact = self.output_net.preact(h, *o_params)
+        preact = self.output_net.step_preact(h, *output_params)
         return h, preact
 
     def step_sample(self, h_, x_, *params):
         h, preact = self.step_sample_preact(h_, x_, *params)
 
-        p = eval(self.output_net.out_act)(preact)
+        p = self.output_net.distribution(preact)
         x = self.output_net.sample(p)
         return h, x, p
 
     def step_sample_cond(self, h_, x_, c, *params):
         assert self.conditional is not None
-        Ur = self.get_recurrent_args(*params)[0]
-        input_params = self.get_input_args(*params)
+
+        Ur            = self.get_recurrent_args(*params)[0]
+        input_params  = self.get_input_args(*params)
         output_params = self.get_output_args(*params)
 
-        y = self.input_net.preact(x_, *input_params)
-        y += c
+        y = self.input_net.step_preact(x_, *input_params)
+        y = y + c
         h = self._step(y, h_, Ur)
 
-        preact = self.output_net.preact(h, *output_params)
+        preact = self.output_net.step_preact(h, *output_params)
 
-        p = eval(self.output_net.out_act)(preact)
+        p = self.output_net.distribution(preact)
         x = self.output_net.sample(p)
         return h, x, p
 
     def step_sample_cond_x(self, h_, x_, *params):
         assert self.conditional is not None
-        h, preact = self.step_sample_preact(h_, x_, *params)
-        c_params = self.get_conditional_args(*params)
-        preact += self.conditional.preact(x_, *c_params)
 
-        p = eval(self.output_net.out_act)(preact)
+        h, preact = self.step_sample_preact(h_, x_, *params)
+        c_params  = self.get_conditional_args(*params)
+        preact    = preact + self.conditional.step_preact(x_, *c_params)
+
+        p = self.output_net.distribution(preact)
         x = self.output_net.sample(p)
         return h, x, p
 
@@ -262,7 +265,7 @@ class RNN(Layer):
             step = self.step_sample_cond
             non_seqs.append(condition_on)
             z0 += condition_on
-        p0 = eval(self.output_net.out_act)(z0)
+        p0 = self.output_net.out_act.distribution(z0)
 
         non_seqs += self.get_sample_params()
 
@@ -276,115 +279,6 @@ class RNN(Layer):
 
         return OrderedDict(x=x, p=p, h=h, x0=x0, p0=p0, h0=h0), updates
 
-    # Assignment functions -----------------------------------------------------
-
-    def step_energy(self, x, x_p, h_p, *params):
-        h, x_s, p = self.step_sample(h_p, x_p, *params)
-        energy = self.neg_log_prob(x, p)
-        return energy, h, p
-
-    def step_energy_cond(self, x, x_p, h_p, c, *params):
-        h, x_s, p = self.step_sample_cond(h_p, x_p, c, *params)
-        energy = self.neg_log_prob(x, p)
-        return energy, h, p
-
-    def step_scale(self, scaling, counts, idx, alpha, beta):
-        counts = T.set_subtensor(counts[idx, T.arange(counts.shape[1])], 1)
-        picked_scaling = scaling[idx, T.arange(scaling.shape[1])]
-        scaling = scaling / beta
-        scaling = T.set_subtensor(scaling[idx, T.arange(scaling.shape[1])], picked_scaling * alpha)
-        scaling = T.clip(scaling, 0.0, 1.0)
-        return scaling, counts
-
-    def step_assign(self, idx, h_p, counts, scaling, x, alpha, beta, *params):
-        energies, h_n, p = self.step_energy(x, x[idx, T.arange(x.shape[1])], h_p, *params)
-        energies -= T.log(scaling)
-
-        idx = T.argmin(energies, axis=0)
-
-        scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
-        return (idx, h_n, p, energies[idx, T.arange(energies.shape[1])], counts, scaling), theano.scan_module.until(T.all(counts))
-
-    def step_assign_cond(self, idx, h_p, counts, scaling, x, alpha, beta, c, *params):
-        energies, h_n, p = self.step_energy_cond(x, x[idx, T.arange(x.shape[1])], h_p, c, *params)
-        energies -= T.log(scaling)
-
-        idx = T.argmin(energies, axis=0)
-
-        scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
-        return (idx, h_n, p, energies[idx, T.arange(energies.shape[1])], counts, scaling), theano.scan_module.until(T.all(counts))
-
-    def step_assign_sample(self, idx, h_p, counts, scaling, x, alpha, beta, *params):
-        energies, h_n, p = self.step_energy(x, x[idx, T.arange(x.shape[1])], h_p, *params)
-        energies -= T.log(scaling)
-
-        e_max = (-energies).max()
-        probs = T.exp(-energies - e_max)
-        probs = probs
-        probs = probs / probs.sum()
-        idx = T.argmax(self.trng.multinomial(pvals=probs).astype('int64'), axis=0)
-
-        scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
-        return (idx, h_n, p, energies[idx, T.arange(energies.shape[1])], counts, scaling), theano.scan_module.until(T.all(counts))
-
-    def get_first_assign(self, x, p0):
-        energy = self.neg_log_prob(x, p0)
-        idx = T.argmin(energy, axis=0)
-        return idx
-
-    def step_assign_call(self, X, h0, condition_on, alpha, beta, steps, sample,
-                         select_first, *params):
-
-        o_params = self.get_output_args(*params)
-        p0 = self.output_net(h0)
-
-        counts = T.zeros((X.shape[0], X.shape[1])).astype('int64')
-        scaling = T.ones((X.shape[0], X.shape[1])).astype('float32')
-
-        if select_first:
-            print 'Selecting first best in assignment'
-            idx0 = self.get_first_assign(X, p0)
-        else:
-            print 'Using 0 as first in assignment'
-            idx0 = T.zeros((X.shape[1],)).astype('int64')
-
-        counts = T.set_subtensor(counts[idx0, T.arange(counts.shape[1])], 1)
-        scaling = T.set_subtensor(scaling[idx0, T.arange(scaling.shape[1])], scaling[0] * alpha)
-
-        seqs = []
-        outputs_info = [idx0, h0, None, None, counts, scaling]
-        non_seqs = [X, alpha, beta]
-
-        if condition_on is None:
-            step = self.step_assign
-        else:
-            step = self.step_assign_cond
-            non_seqs.append(condition_on)
-
-        non_seqs += params
-
-        (chain, h_chain, p_chain, energies, counts, scalings), updates = scan(
-            step, seqs, outputs_info, non_seqs, steps, name='make_chain',
-            strict=False)
-
-        chain = concatenate([idx0[None, :], chain], axis=0)
-        p_chain = concatenate([p0[None, :, :], p_chain], axis=0)
-
-        return OrderedDict(chain=chain, probs=p_chain, energies=energies, counts=counts[-1], scalings=scalings[-1]), updates
-
-    def assign(self, X, h0=None, condition_on=None, alpha=0.0, beta=1.0,
-               steps=None, sample=False, select_first=False):
-        if h0 is None:
-            h0 = self.trng.normal(avg=0, std=1.0, size=(X.shape[1], self.dim_h)).astype(floatX)
-
-        if steps is None:
-            steps = X.shape[0] - 1
-
-        params = self.get_sample_params()
-
-        return self.step_assign_call(X, h0, condition_on, alpha, beta, steps,
-                                     sample, select_first, *params)
-
     # Call functions -----------------------------------------------------------
 
     def _step(self, y, h_, Ur):
@@ -394,27 +288,19 @@ class RNN(Layer):
 
     def call_seqs(self, x, condition_on, *params):
         i_params = self.get_input_args(*params)
-        a = self.input_net.preact(x, *i_params)
+        a = self.input_net.step_preact(x, *i_params)
         if condition_on is not None:
             a += condition_on
         seqs = [a]
         return seqs
 
-    def __call__(self, x, h0=None, condition_on=None):
-        if h0 is None:
-            h0 = T.alloc(0., x.shape[1], self.dim_h).astype(floatX)
-
-        params = self.get_sample_params()
-
-        return self.step_call(x, h0, condition_on, *params)
-
     def step_call(self, x, h0, condition_on, *params):
         n_steps = x.shape[0]
         n_samples = x.shape[1]
 
-        seqs = self.call_seqs(x, condition_on, *params)
+        seqs         = self.call_seqs(x, condition_on, *params)
         outputs_info = [h0]
-        non_seqs = self.get_recurrent_args(*params)
+        non_seqs     = self.get_recurrent_args(*params)
 
         h, updates = theano.scan(
             self._step,
@@ -426,9 +312,18 @@ class RNN(Layer):
             profile=tools.profile,
             strict=True)
 
-        o_params = self.get_output_args(*params)
-        preact = self.output_net.preact(h, *o_params)
-        p = eval(self.output_net.out_act)(preact)
-        y = self.output_net.sample(p=p)
+        o_params    = self.get_output_args(*params)
+        out_net_out = self.output_net(h, *o_params)
+        preact      = out_net_out['z']
+        p           = out_net_out['p']
+        y           = self.output_net.sample(p=p)
 
         return OrderedDict(h=h, y=y, p=p, z=preact), updates
+
+    def __call__(self, x, h0=None, condition_on=None):
+        if h0 is None:
+            h0 = T.alloc(0., x.shape[1], self.dim_h).astype(floatX)
+
+        params = self.get_sample_params()
+
+        return self.step_call(x, h0, condition_on, *params)

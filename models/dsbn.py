@@ -180,12 +180,12 @@ class DeepSBN(Layer):
         end = start + self.conditionals[level].n_params
 
         params = params[start:end]
-        return self.conditionals[level].step_call(h, *params)
+        return self.conditionals[level].step_feed(h, *params)
 
     def sample_from_prior(self, n_samples=100):
         h, updates = self.prior.sample(n_samples)
         for conditional in self.conditionals[::-1]:
-            p = conditional(h)
+            p = conditional.feed(h)
             h, _ = conditional.sample(p)
             h = h[0]
 
@@ -249,7 +249,7 @@ class DeepSBN(Layer):
         state = state[None, :, :]
 
         for l in xrange(self.n_layers):
-            q0 = self.posteriors[l](state).mean(axis=0)
+            q0 = self.posteriors[l].feed(state).mean(axis=0)
             q0s.append(q0)
             if sample_posterior:
                 state, _ = self.posteriors[l].sample(q0, n_samples=n_samples)
@@ -354,7 +354,7 @@ class DeepSBN(Layer):
         q0s   = []
         state = x[None, :, :]
         for l in xrange(self.n_layers):
-            q0 = self.posteriors[l](state).mean(axis=0)
+            q0 = self.posteriors[l].feed(state).mean(axis=0)
             q0s.append(q0)
             if sample_posterior:
                 raise NotImplementedError()
@@ -374,10 +374,10 @@ class DeepSBN(Layer):
             h = (r <= q0[None, :, :]).astype(floatX)
             h0s.append(h)
 
-        p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
-        p_y0s = [conditional(h0) for h0, conditional in zip(h0s, self.conditionals)]
+        p_ys = [conditional.feed(h) for h, conditional in zip(hs, self.conditionals)]
+        p_y0s = [conditional.feed(h0) for h0, conditional in zip(h0s, self.conditionals)]
         ys   = [y[None, :, :]] + hs[:-1]
-        y0s   = [y[None, :, :]] + h0s[:-1]  
+        y0s   = [y[None, :, :]] + h0s[:-1]
 
         log_py_h = T.constant(0.).astype(floatX)
         log_py_h0 = T.constant(0.).astype(floatX)
@@ -386,7 +386,7 @@ class DeepSBN(Layer):
         log_qkh  = T.constant(0.).astype(floatX)
         for l in xrange(self.n_layers):
             log_py_h -= self.conditionals[l].neg_log_prob(ys[l], p_ys[l])
-            log_py_h0 -= self.conditionals[l].neg_log_prob(y0s[l], p_y0s[l]) 
+            log_py_h0 -= self.conditionals[l].neg_log_prob(y0s[l], p_y0s[l])
             log_qh   -= self.posteriors[l].neg_log_prob(hs[l], q0s[l])
             log_qh0  -= self.posteriors[l].neg_log_prob(h0s[l], q0s[l])
             log_qkh  -= self.posteriors[l].neg_log_prob(hs[l], qks[l])
@@ -438,7 +438,7 @@ class DeepSBN(Layer):
         qcs   = []
         state = x[None, :, :]
         for l in xrange(self.n_layers):
-            q = self.posteriors[l](state).mean(axis=0)
+            q = self.posteriors[l].feed(state).mean(axis=0)
             qs.append(q)
             if sample_posterior:
                 state, _ = self.posteriors[l].sample(q, n_samples=n_samples)
@@ -455,7 +455,7 @@ class DeepSBN(Layer):
             h = (r <= qc[None, :, :]).astype(floatX)
             hs.append(h)
 
-        p_ys = [conditional(h) for h, conditional in zip(hs, self.conditionals)]
+        p_ys = [conditional.feed(h) for h, conditional in zip(hs, self.conditionals)]
         ys   = [y[None, :, :]] + hs[:-1]
 
         log_py_h = T.constant(0.).astype(floatX)
