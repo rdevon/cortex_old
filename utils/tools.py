@@ -3,7 +3,9 @@ Helper module for NMT
 """
 
 from collections import OrderedDict
+from ConfigParser import ConfigParser
 import numpy as np
+import os
 import pprint
 import random
 import theano
@@ -23,6 +25,21 @@ rng_ = np.random.RandomState(random_seed)
 profile = False
 
 f_clip = lambda x, y, z: T.clip(x, y, 1.)
+
+def get_paths():
+    d = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + '/..')
+    config_file = os.path.join(d, 'irvi.conf')
+    config = ConfigParser()
+    config.read(config_file)
+    path_dict = config._sections['PATHS']
+    path_dict.pop('__name__')
+    return path_dict
+
+def resolve_path(p):
+    path_dict = get_paths()
+    for k, v in path_dict.iteritems():
+        p = p.replace(k, v)
+    return p
 
 def get_trng():
     trng = RandomStreams(random.randint(0, 1000000))
