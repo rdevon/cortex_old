@@ -49,12 +49,10 @@ class SimpleMonitor(object):
                 d[k] = [self.d[k][-1]]
                 if k in self.d_valid.keys():
                     d[k].append(self.d_valid[k][-1])
+                    if len(self.d_valid[k]) > 1:
+                        d[k].append(self.d_valid[k][-1] - self.d_valid[k][-2])
                 else:
                     d[k].append(None)
-
-        for k in self.d.keys():
-            if k.startswith('d_'):
-                d[k[2:]].append(self.d[k][-1])
 
         length = len('\t' ) + max(len(k) for k in d.keys()) + len(' (train / valid) |')
         for k, vs in d.iteritems():

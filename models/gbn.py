@@ -11,33 +11,48 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from distributions import Gaussian
 from layers import Layer
 from mlp import MLP
-from sbn import init_inference_args
 from utils import tools
 from utils.tools import (
     concatenate,
+    floatX,
     init_rngs,
     init_weights,
     log_mean_exp,
     log_sum_exp,
-    logit,
     _slice
 )
 
-norm_weight = tools.norm_weight
-ortho_weight = tools.ortho_weight
-floatX = 'float32' # theano.config.floatX
-pi = theano.shared(np.pi).astype('float32')
+
+def unpack(dim_in=None,
+           dim_h=None,
+           recognition_net=None,
+           generation_net=None,
+           extra_args=dict(),
+           **model_args):
+
+    prior_model = Gaussian(dim_h)
+    models = []
+
+    mlps = GBN.mlp_factory(dim_in, dim_h,
+                           recognition_net=recognition_net,
+                           generation_net=generation_net)
+
+    models += mlps.values()
+    models.append(prior_model)
+
+    kwargs.update(**mlps)
+    kwargs['prior'] = prior_model
+    model = GBN(dim_in, dim_h, **mlps)
+    models.append(model)
+    return models, model_args, extra_args
 
 
-class GaussianBeliefNet(Layer):
+class GBN(Layer):
     def __init__(self, dim_in, dim_h,
-                 posterior=None, conditional=None,
-                 prior=None,
-                 z_init=None,
+                 posterior=None, conditional=None, prior=None,
                  name='gbn',
                  **kwargs):
 
-        self.strict = True
         self.dim_in = dim_in
         self.dim_h = dim_h
 
@@ -45,34 +60,69 @@ class GaussianBeliefNet(Layer):
         self.conditional = conditional
         self.prior = prior
 
-        self.z_init = z_init
-
-        kwargs = init_inference_args(self, **kwargs)
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
-        super(GaussianBeliefNet, self).__init__(name=name)
+        super(GBN, self).__init__(name=name)
+
+    @staticmethod
+    def mlp_factory(dim_h, dims, distributions, recognition_net=None, generation_net=None):
+        mlps = {}
+
+        if recognition_net is not None:
+            input_name = recognition_net.get('input_layer')
+            recognition_net['distribution'] = 'gaussian'
+            recognition_net['dim_in'] = dims[input_name]
+            recognition_net['dim_out'] = dim_h * 2
+            posterior = MLP.factory(**recognition_net)
+            mlps['posterior'] = posterior
+
+        if generation_net is not None:
+            output_name = generation_net['output']
+            generation_net['dim_in'] = dim_h
+
+            t = generation_net.get('type', None)
+            if t is None:
+                generation_net['dim_out'] = dims[output_name]
+                generation_net['distribution'] = distributions[output_name]
+                conditional = MLP.factory(**generation_net)
+            elif t == 'MMMLP':
+                for out in generation_net['graph']['outputs']:
+                    generation_net['graph']['outs'][out] = dict(
+                        dim=dims[out],
+                        distribution=distributions[out])
+                conditional = MultiModalMLP.factory(**generation_net)
+            else:
+                raise ValueError(t)
+            mlps['conditional'] = conditional
+
+        return mlps
 
     def set_params(self):
         self.params = OrderedDict()
 
+        if self.prior is None:
+            self.prior = Gaussian(self.dim_h)
+
         if self.posterior is None:
-            self.posterior = MLP(self.dim_in, self.dim_h, self.dim_h, 1,
+            self.posterior = MLP(self.dim_in, self.dim_h * 2,
+                                 dim_hs=[],
                                  rng=self.rng, trng=self.trng,
                                  h_act='T.nnet.sigmoid',
-                                 out_act='T.nnet.sigmoid')
+                                 distribution='gaussian')
         if self.conditional is None:
-            self.conditional = MLP(self.dim_h, self.dim_h, self.dim_in, 1,
+            self.conditional = MLP(self.dim_h, self.dim_in,
+                                   dim_hs=[],
                                    rng=self.rng, trng=self.trng,
                                    h_act='T.nnet.sigmoid',
-                                   out_act='lambda x: x')
+                                   distribution='binomial')
 
         self.posterior.name = self.name + '_posterior'
         self.conditional.name = self.name + '_conditional'
 
     def set_tparams(self, excludes=[]):
         print 'Excluding the following parameters from learning: %s' % excludes
-        tparams = super(GaussianBeliefNet, self).set_tparams()
+        tparams = super(GBN, self).set_tparams()
         tparams.update(**self.posterior.set_tparams())
         tparams.update(**self.conditional.set_tparams())
         tparams.update(**self.prior.set_tparams())
@@ -93,36 +143,21 @@ class GaussianBeliefNet(Layer):
 
     def sample_from_prior(self, n_samples=100):
         h, updates = self.prior.sample(n_samples)
-        py = self.conditional(h)
+        py = self.conditional.feed(h)
         return self.get_center(py), updates
 
     # Misc --------------------------------------------------------------------
 
     def get_center(self, p):
-        return self.conditional.prob(p)
-
-    def log_marginal(self, y, h, py, q):
-        log_py_h = -self.conditional.neg_log_prob(y, py)
-        log_ph   = -self.prior.neg_log_prob(h)
-        log_qh   = -self.posterior.neg_log_prob(h, q)
-        assert log_py_h.ndim == log_ph.ndim == log_qh.ndim
-
-        log_p     = log_py_h + log_ph - log_qh
-        log_p_max = T.max(log_p, axis=0, keepdims=True)
-        w         = T.exp(log_p - log_p_max)
-
-        return (T.log(w.mean(axis=0, keepdims=True)) + log_p_max).mean()
+        return self.conditional.get_center(p)
 
     def p_y_given_h(self, h, *params):
         start  = self.prior.n_params
         stop   = start + self.conditional.n_params
         params = params[start:stop]
-        return self.conditional.step_call(h, *params)
+        return self.conditional.step_feed(h, *params)
 
     def kl_divergence(self, p, q):
-        '''
-        Only works with Gaussian dists ATM.
-        '''
         dim = self.dim_h
         mu_p = _slice(p, 0, dim)
         log_sigma_p = _slice(p, 1, dim)
@@ -135,211 +170,65 @@ class GaussianBeliefNet(Layer):
             - 1)
         return kl.sum(axis=kl.ndim-1)
 
-    # Inference ----------------------------------------------------------------
+    def l2_decay(self, rate):
+        rec_l2_cost = self.posterior.get_L2_weight_cost(rate)
+        gen_l2_cost = self.conditional.get_L2_weight_cost(rate)
 
-    def e_step(self, epsilon, q, y, *params):
-        '''
-        E step for IRVI.
-        '''
-        prior_params = self.get_prior_params(*params)
+        rval = OrderedDict(
+            rec_l2_cost=rec_l2_cost,
+            gen_l2_cost=gen_l2_cost,
+            cost = rec_l2_cost + gen_l2_cost
+        )
 
-        mu_q = _slice(q, 0, self.dim_h)
-        log_sigma_q = _slice(q, 1, self.dim_h)
-        h = mu_q[None, :, :] + epsilon * T.exp(log_sigma_q[None, :, :])
-        py = self.p_y_given_h(h, *params)
+        return rval
 
-        consider_constant = [y] + list(params)
-        cond_term = self.conditional.neg_log_prob(y[None, :, :], py).mean(axis=0)
-        kl_term = self.prior.step_kl_divergence(q, *prior_params)
-
-        cost = (cond_term + kl_term).sum(axis=0)
-        grad = theano.grad(cost, wrt=q, consider_constant=consider_constant)
-
-        return cost, grad
-
-    def step_infer(self, *params):
-        raise NotImplementedError()
-
-    def init_infer(self, q):
-        raise NotImplementedError()
-
-    def unpack_infer(self, outs):
-        raise NotImplementedError()
-
-    def params_infer(self):
-        raise NotImplementedError()
-
-    # Momentum
-    def _step_momentum(self, epsilon, q, dq_, y, m, *params):
-        l = self.inference_rate
-        cost, grad = self.e_step(epsilon, q, y, *params)
-        dq = (-l * grad + m * dq_).astype(floatX)
-        q = (q + dq).astype(floatX)
-        return q, dq, cost
-
-    def _init_momentum(self, q):
-        return [T.zeros_like(q)]
-
-    def _unpack_momentum(self, outs):
-        qs, dqs, costs = outs
-        return qs, costs
-
-    def _params_momentum(self):
-        return [T.constant(self.momentum).astype('float32')]
-
-    def init_variational_inference(self, ph):
-        if self.z_init == 'recognition_net':
-            print 'Starting q0 at recognition net'
-            q0 = ph
-        else:
-            q0 = T.alloc(0., x.shape[0], 2 * self.dim_h).astype(floatX)
-
-        return q0
 
     # Learning -----------------------------------------------------------------
 
-    def m_step(self, x, y, qk, n_samples=10):
-        constants = []
-        q0 = self.posterior(x)
-        h, updates = self.posterior.sample(p=qk, n_samples=n_samples)
-        p_y = self.conditional(h)
+    def __call__(self, x, y, qk=None, n_posterior_samples=10):
+        q0 = self.posterior.feed(x)
 
-        y_energy = self.conditional.neg_log_prob(y[None, :, :], p_y).mean(axis=0)
-        prior_energy = self.prior.kl_divergence(qk)
-        h_energy = self.kl_divergence(qk, q0)
-        entropy = self.posterior.entropy(qk)
+        if qk is None:
+            qk = q0
 
-        return (prior_energy, h_energy, y_energy, entropy), constants, theano.OrderedUpdates()
+        h, updates  = self.posterior.sample(qk, n_samples=n_posterior_samples)
+        py          = self.conditional.feed(h)
 
-    def infer_q(self, x, y, n_inference_steps):
-        updates = theano.OrderedUpdates()
+        log_py_h    = -self.conditional.neg_log_prob(y[None, :, :], py)
+        KL_qk_p     = self.prior.kl_divergence(qk)
+        KL_qk_q0    = self.kl_divergence(qk, q0)
 
-        q0 = self.posterior(x)
+        log_ph      = -self.prior.neg_log_prob(h)
+        log_qh      = -self.posterior.neg_log_prob(h, qk)
 
-        epsilons = self.trng.normal(
-            avg=0, std=1.0,
-            size=(n_inference_steps, self.n_inference_samples,
-                  x.shape[0], self.dim_h),
-            dtype=x.dtype)
+        log_p       = (log_sum_exp(log_py_h + log_ph - log_qh, axis=0)
+                       - T.log(n_posterior_samples))
 
-        seqs = [epsilons]
-        outputs_info = [q0] + self.init_infer(q0) + [None]
-        non_seqs = [y] + self.params_infer() + self.get_params()
+        y_energy    = -log_py_h.mean(axis=0)
+        p_entropy   = self.prior.entropy()
+        q_entropy   = self.posterior.entropy(qk)
+        nll         = -log_p
 
-        print ('Doing %d inference steps and a rate of %.5f with %d '
-               'inference samples'
-               % (n_inference_steps, self.inference_rate, self.n_inference_samples))
+        cost        = (y_energy + KL_qk_p + KL_qk_q0).sum(0)
+        lower_bound = -(y_energy + KL_qk_p).mean()
 
-        if isinstance(n_inference_steps, T.TensorVariable) or n_inference_steps > 1:
-            print 'Multiple inference steps. Using `scan`'
-            outs, updates_2 = theano.scan(
-                self.step_infer,
-                sequences=seqs,
-                outputs_info=outputs_info,
-                non_sequences=non_seqs,
-                name=tools._p(self.name, 'infer'),
-                n_steps=n_inference_steps,
-                profile=tools.profile,
-                strict=False
-            )
-            updates.update(updates_2)
-            qs, i_costs = self.unpack_infer(outs)
-            qs = T.concatenate([q0[None, :, :], qs], axis=0)
+        results = OrderedDict({
+            '-log p(x|h)': y_energy.mean(0),
+            '-log p(x)': nll.mean(0),
+            'KL(q_k||p)': KL_qk_p.mean(0),
+            'KL(q_k||q_0)': KL_qk_q0.mean(0),
+            'H(p)': p_entropy,
+            'H(q)': q_entropy.mean(0),
+            'lower_bound': lower_bound,
+            'cost': cost
+        })
 
-        elif n_inference_steps == 1:
-            print 'Single inference step'
-            inps = [epsilons[0]] + outputs_info[:-1] + non_seqs
-            outs = self.step_infer(*inps)
-            q, i_cost = self.unpack_infer(outs)
-            qs = T.concatenate([q0[None, :, :], q[None, :, :]], axis=0)
-            i_costs = [i_cost]
-
-        elif n_inference_steps == 0:
-            print 'No inference steps. VAE'
-            qs = q0[None, :, :]
-            i_costs = [T.constant(0.).astype(floatX)]
-
-        return (qs, i_costs), updates
-
-    # Inference
-    def inference(self, x, y, n_inference_steps=20, n_sampling_steps=None,
-                  n_samples=100, pass_gradients=False):
-        (qs, _), updates = self.infer_q(x, y, n_inference_steps)
-        qk = qs[-1]
-
-        (prior_energy, h_energy, y_energy, entropy), m_constants, m_updates = self.m_step(
-            x, y, qk, n_samples=n_samples)
-        updates.update(m_updates)
-
-        constants = [entropy] + m_constants
-        if n_inference_steps == 0 or pass_gradients:
-            print 'Passing the gradient through latent variables'
-        else:
-            constants.append(qs)
-
-        return (qk, prior_energy, h_energy, y_energy, entropy), updates, constants
-
-    def __call__(self, x, y, n_samples=100, n_inference_steps=0,
-                 calculate_log_marginal=False, stride=10):
-        outs = OrderedDict()
-
-        (qs, i_costs), updates = self.infer_q(x, y, n_inference_steps)
-
-        if n_inference_steps > stride and stride != 0:
-            steps = [0, 1] + range(stride, n_inference_steps, stride)
-            steps = steps[:-1] + [n_inference_steps - 1]
-        elif n_inference_steps > 0 and n_inference_steps != 1:
-            steps = [0, 1, n_inference_steps - 1]
-        elif n_inference_steps == 1:
-            steps = [0, 1]
-        else:
-            steps = [0]
-
-        lower_bounds  = []
-        nlls          = []
-        pys           = []
-        energies      = []
-        prior_terms   = []
-        entropy_terms = []
-
-        for i in steps:
-            qk = qs[i]
-
-            h, _        = self.posterior.sample(p=qk, n_samples=n_samples)
-            py          = self.conditional(h)
-            y_energy_b  = self.conditional.neg_log_prob(
-                y[None, :, :], py).mean(axis=0)
-            y_energy    = y_energy_b.mean(axis=0)
-            kl_term     = self.prior.kl_divergence(qk).mean()
-            lower_bound = y_energy + kl_term
-
-            lower_bounds.append(lower_bound)
-            energies.append(y_energy_b)
-            prior_terms.append(kl_term.mean())
-            entropy_terms.append(T.constant(0.).astype(floatX))
-
-            if calculate_log_marginal:
-                nll = -self.log_marginal(y[None, :, :], h, py, qk[None, :, :])
-                nlls.append(nll)
-
-            pys.append(py)
-
-        outs.update(
-            i_costs=i_costs[steps],
-            prior_terms=prior_terms,
-            entropy_terms=entropy_terms,
-            energies=energies,
+        samples = OrderedDict(
             py=py,
-            pys=pys,
-            lower_bound=lower_bounds[-1],
-            lower_bounds=lower_bounds,
-            inference_cost=(lower_bounds[0] - lower_bounds[-1])
+            batch_energies=y_energy
         )
 
-        if calculate_log_marginal:
-            outs.update(nll=nlls[-1], nlls=nlls)
-
-        return outs, updates
+        return results, samples
 
 
 #Deep Gaussian Belief Networks==================================================

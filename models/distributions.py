@@ -21,10 +21,42 @@ from utils.tools import (
 
 _clip = 1e-7
 
+
+def dist_class(c, conditional=False):
+    if conditional:
+        if c == 'binomial':
+            return Binomial
+        elif c == 'continuous_binomial':
+            return ContinuousBinomial
+        elif c == 'centered_binomial':
+            return CenteredBinomial
+        elif c == 'multinomial':
+            return Multinomial
+        elif c == 'gaussian':
+            return Gaussian
+        else:
+            raise ValueError(c)
+    else:
+        if c == 'binomial':
+            return ConditionalBinomial
+        elif c == 'continuous_binomial':
+            return ConditionalContinuousBinomial
+        elif c == 'centered_binomial':
+            return ConditionalCetneredBinomial
+        elif c == 'multinomial':
+            return ConditionalMultinomial
+        elif c == 'gaussian':
+            return ConditionalGaussian
+        else:
+            raise ValueError(c)
+
+
 class Distribution(Layer):
-    def __init__(self, dim, name='distribution', must_sample=False, **kwargs):
+    def __init__(self, dim, name='distribution', must_sample=False, scale=1,
+                 **kwargs):
         self.dim = dim
         self.must_sample = must_sample
+        self.scale = scale
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
@@ -40,35 +72,48 @@ class Distribution(Layer):
     def get_prob(self):
         raise NotImplementedError()
 
-    def get(self):
-        return self.get_prob(*self.get_params())
-
-    def sample(self, n_samples):
-        p = self.get_prob(*self.get_params())
-        return self.f_sample(self.trng, p, size=(n_samples, self.dim)), theano.OrderedUpdates()
-
-    def step_neg_log_prob(self, x, *params):
-        p = self.get_prob(*params)
-        return self.f_neg_log_prob(x, p)
-
-    def neg_log_prob(self, x):
-        p = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(x, p)
-
-    def entropy(self):
-        p = self.get_prob(*self.get_params())
-        return self.f_entropy(p)
-
     def kl_divergence(self, q):
         raise NotImplementedError()
 
+    def __call__(self, z):
+        raise NotImplementedError()
 
-class Bernoulli(Distribution):
-    def __init__(self, dim, name='bernoulli', **kwargs):
+    def sample(self, n_samples, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        if p.ndim == 1:
+            size = (n_samples, p.shape[0] // self.scale)
+        elif p.ndim == 2:
+            size = (n_samples, p.shape[0], p.shape[1] // self.scale)
+        elif p.ndim == 3:
+            size = (n_samples, p.shape[0], p.shape[2], p.shape[3] // self.scale)
+        elif p.ndim == 4:
+            raise NotImplementedError('%d dim sampling not supported yet' % p.ndim)
+        return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
+
+    def step_neg_log_prob(self, x, p):
+        return self.f_neg_log_prob(x, p)
+
+    def neg_log_prob(self, x, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(x, p)
+
+    def entropy(self, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return self.f_entropy(p)
+
+    def get_center(self, p):
+        return p
+
+
+class Binomial(Distribution):
+    def __init__(self, dim, name='binomial', **kwargs):
         self.f_sample = _binomial
         self.f_neg_log_prob = _cross_entropy
         self.f_entropy = _binary_entropy
-        super(Bernoulli, self).__init__(dim, name=name, **kwargs)
+        super(Binomial, self).__init__(dim, name=name, **kwargs)
 
     def set_params(self):
         z = np.zeros((self.dim,)).astype(floatX)
@@ -79,14 +124,62 @@ class Bernoulli(Distribution):
 
     def get_prob(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
-        #return T.nnet.sigmoid(z)
+
+    def __call__(self, z):
+        return T.nnet.sigmoid(z) * 0.9999 + 0.000005
+
+class CenteredBinomial(Binomial):
+    def __call__(self, z):
+        return T.tanh(z)
+
+class ContinuousBinomial(Binomial):
+    def sample(self, n_samples, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return p
+
+class ConditionalBinomial(Binomial):
+    def set_params(self): self.params = OrderedDict()
+    def get_params(self): return []
+
+class ConditionalCenteredBinomial(CenteredBinomial):
+    def set_params(self): self.params = OrderedDict()
+    def get_params(self): return []
+
+class ConditionalContinuousBinomial(ContinuousBinomial):
+    def set_params(self): self.params = OrderedDict()
+    def get_params(self): return []
+
+
+
+class Multinomial(Distribution):
+    def __init(self, dim, name='multinomial', **kwargs):
+        self.f_sample = _sample_multinomial
+        self.f_neg_log_prob = _categorical_cross_entropy
+        self.f_entropy = _categorical_entropy
+        super(Multinomal, self).__init__(dim, name=name, **kwargs)
+
+    def set_params(self):
+        z = np.zeros((self.dim,)).astype(floatX)
+        self.params = OrderedDict(z=z)
+
+    def get_prob(self, z):
+        return _softmax(z)
+
+    def __call__(self, z):
+        return _softmax(z)
+
+class ConditionalMultinomial(Multinomial):
+    def set_params(self): self.params = OrderedDict()
+    def get_params(self): return []
+
 
 class Gaussian(Distribution):
     def __init__(self, dim, name='gaussian', **kwargs):
         self.f_sample = _normal
         self.f_neg_log_prob = _neg_normal_log_prob
         self.f_entropy = _normal_entropy
-        super(Gaussian, self).__init__(dim, name=name, **kwargs)
+        super(Gaussian, self).__init__(dim, name=name, scale=2, **kwargs)
 
     def set_params(self):
         mu = np.zeros((self.dim,)).astype(floatX)
@@ -101,6 +194,12 @@ class Gaussian(Distribution):
     def get_prob(self, mu, log_sigma):
         return concatenate([mu, log_sigma])
 
+    def __call__(self, z):
+        return z
+
+    def get_center(self, mu, log_sigma):
+        return mu
+
     def step_kl_divergence(self, q, mu, log_sigma):
         mu_q = _slice(q, 0, self.dim)
         log_sigma_q = _slice(q, 1, self.dim)
@@ -113,6 +212,24 @@ class Gaussian(Distribution):
 
     def kl_divergence(self, q):
         return self.step_kl_divergence(q, *self.get_params())
+
+    def step_sample(self, epsilon, p):
+        dim = p.shape[p.ndim-1] // 2
+        mu = _slice(p, 0, dim)
+        log_sigma = _slice(p, 1, dim)
+        return mu + epsilon * T.exp(log_sigma)
+
+    def prototype_samples(self, size):
+        return self.trng.normal(
+            avg=0, std=1.0,
+            size=size,
+            dtype=floatX
+        )
+
+
+class ConditionalGaussian(Gaussian):
+    def set_params(self): self.params = OrderedDict()
+    def get_params(self): return []
 
 
 # BERNOULLI --------------------------------------------------------------------
@@ -147,7 +264,7 @@ def _softmax(x):
     out = e_x / e_x.sum(axis=axis, keepdims=True)
     return out
 
-def _sample_softmax(trng, p, size=None):
+def _sample_multinomial(trng, p, size=None):
     if size is None:
         size = p.shape
     return trng.multinomial(pvals=p, size=size).astype('float32')
@@ -170,7 +287,7 @@ def _normal(trng, p, size=None):
 
     if size is None:
         size = mu.shape
-    return trng.normal(avg=mu, std=T.exp(log_sigma), size=size)
+    return trng.normal(avg=mu, std=T.exp(log_sigma), size=size, dtype=floatX)
 
 def _normal_prob(p):
     dim = p.shape[p.ndim-1] // 2

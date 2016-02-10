@@ -73,8 +73,8 @@ class MNIST(Dataset):
 
         self.dims = dict(label=len(np.unique(Y)))
         self.dims[name] = X.shape[1]
-        self.acts = dict(label='T.nnet.softmax')
-        self.acts[name] = 'T.nnet.sigmoid'
+        self.distributions = dict(label='binomial')
+        self.distributions[name] = 'binomial'
 
         if binarize:
             X = rng_.binomial(p=X, size=X.shape, n=1).astype('float32')
