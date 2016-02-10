@@ -37,7 +37,8 @@ class MNIST(Dataset):
 
         if source is None:
             raise ValueError('No source file provided')
-        print 'Loading {name} ({mode})'.format(name=name, mode=mode)
+        print 'Loading {name} ({mode}) from {source}'.format(
+            name=name, mode=mode, source=source)
 
         X, Y = self.get_data(source, mode)
         self.mode = mode
