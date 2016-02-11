@@ -192,7 +192,6 @@ class SigmoidBeliefNetwork(Layer):
 
         if recognition_net is not None:
             t = recognition_net.get('type', None)
-            print recognition_net
             if t is None:
                 posterior = MLP.factory(**recognition_net)
             elif t == 'darn':

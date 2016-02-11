@@ -29,6 +29,9 @@ class Dataset(object):
     def __iter__(self):
         return self
 
+    def save_images(self, *args):
+        pass
+
 
 def load_data(dataset=None,
               train_batch_size=None,

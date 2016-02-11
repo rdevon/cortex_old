@@ -7,6 +7,7 @@ import theano
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as T
 
+from datasets.chains import Chains
 from datasets.euclidean import Euclidean
 from models.chainer import RNNChainer
 from models.rnn import RNN
@@ -48,7 +49,7 @@ def test_build_rnn(dim_in=31, dim_h=11, dim_out=None, i_net=None, o_net=None):
 def test_dataset(n_samples=2000, batch_size=13, dims=2):
     print 'Forming data iter'
     data_iter = Euclidean(n_samples=n_samples, dims=dims, batch_size=batch_size)
-    print 'Data iterm formed'
+    print 'Data iter formed'
     return data_iter
 
 def test_chain():
@@ -65,4 +66,12 @@ def test_chain():
 
     chainer.build_data_chain(data_iter)
 
+def test_chain_dataset():
+    data_iter = test_dataset()
+    chains = Chains(data_iter)
 
+    rnn = test_build_rnn(dim_in=data_iter.dims[data_iter.name])
+    chainer = RNNChainer(rnn)
+
+    chains.set_chainer(chainer)
+    print chains.next()

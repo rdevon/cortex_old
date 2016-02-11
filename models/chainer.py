@@ -30,9 +30,12 @@ class RNNChainer(Layer):
         chain_dict, updates = self.assign(X, H0, condition_on=C, **chain_args)
         return chain_dict, updates
 
-    def build_data_chain(self, data_iter, h0=None, c=None, l_chain=None):
+    def build_data_chain(self, data_iter, l_chain=None, h0=None, c=None):
+        n_remaining_samples = data_iter.n - data_iter.pos
         if l_chain is None:
-            l_chain = data_iter.n - data_iter.pos
+            l_chain = n_remaining_samples
+        else:
+            l_chain = min(l_chain, n_remaining_samples)
 
         x = data_iter.next(batch_size=l_chain)[data_iter.name][:, None, :]
         if h0 is None:
@@ -46,7 +49,6 @@ class RNNChainer(Layer):
         pbar = ProgressBar(widgets=widgets, maxval=1).start()
         idx, p_chain, h_chain = self.f_build(x, h0)
         pbar.update(1)
-        print
         x_chain = x[idx]
 
         rval = OrderedDict(
