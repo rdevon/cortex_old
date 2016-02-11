@@ -21,6 +21,7 @@ from . import Dataset
 from utils.tools import (
     concatenate,
     init_rngs,
+    resolve_path,
     rng_,
     scan
 )
@@ -32,10 +33,12 @@ class MNIST(Dataset):
                  binarize=False, name='mnist',
                  out_path=None, **kwargs):
         super(MNIST, self).__init__(name=name, **kwargs)
+        source = resolve_path(source)
 
         if source is None:
             raise ValueError('No source file provided')
-        print 'Loading {name} ({mode})'.format(name=name, mode=mode)
+        print 'Loading {name} ({mode}) from {source}'.format(
+            name=name, mode=mode, source=source)
 
         X, Y = self.get_data(source, mode)
         self.mode = mode

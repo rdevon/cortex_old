@@ -117,7 +117,7 @@ class GDIR(object):
         if self.pass_gradients:
             constants = []
         else:
-            constants = qs
+            constants = [qs]
 
         rval = OrderedDict(
             qk=qs[-1],
