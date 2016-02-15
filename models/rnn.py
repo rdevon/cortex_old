@@ -55,7 +55,7 @@ def init_h(h_init, X, batch_size, models, **h_args):
 class RNN(Layer):
     def __init__(self, dim_in, dim_h, dim_out=None,
                  conditional=None, input_net=None, output_net=None,
-                 name='gen_rnn', **kwargs):
+                 name='rnn', **kwargs):
 
         self.dim_in = dim_in
         self.dim_h = dim_h
@@ -80,7 +80,7 @@ class RNN(Layer):
         return RNN(dim_in, dim_h, **kwargs)
 
     @staticmethod
-    def mlp_factory(dim_in, dim_h, dim_out=None,
+    def mlp_factory(dim_in, dim_h, data_iter, dim_out=None,
                     i_net=None, a_net=None, o_net=None, c_net=None):
         mlps = {}
 
@@ -88,11 +88,13 @@ class RNN(Layer):
             dim_out = dim_in
 
         if i_net is not None:
+            i_net['distribution'] = 'centered_binomial'
             input_net = MLP.factory(dim_in=dim_in, dim_out=dim_h,
                                     name='input_net', **i_net)
             mlps['input_net'] = input_net
 
         if o_net is not None:
+            o_net['distribution'] = data_iter.distributions[data_iter.name]
             output_net = MLP.factory(dim_in=dim_h, dim_out=dim_out,
                                      name='output_net', **o_net)
             mlps['output_net'] = output_net
@@ -114,9 +116,8 @@ class RNN(Layer):
     def set_net_params(self):
         if self.input_net is None:
             self.input_net = MLP(
-                self.dim_in, self.dim_h, self.dim_h, 1,
+                self.dim_in, self.dim_h,
                 rng=self.rng, trng=self.trng,
-                h_act='T.nnet.sigmoid',
                 distribution='centered_binomial',
                 name='input_net')
         else:
@@ -126,9 +127,8 @@ class RNN(Layer):
 
         if self.output_net is None:
             self.output_net = MLP(
-                self.dim_h, self.dim_h, self.dim_out, 1,
+                self.dim_h, self.dim_out,
                 rng=self.rng, trng=self.trng,
-                h_act='T.nnet.sigmoid',
                 distribution='binomial',
                 name='output_net')
         else:
@@ -186,7 +186,7 @@ class RNN(Layer):
     def get_conditional_args(self, *args):
         return args[self.param_idx[2]:self.param_idx[3]]
 
-    # Energy functions ---------------------------------------------------------
+    # Extra functions ---------------------------------------------------------
 
     def energy(self, X, h0=None):
         outs, updates = self.__call__(X[:-1], h0=h0)
@@ -196,6 +196,20 @@ class RNN(Layer):
 
     def neg_log_prob(self, x, p):
         return self.output_net.neg_log_prob(x, p)
+
+    def l2_decay(self, rate):
+        cost = rate * (Ur ** 2).sum()
+
+        for net in self.nets:
+            if net is None:
+                continue
+            cost += net.get_L2_weight_cost(rate)
+
+        rval = OrderedDict(
+            cost = cost
+        )
+
+        return rval
 
     # Sample functions ---------------------------------------------------------
 
@@ -214,9 +228,11 @@ class RNN(Layer):
         h, preact = self.step_sample_preact(h_, x_, *params)
 
         p = self.output_net.distribution(preact)
-        x = self.output_net.sample(p)
+        x, _ = self.output_net.sample(p, n_samples=1)
+        x = x[0]
         return h, x, p
 
+    '''
     def step_sample_cond(self, h_, x_, c, *params):
         assert self.conditional is not None
 
@@ -244,33 +260,31 @@ class RNN(Layer):
         p = self.output_net.distribution(preact)
         x = self.output_net.sample(p)
         return h, x, p
+    '''
 
     def sample(self, x0=None, h0=None, n_samples=10, n_steps=10,
-               condition_on=None):
+               condition_on=None, debug=False):
         if x0 is None:
-            x0 = self.output_net.sample(
+            x0, _ = self.output_net.sample(
                 p=T.constant(0.5).astype(floatX),
                 size=(n_samples, self.output_net.dim_out)).astype(floatX)
 
         if h0 is None:
             h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX)
-        z0 = self.output_net(h0, return_preact=True)
+        z0 = self.output_net.preact(h0)
 
         seqs = []
         outputs_info = [h0, x0, None]
         non_seqs = []
-        if condition_on is None:
-            step = self.step_sample
-        else:
-            step = self.step_sample_cond
-            non_seqs.append(condition_on)
-            z0 += condition_on
-        p0 = self.output_net.out_act.distribution(z0)
+        step = self.step_sample
+        p0 = self.output_net.distribution(z0)
 
         non_seqs += self.get_sample_params()
+        if debug:
+            return self.step_sample(h0, x0, *self.get_sample_params())
 
         outs = scan(step, seqs, outputs_info, non_seqs, n_steps,
-                                  name=self.name+'_sampling', strict=False)
+                    name=self.name+'_sampling', strict=False)
         (h, x, p), updates = outs
 
         x = concatenate([x0[None, :, :], x])
@@ -313,12 +327,12 @@ class RNN(Layer):
             strict=True)
 
         o_params    = self.get_output_args(*params)
-        out_net_out = self.output_net(h, *o_params)
+        out_net_out = self.output_net.step_call(h, *o_params)
         preact      = out_net_out['z']
         p           = out_net_out['p']
-        y           = self.output_net.sample(p=p)
+        #y           = self.output_net.sample(p=p)
 
-        return OrderedDict(h=h, y=y, p=p, z=preact), updates
+        return OrderedDict(h=h, p=p, z=preact), updates
 
     def __call__(self, x, h0=None, condition_on=None):
         if h0 is None:

@@ -28,6 +28,7 @@ class MLP(Layer):
     def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
                  f_sample=None, f_neg_log_prob=None, f_entropy=None,
                  h_act='T.nnet.sigmoid', distribution='binomial', out_act=None,
+                 distribution_args=dict(),
                  name='MLP',
                  **kwargs):
 
@@ -48,17 +49,30 @@ class MLP(Layer):
             else:
                 raise ValueError(out_act)
 
+
+
+        if distribution is None:
+            distribution = 'binomial'
+
+        if isinstance(distribution, Distribution):
+            self.distribution = distribution
+        else:
+            self.distribution = dist_class(distribution, conditional=True)(
+                dim_out, **distribution_args)
+
+        self.dim_out = dim_out * self.distribution.scale
+
         if dim_h is None:
-            assert dim_hs is not None
+            if dim_hs is None:
+                dim_hs = []
             assert n_layers is None
         else:
             assert dim_hs is None
             dim_hs = []
             for l in xrange(n_layers - 1):
                 dim_hs.append(dim_h)
-        dim_hs.append(dim_out)
+        dim_hs.append(self.dim_out)
         self.dim_hs = dim_hs
-        self.dim_out = dim_out
         self.n_layers = len(dim_hs)
         assert self.n_layers > 0
 
@@ -67,13 +81,7 @@ class MLP(Layer):
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
-        if distribution is None:
-            distribution = 'binomial'
 
-        if isinstance(distribution, Distribution):
-            self.distribution = distribution(dim_out)
-        else:
-            self.distribution = dist_class(distribution, conditional=True)(dim_out)
 
         super(MLP, self).__init__(name=name)
 
@@ -102,8 +110,8 @@ class MLP(Layer):
     def entropy(self, p):
         return self.distribution.entropy(p)
 
-    def get_center(self, *p):
-        return self.distribution.get_center(*p)
+    def get_center(self, p):
+        return self.distribution.get_center(p)
 
     def set_params(self):
         self.params = OrderedDict()

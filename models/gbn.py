@@ -73,7 +73,6 @@ class GBN(Layer):
             input_name = recognition_net.get('input_layer')
             recognition_net['distribution'] = 'gaussian'
             recognition_net['dim_in'] = dims[input_name]
-            recognition_net['dim_out'] = dim_h * 2
             posterior = MLP.factory(**recognition_net)
             mlps['posterior'] = posterior
 
