@@ -2,6 +2,7 @@
 Module for fMRI data
 '''
 
+from collections import OrderedDict
 from glob import glob
 import numpy as np
 import os
@@ -11,26 +12,37 @@ import random
 import theano
 import yaml
 
+from . import Dataset
 import nifti_viewer
 import nipy
 from nipy.core.api import Image
 import rois
+from utils import floatX
+from utils.tools import resolve_path
 
 
-floatX = theano.config.floatX
+def load_data(idx=None, dataset='mri', **dataset_args):
+    if dataset == 'mri':
+        C = MRI
+    else:
+        raise ValueErro(dataset)
+    train, valid, test, idx = make_datasets(C, **dataset_args)
+    dataset_args['idx'] = idx
+    return train, valid, test
 
-def load_data(idx=None, **dataset_args):
-    train, valid, test, idx = make_datasets(MRI, idx=idx, **dataset_args)
-    return train, valid, test, idx
+def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
+                  train_batch_size=None,
+                  valid_batch_size=None,
+                  test_batch_size=None,
+                  **dataset_args):
 
-def make_datasets(C, split=None, idx=None, **dataset_args):
     assert C in [MRI]
 
     if idx is None:
         assert split is not None
         if round(np.sum(split), 5) != 1. or len(split) != 3:
             raise ValueError(split)
-        dummy = C(**dataset_args)
+        dummy = C(batch_size=1, **dataset_args)
         N = dummy.n
         idx = range(N)
         random.shuffle(idx)
@@ -46,9 +58,18 @@ def make_datasets(C, split=None, idx=None, **dataset_args):
         test_idx = idx[split_idx[1]:]
         idx = [train_idx, valid_idx, test_idx]
 
-    train = C(idx=idx[0], **dataset_args)
-    valid = C(idx=idx[1], **dataset_args)
-    test = C(idx=idx[2], **dataset_args)
+    if train_batch_size is not None:
+        train = C(idx=idx[0], batch_size=train_batch_size, **dataset_args)
+    else:
+        train = None
+    if valid_batch_size is not None:
+        valid = C(idx=idx[1], batch_size=valid_batch_size, **dataset_args)
+    else:
+        valid = None
+    if test_batch_size is not None:
+        test = C(idx=idx[2], batch_size=test_batch_size, **dataset_args)
+    else:
+        test = None
 
     return train, valid, test, idx
 
@@ -79,20 +100,19 @@ def make_one_hot(labels):
     return one_hot.astype('float32')
 
 
-class MRI(object):
-    def __init__(self, source=None, batch_size=None,
-                 shuffle=True, idx=None):
-        print 'Loading MRI from %s' % source
+class MRI(Dataset):
+    def __init__(self, source=None, name='mri', idx=None, **kwargs):
+        super(MRI, self).__init__(name=name, **kwargs)
 
+        print 'Loading MRI from %s' % source
+        source = resolve_path(source)
         X, Y = self.get_data(source)
 
         self.image_shape = X.shape[1:]
-        self.dims = dict(mri=int(self.mask.sum()), group=len(np.unique(Y)))
-        self.acts = dict(mri='lambda x: x', group='T.nnet.softmax')
-        self.shuffle = shuffle
-        self.pos = 0
-        self.batch_size = batch_size
-        self.next = self._next
+        self.dims = {self.name: int(self.mask.sum()),
+                     'group': len(np.unique(Y))}
+        self.distributions = {self.name: 'gaussian',
+                              'group': 'multinomial'}
 
         if idx is not None:
             X = X[idx]
@@ -105,25 +125,17 @@ class MRI(object):
 
         self.mean_image = self.X.mean(axis=0)
 
-        if self.shuffle:
-            self._randomize()
-
     def _randomize(self):
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
         self.X = self.X[rnd_idx, :]
         self.Y = self.Y[rnd_idx, :]
 
-    def _reset(self):
-        self.pos = 0
-        if self.shuffle:
-            self._randomize()
-
-    def _next(self, batch_size=None):
+    def next(self, batch_size=None):
         if batch_size is None:
             batch_size = self.batch_size
 
         if self.pos == -1:
-            self._reset()
+            self.reset()
             raise StopIteration
 
         x = self.X[self.pos:self.pos+batch_size]
@@ -133,7 +145,12 @@ class MRI(object):
         if self.pos + batch_size > self.n:
             self.pos = -1
 
-        return x, y
+        rval = {
+            self.name: x,
+            'group': y
+        }
+
+        return rval
 
     def get_data(self, source):
         print('Loading file locations from %s' % source)
@@ -233,7 +250,9 @@ class MRI(object):
         return images, out_files
 
     def save_images(self, x, out_file, remove_niftis=True,
-                    order=None, stats=dict()):
+                    order=None, stats=dict(), x_limit=None):
+        if len(x.shape) == 3:
+            x = x[:, 0, :]
         x = self._unmask(x)
 
         images, nifti_files = self.save_niftis(x)
@@ -262,9 +281,6 @@ class FMRI_IID(object):
         return self
 
     def next(self, batch_size):
-        pass
-
-    def name(self, ):
         pass
 
     def save_images(self, x, outfile):

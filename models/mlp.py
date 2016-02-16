@@ -79,8 +79,6 @@ class MLP(Layer):
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
-
-
         super(MLP, self).__init__(name=name)
 
     @staticmethod
