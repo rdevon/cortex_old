@@ -79,6 +79,9 @@ class Distribution(Layer):
     def kl_divergence(self, q):
         raise NotImplementedError()
 
+    def get_bias(self):
+        raise NotImplementedError()
+
     def __call__(self, z):
         raise NotImplementedError()
 
@@ -114,14 +117,19 @@ class Distribution(Layer):
 
 
 class Binomial(Distribution):
-    def __init__(self, dim, name='binomial', **kwargs):
+    def __init__(self, dim, name='binomial', bias_args=dict(), **kwargs):
         self.f_sample = _binomial
         self.f_neg_log_prob = _cross_entropy
         self.f_entropy = _binary_entropy
+
+        bias_args = dict(z=0)
+        bias_args.update(**bias_args)
+        self.bias = bias_args['z']
+
         super(Binomial, self).__init__(dim, name=name, **kwargs)
 
     def set_params(self):
-        z = np.zeros((self.dim,)).astype(floatX)
+        z = np.zeros((self.dim,)).astype(floatX) + self.bias
         self.params = OrderedDict(z=z)
 
     def get_params(self):
@@ -129,6 +137,9 @@ class Binomial(Distribution):
 
     def get_prob(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
+
+    def get_bias(self):
+        return self.bias
 
     def __call__(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
@@ -187,15 +198,21 @@ class ConditionalMultinomial(Multinomial):
 
 
 class Gaussian(Distribution):
-    def __init__(self, dim, name='gaussian', **kwargs):
+    def __init__(self, dim, name='gaussian', bias_args=dict(), **kwargs):
         self.f_sample = _normal
         self.f_neg_log_prob = _neg_normal_log_prob
         self.f_entropy = _normal_entropy
+
+        bias_args = dict(mu=0.5, log_sigma=-2)
+        bias_args.update(**bias_args)
+        self.mu_bias = (np.zeros((dim,)) + bias_args['mu']).astype(floatX)
+        self.log_sigma_bias = (np.zeros((dim,)) + bias_args['log_sigma']).astype(floatX)
+
         super(Gaussian, self).__init__(dim, name=name, scale=2, **kwargs)
 
     def set_params(self):
-        mu = np.zeros((self.dim,)).astype(floatX)
-        log_sigma = np.zeros((self.dim,)).astype(floatX)
+        mu = self.mu_bias
+        log_sigma = self.log_sigma_bias
 
         self.params = OrderedDict(
             mu=mu, log_sigma=log_sigma)
@@ -205,6 +222,9 @@ class Gaussian(Distribution):
 
     def get_prob(self, mu, log_sigma):
         return concatenate([mu, log_sigma])
+
+    def get_bias(self):
+        return np.concatenate([self.mu_bias, self.log_sigma_bias])
 
     def __call__(self, z):
         return z

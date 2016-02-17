@@ -65,8 +65,6 @@ class RNNChainer(Layer):
 
         return rval
 
-        # Assignment functions -----------------------------------------------------
-
     def step_energy(self, x, x_p, h_p, *params):
         h, x_s, p = self.rnn.step_sample(h_p, x_p, *params)
         energy    = self.rnn.neg_log_prob(x, p)
@@ -163,7 +161,8 @@ class RNNChainer(Layer):
         idx0 = T.zeros((X.shape[1],)).astype(intX)
         x0 = X[idx0, T.arange(X.shape[1])]
         #h0 = self.aux_net.feed(x0)
-        h0 = T.zeros((X.shape[1], self.rnn.dim_h)).astype(floatX)
+        if h0 is None:
+            h0 = T.zeros((X.shape[1], self.rnn.dim_h)).astype(floatX)
         p0 = self.rnn.output_net.feed(h0)
         e0 = self.rnn.neg_log_prob(x0, p0)
         constants = []
@@ -213,4 +212,96 @@ class RNNChainer(Layer):
         params = self.rnn.get_sample_params()
 
         return self.step_assign_call(X, h0, condition_on, alpha, beta, steps,
+                                     sample, select_first, *params)
+
+
+class LSTMChainer(RNNChainer):
+    def step_energy(self, x, x_p, h_p, c_p, *params):
+        h, c, x_s, p = self.rnn.step_sample(h_p, c_p, x_p, *params)
+        energy    = self.rnn.neg_log_prob(x, p)
+        #energy    = ((x - x_p) ** 2).sum(axis=x.ndim-1)
+        return energy, h, c, p
+
+    def step_assign(self, idx, h_p, c_p, counts, scaling, x, alpha, beta, *params):
+        x_p = x[idx, T.arange(x.shape[1])]
+
+        if self.X_mean is not None:
+            x_p = x_p - self.X_mean
+
+        energies, h_n, c_n, p = self.step_energy(x, x_p, h_p, c_p, *params)
+        energies         = energies - T.log(scaling)
+        energy           = energies[idx, T.arange(energies.shape[1])]
+        idx              = T.argmin(energies, axis=0)
+
+        scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
+        return (idx, h_n, c_n, p, energy, counts, scaling), theano.scan_module.until(T.all(counts))
+
+    def get_first_assign(self, x, p0):
+        energy = self.rnn.neg_log_prob(x, p0)
+        idx = T.argmin(energy, axis=0)
+        return idx
+
+    def step_assign_call(self, X, h0, c0, condition_on, alpha, beta, steps, sample,
+                         select_first, *params):
+
+        o_params  = self.rnn.get_output_args(*params)
+        counts    = T.zeros((X.shape[0], X.shape[1])).astype('int64')
+        scaling   = T.ones((X.shape[0], X.shape[1])).astype(floatX)
+        constants = []
+
+        idx0 = T.zeros((X.shape[1],)).astype(intX)
+        x0 = X[idx0, T.arange(X.shape[1])]
+        if h0 is None:
+            h0 = T.zeros((X.shape[1], self.rnn.dim_h)).astype(floatX)
+        if c0 is None:
+            c0 = T.zeros((X.shape[1], self.rnn.dim_h)).astype(floatX)
+        p0 = self.rnn.output_net.feed(h0)
+        e0 = self.rnn.neg_log_prob(x0, p0)
+        constants = []
+
+        counts  = T.set_subtensor(counts[idx0, T.arange(counts.shape[1])], 1)
+        scaling = T.set_subtensor(scaling[idx0, T.arange(scaling.shape[1])],
+                                  scaling[0] * alpha)
+
+        seqs = []
+        outputs_info = [idx0, h0, c0, None, None, counts, scaling]
+        non_seqs = [X, alpha, beta]
+
+        if condition_on is None:
+            step = self.step_assign
+        else:
+            step = self.step_assign_cond
+            non_seqs.append(condition_on)
+
+        non_seqs += params
+
+        (i_chain, h_chain, c_chain, p_chain, energies, counts, scalings), updates = scan(
+            step, seqs, outputs_info, non_seqs, steps, name='make_chain',
+            strict=False)
+
+        h_chain = concatenate([h0[None, :, :], h_chain], axis=0)
+        i_chain = concatenate([idx0[None, :], i_chain], axis=0)
+        p_chain = concatenate([p0[None, :, :], p_chain], axis=0)
+
+        outs = OrderedDict(
+            extra=p0,
+            i_chain=i_chain.astype('int64'),
+            p_chain=p_chain,
+            h_chain=h_chain,
+            energies=energies,
+            counts=counts[-1],
+            scalings=scalings[-1]
+        )
+
+        return outs, updates, constants
+
+    def assign(self, X, h0=None, c0=None, condition_on=None, alpha=0.0, beta=1.0,
+               steps=None, sample=False, select_first=False):
+
+        if steps is None:
+            steps = X.shape[0] - 1
+
+        params = self.rnn.get_sample_params()
+
+        return self.step_assign_call(X, h0, c0, condition_on, alpha, beta, steps,
                                      sample, select_first, *params)

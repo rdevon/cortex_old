@@ -81,8 +81,6 @@ class MLP(Layer):
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
-
-
         super(MLP, self).__init__(name=name)
 
     @staticmethod
@@ -126,6 +124,9 @@ class MLP(Layer):
             W = norm_weight(dim_in, dim_out,
                             scale=self.weight_scale, ortho=False)
             b = np.zeros((dim_out,)).astype(floatX)
+
+            if l == self.n_layers - 1:
+                b += self.distribution.get_bias()
 
             self.params['W%d' % l] = W
             self.params['b%d' % l] = b

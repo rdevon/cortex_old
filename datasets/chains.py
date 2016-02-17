@@ -98,7 +98,7 @@ class Chains(object):
         if isinstance(D, Dataset):
             self.dataset = D
         else:
-            self.dataset = D(batch_size=batch_size, shuffle=False, **kwargs)
+            self.dataset = D(batch_size=batch_size, **kwargs)
         self.chainer = None
 
         self.batch_size = batch_size

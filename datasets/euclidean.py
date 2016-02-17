@@ -24,9 +24,10 @@ class Euclidean(Dataset):
         init_rngs(self, **kwargs)
 
         self.X = self.get_data(n_samples, dims)
+        self.make_bullseye()
+
         self.n = self.X.shape[0]
 
-        self.make_circle()
         self.dims = dict()
         self.dims[self.name] = dims
         self.distributions = dict()
@@ -47,7 +48,7 @@ class Euclidean(Dataset):
 
         return f
 
-    def make_circle(self, r=0.3, G=0.3):
+    def make_circle(self, r=0.3, G=0.05):
         for k in xrange(10):
             x = self.X[:, 0] - 0.5
             y = self.X[:, 1] - 0.5
@@ -57,6 +58,14 @@ class Euclidean(Dataset):
             self.X += f
             self.X = np.clip(self.X, 0, 1)
 
+    def make_bullseye(self, r=0.3, G=0.08):
+        self.make_circle(r=r, G=G)
+        self.X = np.concatenate(
+            [self.X,
+             self.rng.normal(loc=0.5,
+                             scale=0.05,
+                             size=(self.X.shape[0] // 10,
+                                   self.X.shape[1]))]).astype(floatX)
 
     def make_fibrous(self, n_points=40):
         y = self.rng.uniform(size=(n_points, self.X.shape[1])).astype(floatX)
