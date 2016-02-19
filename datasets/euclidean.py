@@ -12,6 +12,7 @@ from progressbar import (
     Timer
 )
 import random
+import scipy
 
 from . import Dataset
 from utils import floatX, intX
@@ -104,12 +105,18 @@ class Euclidean(Dataset):
 
         return outs
 
-    def save_images(self, x, imgfile):
+    def save_images(self, X, imgfile, density=False):
         fig = plt.figure()
-        plt.scatter(x[:, 0], x[:, 1], marker='o', c=range(x.shape[0]),
-                    cmap=plt.cm.coolwarm)
-        plt.text(x[0, 0], x[0, 1], str('start'))
-        #for i, (x, y) in enumerate(zip(x[:, 0], x[:, 1])):
-        #    plt.text(x, y, str(i), color='black', fontsize=12)
+        x = X[:, 0]
+        y = X[:, 1]
+        if density:
+            xy = np.vstack([x,y])
+            z = scipy.stats.gaussian_kde(xy)(xy)
+            plt.scatter(x, y, c=z, marker='o', edgecolor='')
+        else:
+            plt.scatter(x, y, marker='o', c=range(x.shape[0]),
+                        cmap=plt.cm.coolwarm)
+        plt.text(x[0], y[0], str('start'))
+
         plt.savefig(imgfile)
         plt.close()

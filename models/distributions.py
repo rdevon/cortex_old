@@ -203,7 +203,7 @@ class Gaussian(Distribution):
         self.f_neg_log_prob = _neg_normal_log_prob
         self.f_entropy = _normal_entropy
 
-        bias_args = dict(mu=0.5, log_sigma=-2)
+        bias_args = dict(mu=0.5, log_sigma=-3)
         bias_args.update(**bias_args)
         self.mu_bias = (np.zeros((dim,)) + bias_args['mu']).astype(floatX)
         self.log_sigma_bias = (np.zeros((dim,)) + bias_args['log_sigma']).astype(floatX)
