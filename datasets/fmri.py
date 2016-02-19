@@ -101,7 +101,8 @@ def make_one_hot(labels):
 
 
 class MRI(Dataset):
-    def __init__(self, source=None, name='mri', idx=None, **kwargs):
+    def __init__(self, source=None, name='mri', idx=None,
+                 distribution='gaussian', **kwargs):
         super(MRI, self).__init__(name=name, **kwargs)
 
         print 'Loading MRI from %s' % source
@@ -110,13 +111,12 @@ class MRI(Dataset):
 
         self.dims = {self.name: int(self.mask.sum()),
                      'group': len(np.unique(Y))}
-        self.distributions = {self.name: 'gaussian',
+        self.distributions = {self.name: distribution,
                               'group': 'multinomial'}
 
-
         self.image_shape = X.shape[1:]
-        self.mean_image = X.mean(axis=0)
         self.X = self._mask(X)
+        self.mean_image = self.X.mean(axis=0)
         self.Y = make_one_hot(Y)
 
         if idx is not None:
@@ -124,6 +124,15 @@ class MRI(Dataset):
             self.Y = self.Y[idx]
 
         self.n = self.X.shape[0]
+
+        if distribution == 'gaussian':
+            self.X -= self.mean_image
+            self.X /= self.X.std()
+        elif distribution in ['continuous_binomial', 'binomial']:
+            self.X -= self.X.min()
+            self.X /= (self.X.max() - self.X.min())
+        else:
+            raise ValueError(distribution)
 
     def _randomize(self):
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
