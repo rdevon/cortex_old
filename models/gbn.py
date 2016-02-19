@@ -213,6 +213,8 @@ class GBN(Layer):
         results = OrderedDict({
             '-log p(x|h)': y_energy.mean(0),
             '-log p(x)': nll.mean(0),
+            '-log p(h)': log_ph.mean(),
+            '-log q(h)': log_qh.mean(),
             'KL(q_k||p)': KL_qk_p.mean(0),
             'KL(q_k||q_0)': KL_qk_q0.mean(0),
             'H(p)': p_entropy,
