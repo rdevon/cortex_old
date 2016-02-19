@@ -114,16 +114,15 @@ class MRI(Dataset):
         self.distributions = {self.name: 'gaussian',
                               'group': 'multinomial'}
 
-        if idx is not None:
-            X = X[idx]
-            Y = Y[idx]
-
-        self.n = X.shape[0]
-
+        self.mean_image = self.X.mean(axis=0)
         self.X = self._mask(X)
         self.Y = make_one_hot(Y)
 
-        self.mean_image = self.X.mean(axis=0)
+        if idx is not None:
+            self.X = self.X[idx]
+            self.Y = self.Y[idx]
+
+        self.n = self.X.shape[0]
 
     def _randomize(self):
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
