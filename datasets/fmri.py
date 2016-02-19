@@ -108,13 +108,14 @@ class MRI(Dataset):
         source = resolve_path(source)
         X, Y = self.get_data(source)
 
-        self.image_shape = X.shape[1:]
         self.dims = {self.name: int(self.mask.sum()),
                      'group': len(np.unique(Y))}
         self.distributions = {self.name: 'gaussian',
                               'group': 'multinomial'}
 
-        self.mean_image = self.X.mean(axis=0)
+
+        self.image_shape = X.shape[1:]
+        self.mean_image = X.mean(axis=0)
         self.X = self._mask(X)
         self.Y = make_one_hot(Y)
 
