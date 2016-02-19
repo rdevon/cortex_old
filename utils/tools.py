@@ -19,12 +19,18 @@ floatX = theano.config.floatX
 pi = theano.shared(np.pi).astype(floatX)
 e = theano.shared(np.e).astype(floatX)
 
-random_seed = 0xeffe
+random_seed = random.randint(0, 10000)
 rng_ = np.random.RandomState(random_seed)
 
 profile = False
 
 f_clip = lambda x, y, z: T.clip(x, y, 1.)
+
+_, _columns = os.popen('stty size', 'r').read().split()
+_columns = int(_columns)
+
+def print_section(s):
+    print ('-' * 3) + s + ('-' * (_columns - 3 - len(s)))
 
 def get_paths():
     d = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + '/..')

@@ -34,6 +34,8 @@ def dist_class(c, conditional=False):
             return Multinomial
         elif c == 'gaussian':
             return Gaussian
+        elif c == 'truncated_gaussian':
+            return TruncatedGaussian
         else:
             raise ValueError(c)
     else:
@@ -47,6 +49,8 @@ def dist_class(c, conditional=False):
             return ConditionalMultinomial
         elif c == 'gaussian':
             return ConditionalGaussian
+        elif c == 'truncated_gaussian':
+            return ConditionalTruncatedGaussian
         else:
             raise ValueError(c)
 
@@ -89,6 +93,7 @@ class Distribution(Layer):
             size = (n_samples, p.shape[0], p.shape[2], p.shape[3] // self.scale)
         elif p.ndim == 4:
             raise NotImplementedError('%d dim sampling not supported yet' % p.ndim)
+
         return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
 
     def step_neg_log_prob(self, x, p):
@@ -128,15 +133,26 @@ class Binomial(Distribution):
     def __call__(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
 
+    def prototype_samples(self, size):
+        return self.trng.uniform(size, dtype=floatX)
+
 class CenteredBinomial(Binomial):
     def __call__(self, z):
         return T.tanh(z)
+
+    def neg_log_prob(self, x, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        x = 0.5 * (x + 1)
+        p = 0.5 * (p + 1)
+        return self.f_neg_log_prob(x, p)
+
 
 class ContinuousBinomial(Binomial):
     def sample(self, n_samples, p=None):
         if p is None:
             p = self.get_prob(*self.get_params())
-        return p
+        return T.shape_padleft(p), theano.OrderedUpdates()
 
 class ConditionalBinomial(Binomial):
     def set_params(self): self.params = OrderedDict()
@@ -149,7 +165,6 @@ class ConditionalCenteredBinomial(CenteredBinomial):
 class ConditionalContinuousBinomial(ContinuousBinomial):
     def set_params(self): self.params = OrderedDict()
     def get_params(self): return []
-
 
 
 class Multinomial(Distribution):
@@ -197,7 +212,8 @@ class Gaussian(Distribution):
     def __call__(self, z):
         return z
 
-    def get_center(self, mu, log_sigma):
+    def get_center(self, p):
+        mu = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
         return mu
 
     def step_kl_divergence(self, q, mu, log_sigma):
@@ -214,7 +230,7 @@ class Gaussian(Distribution):
         return self.step_kl_divergence(q, *self.get_params())
 
     def step_sample(self, epsilon, p):
-        dim = p.shape[p.ndim-1] // 2
+        dim = p.shape[p.ndim-1] // self.scale
         mu = _slice(p, 0, dim)
         log_sigma = _slice(p, 1, dim)
         return mu + epsilon * T.exp(log_sigma)
@@ -227,7 +243,62 @@ class Gaussian(Distribution):
         )
 
 
+class TruncatedGaussian(Gaussian):
+    def __init__(self, dim, name='truncated_gaussian', minmax=(0, 1), **kwargs):
+        self.min, self.max = minmax
+        super(TruncatedGaussian, self).__init__(dim, name=name, **kwargs)
+
+    def get_params(self):
+        return [T.clip(self.mu, self.min, self.max), self.log_sigma]
+
+    def __call__(self, p):
+        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
+        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // 2)
+        mu = T.clip(mu, self.min, self.max)
+        return concatenate([mu, log_sigma], axis=mu.ndim-1)
+
+    def sample(self, n_samples, p=None):
+        samples, updates = super(TruncatedGaussian, self).sample(n_samples, p=p)
+        return T.clip(samples, self.min, self.max), updates
+
+    def step_sample(self, epsilon, p):
+        return T.clip(super(TruncatedGaussian, self).step_sample(epsilon, p),
+                      self.min, self.max)
+
+    def step_kl_divergence(self, q, mu, log_sigma):
+        mu_q = _slice(q, 0, self.dim)
+        mu = T.clip(mu, self.min, self.max)
+        mu_q = T.clip(mu_q, self.min, self.max)
+        log_sigma_q = _slice(q, 1, self.dim)
+
+        kl = log_sigma - log_sigma_q + 0.5 * (
+            (T.exp(2 * log_sigma_q) + (mu - mu_q) ** 2) /
+            T.exp(2 * log_sigma)
+            - 1)
+        return kl.sum(axis=kl.ndim-1)
+
+    def step_neg_log_prob(self, x, p):
+        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
+        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // 2)
+        mu = T.clip(mu, self.min, self.max)
+        p = concatenate([mu, log_sigma], axis=mu.ndim-1)
+        return self.f_neg_log_prob(x, p)
+
+    def neg_log_prob(self, x, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
+        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // 2)
+        mu = T.clip(mu, self.min, self.max)
+        p = concatenate([mu, log_sigma], axis=mu.ndim-1)
+        return self.f_neg_log_prob(x, p)
+
+
 class ConditionalGaussian(Gaussian):
+    def set_params(self): self.params = OrderedDict()
+    def get_params(self): return []
+
+class ConditionalTrucatedGaussian(TruncatedGaussian):
     def set_params(self): self.params = OrderedDict()
     def get_params(self): return []
 

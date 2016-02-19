@@ -66,14 +66,15 @@ class GBN(Layer):
         super(GBN, self).__init__(name=name)
 
     @staticmethod
-    def mlp_factory(dim_h, dims, distributions, recognition_net=None, generation_net=None):
+    def mlp_factory(dim_h, dims, distributions,
+                    recognition_net=None, generation_net=None):
         mlps = {}
 
         if recognition_net is not None:
             input_name = recognition_net.get('input_layer')
             recognition_net['distribution'] = 'gaussian'
             recognition_net['dim_in'] = dims[input_name]
-            recognition_net['dim_out'] = dim_h * 2
+            recognition_net['dim_out'] = dim_h
             posterior = MLP.factory(**recognition_net)
             mlps['posterior'] = posterior
 
@@ -105,7 +106,7 @@ class GBN(Layer):
             self.prior = Gaussian(self.dim_h)
 
         if self.posterior is None:
-            self.posterior = MLP(self.dim_in, self.dim_h * 2,
+            self.posterior = MLP(self.dim_in, self.dim_h,
                                  dim_hs=[],
                                  rng=self.rng, trng=self.trng,
                                  h_act='T.nnet.sigmoid',
@@ -181,9 +182,6 @@ class GBN(Layer):
         )
 
         return rval
-
-
-    # Learning -----------------------------------------------------------------
 
     def __call__(self, x, y, qk=None, n_posterior_samples=10):
         q0 = self.posterior.feed(x)
