@@ -207,7 +207,7 @@ class GBN(Layer):
         q_entropy   = self.posterior.entropy(qk)
         nll         = -log_p
 
-        cost        = (y_energy + KL_qk_p + KL_qk_q0).sum(0)
+        cost        = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
         lower_bound = -(y_energy + KL_qk_p).mean()
 
         results = OrderedDict({
