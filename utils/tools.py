@@ -154,7 +154,7 @@ def load_experiment(experiment_yaml):
     print('Experiment hyperparams: %s' % pprint.pformat(exp_dict))
     return exp_dict
 
-def load_model(model_file, f_unpack=None):
+def load_model(model_file, f_unpack=None, **extra_args):
     '''
     Loads pretrained model.
     '''
@@ -163,8 +163,12 @@ def load_model(model_file, f_unpack=None):
     params = np.load(model_file)
     d = dict()
     for k in params.keys():
-        d[k] = params[k].item()
+        try:
+            d[k] = params[k].item()
+        except ValueError:
+            d[k] = params[k]
 
+    d.update(**extra_args)
     models, pretrained_kwargs, kwargs = f_unpack(**d)
 
     print('Pretrained model(s) has the following parameters: \n%s'

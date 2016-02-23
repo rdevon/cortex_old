@@ -27,8 +27,7 @@ def load_data(idx=None, dataset='mri', **dataset_args):
     else:
         raise ValueErro(dataset)
     train, valid, test, idx = make_datasets(C, **dataset_args)
-    dataset_args['idx'] = idx
-    return train, valid, test
+    return train, valid, test, idx
 
 def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
                   train_batch_size=None,

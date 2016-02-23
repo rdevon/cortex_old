@@ -28,21 +28,28 @@ def unpack(dim_in=None,
            recognition_net=None,
            generation_net=None,
            extra_args=dict(),
+           distributions=dict(),
+           dims=dict(),
+           dataset_args=dict(),
+           center_input=None,
            **model_args):
 
+    print 'Unpacking model with parameters %s' % model_args.keys()
+
+    print 'Forming prior model'
     prior_model = Gaussian(dim_h)
     models = []
 
-    mlps = GBN.mlp_factory(dim_in, dim_h,
+    print 'Forming MLPs'
+    kwargs = GBN.mlp_factory(dim_h, dims, distributions,
                            recognition_net=recognition_net,
                            generation_net=generation_net)
 
-    models += mlps.values()
-    models.append(prior_model)
-
-    kwargs.update(**mlps)
+    models += kwargs.values()
     kwargs['prior'] = prior_model
-    model = GBN(dim_in, dim_h, **mlps)
+    models.append(prior_model)
+    print 'Forming GBN'
+    model = GBN(dim_in, dim_h, **kwargs)
     models.append(model)
     return models, model_args, extra_args
 
@@ -71,6 +78,7 @@ class GBN(Layer):
         mlps = {}
 
         if recognition_net is not None:
+            print recognition_net
             input_name = recognition_net.get('input_layer')
             recognition_net['distribution'] = 'gaussian'
             recognition_net['dim_in'] = dims[input_name]
@@ -79,6 +87,7 @@ class GBN(Layer):
             mlps['posterior'] = posterior
 
         if generation_net is not None:
+            print generation_net
             output_name = generation_net['output']
             generation_net['dim_in'] = dim_h
 
@@ -147,6 +156,16 @@ class GBN(Layer):
         py = self.conditional.feed(h)
         return self.get_center(py), updates
 
+    def visualize_latents(self):
+        h0 = self.prior.mu
+        py0 = self.conditional.feed(h0)
+
+        sq = T.nlinalg.AllocDiag()(self.prior.log_sigma)
+        h = T.exp(sq).astype(floatX) + h0[None, :]
+        py = self.conditional.feed(h)
+
+        return py - py0[None, :]
+
     # Misc --------------------------------------------------------------------
 
     def get_center(self, p):
@@ -178,7 +197,7 @@ class GBN(Layer):
         rval = OrderedDict(
             rec_l2_cost=rec_l2_cost,
             gen_l2_cost=gen_l2_cost,
-            cost = rec_l2_cost + gen_l2_cost
+            cost=rec_l2_cost+gen_l2_cost
         )
 
         return rval

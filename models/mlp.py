@@ -63,6 +63,8 @@ class MLP(Layer):
         if dim_h is None:
             if dim_hs is None:
                 dim_hs = []
+            else:
+                dim_hs = [dim_h for dim_h in dim_hs]
             assert n_layers is None
         else:
             assert dim_hs is None
