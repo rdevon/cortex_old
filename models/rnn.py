@@ -193,6 +193,9 @@ class RNN(Layer):
     def get_recurrent_args(self, *args):
         return args[:self.param_idx[0]]
 
+    def get_inter_args(self, level, *args):
+        return args[self.param_idx[level]:self.param_idx[level+1]]
+
     def get_input_args(self, *args):
         return args[self.param_idx[self.n_layers-1]:self.param_idx[self.n_layers]]
 
@@ -234,7 +237,7 @@ class RNN(Layer):
         params = list(params)
         hs_ = params[:self.n_layers]
         x = params[self.n_layers]
-        params = params[self.n_layers:]
+        params = params[self.n_layers+1:]
 
         Urs           = self.get_recurrent_args(*params)
         input_params  = self.get_input_args(*params)
@@ -269,13 +272,13 @@ class RNN(Layer):
         h      = T.tanh(preact)
         return h
 
-    def call_seqs(self, x, condition_on, level=0, *params):
+    def call_seqs(self, x, condition_on, level, *params):
         if level == 0:
             i_params = self.get_input_args(*params)
             a        = self.input_net.step_preact(x, *i_params)
         else:
-            i_params = self.get_inter_args(level=level+1, *params)
-            a        = self.inter_net.step_preact(x, *i_params)
+            i_params = self.get_inter_args(level-1, *params)
+            a        = self.inter_nets[level-1].step_preact(x, *i_params)
 
         if condition_on is not None:
             a += condition_on
@@ -288,7 +291,7 @@ class RNN(Layer):
 
         hs = []
         for i, h0 in enumerate(h0s):
-            seqs         = self.call_seqs(x, condition_on, *params)
+            seqs         = self.call_seqs(x, None, i, *params)
             outputs_info = [h0]
             non_seqs     = [self.get_recurrent_args(*params)[i]]
 
@@ -342,8 +345,8 @@ class RNN(Layer):
         x  = concatenate([x0[None, :, :], x])
         for i in xrange(self.n_layers):
             hs[i]  = concatenate([h0s[i][None, :, :], hs[i]])
-        p0 = self.output_net.distribution(z0)
         z0 = self.output_net.preact(h0s[-1])
+        p0 = self.output_net.distribution(z0)
         p  = concatenate([p0[None, :, :], p])
 
         return OrderedDict(x=x, p=p, hs=hs, x0=x0, p0=p0, h0s=h0s), updates

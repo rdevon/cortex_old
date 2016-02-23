@@ -26,50 +26,55 @@ class RNNChainer(Layer):
         X = T.tensor3('x', dtype=floatX)
 
         chain_dict, updates = self.__call__(X, **chain_args)
-        outs = [chain_dict['i_chain'], chain_dict['p_chain'],
-                chain_dict['h_chain'], chain_dict['x_chain']]
+        outs = chain_dict['h_chains'] + [chain_dict['i_chain'],
+                                         chain_dict['p_chain'],
+                                         chain_dict['x_chain']]
         self.f_test = theano.function([X], chain_dict['extra'])
         self.f_build = theano.function([X], outs, updates=updates)
 
     def __call__(self, X, **chain_args):
         return self.assign(X, **chain_args)
 
-    def build_data_chain(self, data_iter, l_chain=None, h0=None, c=None):
+    def build_data_chain(self, data_iter, batch_size=1, l_chain=None, h0s=None, c=None):
         n_remaining_samples = data_iter.n - data_iter.pos
         if l_chain is None:
             l_chain = n_remaining_samples
         else:
             l_chain = min(l_chain, n_remaining_samples)
 
-        x = data_iter.next(batch_size=l_chain)[data_iter.name][:, None, :]
+        x = data_iter.next(batch_size=l_chain)[data_iter.name]
+        x = np.zeros((x.shape[0], batch_size, x.shape[1])).astype(floatX) + x[:, None, :]
+        for b in range(batch_size):
+            np.random.shuffle(x[:, b])
 
-        widgets = ['Building chain from dataset {dataset} '
-                   'of length {length} ('.format(dataset=data_iter.name,
-                                               length=l_chain),
-                   Timer(), ')']
-        pbar = ProgressBar(widgets=widgets, maxval=1).start()
-        idx, p_chain, h_chain, x_chain = self.f_build(x)
-        pbar.update(1)
-        print
-        idx = idx[:, 0]
-        p_chain = p_chain[:, 0]
-        h_chain = h_chain[:, 0]
-        x_chain = x_chain[:, 0]
+       # widgets = ['Building {batch_size} chains from dataset {dataset} '
+       #            'of length {length} ('.format(
+       #             batch_size=batch_size, dataset=data_iter.name,
+       #             length=l_chain),
+       #            Timer(), ')']
+        #pbar = ProgressBar(widgets=widgets, maxval=1).start()
+        outs = self.f_build(x)
+        h_chains = outs[:-3]
+        idx, p_chain, x_chain = outs[-3:]
+        #pbar.update(1)
+        #print
 
         rval = OrderedDict(
             idx=idx,
             x_chain=x_chain,
             p_chain=p_chain,
-            h_chain=h_chain
+            h_chains=h_chains
         )
 
         return rval
 
-    def step_energy(self, x, x_p, h_p, *params):
-        h, x_s, p = self.rnn.step_sample(h_p, x_p, *params)
+    def step_energy(self, x, x_p, h_ps, *params):
+        outs = self.rnn.step_sample(*(h_ps + [x_p] + list(params)))
+        hs = outs[:self.rnn.n_layers]
+        x_s, p = outs[self.rnn.n_layers:]
         energy    = self.rnn.neg_log_prob(x, p)
         #energy    = ((x - x_p) ** 2).sum(axis=x.ndim-1)
-        return energy, h, p
+        return energy, hs, p
 
     '''
     def step_energy_cond(rnn, x, x_p, h_p, c, *params):
@@ -87,13 +92,17 @@ class RNNChainer(Layer):
         scaling        = T.clip(scaling, 0.0, 1.0)
         return scaling, counts
 
-    def step_assign(self, idx, e_p, h_p, counts, scaling, x, alpha, beta, *params):
+    def step_assign(self, *params):
+        params = list(params)
+        h_ps = params[:self.rnn.n_layers]
+        idx, e_p, counts, scaling, x, alpha, beta = params[self.rnn.n_layers:self.rnn.n_layers+7]
+        params = params[self.rnn.n_layers+7:]
         x_p = x[idx, T.arange(x.shape[1])]
 
         if self.X_mean is not None:
             x_p = x_p - self.X_mean
 
-        Us, h_n, p = self.step_energy(x, x_p, h_p, *params)
+        Us, h_ns, p = self.step_energy(x, x_p, h_ps, *params)
         Us         = Us - T.log(scaling)
 
         idx        = T.argmin(Us, axis=0)
@@ -104,7 +113,7 @@ class RNNChainer(Layer):
         e_n        = Us[idx, T.arange(Us.shape[1])]
 
         scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
-        return (idx, e_n, h_n, p, counts, scaling), theano.scan_module.until(T.all(counts))
+        return tuple(h_ns) + (idx, e_n, p, counts, scaling), theano.scan_module.until(T.all(counts))
 
     def step_assign_sample(self, r, h_p, x_p, x, *params):
         # assigning
@@ -149,7 +158,7 @@ class RNNChainer(Layer):
         idx = T.argmin(energy, axis=0)
         return idx
 
-    def step_assign_call(self, X, h0, condition_on, alpha, beta, steps, sample,
+    def step_assign_call(self, X, h0s, condition_on, alpha, beta, steps, sample,
                          select_first, n_steps, *params):
 
         o_params  = self.rnn.get_output_args(*params)
@@ -157,9 +166,9 @@ class RNNChainer(Layer):
         x0 = X[idx0, T.arange(X.shape[1])]
         #h0 = self.aux_net.feed(x0)
 
-        if h0 is None:
-            h0 = T.zeros((X.shape[1], self.rnn.dim_h)).astype(floatX)
-        p0 = self.rnn.output_net.feed(h0)
+        if h0s is None:
+            h0s = [T.zeros((X.shape[1], dim_h)).astype(floatX) for dim_h in self.rnn.dim_hs]
+        p0 = self.rnn.output_net.feed(h0s[-1])
 
         if sample:
             assert n_steps is not None
@@ -194,7 +203,7 @@ class RNNChainer(Layer):
                                       scaling[0] * alpha)
 
             seqs = []
-            outputs_info = [idx0, e0, h0, None, counts, scaling]
+            outputs_info = h0s + [idx0, e0, None, counts, scaling]
             non_seqs = [X, alpha, beta]
 
             if condition_on is None:
@@ -205,11 +214,15 @@ class RNNChainer(Layer):
 
             non_seqs += params
 
-            (i_chain, energies, h_chain, p_chain, counts, scalings), updates = scan(
+            outs, updates = scan(
                 step, seqs, outputs_info, non_seqs, steps, name='make_chain',
                 strict=False)
 
-            h_chain = concatenate([h0[None, :, :], h_chain], axis=0)
+            h_chains = outs[:self.rnn.n_layers]
+            (i_chain, energies, p_chain, counts, scalings) = outs[self.rnn.n_layers:]
+
+            h_chains = [concatenate([h0[None, :, :], h_chain], axis=0)
+                        for h0, h_chain in zip(h0s, h_chains)]
             i_chain = concatenate([idx0[None, :], i_chain], axis=0).astype('int64')
             p_chain = concatenate([p0[None, :, :], p_chain], axis=0)
             x_chain = X[i_chain, T.arange(X.shape[1])]
@@ -218,7 +231,7 @@ class RNNChainer(Layer):
                 extra=p0,
                 i_chain=i_chain,
                 p_chain=p_chain,
-                h_chain=h_chain,
+                h_chains=h_chains,
                 x_chain=x_chain,
                 energies=energies,
                 counts=counts[-1],
@@ -227,7 +240,7 @@ class RNNChainer(Layer):
 
         return outs, updates
 
-    def assign(self, X, h0=None, condition_on=None, alpha=0.0, beta=1.0,
+    def assign(self, X, h0s=None, condition_on=None, alpha=0.0, beta=1.0,
                steps=None, sample=False, select_first=False, n_steps=None):
 
         if steps is None:
@@ -235,7 +248,7 @@ class RNNChainer(Layer):
 
         params = self.rnn.get_sample_params()
 
-        return self.step_assign_call(X, h0, condition_on, alpha, beta, steps,
+        return self.step_assign_call(X, h0s, condition_on, alpha, beta, steps,
                                      sample, select_first, n_steps, *params)
 
 

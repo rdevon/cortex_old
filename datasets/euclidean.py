@@ -15,7 +15,7 @@ import random
 import scipy
 
 from . import Dataset
-from utils import floatX, intX
+from utils import floatX, intX, pi
 from utils.tools import init_rngs
 
 
@@ -24,8 +24,9 @@ class Euclidean(Dataset):
         super(Euclidean, self).__init__(**kwargs)
         init_rngs(self, **kwargs)
 
+        self.collection = None
         self.X = self.get_data(n_samples, dims)
-        self.make_bullseye()
+        self.make_fibrous()
 
         self.n = self.X.shape[0]
 
@@ -58,6 +59,41 @@ class Euclidean(Dataset):
             f = G * d
             self.X += f
             self.X = np.clip(self.X, 0, 1)
+
+    def make_spiral(self, r=0.25, G=0.0001):
+        for k in range(10):
+            x = self.X[:, 0] - 0.5
+            y = self.X[:, 1] - 0.5
+            theta = np.arctan2(x, y)
+            ds = [r * (i + theta / (2 * np.pi)) for i in range(int(1 / r))]
+            alphas = [np.sqrt(x ** 2 + y ** 2) / d for d in ds]
+            for alpha in alphas:
+                d = np.concatenate([(x * (1 - alpha))[:, None], (y * (1 - alpha))[:, None]], axis=1)
+                f = -G * d / (d ** 2).sum(axis=1, keepdims=True)
+                self.X += f
+            self.X = np.clip(self.X, 0, 1)
+
+        rs = np.arange(0, 0.7, 0.001)
+        theta = 2 * np.pi * rs / r
+        y = rs * np.sin(theta) + 0.5
+        x = -rs * np.cos(theta) + 0.5
+        spiral = zip(x, y)
+        self.collection = matplotlib.collections.LineCollection([spiral], colors='k')
+
+    def make_ex(self):
+        x = self.rng.normal(loc=0.5, scale=0.05, size=self.X.shape).astype(floatX)
+        t1 = self.rng.uniform(low=-0.5, high=0.5, size=(self.X.shape[0] // 2,)).astype(floatX)
+        t2 = self.rng.uniform(low=-0.5, high=0.5, size=t1.shape).astype(floatX)
+        self.X = np.concatenate([x[:x.shape[0]//2] + t1[:, None], x[x.shape[0]//2:] + t2[:, None] * np.array([1, -1])[None, :]]).astype(floatX)
+
+        self.collection = matplotlib.collections.LineCollection([[(0, 0), (1, 1)], [(0, 1), (1, 0)]], colors='k')
+
+    def make_modes(self, r=0.3, N=5, G=0.01):
+        modes = [2 * np.pi * n / N for n in range(N)]
+        self.X = np.concatenate([self.rng.normal(
+            loc=0.5, scale=0.05, size=(self.X.shape[0] // N, self.X.shape[1])).astype(floatX)
+                                 + np.array([(r * np.cos(mode)), (r * np.sin(mode))]).astype(floatX)[None, :]
+                                 for mode in modes])
 
     def make_bullseye(self, r=0.3, G=0.08):
         self.make_circle(r=r, G=G)
@@ -106,17 +142,25 @@ class Euclidean(Dataset):
         return outs
 
     def save_images(self, X, imgfile, density=False):
-        fig = plt.figure()
+        ax = plt.axes()
         x = X[:, 0]
         y = X[:, 1]
         if density:
             xy = np.vstack([x,y])
             z = scipy.stats.gaussian_kde(xy)(xy)
-            plt.scatter(x, y, c=z, marker='o', edgecolor='')
+            ax.scatter(x, y, c=z, marker='o', edgecolor='')
         else:
-            plt.scatter(x, y, marker='o', c=range(x.shape[0]),
+            ax.scatter(x, y, marker='o', c=range(x.shape[0]),
                         cmap=plt.cm.coolwarm)
-        plt.text(x[0], y[0], str('start'))
+
+        if self.collection is not None:
+            self.collection.set_transform(ax.transData)
+            ax.add_collection(self.collection)
+
+
+        ax.text(x[0], y[0], str('start'), transform=ax.transAxes)
+        ax.axis([-0.2, 1.2, -0.2, 1.2])
+        fig = plt.gcf()
 
         plt.savefig(imgfile)
         plt.close()
