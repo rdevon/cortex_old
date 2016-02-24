@@ -252,6 +252,80 @@ class RNNChainer(Layer):
                                      sample, select_first, n_steps, *params)
 
 
+class DijktrasChainer(RNNChainer):
+    def __init__(self, rnn):
+        self.rnn = rnn
+
+        X = T.matrix('x', dtype=floatX)
+        H = T.matrix('h', dtype=floatX)
+
+        chain_dict, updates = self.__call__(X, H)
+        outs = chain_dict['h_chains'] + [chain_dict['i_chain'],
+                                         chain_dict['p_chain'],
+                                         chain_dict['x_chain']]
+        self.f_test = theano.function([X], chain_dict['extra'])
+        self.f_build = theano.function([X], outs, updates=updates)
+
+    def build_data_chain(self, data_iter, batch_size=1, l_chain=None, h0s=None, c=None):
+        n_remaining_samples = data_iter.n - data_iter.pos
+        if l_chain is None:
+            l_chain = n_remaining_samples
+        else:
+            l_chain = min(l_chain, n_remaining_samples)
+
+        x = data_iter.next(batch_size=l_chain)[data_iter.name]
+
+        outs = self.f_build(x)
+        h_chains = outs[:-3]
+        idx, p_chain, x_chain = outs[-3:]
+
+        rval = OrderedDict(
+            idx=idx,
+            x_chain=x_chain,
+            p_chain=p_chain,
+            h_chains=h_chains
+        )
+
+        return rval
+
+    def step(i, D, E):
+        D = T.switch(T.lt(E[i] + D[i][None], D), E[i] + D[i][None], D)
+        return D
+
+    def step_path(i, Ds):
+        P = T.switch(T.eq(Ds[i], Ds[i-1]), 0, i)
+        return P
+
+    def step_assign_call(self, X, H, *params):
+        E = step_energy(self, X, X, H, *params)
+        D = E[0]
+
+        Ds, _ = theano.scan(
+            step,
+            sequences=[T.arange(1, D.shape[0])],
+            outputs_info=[D],
+            non_sequences=[E]
+        )
+
+        Ps, _ = theano.scan(
+            step_path,
+            sequences=[T.arange(1, D.shape[0])],
+            non_sequences=[Ds]
+        )
+
+        outs = OrderedDict(
+            i_chain=i_chain,
+            h_chains=h_chains,
+            x_chain=x_chain,
+            counts=counts[-1],
+            scalings=scalings[-1]
+        )
+
+    def assign(self, X, H):
+        params = self.rnn.get_sample_params()
+
+        return self.step_assign_call(X, H, *params)
+
 class LSTMChainer(RNNChainer):
     def step_energy(self, x, x_p, h_p, c_p, *params):
         h, c, x_s, p = self.rnn.step_sample(h_p, c_p, x_p, *params)
