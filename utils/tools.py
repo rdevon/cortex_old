@@ -96,7 +96,7 @@ def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan', strict=Fals
         strict=strict
     )
 
-def init_weights(model, weight_noise=False, weight_scale=0.01, dropout=False, **kwargs):
+def init_weights(model, weight_noise=False, weight_scale=0.001, dropout=False, **kwargs):
     model.weight_noise = weight_noise
     model.weight_scale = weight_scale
     model.dropout = dropout

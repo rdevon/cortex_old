@@ -4,6 +4,7 @@ Reweighted wake-sleep inference
 
 from collections import OrderedDict
 import theano
+from theano import tensor as T
 
 from utils import floatX
 from utils.tools import (
@@ -21,7 +22,7 @@ class RWS(object):
         self.model = model
         warn_kwargs(self, **kwargs)
 
-    def __call__(self, x, y, n_poasterior_samples=10, qk=None):
+    def __call__(self, x, y, n_posterior_samples=10, qk=None):
         model = self.model
 
         print 'Doing RWS, %d samples' % n_posterior_samples

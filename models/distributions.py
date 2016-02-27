@@ -216,9 +216,15 @@ class Gaussian(Distribution):
         mu = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
         return mu
 
+    def split_prob(self, p):
+        mu        = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
+        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // self.scale)
+        return mu, log_sigma
+
     def step_kl_divergence(self, q, mu, log_sigma):
         mu_q = _slice(q, 0, self.dim)
         log_sigma_q = _slice(q, 1, self.dim)
+#        log_sigma = T.maximum(log_sigma, -5)
 
         kl = log_sigma - log_sigma_q + 0.5 * (
             (T.exp(2 * log_sigma_q) + (mu - mu_q) ** 2) /
@@ -316,14 +322,14 @@ def _centered_binomial(trng, p, size=None):
     return 2 * trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
 
 def _cross_entropy(x, p):
-    energy = -x * T.log(p) - (1 - x) * T.log(1 - p)
     #p = T.clip(p, _clip, 1.0 - _clip)
+    energy = -x * T.log(p) - (1 - x) * T.log(1 - p)
     #energy = T.nnet.binary_crossentropy(p, x)
     return energy.sum(axis=energy.ndim-1)
 
 def _binary_entropy(p):
-    entropy = -p * T.log(p) - (1 - p) * T.log(1 - p)
     #p_c = T.clip(p, _clip, 1.0 - _clip)
+    entropy = -p * T.log(p) - (1 - p) * T.log(1 - p)
     #entropy = T.nnet.binary_crossentropy(p_c, p)
     return entropy.sum(axis=entropy.ndim-1)
 
@@ -369,6 +375,7 @@ def _neg_normal_log_prob(x, p):
     dim = p.shape[p.ndim-1] // 2
     mu = _slice(p, 0, dim)
     log_sigma = _slice(p, 1, dim)
+#    log_sigma = T.maximum(log_sigma, -5)
     energy = 0.5 * (
         (x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
     return energy.sum(axis=energy.ndim-1)

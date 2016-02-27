@@ -117,6 +117,7 @@ class IRVI(object):
         model = self.model
 
         inference_outs, _, updates = self.inference(x, y)
+        i_costs = inference_outs['i_costs']
 
         qs = inference_outs['qs']
 
@@ -129,12 +130,14 @@ class IRVI(object):
             steps = [0]
 
         full_results = OrderedDict()
+        full_results['i_cost'] = []
         samples = OrderedDict()
         for i in steps:
             qk  = qs[i]
-            results_k, samples_k = model(x, y, qk, **model_args)
+            results_k, samples_k, _ = model(x, y, qk, **model_args)
             samples_k['q'] = qk
             update_dict_of_lists(full_results, **results_k)
+            full_results['i_cost'].append(i_costs[i])
             update_dict_of_lists(samples, **samples_k)
 
         results = OrderedDict()

@@ -11,10 +11,10 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from distributions import Gaussian
 from layers import Layer
 from mlp import MLP
+from utils import floatX, intX, pi
 from utils import tools
 from utils.tools import (
     concatenate,
-    floatX,
     init_rngs,
     init_weights,
     log_mean_exp,
@@ -45,12 +45,13 @@ def unpack(dim_in=None,
                            recognition_net=recognition_net,
                            generation_net=generation_net)
 
-    models += kwargs.values()
     kwargs['prior'] = prior_model
     models.append(prior_model)
     print 'Forming GBN'
     model = GBN(dim_in, dim_h, **kwargs)
     models.append(model)
+    models += [model.posterior, model.conditional]
+
     return models, model_args, extra_args
 
 
@@ -158,11 +159,11 @@ class GBN(Layer):
 
     def visualize_latents(self):
         h0 = self.prior.mu
-        py0 = self.conditional.feed(h0)
+        py0 = self.conditional.get_center(self.conditional.feed(h0))
 
-        sq = T.nlinalg.AllocDiag()(self.prior.log_sigma)
-        h = T.exp(sq).astype(floatX) + h0[None, :]
-        py = self.conditional.feed(h)
+        sigma = T.nlinalg.AllocDiag()(T.exp(self.prior.log_sigma))
+        h = 10 * sigma.astype(floatX) + h0[None, :]
+        py = self.conditional.get_center(self.conditional.feed(h))
 
         return py - py0[None, :]
 
@@ -202,7 +203,7 @@ class GBN(Layer):
 
         return rval
 
-    def __call__(self, x, y, qk=None, n_posterior_samples=10):
+    def __call__(self, x, y, qk=None, n_posterior_samples=10, pass_gradients=False):
         q0 = self.posterior.feed(x)
 
         if qk is None:
@@ -213,10 +214,21 @@ class GBN(Layer):
 
         log_py_h    = -self.conditional.neg_log_prob(y[None, :, :], py)
         KL_qk_p     = self.prior.kl_divergence(qk)
-        KL_qk_q0    = self.kl_divergence(qk, q0)
+        qk_c        = qk.copy()
+        if pass_gradients:
+            KL_qk_q0 = T.constant(0.).astype(floatX)
+        else:
+            KL_qk_q0    = self.kl_divergence(qk_c, q0)
 
         log_ph      = -self.prior.neg_log_prob(h)
-        log_qh      = -self.posterior.neg_log_prob(h, qk)
+        
+#        dim = qk.shape[qk.ndim-1] // 2
+#        mu = _slice(qk, 0, dim)
+#        log_sigma = _slice(qk, 1, dim)
+#        log_qh = -0.5 * (
+#            (h - mu) ** 2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi)).sum(axis=2)
+
+        log_qh      = -self.posterior.neg_log_prob(h, qk[None, :, :])
 
         log_p       = (log_sum_exp(log_py_h + log_ph - log_qh, axis=0)
                        - T.log(n_posterior_samples))
@@ -226,16 +238,43 @@ class GBN(Layer):
         q_entropy   = self.posterior.entropy(qk)
         nll         = -log_p
 
-        cost        = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
+        '''
+        lower_bound = -(y_energy + log_ph.mean(axis=0) - log_qh.mean(axis=0)).mean()
+        if pass_gradients:
+            cost = (y_energy + log_ph.mean(axis=0) - log_qh.mean(axis=0)).mean(0)
+        else:
+            cost = (y_energy + log_ph.mean(axis=0) - log_qh.mean(axis=0) + KL_qk_q0).mean(0)
+        '''
+
         lower_bound = -(y_energy + KL_qk_p).mean()
+        if pass_gradients:
+            cost = (y_energy + KL_qk_p).mean(0)
+        else:
+            cost = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
+
+        #cost        = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
+        #lower_bound = -(y_energy + KL_qk_p).mean()
+
+#        mu, log_sigma = self.posterior.distribution.split_prob(qk)
 
         results = OrderedDict({
+#            'mu_mean': mu.mean(),
+#            'log_sigma_mean': log_sigma.mean(),
+#            'h': h,
+#            'mu': mu,
+#            'log_sigma': log_sigma,
+#            'term1': ((h - mu) ** 2).mean(),
+#            'term2': (T.exp(2 * log_sigma)).min(),
+#            'term12': ((h - mu) ** 2 / T.exp(2 * log_sigma)).mean(),
+#            'min_sigma': T.min(log_sigma),
+#            'h_mean': h.mean(),
+#            'h_std': h.std(),
             '-log p(x|h)': y_energy.mean(0),
             '-log p(x)': nll.mean(0),
             '-log p(h)': log_ph.mean(),
             '-log q(h)': log_qh.mean(),
             'KL(q_k||p)': KL_qk_p.mean(0),
-            'KL(q_k||q_0)': KL_qk_q0.mean(0),
+            'KL(q_k||q_0)': KL_qk_q0.mean(),
             'H(p)': p_entropy,
             'H(q)': q_entropy.mean(0),
             'lower_bound': lower_bound,
@@ -247,7 +286,8 @@ class GBN(Layer):
             batch_energies=y_energy
         )
 
-        return results, samples
+        constants = [qk_c]
+        return results, samples, constants
 
 
 #Deep Gaussian Belief Networks==================================================

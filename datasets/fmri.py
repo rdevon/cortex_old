@@ -118,12 +118,6 @@ class MRI(Dataset):
         self.mean_image = self.X.mean(axis=0)
         self.Y = make_one_hot(Y)
 
-        if idx is not None:
-            self.X = self.X[idx]
-            self.Y = self.Y[idx]
-
-        self.n = self.X.shape[0]
-
         if distribution == 'gaussian':
             self.X -= self.mean_image
             self.X /= self.X.std()
@@ -133,10 +127,64 @@ class MRI(Dataset):
         else:
             raise ValueError(distribution)
 
+        if idx is not None:
+            self.X = self.X[idx]
+            self.Y = self.Y[idx]
+
+        self.n = self.X.shape[0]
+
     def _randomize(self):
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
         self.X = self.X[rnd_idx, :]
         self.Y = self.Y[rnd_idx, :]
+
+    def get_data(self, source):
+        print('Loading file locations from %s' % source)
+        source_dict = yaml.load(open(source))
+        print('Source locations: %s' % pprint.pformat(source_dict))
+
+        nifti_file = source_dict['nifti']
+        mask_file = source_dict['mask']
+        self.tmp_path = source_dict['tmp_path']
+        if not path.isdir(self.tmp_path):
+            os.mkdir(self.tmp_path)
+        self.anat_file = source_dict['anat_file']
+        sites_file = source_dict['sites']
+
+        data_files = source_dict['data']
+        if isinstance(data_files, str):
+            data_files = [data_files]
+
+        X = []
+        Y = []
+        for i, data_file in enumerate(data_files):
+            print 'Loading %s' % data_file
+            X_ = np.load(data_file)
+            X.append(X_.astype(floatX))
+            Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
+
+        X = np.concatenate(X, axis=0)
+        Y = np.concatenate(Y, axis=0)
+
+        mask = np.load(mask_file)
+        if not np.all(np.bitwise_or(mask == 0, mask == 1)):
+            raise ValueError("Mask has incorrect values.")
+
+        self.mask = mask
+        self.base_nifti_file = nifti_file
+        self.sites = np.load(sites_file).tolist()
+        
+        '''
+        print 'Regressing out site'
+        idx0 = [i for i, s in enumerate(self.sites) if s == 0]
+        idx1 = [i for i, s in enumerate(self.sites) if s == 1]
+        mi0 = X[idx0].mean(axis=0)
+        mi1 = X[idx1].mean(axis=0)
+
+        X[idx0] -= mi0
+        X[idx1] -= mi1
+        '''
+        return X, Y
 
     def next(self, batch_size=None):
         if batch_size is None:
@@ -159,51 +207,6 @@ class MRI(Dataset):
         }
 
         return rval
-
-    def get_data(self, source):
-        print('Loading file locations from %s' % source)
-        source_dict = yaml.load(open(source))
-        print('Source locations: %s' % pprint.pformat(source_dict))
-
-        nifti_file = source_dict['nifti']
-        mask_file = source_dict['mask']
-        self.tmp_path = source_dict['tmp_path']
-        if not path.isdir(self.tmp_path):
-            os.mkdir(self.tmp_path)
-        self.anat_file = source_dict['anat_file']
-        sites_file = source_dict['sites']
-
-        data_files = source_dict['data']
-        if isinstance(data_files, str):
-            data_files = [data_files]
-
-        X = []
-        Y = []
-        for i, data_file in enumerate(data_files):
-            X_ = np.load(data_file)
-            X.append(X_.astype(floatX))
-            Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
-
-        X = np.concatenate(X, axis=0)
-        Y = np.concatenate(Y, axis=0)
-
-        mask = np.load(mask_file)
-        if not np.all(np.bitwise_or(mask == 0, mask == 1)):
-            raise ValueError("Mask has incorrect values.")
-
-        self.mask = mask
-        self.base_nifti_file = nifti_file
-        self.sites = np.load(sites_file).tolist()
-
-        idx0 = [i for i, s in enumerate(self.sites) if s == 0]
-        idx1 = [i for i, s in enumerate(self.sites) if s == 1]
-        mi0 = X[idx0].mean(axis=0)
-        mi1 = X[idx1].mean(axis=0)
-
-        X[idx0] -= mi0
-        X[idx1] -= mi1
-
-        return X, Y
 
     def _mask(self, X, mask=None):
         if mask is None:

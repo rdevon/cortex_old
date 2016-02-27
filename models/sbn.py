@@ -23,10 +23,6 @@ from utils.tools import (
     init_weights,
     log_mean_exp,
     log_sum_exp,
-    logit,
-    norm_weight,
-    ortho_weight,
-    pi,
     update_dict_of_lists,
     _slice
 )
@@ -37,65 +33,34 @@ def unpack(dim_in=None,
            z_init=None,
            recognition_net=None,
            generation_net=None,
-           prior=None,
-           dataset=None,
-           dataset_args=None,
-           n_inference_steps=None,
-           n_inference_samples=None,
-           inference_method=None,
-           inference_rate=None,
-           input_mode=None,
-           extra_inference_args=dict(),
+           extra_args=dict(),
+           distributions=dict(),
+           dims=dict(),
+           dataset_args=dict(),
+           center_input=None,
            **model_args):
     '''
     Function to unpack pretrained model into fresh SFFN class.
     '''
-    from gbn import GaussianBeliefNet as GBN
 
-    kwargs = dict(
-        inference_method=inference_method,
-        inference_rate=inference_rate,
-        n_inference_steps=n_inference_steps,
-        z_init=z_init,
-        n_inference_samples=n_inference_samples,
-        extra_inference_args=extra_inference_args,
-    )
+    print 'Unpacking model with parameters %s' % model_args.keys()
 
-    dim_h = int(dim_h)
-    dataset_args = dataset_args[()]
-    recognition_net = recognition_net[()]
-    generation_net = generation_net[()]
-    if prior == 'logistic':
-        out_act = 'T.nnet.sigmoid'
-        prior_model = Bernoulli(dim_h)
-        C = SigmoidBeliefNetwork
-    elif prior == 'darn':
-        out_act = 'T.nnet.sigmoid'
-        prior_model = AutoRegressor(dim_h)
-        C = SigmoidBeliefNetwork
-    elif prior == 'gaussian':
-        out_act = 'lambda x: x'
-        prior_model = Gaussian(dim_h)
-        C = GBN
-    else:
-        raise ValueError('%s prior not known' % prior)
-
+    print 'Forming prior model'
+    prior_model = Binomial(dim_h)
     models = []
 
-    mlps = SigmoidBeliefNetwork.mlp_factory(recognition_net=recognition_net,
-                                            generation_net=generation_net)
+    kwargs = SBN.mlp_factory(dim_h, dims, distributions,
+                             recognition_net=recognition_net,
+                             generation_net=generation_net)
 
-    models += mlps.values()
     models.append(prior_model)
-
-    kwargs.update(**mlps)
-    kwargs['prior'] = prior_model
-    model = C(dim_in, dim_h, **kwargs)
+    kwargs['prior'] = prior_model    
+    print 'Forming SBN'
+    model = SBN(dim_in, dim_h, **kwargs)
     models.append(model)
-    return models, model_args, dict(
-        dataset=dataset,
-        dataset_args=dataset_args
-    )
+    models += [model.posterior, model.conditional]
+
+    return models, model_args, extra_args
 
 
 class SBN(Layer):
@@ -233,6 +198,13 @@ class SBN(Layer):
         center = self.conditional.get_center(py)
         return center
 
+    def visualize_latents(self):
+        h = T.eye(self.prior.dim).astype(floatX)
+        py = self.conditional.get_center(self.conditional.feed(h))
+        h0 = T.zeros_like(h)
+        py0 = self.conditional.get_center(self.conditional.feed(h0))
+        return py - py0
+
     # Misc --------------------------------------------------------------------
 
     def get_center(self, p):
@@ -315,4 +287,4 @@ class SBN(Layer):
             batch_energies=y_energy
         )
 
-        return results, samples
+        return results, samples, theano.OrderedUpdates()
