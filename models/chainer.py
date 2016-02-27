@@ -252,79 +252,122 @@ class RNNChainer(Layer):
                                      sample, select_first, n_steps, *params)
 
 
-class DijktrasChainer(RNNChainer):
+class DijkstrasChainer(RNNChainer):
     def __init__(self, rnn):
         self.rnn = rnn
 
-        X = T.matrix('x', dtype=floatX)
-        H = T.matrix('h', dtype=floatX)
+        X   = T.matrix('x', dtype=floatX)
+        Hs  = [T.matrix('h%d' % i, dtype=floatX) for i in range(self.rnn.n_layers)]
+        idx = T.vector('idx', dtype=intX)
 
-        chain_dict, updates = self.__call__(X, H)
-        outs = chain_dict['h_chains'] + [chain_dict['i_chain'],
-                                         chain_dict['p_chain'],
-                                         chain_dict['x_chain']]
-        self.f_test = theano.function([X], chain_dict['extra'])
-        self.f_build = theano.function([X], outs, updates=updates)
+        chain_dict, updates = self.__call__(X, Hs, idx)
+        outs = chain_dict['h_chains'] + [chain_dict['x_chain'], chain_dict['mask']]
+        self.f_test = theano.function(Hs + [X, idx], chain_dict['extra'],
+                                      on_unused_input='ignore')
+        self.f_build = theano.function(Hs + [X, idx], outs, updates=updates)
 
-    def build_data_chain(self, data_iter, batch_size=1, l_chain=None, h0s=None, c=None):
-        n_remaining_samples = data_iter.n - data_iter.pos
-        if l_chain is None:
-            l_chain = n_remaining_samples
-        else:
-            l_chain = min(l_chain, n_remaining_samples)
+    def __call__(self, X, Hs, idx):
+        return self.assign(X, Hs, idx)
 
-        x = data_iter.next(batch_size=l_chain)[data_iter.name]
+    def build_data_chain(self, data_iter, batch_size, build_batch=100):
+        build_batch = min(batch_size, build_batch)
+        outs = data_iter.next(batch_size=batch_size)
+        x = outs[0]
+        hs = outs[1:]
+        x_chain = []
+        hs_chain = [[] for _ in hs]
+        masks = []
+        for i0 in range(0, batch_size - build_batch + 1, build_batch):
+            #print i0
+            #extra = self.f_test(*(list(hs) + [x, range(i0, i0 + build_batch)]))
+            #assert False, [ex.shape for ex in extra]
+            outs = self.f_build(*(list(hs) + [x, range(i0, i0 + build_batch)]))
+            hs_ = outs[:-2]
+            x_, mask = outs[-2:]
+            x_chain.append(x_)
+            for i, h_ in enumerate(hs_):
+                hs_chain[i].append(h_)
+            masks.append(mask)
 
-        outs = self.f_build(x)
-        h_chains = outs[:-3]
-        idx, p_chain, x_chain = outs[-3:]
+        mask=np.concatenate(masks, axis=2).astype(floatX)
+        x_chain=np.concatenate(x_chain, axis=2).astype(floatX)
+        h_chains=[np.concatenate(h_chain, axis=2) for h_chain in hs_chain]
+
+        mask = mask.reshape((mask.shape[0], mask.shape[1] * mask.shape[2]))
+        x_chain = x_chain.reshape((x_chain.shape[0], x_chain.shape[1] * x_chain.shape[2], x_chain.shape[3]))
+        h_chains = [h_chain.reshape((h_chain.shape[0], h_chain.shape[1] * h_chain.shape[2], h_chain.shape[3])) for h_chain in h_chains]
 
         rval = OrderedDict(
-            idx=idx,
+            mask=mask,
             x_chain=x_chain,
-            p_chain=p_chain,
             h_chains=h_chains
         )
-
         return rval
 
-    def step(i, D, E):
-        D = T.switch(T.lt(E[i] + D[i][None], D), E[i] + D[i][None], D)
-        return D
+    def step_assign_call(self, X, Hs, idx, *params):
 
-    def step_path(i, Ds):
-        P = T.switch(T.eq(Ds[i], Ds[i-1]), 0, i)
-        return P
+        def step(i, D, c, E):
+            c = T.switch(T.eq(i, 0), 0, c)
+            D_new = T.switch(T.lt(E[i][:, None] + D[i][None, :], D), E[i][:, None] + D[i][None, :], D)
+            c = T.switch(T.all(T.eq(D, D_new)), c, c+1)
+            stop = T.eq(c, 0) and T.eq(i, D.shape[0]-1)
+            return (D_new, c), theano.scan_module.until(stop)
 
-    def step_assign_call(self, X, H, *params):
-        E = step_energy(self, X, X, H, *params)
-        D = E[0]
+        def step_path(i, Q, Ds):
+            P = T.switch(T.eq(Ds[i], Ds[i-1]), -1, i % Ds.shape[1])
+            Q = T.switch(T.neq(P, -1), P, Q)
+            return Q, P
 
-        Ds, _ = theano.scan(
+        outs = self.rnn.step_sample(*(Hs + [X] + list(params)))
+        P    = outs[-1]
+        E    = self.rnn.neg_log_prob(X[:, None, :], P[None, :, :])
+        #energy    = ((x - x_p) ** 2).sum(axis=x.ndim-1)
+
+        D = E[idx].T
+        #assert False, (E.ndim, D.ndim)
+
+        C = T.tile(T.arange(D.shape[0]), D.shape[0])
+        (Ds, Cs), updates = theano.scan(
             step,
-            sequences=[T.arange(1, D.shape[0])],
-            outputs_info=[D],
+            sequences=[C],
+            outputs_info=[D, T.constant(0)],
             non_sequences=[E]
         )
 
-        Ps, _ = theano.scan(
+        Q0 = T.zeros_like(D) + T.arange(D.shape[0])[:, None]
+        (Qs, Ps), updates = theano.scan(
             step_path,
-            sequences=[T.arange(1, D.shape[0])],
+            sequences=[T.arange(1, Ds.shape[0])[::-1]],
+            outputs_info=[Q0, None],
             non_sequences=[Ds]
         )
 
+        idx = T.neq(Ps.sum(axis=(1, 2)), -(D.shape[0] * D.shape[1])).nonzero()[0]
+        Qs = Qs[idx]
+        Ps = Ps[idx]
+        Qs0 = T.zeros_like(D) + T.arange(D.shape[1])[None, :]
+        Qsl = T.zeros_like(D) + T.arange(D.shape[0])[:, None]
+        Qs = T.concatenate([Qs0[None, :, :], Qs[::-1], Qsl[None, :, :]]).astype(intX)
+        Ps = T.concatenate([Qs0[None, :, :], Ps[::-1], Qsl[None, :, :]])
+
+        x_chain = X[Qs]
+        x_chain = T.switch(T.eq(Ps[:, :, :, None], -1), 0, x_chain)
+        h_chains = [H[Qs] for H in Hs]
+        mask = T.neq(Ps, -1).astype(intX)
+
         outs = OrderedDict(
-            i_chain=i_chain,
-            h_chains=h_chains,
+            extra=[mask, x_chain] + h_chains,
+            mask=mask,
             x_chain=x_chain,
-            counts=counts[-1],
-            scalings=scalings[-1]
+            h_chains=h_chains
         )
 
-    def assign(self, X, H):
+        return outs, theano.OrderedUpdates()
+
+    def assign(self, X, Hs, idx):
         params = self.rnn.get_sample_params()
 
-        return self.step_assign_call(X, H, *params)
+        return self.step_assign_call(X, Hs, idx, *params)
 
 class LSTMChainer(RNNChainer):
     def step_energy(self, x, x_p, h_p, c_p, *params):

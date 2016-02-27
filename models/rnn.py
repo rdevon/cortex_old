@@ -248,7 +248,7 @@ class RNN(Layer):
         for i in xrange(self.n_layers):
             h_ = hs_[i]
             Ur = Urs[i]
-            h = self._step(y, h_, Ur)
+            h = self._step(1, y, h_, Ur)
             hs.append(h)
 
             if i < self.n_layers - 1:
@@ -267,9 +267,10 @@ class RNN(Layer):
         x         = x[0]
         return tuple(hs) + (x, p)
 
-    def _step(self, y, h_, Ur):
+    def _step(self, m, y, h_, Ur):
         preact = T.dot(h_, Ur) + y
         h      = T.tanh(preact)
+        h      = m * h + (1 - m) * h_
         return h
 
     def call_seqs(self, x, condition_on, level, *params):
@@ -285,13 +286,13 @@ class RNN(Layer):
 
         return [a]
 
-    def step_call(self, x, h0s, *params):
+    def step_call(self, x, m, h0s, *params):
         n_steps = x.shape[0]
         n_samples = x.shape[1]
 
         hs = []
         for i, h0 in enumerate(h0s):
-            seqs         = self.call_seqs(x, None, i, *params)
+            seqs         = [m[:, :, None]] + self.call_seqs(x, None, i, *params)
             outputs_info = [h0]
             non_seqs     = [self.get_recurrent_args(*params)[i]]
 
@@ -311,13 +312,16 @@ class RNN(Layer):
 
         return OrderedDict(hs=hs, p=p, z=preact), updates
 
-    def __call__(self, x, h0s=None, condition_on=None):
+    def __call__(self, x, m=None, h0s=None, condition_on=None):
         if h0s is None:
             h0s = [T.alloc(0., x.shape[1], dim_h).astype(floatX) for dim_h in self.dim_hs]
 
+        if m is None:
+            m = T.ones((x.shape[0], x.shape[1])).astype(floatX)
+
         params = self.get_sample_params()
 
-        return self.step_call(x, h0s, *params)
+        return self.step_call(x, m, h0s, *params)
 
     def sample(self, x0=None, h0s=None, n_samples=10, n_steps=10,
                condition_on=None, debug=False):
