@@ -18,10 +18,12 @@ class AIR(IRVI):
     def __init__(self,
                  model,
                  name='AIR',
+                 pass_gradients=False,
                  **kwargs):
 
         super(AIR, self).__init__(model, name=name,
-                                  pass_gradients=False, **kwargs)
+                                  pass_gradients=pass_gradients,
+                                  **kwargs)
 
     def step_infer(self, r, q, y, *params):
         model = self.model
@@ -32,7 +34,7 @@ class AIR(IRVI):
         log_py_h = -model.conditional.neg_log_prob(y[None, :, :], py)
         log_ph   = -model.prior.step_neg_log_prob(h, model.prior.get_prob(*prior_params))
         log_qh   = -model.posterior.neg_log_prob(h, q[None, :, :])
-    
+
         log_p     = log_py_h + log_ph - log_qh
         log_p_max = T.max(log_p, axis=0, keepdims=True)
 

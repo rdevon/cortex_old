@@ -79,7 +79,6 @@ class GBN(Layer):
         mlps = {}
 
         if recognition_net is not None:
-            print recognition_net
             input_name = recognition_net.get('input_layer')
             recognition_net['distribution'] = 'gaussian'
             recognition_net['dim_in'] = dims[input_name]
@@ -88,7 +87,6 @@ class GBN(Layer):
             mlps['posterior'] = posterior
 
         if generation_net is not None:
-            print generation_net
             output_name = generation_net['output']
             generation_net['dim_in'] = dim_h
 
@@ -221,7 +219,7 @@ class GBN(Layer):
             KL_qk_q0    = self.kl_divergence(qk_c, q0)
 
         log_ph      = -self.prior.neg_log_prob(h)
-        
+
 #        dim = qk.shape[qk.ndim-1] // 2
 #        mu = _slice(qk, 0, dim)
 #        log_sigma = _slice(qk, 1, dim)
