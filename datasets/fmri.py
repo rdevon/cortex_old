@@ -24,8 +24,10 @@ from utils.tools import resolve_path
 def load_data(idx=None, dataset='mri', **dataset_args):
     if dataset == 'mri':
         C = MRI
+    elif dataset == 'fmri_iid':
+        C = FMRI_IID
     else:
-        raise ValueErro(dataset)
+        raise ValueError(dataset)
     train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
 
@@ -35,7 +37,6 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
                   test_batch_size=None,
                   **dataset_args):
 
-    assert C in [MRI]
 
     if idx is None:
         assert split is not None
@@ -217,7 +218,7 @@ class MRI(Dataset):
 
         mask_f = mask.flatten()
         mask_idx = np.where(mask_f == 1)[0].tolist()
-        X_masked = np.zeros((X.shape[0], self.dims['mri'])).astype(floatX)
+        X_masked = np.zeros((X.shape[0], self.dims[self.name])).astype(floatX)
 
         for i, x in enumerate(X):
             X_masked[i] = x.flatten()[mask_idx]
@@ -228,7 +229,7 @@ class MRI(Dataset):
         if mask is None:
             mask = self.mask
 
-        if X_masked.shape[1] != self.dims['mri']:
+        if X_masked.shape[1] != self.dims[self.name]:
             raise ValueError(X_masked.shape)
 
         mask_f = mask.flatten()

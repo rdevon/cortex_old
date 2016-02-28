@@ -4,6 +4,11 @@ Utility for handling fMRI data
 
 import argparse
 from glob import glob
+import nibabel as nib
+from nipy import save_image, load_image
+import numpy as np
+import os
+from os import path
 
 from load_mri import (
     find_niftis,
@@ -31,7 +36,7 @@ def read_niftis(file_list):
         subject_data /= subject_data.std()
         data.append(subject_data)
         new_file_list.append(f)
-    data = np.concatenate(data, axis=3).transpose(3, 0, 1, 2).astype(floatX)
+    data = np.concatenate(data, axis=3).transpose(3, 0, 1, 2).astype('float32')
 
     return data, new_file_list
 
@@ -47,6 +52,34 @@ def save_mask(data, out_path):
         lambda x_, y_: x_ * y_, mask.shape))
 
     np.save(out_path, mask)
+
+def load_niftis(source_dir, out_dir, name='mri', patterns=None):
+    '''                                                                                                                                                                                
+    Loads niftis from a directory.                                                                                                                                                     
+    '''
+
+    if patterns is not None:
+        file_lists = []
+        for i, pattern in enumerate(patterns):
+            file_list = glob(path.join(source_dir, pattern))
+            file_lists.append(file_list)
+    else:
+        file_lists = [find_niftis(source_dir)]
+
+    datas = []
+    new_file_lists = []
+    for i, file_list in enumerate(file_lists):
+        data, new_file_list = read_niftis(file_list)
+        new_file_lists.append(new_file_list)
+        datas.append(data)
+        np.save(path.join(out_dir, name + '_%d.npy' % i), data)
+
+    sites = [[0 if 'st' in f else 1 for f in fl] for fl in file_lists]
+    sites = sites[0] + sites[1]
+
+    mask = save_mask(np.concatenate(datas, axis=0), path.join(out_dir, name + '_mask.npy'))
+    np.save(path.join(out_dir, name + '_file_paths.npy'), new_file_lists)
+    np.save(path.join(out_dir, name + '_sites.npy'), sites)
 
 def make_argument_parser():
     parser = argparse.ArgumentParser()
