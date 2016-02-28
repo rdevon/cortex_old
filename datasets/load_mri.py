@@ -105,7 +105,7 @@ def make_argument_parser():
     parser.add_argument('source',
                         help='source directory for all subjects.')
     parser.add_argument('out_path',
-                        help='output directory under args.out_prefix')
+                        help='output directory under args.name')
     parser.add_argument('-n', '--name', default='mri')
     parser.add_argument('-p', '--patterns', nargs='+', default=None)
 

@@ -104,7 +104,7 @@ class MRI(Dataset):
                  distribution='gaussian', **kwargs):
         super(MRI, self).__init__(name=name, **kwargs)
 
-        print 'Loading MRI from %s' % source
+        print 'Loading %s from %s' % (name, source)
         source = resolve_path(source)
         X, Y = self.get_data(source)
 
@@ -173,7 +173,7 @@ class MRI(Dataset):
         self.mask = mask
         self.base_nifti_file = nifti_file
         self.sites = np.load(sites_file).tolist()
-        
+
         '''
         print 'Regressing out site'
         idx0 = [i for i, s in enumerate(self.sites) if s == 0]
@@ -280,25 +280,44 @@ class MRI(Dataset):
         print 'Done'
 
 
-class FMRI_IID(object):
-    def __init__(self, source):
-        print 'Loading '
-        pass
+class FMRI_IID(MRI):
+    def __init__(self, name='fmri_iid', **kwargs):
+        super(FMRI_IID, self).__init__(name=name, **kwargs)
 
-    def randomize(self):
-        pass
+    def get_data(self, source):
+        print('Loading file locations from %s' % source)
+        source_dict = yaml.load(open(source))
+        print('Source locations: %s' % pprint.pformat(source_dict))
 
-    def __iter__(self):
-        return self
+        nifti_file = source_dict['nifti']
+        mask_file = source_dict['mask']
+        self.tmp_path = source_dict['tmp_path']
+        if not path.isdir(self.tmp_path):
+            os.mkdir(self.tmp_path)
+        self.anat_file = source_dict['anat_file']
 
-    def next(self, batch_size):
-        pass
+        data_files = source_dict['data']
+        if isinstance(data_files, str):
+            data_files = [data_files]
 
-    def save_images(self, x, outfile):
-        pass
+        X = []
+        Y = []
+        for i, data_file in enumerate(data_files):
+            print 'Loading %s' % data_file
+            X_ = np.load(data_file)
+            X.append(X_.astype(floatX))
+            Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
 
-    def show(self, image):
-        pass
+        X = np.concatenate(X, axis=0)
+        Y = np.concatenate(Y, axis=0)
+
+        mask = np.load(mask_file)
+        if not np.all(np.bitwise_or(mask == 0, mask == 1)):
+            raise ValueError("Mask has incorrect values.")
+
+        self.mask = mask
+        self.base_nifti_file = nifti_file
+        return X, Y
 
 
 class ICA_Loadings(object):
