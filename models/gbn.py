@@ -25,6 +25,7 @@ from utils.tools import (
 
 def unpack(dim_in=None,
            dim_h=None,
+           prior=None,
            recognition_net=None,
            generation_net=None,
            extra_args=dict(),
@@ -253,14 +254,14 @@ class GBN(Layer):
         #cost        = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
         #lower_bound = -(y_energy + KL_qk_p).mean()
 
-#        mu, log_sigma = self.posterior.distribution.split_prob(qk)
+        mu, log_sigma = self.posterior.distribution.split_prob(qk)
 
         results = OrderedDict({
 #            'mu_mean': mu.mean(),
 #            'log_sigma_mean': log_sigma.mean(),
 #            'h': h,
-#            'mu': mu,
-#            'log_sigma': log_sigma,
+            'mu': mu.mean(),
+            'log_sigma': log_sigma.mean(),
 #            'term1': ((h - mu) ** 2).mean(),
 #            'term2': (T.exp(2 * log_sigma)).min(),
 #            'term12': ((h - mu) ** 2 / T.exp(2 * log_sigma)).mean(),
@@ -476,6 +477,7 @@ class DeepGBN(Layer):
 
         grads = theano.grad(cost, wrt=qs, consider_constant=consider_constant)
 
+        cost = kl_term.mean()
         return cost, grads
 
     def step_infer(self, *params):

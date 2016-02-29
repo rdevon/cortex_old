@@ -111,7 +111,7 @@ class IRVI(object):
         return rval, constants, updates
 
     def __call__(self, x, y,
-                 stride=10,
+                 stride=1,
                  **model_args):
 
         model = self.model
