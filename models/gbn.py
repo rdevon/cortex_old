@@ -158,13 +158,15 @@ class GBN(Layer):
 
     def visualize_latents(self):
         h0 = self.prior.mu
-        py0 = self.conditional.get_center(self.conditional.feed(h0))
+        y0_mu, y0_logsigma = self.conditional.distribution.split_prob(
+            self.conditional.feed(h0))
 
         sigma = T.nlinalg.AllocDiag()(T.exp(self.prior.log_sigma))
         h = 10 * sigma.astype(floatX) + h0[None, :]
-        py = self.conditional.get_center(self.conditional.feed(h))
-
-        return py - py0[None, :]
+        y_mu, y_logsigma = self.conditional.distribution.split_prob(
+            self.conditional.feed(h))
+        py = y_mu - y0_mu[None, :]
+        return py# / py.std()#T.exp(y_logsigma)
 
     # Misc --------------------------------------------------------------------
 
