@@ -38,9 +38,10 @@ class GDIR(IRVI):
         KL_q_p   = model.prior.step_kl_divergence(q, *prior_params)
         y_energy = -log_py_h.mean(axis=0)
 
-        cost = (y_energy + KL_q_p).sum(axis=0)
+        cost = (y_energy + KL_q_p).mean(axis=0)
         grad = theano.grad(cost, wrt=q, consider_constant=consider_constant)
 
+        cost = y_energy.mean()
         return cost, grad
 
 

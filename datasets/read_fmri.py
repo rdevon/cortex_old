@@ -54,8 +54,8 @@ def save_mask(data, out_path):
     np.save(out_path, mask)
 
 def load_niftis(source_dir, out_dir, name='mri', patterns=None):
-    '''                                                                                                                                                                                
-    Loads niftis from a directory.                                                                                                                                                     
+    '''
+    Loads niftis from a directory.
     '''
 
     if patterns is not None:

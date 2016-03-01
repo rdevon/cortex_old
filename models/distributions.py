@@ -44,7 +44,7 @@ def dist_class(c, conditional=False):
         elif c == 'continuous_binomial':
             return ConditionalContinuousBinomial
         elif c == 'centered_binomial':
-            return ConditionalCetneredBinomial
+            return ConditionalCenteredBinomial
         elif c == 'multinomial':
             return ConditionalMultinomial
         elif c == 'gaussian':
@@ -190,10 +190,11 @@ class ConditionalMultinomial(Multinomial):
 
 
 class Gaussian(Distribution):
-    def __init__(self, dim, name='gaussian', **kwargs):
+    def __init__(self, dim, name='gaussian', clip=-10, **kwargs):
         self.f_sample = _normal
         self.f_neg_log_prob = _neg_normal_log_prob
         self.f_entropy = _normal_entropy
+        self.clip = clip
         super(Gaussian, self).__init__(dim, name=name, scale=2, **kwargs)
 
     def set_params(self):
@@ -224,7 +225,8 @@ class Gaussian(Distribution):
     def step_kl_divergence(self, q, mu, log_sigma):
         mu_q = _slice(q, 0, self.dim)
         log_sigma_q = _slice(q, 1, self.dim)
-#        log_sigma = T.maximum(log_sigma, -5)
+        log_sigma_q = T.maximum(log_sigma_q, self.clip)
+        log_sigma = T.maximum(log_sigma, self.clip)
 
         kl = log_sigma - log_sigma_q + 0.5 * (
             (T.exp(2 * log_sigma_q) + (mu - mu_q) ** 2) /
@@ -247,6 +249,19 @@ class Gaussian(Distribution):
             size=size,
             dtype=floatX
         )
+
+    def step_neg_log_prob(self, x, p):
+        return self.f_neg_log_prob(x, p, clip=self.clip)
+
+    def neg_log_prob(self, x, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(x, p, clip=self.clip)
+
+    def entropy(self, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return self.f_entropy(p, clip=self.clip)
 
 
 class TruncatedGaussian(Gaussian):
@@ -371,17 +386,20 @@ def _normal_prob(p):
     mu = _slice(p, 0, dim)
     return mu
 
-def _neg_normal_log_prob(x, p):
+def _neg_normal_log_prob(x, p, clip=None):
     dim = p.shape[p.ndim-1] // 2
     mu = _slice(p, 0, dim)
     log_sigma = _slice(p, 1, dim)
-#    log_sigma = T.maximum(log_sigma, -5)
+    if clip is not None:
+        log_sigma = T.maximum(log_sigma, clip)
     energy = 0.5 * (
         (x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
     return energy.sum(axis=energy.ndim-1)
 
-def _normal_entropy(p):
+def _normal_entropy(p, clip=None):
     dim = p.shape[p.ndim-1] // 2
     log_sigma = _slice(p, 1, dim)
+    if clip is not None:
+        log_sigma = T.maximum(log_sigma, clip)
     entropy = 0.5 * T.log(2 * pi * e) + log_sigma
     return entropy.sum(axis=entropy.ndim-1)
