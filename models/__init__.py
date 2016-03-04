@@ -5,17 +5,21 @@ Base Layer class
 from collections import OrderedDict
 import theano
 
-from utils.tools import _p
+from utils.tools import (
+    warn_kwargs,
+    _p
+)
 
 
 class Layer(object):
-    def __init__(self, name='', learn=True):
+    def __init__(self, name='', excludes=[], learn=True, **kwargs):
         self.name = name
         self.params = None
-        self.excludes = []
+        self.excludes = excludes
         self.learn = learn
         self.set_params()
         self.n_params = len(self.params)
+        warn_kwargs(kwargs)
 
     def set_params(self):
         raise NotImplementedError()
@@ -28,7 +32,8 @@ class Layer(object):
             tp = theano.shared(self.params[kk], name=kk)
             tparams[_p(self.name, kk)] = tp
             self.__dict__[kk] = tp
-        return tparams
+
+        return OrderedDict((k, v) for k, v in tparams.iteritems() if k not in [_p(self.name, e) for e in self.excludes])
 
     def get_excludes(self):
         if self.learn:

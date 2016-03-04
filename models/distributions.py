@@ -22,7 +22,7 @@ from utils.tools import (
 _clip = 1e-7
 
 
-def dist_class(c, conditional=False):
+def resolve(c, conditional=False):
     if conditional:
         if c == 'binomial':
             return Binomial

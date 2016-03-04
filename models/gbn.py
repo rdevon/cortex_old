@@ -10,7 +10,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from distributions import Gaussian
 from layers import Layer
-from mlp import MLP
+from mlp import resolve as resolve_mlp
 from utils import floatX, intX, pi
 from utils import tools
 from utils.tools import (
@@ -76,15 +76,22 @@ class GBN(Layer):
 
     @staticmethod
     def mlp_factory(dim_h, dims, distributions,
+                    prototype=None,
                     recognition_net=None, generation_net=None):
         mlps = {}
 
         if recognition_net is not None:
+            t = recognition_net.get('type', None)
+            if t == 'mmmlp':
+                raise NotImplementedError()
+            elif t == 'lfmlp':
+                recognition_net['prototype'] = prototype
+
             input_name = recognition_net.get('input_layer')
             recognition_net['distribution'] = 'gaussian'
             recognition_net['dim_in'] = dims[input_name]
             recognition_net['dim_out'] = dim_h
-            posterior = MLP.factory(**recognition_net)
+            posterior = resolve_mlp(t).factory(**recognition_net)
             mlps['posterior'] = posterior
 
         if generation_net is not None:
@@ -92,18 +99,20 @@ class GBN(Layer):
             generation_net['dim_in'] = dim_h
 
             t = generation_net.get('type', None)
-            if t is None:
-                generation_net['dim_out'] = dims[output_name]
-                generation_net['distribution'] = distributions[output_name]
-                conditional = MLP.factory(**generation_net)
-            elif t == 'MMMLP':
+
+            if t == 'mmmlp':
                 for out in generation_net['graph']['outputs']:
                     generation_net['graph']['outs'][out] = dict(
                         dim=dims[out],
                         distribution=distributions[out])
-                conditional = MultiModalMLP.factory(**generation_net)
+                conditional = resolve_mlp(t).factory(**generation_net)
             else:
-                raise ValueError(t)
+                if t == 'lfmlp':
+                    generation_net['filter_in'] = False
+                    generation_net['prototype'] = prototype
+                generation_net['dim_out'] = dims[output_name]
+                generation_net['distribution'] = distributions[output_name]
+                conditional = resolve_mlp(t).factory(**generation_net)
             mlps['conditional'] = conditional
 
         return mlps
@@ -131,7 +140,6 @@ class GBN(Layer):
         self.conditional.name = self.name + '_conditional'
 
     def set_tparams(self, excludes=[]):
-        print 'Excluding the following parameters from learning: %s' % excludes
         tparams = super(GBN, self).set_tparams()
         tparams.update(**self.posterior.set_tparams())
         tparams.update(**self.conditional.set_tparams())

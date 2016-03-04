@@ -8,9 +8,10 @@ import theano
 from theano import tensor as T
 import warnings
 
+import distributions
 from distributions import (
-    dist_class,
-    Distribution
+    Distribution,
+    resolve as resolve_distribution
 )
 from layers import Layer
 from utils.tools import (
@@ -22,9 +23,19 @@ from utils.tools import (
 )
 
 
+def resolve(c):
+    if c == 'mlp' or c is None:
+        return MLP
+    elif c == 'lfmlp':
+        return LFMLP
+    elif c == 'mmmlp':
+        return MultimodalMLP
+    else:
+        raise ValueError(c)
+
+
 class MLP(Layer):
     must_sample = False
-
     def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
                  f_sample=None, f_neg_log_prob=None, f_entropy=None,
                  h_act='T.nnet.sigmoid', distribution='binomial', out_act=None,
@@ -45,20 +56,21 @@ class MLP(Layer):
             elif out_act == 'lambda x: x':
                 distribution = 'gaussian'
             elif out_act == 'T.tanh':
-                out_act = 'centered binomial'
+                distribution = 'centered binomial'
             else:
                 raise ValueError(out_act)
 
-        if distribution is None:
-            distribution = 'binomial'
-
         if isinstance(distribution, Distribution):
             self.distribution = distribution
-        else:
-            self.distribution = dist_class(distribution, conditional=True)(
+        elif distribution is not None:
+            self.distribution = resolve_distribution(
+                distribution, conditional=True)(
                 dim_out, **distribution_args)
+        else:
+            self.distribution = None
 
-        self.dim_out = dim_out * self.distribution.scale
+        if self.distribution is not None:
+            self.dim_out = dim_out * self.distribution.scale
 
         if dim_h is None:
             if dim_hs is None:
@@ -80,8 +92,7 @@ class MLP(Layer):
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
-
-        super(MLP, self).__init__(name=name)
+        super(MLP, self).__init__(name=name, **kwargs)
 
     @staticmethod
     def factory(dim_in=None, dim_out=None,
@@ -100,15 +111,19 @@ class MLP(Layer):
         return cost
 
     def sample(self, p, n_samples=1):
+        assert self.distribution is not None
         return self.distribution.sample(p=p, n_samples=n_samples)
 
     def neg_log_prob(self, x, p):
+        assert self.distribution is not None
         return self.distribution.step_neg_log_prob(x, p)
 
     def entropy(self, p):
+        assert self.distribution is not None
         return self.distribution.entropy(p)
 
     def get_center(self, p):
+        assert self.distribution is not None
         return self.distribution.get_center(p)
 
     def set_params(self):
@@ -150,12 +165,14 @@ class MLP(Layer):
             preact = T.dot(x, W) + b
 
             if l < self.n_layers - 1:
-                activ = self.h_act
-                x = eval(activ)(T.dot(x, W) + b)
+                x = eval(self.h_act)(preact)
                 outs['preact_%d' % l] = preact
                 outs[l] = x
             else:
-                x = self.distribution(preact)
+                if self.distribution is not None:
+                    x = self.distribution(preact)
+                else:
+                    x = eval(self.h_act)(preact)
                 outs['z'] = preact
                 outs['p'] = x
 
@@ -191,6 +208,178 @@ class MLP(Layer):
     def step_preact(self, x, *params):
         return self.step_call(x, *params)['z']
 
+
+class LFMLP(MLP):
+    '''
+    Local filters MLP (In progress)
+    '''
+    def __init__(self, dim_in, dim_out, dim_h=None, dim_hs=None, n_layers=None,
+                 dim_f=None, filter_in=True, prototype=None, stride=1, shape=None,
+                 name='LFMLP', **kwargs):
+
+        self.filter_in = filter_in
+
+        if prototype is None:
+            assert isinstance(shape, list)
+            if self.filter_in:
+                assert reduce(lambda x, y: x + y, shape) == dim_in
+            else:
+                assert reduce(lambda x, y: x + y, shape) == dim_out
+            accum = 0
+            filter_idx = []
+            for s in shape:
+                filter_idx.append(range(accum, accum + s))
+                accum += s
+        else:
+            if self.filter_in:
+                assert prototype.sum() == dim_in
+            else:
+                assert prototype.sum() == dim_out
+
+            assert len(prototype.shape) == len(shape)
+
+            def make_filter_idx(f_shape, shape, start):
+                idx = range(start[0], f_shape[0] + start[0])
+                for st, f_s, s in zip(start[:-1][::-1], f_shape[:-1][::-1], shape[:-1][::-1]):
+                    idx_new = []
+                    for i in idx:
+                        idx_new += [s * i + j for j in range(st, f_s + st)]
+                    idx = idx_new
+                return idx
+
+            incs = [range(0, s - f_s + 1, stride) for s, f_s in zip(prototype.shape, shape)]
+            starts = [[i] for i in incs[0]]
+            for inc in incs[1:]:
+                new_starts = []
+                for i in inc:
+                    new_starts += [s + [i] for s in starts]
+                starts = new_starts
+            filter_idx = [make_filter_idx(shape, prototype.shape, start) for start in starts]
+
+            mask_idx = [i for i, j in enumerate(prototype.flatten()) if j == 1]
+            idx_mask = dict((j, i) for i, j in enumerate(mask_idx))
+
+            filter_idx = [[idx_mask[i] for i in f_idx if i in mask_idx] for f_idx in filter_idx]
+
+        print 'Formed %d filters' % len(filter_idx)
+
+        self.filter_idx = filter_idx
+
+        assert dim_f is not None
+
+        if dim_h is None:
+            if dim_hs is None:
+                dim_hs = []
+            else:
+                dim_hs = [dim_h for dim_h in dim_hs]
+            assert n_layers is None
+        else:
+            assert dim_hs is None
+            dim_hs = []
+            for l in xrange(n_layers - 1):
+                dim_hs.append(dim_h)
+
+        if self.filter_in:
+            dim_hs = [dim_f] + dim_hs
+        else:
+            dim_hs.append(dim_f)
+
+        super(LFMLP, self).__init__(dim_in, dim_out, name=name, excludes=['f'],
+                                    dim_h=None, n_layers=None, dim_hs=dim_hs,
+                                    **kwargs)
+
+    @staticmethod
+    def factory(dim_in=None, dim_out=None,
+                **kwargs):
+        return LFMLP(dim_in, dim_out, **kwargs)
+
+    def set_params(self):
+        self.params = OrderedDict()
+
+        for l in xrange(self.n_layers):
+            if l == 0:
+                dim_in = self.dim_in
+            else:
+                dim_in = self.dim_hs[l-1]
+            dim_out = self.dim_hs[l]
+
+            if self.filter_in:
+                if l == 0:
+                    f = np.zeros((len(self.filter_idx), dim_in)).astype(floatX)
+
+                    for i, f_idx in enumerate(self.filter_idx):
+                        f[i, f_idx] = 1
+
+                    dim_out *= len(self.filter_idx)
+                    self.params['f'] = f
+                elif l == 1:
+                    dim_in *= len(self.filter_idx)
+            elif not self.filter_in:
+                if l == self.n_layers - 1:
+                    f = np.zeros((len(self.filter_idx), dim_out)).astype(floatX)
+                    for i, f_idx in enumerate(self.filter_idx):
+                        f[i, f_idx] = 1
+
+                    dim_in *= len(self.filter_idx)
+                    self.params['f'] = f
+                elif l == self.n_layers - 2:
+                    dim_out *= len(self.filter_idx)
+
+            W = norm_weight(dim_in, dim_out,
+                            scale=self.weight_scale, ortho=False)
+            b = np.zeros((dim_out,)).astype(floatX)
+            self.params['W%d' % l] = W
+            self.params['b%d' % l] = b
+
+    def get_params(self):
+        params = [self.f] + super(LFMLP, self).get_params()
+        return params
+
+    def step_call(self, x, f, *params):
+        params = list(params)
+        outs = OrderedDict(x=x)
+        for l in xrange(self.n_layers):
+            W = params.pop(0)
+            b = params.pop(0)
+
+            if self.weight_noise:
+                print 'Using weight noise in layer %d for MLP %s' % (l, self.name)
+                W += self.trng.normal(avg=0., std=self.weight_noise, size=W.shape)
+
+            if ((self.filter_in and l == 0)
+                or (not(self.filter_in) and l == self.n_layers - 1)):
+                W_ = W[None, :, :] * f[:, :, None]
+                W_ = W_.reshape((W_.shape[0] * W_.shape[1], W_.shape[2])).astype(floatX)
+                preact = T.dot(x, W) + b
+            else:
+                preact = T.dot(x, W) + b
+
+            if l < self.n_layers - 1:
+                x = eval(self.h_act)(preact)
+                outs['preact_%d' % l] = preact
+                outs[l] = x
+            else:
+                if self.distribution is not None:
+                    x = self.distribution(preact)
+                else:
+                    x = eval(self.h_act)(preact)
+                outs['z'] = preact
+                outs['p'] = x
+
+            if self.dropout and l != self.n_layers - 1:
+                print 'Adding dropout to layer {layer} for MLP {name}'.format(
+                    layer=l, name=self.name)
+                if activ == 'T.tanh':
+                    raise NotImplementedError('dropout for tanh units not implemented yet')
+                elif activ in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
+                    x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
+                                             dtype=x.dtype)
+                    x = x * x_d / (1 - self.dropout)
+                else:
+                    raise NotImplementedError('No dropout for %s yet' % activ)
+
+        assert len(params) == 0, params
+        return outs
 
 
 # MULTIMODAL MLP CLASS --------------------------------------------------------
