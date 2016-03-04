@@ -37,7 +37,6 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
                   test_batch_size=None,
                   **dataset_args):
 
-
     if idx is None:
         assert split is not None
         if round(np.sum(split), 5) != 1. or len(split) != 3:
@@ -74,9 +73,10 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
     return train, valid, test, idx
 
 def medfilt(x, k):
-    """Apply a length-k median filter to a 1D array x.
+    '''
+    Apply a length-k median filter to a 1D array x.
     Boundaries are extended by repeating endpoints.
-    """
+    '''
     assert k % 2 == 1, "Median filter length must be odd."
     assert x.ndim == 1, "Input must be one-dimensional."
     k2 = (k - 1) // 2
@@ -134,7 +134,7 @@ class MRI(Dataset):
 
         self.n = self.X.shape[0]
 
-    def _randomize(self):
+    def randomize(self):
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
         self.X = self.X[rnd_idx, :]
         self.Y = self.Y[rnd_idx, :]
