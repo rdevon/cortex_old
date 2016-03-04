@@ -131,12 +131,12 @@ def montage(nifti, anat, roi_dict, thr=2,
     y = 8
     x = int(ceil(1.0 * features / y))
 
-    font = {"size":8}
+    font = {"size": 8}
     rc("font",**font)
 
     if fig is None:
-        fig = plt.figure(figsize=[iscale * y, iscale * x / 2.5])
-    plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99, wspace=0.1, hspace=0)
+        fig = plt.figure(figsize=[iscale * y, (1.5 * iscale) * x / 2.5])
+    plt.subplots_adjust(left=0.01, right=0.99, bottom=0.05, top=0.99, wspace=0.05, hspace=0.5)
 
     if order is None:
         order = range(features)
@@ -161,7 +161,7 @@ def montage(nifti, anat, roi_dict, thr=2,
         coords = ([-coords[0], -coords[1], coords[2]])
 
         ax = fig.add_subplot(x, y, i + 1)
-        plt.axis("off")
+        #plt.axis("off")
 
         try:
             plot_map(feat,
@@ -184,6 +184,12 @@ def montage(nifti, anat, roi_dict, thr=2,
                  transform=ax.transAxes,
                  horizontalalignment='center',
                  color=(texcol, texcol, texcol))
+        for j, r in enumerate(roi['top_clust']['rois']):
+            plt.text(0.05, -0.15 * (.5 + j), r[:35],
+                     transform=ax.transAxes,
+                     horizontalalignment='left',
+                     color=(0, 0, 0))
+
         pos = [(0.05, 0.05), (0.4, 0.05), (0.8, 0.05)]
         colors = ["purple", "blue", "green"]
         for i, (k, vs) in enumerate(stats.iteritems()):

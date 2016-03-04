@@ -69,7 +69,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         test = C(idx=idx[2], batch_size=test_batch_size, **dataset_args)
     else:
         test = None
-
+    
     return train, valid, test, idx
 
 def medfilt(x, k):
@@ -150,7 +150,6 @@ class MRI(Dataset):
         if not path.isdir(self.tmp_path):
             os.mkdir(self.tmp_path)
         self.anat_file = source_dict['anat_file']
-        sites_file = source_dict['sites']
 
         data_files = source_dict['data']
         if isinstance(data_files, str):
@@ -173,18 +172,19 @@ class MRI(Dataset):
 
         self.mask = mask
         self.base_nifti_file = nifti_file
-        self.sites = np.load(sites_file).tolist()
 
-        '''
-        print 'Regressing out site'
-        idx0 = [i for i, s in enumerate(self.sites) if s == 0]
-        idx1 = [i for i, s in enumerate(self.sites) if s == 1]
-        mi0 = X[idx0].mean(axis=0)
-        mi1 = X[idx1].mean(axis=0)
+        if 'sites' in source_dict.keys():
+            self.sites = np.load(sites_file).tolist()
+            sites_file = source_dict['sites']
+            print 'Regressing out site'
+            idx0 = [i for i, s in enumerate(self.sites) if s == 0]
+            idx1 = [i for i, s in enumerate(self.sites) if s == 1]
+            mi0 = X[idx0].mean(axis=0)
+            mi1 = X[idx1].mean(axis=0)
 
-        X[idx0] -= mi0
-        X[idx1] -= mi1
-        '''
+            X[idx0] -= mi0
+            X[idx1] -= mi1
+
         return X, Y
 
     def next(self, batch_size=None):
@@ -213,8 +213,12 @@ class MRI(Dataset):
         if mask is None:
             mask = self.mask
 
+        if X.shape[1] == mask.sum():
+            print 'Data already masked'
+            return X
+            
         if X.shape[1:] != mask.shape:
-            raise ValueError()
+            raise ValueError((X.shape, mask.shape))
 
         mask_f = mask.flatten()
         mask_idx = np.where(mask_f == 1)[0].tolist()
@@ -301,6 +305,9 @@ class FMRI_IID(MRI):
         if isinstance(data_files, str):
             data_files = [data_files]
 
+        targets_file = source_dict['targets']
+        novels_file = source_dict['novels']
+
         X = []
         Y = []
         for i, data_file in enumerate(data_files):
@@ -318,6 +325,9 @@ class FMRI_IID(MRI):
 
         self.mask = mask
         self.base_nifti_file = nifti_file
+        self.targets = np.load(targets_file)
+        self.novels = np.load(novels_file)
+
         return X, Y
 
 
