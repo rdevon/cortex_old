@@ -69,7 +69,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         test = C(idx=idx[2], batch_size=test_batch_size, **dataset_args)
     else:
         test = None
-    
+
     return train, valid, test, idx
 
 def medfilt(x, k):
@@ -174,8 +174,8 @@ class MRI(Dataset):
         self.base_nifti_file = nifti_file
 
         if 'sites' in source_dict.keys():
-            self.sites = np.load(sites_file).tolist()
             sites_file = source_dict['sites']
+            self.sites = np.load(sites_file).tolist()
             print 'Regressing out site'
             idx0 = [i for i, s in enumerate(self.sites) if s == 0]
             idx1 = [i for i, s in enumerate(self.sites) if s == 1]
@@ -216,7 +216,7 @@ class MRI(Dataset):
         if X.shape[1] == mask.sum():
             print 'Data already masked'
             return X
-            
+
         if X.shape[1:] != mask.shape:
             raise ValueError((X.shape, mask.shape))
 
