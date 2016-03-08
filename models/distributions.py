@@ -96,7 +96,8 @@ class Distribution(Layer):
 
         return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
 
-    def step_neg_log_prob(self, x, p):
+    def step_neg_log_prob(self, x, *params):
+        p = self.get_prob(*params)
         return self.f_neg_log_prob(x, p)
 
     def neg_log_prob(self, x, p=None):
@@ -208,7 +209,7 @@ class Gaussian(Distribution):
         return [self.mu, self.log_sigma]
 
     def get_prob(self, mu, log_sigma):
-        return concatenate([mu, log_sigma])
+        return mu, log_sigma
 
     def __call__(self, z):
         return z
@@ -220,7 +221,7 @@ class Gaussian(Distribution):
     def split_prob(self, p):
         mu        = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
         log_sigma = _slice(p, 1, p.shape[p.ndim-1] // self.scale)
-        return mu, log_sigma
+        return concatenate([mu, log_sigma], axis=mu.ndim-1)
 
     def step_kl_divergence(self, q, mu, log_sigma):
         mu_q = _slice(q, 0, self.dim)
@@ -250,8 +251,9 @@ class Gaussian(Distribution):
             dtype=floatX
         )
 
-    def step_neg_log_prob(self, x, p):
-        return self.f_neg_log_prob(x, p, clip=self.clip)
+    def step_neg_log_prob(self, x, *params):
+        p = self.get_prob(*params)
+        return self.f_neg_log_prob(x, p=p, clip=self.clip)
 
     def neg_log_prob(self, x, p=None):
         if p is None:

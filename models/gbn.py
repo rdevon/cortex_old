@@ -37,7 +37,7 @@ def unpack(dim_in=None,
 
     print 'Unpacking model with parameters %s' % model_args.keys()
 
-    print 'Forming prior model'
+    print 'Forming Gaussian prior model'
     prior_model = Gaussian(dim_h)
     models = []
 
@@ -212,6 +212,9 @@ class GBN(Layer):
 
         return rval
 
+    def init_inference_samples(self, size):
+        return self.posterior.distribution.prototype_samples(size)
+
     def __call__(self, x, y, qk=None, n_posterior_samples=10, pass_gradients=False):
         q0 = self.posterior.feed(x)
 
@@ -230,13 +233,6 @@ class GBN(Layer):
             KL_qk_q0    = self.kl_divergence(qk_c, q0)
 
         log_ph      = -self.prior.neg_log_prob(h)
-
-#        dim = qk.shape[qk.ndim-1] // 2
-#        mu = _slice(qk, 0, dim)
-#        log_sigma = _slice(qk, 1, dim)
-#        log_qh = -0.5 * (
-#            (h - mu) ** 2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi)).sum(axis=2)
-
         log_qh      = -self.posterior.neg_log_prob(h, qk[None, :, :])
 
         log_p       = (log_sum_exp(log_py_h + log_ph - log_qh, axis=0)
@@ -247,37 +243,17 @@ class GBN(Layer):
         q_entropy   = self.posterior.entropy(qk)
         nll         = -log_p
 
-        '''
-        lower_bound = -(y_energy + log_ph.mean(axis=0) - log_qh.mean(axis=0)).mean()
-        if pass_gradients:
-            cost = (y_energy + log_ph.mean(axis=0) - log_qh.mean(axis=0)).mean(0)
-        else:
-            cost = (y_energy + log_ph.mean(axis=0) - log_qh.mean(axis=0) + KL_qk_q0).mean(0)
-        '''
-
         lower_bound = -(y_energy + KL_qk_p).mean()
         if pass_gradients:
             cost = (y_energy + KL_qk_p).mean(0)
         else:
             cost = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
 
-        #cost        = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
-        #lower_bound = -(y_energy + KL_qk_p).mean()
-
         mu, log_sigma = self.posterior.distribution.split_prob(qk)
 
         results = OrderedDict({
-#            'mu_mean': mu.mean(),
-#            'log_sigma_mean': log_sigma.mean(),
-#            'h': h,
             'mu': mu.mean(),
             'log_sigma': log_sigma.mean(),
-#            'term1': ((h - mu) ** 2).mean(),
-#            'term2': (T.exp(2 * log_sigma)).min(),
-#            'term12': ((h - mu) ** 2 / T.exp(2 * log_sigma)).mean(),
-#            'min_sigma': T.min(log_sigma),
-#            'h_mean': h.mean(),
-#            'h_std': h.std(),
             '-log p(x|h)': y_energy.mean(0),
             '-log p(x)': nll.mean(0),
             '-log p(h)': log_ph.mean(),

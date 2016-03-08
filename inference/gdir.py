@@ -66,3 +66,5 @@ class MomentumGDIR(GDIR):
 
     def params_infer(self):
         return [T.constant(self.momentum).astype(floatX)]
+
+

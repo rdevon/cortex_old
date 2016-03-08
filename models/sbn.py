@@ -10,7 +10,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from layers import Layer
 from darn import AutoRegressor, DARN
-from distributions import Binomial, Gaussian
+from distributions import resolve as resolve_prior
 from mlp import (
     MLP,
     MultiModalMLP
@@ -30,7 +30,7 @@ from utils.tools import (
 
 def unpack(dim_in=None,
            dim_h=None,
-           z_init=None,
+           prior=None,
            recognition_net=None,
            generation_net=None,
            extra_args=dict(),
@@ -40,13 +40,14 @@ def unpack(dim_in=None,
            center_input=None,
            **model_args):
     '''
-    Function to unpack pretrained model into fresh SFFN class.
+    Function to unpack pretrained model into fresh SBN class.
     '''
 
     print 'Unpacking model with parameters %s' % model_args.keys()
 
-    print 'Forming prior model'
-    prior_model = Binomial(dim_h)
+    print 'Forming %s prior model' % prior
+    PC = resolve_prior(prior)
+    prior_model = PC(dim_h)
     models = []
 
     kwargs = SBN.mlp_factory(dim_h, dims, distributions,
@@ -54,7 +55,7 @@ def unpack(dim_in=None,
                              generation_net=generation_net)
 
     models.append(prior_model)
-    kwargs['prior'] = prior_model    
+    kwargs['prior'] = prior_model
     print 'Forming SBN'
     model = SBN(dim_in, dim_h, **kwargs)
     models.append(model)
@@ -67,7 +68,6 @@ class SBN(Layer):
     def __init__(self, dim_in, dim_h,
                  posterior=None, conditional=None,
                  prior=None,
-                 z_init=None,
                  name='sbn',
                  **kwargs):
 
@@ -136,15 +136,11 @@ class SBN(Layer):
 
         if self.prior is None:
             self.prior = Binomial(self.dim_h)
-        elif isinstance(self.prior, Gaussian):
-            raise NotImplementedError('Gaussian prior not supported here ATM. '
-                                      'Try gbn.py')
 
         if self.posterior is None:
             self.posterior = MLP(self.dim_in, self.dim_h,
                                  dim_hs=[],
                                  rng=self.rng, trng=self.trng,
-                                 h_act='T.nnet.sigmoid',
                                  distribution='binomial')
         elif isinstance(self.posterior, DARN):
             raise ValueError('DARN posterior not supported ATM')
@@ -153,7 +149,6 @@ class SBN(Layer):
             self.conditional = MLP(self.dim_h, self.dim_in,
                                    dim_hs=[],
                                    rng=self.rng, trng=self.trng,
-                                   h_act='T.nnet.sigmoid',
                                    distribution='binomial')
 
         self.posterior.name = self.name + '_posterior'
@@ -242,13 +237,16 @@ class SBN(Layer):
         params = params[start:stop]
         return self.conditional.step_feed(h, *params)
 
+    def init_inference_samples(self, size):
+        return self.posterior.distribution.prototype_samples(size)
+
     def __call__(self, x, y, qk=None, n_posterior_samples=10):
         q0  = self.posterior.feed(x)
 
         if qk is None:
             qk = q0
 
-        r   = self.prior.prototype_samples(
+        r   = self.init_inference_samples(
             (n_posterior_samples, y.shape[0], self.dim_h))
         h   = (r <= qk[None, :, :]).astype(floatX)
         py  = self.conditional.feed(h)
