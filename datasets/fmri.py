@@ -9,14 +9,14 @@ import os
 from os import path
 import pprint
 import random
+import nipy
+from nipy.core.api import Image
 import theano
 import yaml
 
+from analysis.mri import rois
 from . import Dataset
 import nifti_viewer
-import nipy
-from nipy.core.api import Image
-import rois
 from utils import floatX
 from utils.tools import resolve_path
 
