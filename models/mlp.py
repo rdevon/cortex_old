@@ -126,6 +126,10 @@ class MLP(Layer):
         assert self.distribution is not None
         return self.distribution.get_center(p)
 
+    def split_prob(self, p):
+        assert self.distribution is not None
+        return self.distribution.split_prob(p)
+
     def set_params(self):
         self.params = OrderedDict()
 

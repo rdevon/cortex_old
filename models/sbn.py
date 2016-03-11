@@ -49,7 +49,6 @@ def unpack(dim_in=None,
     PC = resolve_prior(prior)
     prior_model = PC(dim_h)
     models = []
-
     kwargs = SBN.mlp_factory(dim_h, dims, distributions,
                              recognition_net=recognition_net,
                              generation_net=generation_net)
@@ -60,7 +59,6 @@ def unpack(dim_in=None,
     model = SBN(dim_in, dim_h, **kwargs)
     models.append(model)
     models += [model.posterior, model.conditional]
-
     return models, model_args, extra_args
 
 
@@ -85,7 +83,8 @@ class SBN(Layer):
 
     @staticmethod
     def mlp_factory(dim_h, dims, distributions,
-                    recognition_net=None, generation_net=None):
+                    recognition_net=None, generation_net=None,
+                    prototype=None):
         mlps = {}
 
         if recognition_net is not None:

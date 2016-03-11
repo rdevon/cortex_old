@@ -23,7 +23,7 @@ _clip = 1e-7
 
 
 def resolve(c, conditional=False):
-    if conditional:
+    if not conditional:
         if c == 'binomial':
             return Binomial
         elif c == 'continuous_binomial':
@@ -209,7 +209,7 @@ class Gaussian(Distribution):
         return [self.mu, self.log_sigma]
 
     def get_prob(self, mu, log_sigma):
-        return mu, log_sigma
+        return concatenate([mu, log_sigma], axis=mu.ndim-1)
 
     def __call__(self, z):
         return z
@@ -221,7 +221,7 @@ class Gaussian(Distribution):
     def split_prob(self, p):
         mu        = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
         log_sigma = _slice(p, 1, p.shape[p.ndim-1] // self.scale)
-        return concatenate([mu, log_sigma], axis=mu.ndim-1)
+        return mu, log_sigma
 
     def step_kl_divergence(self, q, mu, log_sigma):
         mu_q = _slice(q, 0, self.dim)
@@ -259,6 +259,11 @@ class Gaussian(Distribution):
         if p is None:
             p = self.get_prob(*self.get_params())
         return self.f_neg_log_prob(x, p, clip=self.clip)
+    
+    def standard_prob(self, x, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return T.exp(-self.neg_log_prob(x, p))
 
     def entropy(self, p=None):
         if p is None:
