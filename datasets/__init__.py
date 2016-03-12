@@ -15,6 +15,7 @@ def load_data(dataset=None,
     from cifar import CIFAR
     from mnist import MNIST
     from uci import UCI
+    from snp import SNP
 
     if dataset == 'mnist':
         C = MNIST
@@ -24,6 +25,10 @@ def load_data(dataset=None,
         C = CALTECH
     elif dataset == 'uci':
         C = UCI
+    elif dataset == 'snp':
+        C = SNP
+#import ipdb
+#ipdb.set_trace()
 
     if train_batch_size is not None:
         train = C(batch_size=train_batch_size,
