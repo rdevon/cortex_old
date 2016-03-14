@@ -27,8 +27,6 @@ def load_data(dataset=None,
         C = UCI
     elif dataset == 'snp':
         C = SNP
-#import ipdb
-#ipdb.set_trace()
 
     if train_batch_size is not None:
         train = C(batch_size=train_batch_size,

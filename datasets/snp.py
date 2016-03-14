@@ -34,9 +34,11 @@ class SNP(Dataset):
         self.distributions[self.name] = 'gaussian'
 
     def get_data(self, source):
-        print('Loading genetic data from %s' %source)
-        X = loadmat(source['snp'])
-        Y = loadmat(source['label'])
+        from utils.tools import get_paths
+        data_path = get_paths()['$snp_data']
+        print('Loading genetic data from %s' %data_path)
+        X = loadmat(data_path + source['snp'])
+        Y = loadmat(data_path + source['label'])
         self.X = X[X.keys()[2]]
         self.Y = Y[Y.keys()[0]]
         
