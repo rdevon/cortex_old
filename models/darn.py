@@ -88,6 +88,9 @@ class AutoRegressor(Distribution):
     def entropy(self):
         return T.constant(0.).astype(floatX)
 
+    def prototype_samples(self, size):
+        return self.trng.uniform(size, dtype=floatX)
+
 
 class DARN(Layer):
     must_sample = True
@@ -151,12 +154,8 @@ class DARN(Layer):
             p = p.T[None, :, :]
         else:
             x = x.T
-            #x = x.reshape((x.shape[0] // n_samples, n_samples, x.shape[1]))
-            #x = x.transpose(1, 0, 2)
             x = x.reshape((n_samples, x.shape[0] // n_samples, x.shape[1]))
             p = p.T
-            #p = p.reshape((p.shape[0] // n_samples, n_samples, p.shape[1]))
-            #p = p.transpose(1, 0, 2)
             p = p.reshape((n_samples, p.shape[0] // n_samples, p.shape[1]))
 
         if return_probs:

@@ -13,9 +13,10 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from layers import Layer
 from models.mlp import MLP
 from rnn import RNN
-from utils import floatX
+import utils.tools
 from utils.tools import (
     concatenate,
+    floatX,
     init_rngs,
     init_weights,
     norm_weight,
@@ -77,8 +78,8 @@ class GRU(RNN):
         return GRU(dim_in, dim_h, **kwargs)
 
     @staticmethod
-    def mlp_factory(dim_in, dim_h, data_iter, a_net=None, **kwargs):
-        mlps = RNN.mlp_factory(dim_in, dim_h, data_iter, **kwargs)
+    def mlp_factory(dim_in, dim_h, a_net=None, **kwargs):
+        mlps = RNN.mlp_factory(dim_in, dim_h, **kwargs)
 
         if a_net is not None:
             input_net_aux = MLP.factory(dim_in=dim_in, dim_out=2*dim_h,
@@ -147,15 +148,14 @@ class GRU(RNN):
         input_params = self.get_input_args(*params)
         output_params = self.get_output_args(*params)
 
-        y_aux = self.input_net_aux.step_preact(x_, *aux_params)
-        y_input = self.input_net.step_preact(x_, *input_params)
+        y_aux = self.input_net_aux.preact(x_, *aux_params)
+        y_input = self.input_net.preact(x_, *input_params)
 
         h = self._step(y_aux, y_input, h_, Ura, Urb)
 
-        preact = self.output_net.step_preact(h, *output_params)
+        preact = self.output_net.preact(h, *output_params)
         return h, preact
 
-    '''
     def step_sample_cond(self, h_, x_, c, *params):
         Ura, Urb = self.get_recurrent_args(*params)
         aux_params = self.get_aux_args(*params)
@@ -173,7 +173,6 @@ class GRU(RNN):
         x = self.output_net.sample(p)
 
         return h, x, p
-    '''
 
     def _step(self, y_a, y_i, h_, Ura, Urb):
         preact = T.dot(h_, Ura) + y_a
@@ -186,8 +185,8 @@ class GRU(RNN):
     def call_seqs(self, x, condition_on, *params):
         i_params = self.get_input_args(*params)
         a_params = self.get_aux_args(*params)
-        i = self.input_net.step_preact(x, *i_params)
-        a = self.input_net_aux.step_preact(x, *a_params)
+        i = self.input_net.preact(x, *i_params)
+        a = self.input_net_aux.preact(x, *a_params)
         if condition_on is not None:
             i += condition_on
         seqs = [a, i]

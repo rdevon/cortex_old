@@ -22,8 +22,8 @@ from utils.tools import (
 _clip = 1e-7
 
 
-def dist_class(c, conditional=False):
-    if conditional:
+def resolve(c, conditional=False):
+    if not conditional:
         if c == 'binomial':
             return Binomial
         elif c == 'continuous_binomial':
@@ -44,7 +44,7 @@ def dist_class(c, conditional=False):
         elif c == 'continuous_binomial':
             return ConditionalContinuousBinomial
         elif c == 'centered_binomial':
-            return ConditionalCetneredBinomial
+            return ConditionalCenteredBinomial
         elif c == 'multinomial':
             return ConditionalMultinomial
         elif c == 'gaussian':
@@ -58,7 +58,7 @@ def dist_class(c, conditional=False):
 class Distribution(Layer):
     def __init__(self, dim, name='distribution', must_sample=False, scale=1,
                  **kwargs):
-        self.dim = dim * scale
+        self.dim = dim
         self.must_sample = must_sample
         self.scale = scale
 
@@ -79,9 +79,6 @@ class Distribution(Layer):
     def kl_divergence(self, q):
         raise NotImplementedError()
 
-    def get_bias(self):
-        raise NotImplementedError()
-
     def __call__(self, z):
         raise NotImplementedError()
 
@@ -99,7 +96,8 @@ class Distribution(Layer):
 
         return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
 
-    def step_neg_log_prob(self, x, p):
+    def step_neg_log_prob(self, x, *params):
+        p = self.get_prob(*params)
         return self.f_neg_log_prob(x, p)
 
     def neg_log_prob(self, x, p=None):
@@ -117,19 +115,14 @@ class Distribution(Layer):
 
 
 class Binomial(Distribution):
-    def __init__(self, dim, name='binomial', bias_args=dict(), **kwargs):
+    def __init__(self, dim, name='binomial', **kwargs):
         self.f_sample = _binomial
         self.f_neg_log_prob = _cross_entropy
         self.f_entropy = _binary_entropy
-
-        bias_args = dict(z=0)
-        bias_args.update(**bias_args)
-        self.bias = bias_args['z']
-
         super(Binomial, self).__init__(dim, name=name, **kwargs)
 
     def set_params(self):
-        z = np.zeros((self.dim,)).astype(floatX) + self.bias
+        z = np.zeros((self.dim,)).astype(floatX)
         self.params = OrderedDict(z=z)
 
     def get_params(self):
@@ -138,11 +131,11 @@ class Binomial(Distribution):
     def get_prob(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
 
-    def get_bias(self):
-        return self.bias
-
     def __call__(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
+
+    def prototype_samples(self, size):
+        return self.trng.uniform(size, dtype=floatX)
 
 class CenteredBinomial(Binomial):
     def __call__(self, z):
@@ -198,21 +191,16 @@ class ConditionalMultinomial(Multinomial):
 
 
 class Gaussian(Distribution):
-    def __init__(self, dim, name='gaussian', bias_args=dict(), **kwargs):
+    def __init__(self, dim, name='gaussian', clip=-10, **kwargs):
         self.f_sample = _normal
         self.f_neg_log_prob = _neg_normal_log_prob
         self.f_entropy = _normal_entropy
-
-        bias_args = dict(mu=0.5, log_sigma=-3)
-        bias_args.update(**bias_args)
-        self.mu_bias = (np.zeros((dim,)) + bias_args['mu']).astype(floatX)
-        self.log_sigma_bias = (np.zeros((dim,)) + bias_args['log_sigma']).astype(floatX)
-
+        self.clip = clip
         super(Gaussian, self).__init__(dim, name=name, scale=2, **kwargs)
 
     def set_params(self):
-        mu = self.mu_bias
-        log_sigma = self.log_sigma_bias
+        mu = np.zeros((self.dim,)).astype(floatX)
+        log_sigma = np.zeros((self.dim,)).astype(floatX)
 
         self.params = OrderedDict(
             mu=mu, log_sigma=log_sigma)
@@ -221,21 +209,25 @@ class Gaussian(Distribution):
         return [self.mu, self.log_sigma]
 
     def get_prob(self, mu, log_sigma):
-        return concatenate([mu, log_sigma])
-
-    def get_bias(self):
-        return np.concatenate([self.mu_bias, self.log_sigma_bias])
+        return concatenate([mu, log_sigma], axis=mu.ndim-1)
 
     def __call__(self, z):
         return z
 
     def get_center(self, p):
-        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
+        mu = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
         return mu
+
+    def split_prob(self, p):
+        mu        = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
+        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // self.scale)
+        return mu, log_sigma
 
     def step_kl_divergence(self, q, mu, log_sigma):
         mu_q = _slice(q, 0, self.dim)
         log_sigma_q = _slice(q, 1, self.dim)
+        log_sigma_q = T.maximum(log_sigma_q, self.clip)
+        log_sigma = T.maximum(log_sigma, self.clip)
 
         kl = log_sigma - log_sigma_q + 0.5 * (
             (T.exp(2 * log_sigma_q) + (mu - mu_q) ** 2) /
@@ -247,7 +239,7 @@ class Gaussian(Distribution):
         return self.step_kl_divergence(q, *self.get_params())
 
     def step_sample(self, epsilon, p):
-        dim = p.shape[p.ndim-1] // 2
+        dim = p.shape[p.ndim-1] // self.scale
         mu = _slice(p, 0, dim)
         log_sigma = _slice(p, 1, dim)
         return mu + epsilon * T.exp(log_sigma)
@@ -258,6 +250,25 @@ class Gaussian(Distribution):
             size=size,
             dtype=floatX
         )
+
+    def step_neg_log_prob(self, x, *params):
+        p = self.get_prob(*params)
+        return self.f_neg_log_prob(x, p=p, clip=self.clip)
+
+    def neg_log_prob(self, x, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(x, p, clip=self.clip)
+    
+    def standard_prob(self, x, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return T.exp(-self.neg_log_prob(x, p))
+
+    def entropy(self, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return self.f_entropy(p, clip=self.clip)
 
 
 class TruncatedGaussian(Gaussian):
@@ -333,14 +344,14 @@ def _centered_binomial(trng, p, size=None):
     return 2 * trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
 
 def _cross_entropy(x, p):
-    energy = -x * T.log(p) - (1 - x) * T.log(1 - p)
     #p = T.clip(p, _clip, 1.0 - _clip)
+    energy = -x * T.log(p) - (1 - x) * T.log(1 - p)
     #energy = T.nnet.binary_crossentropy(p, x)
     return energy.sum(axis=energy.ndim-1)
 
 def _binary_entropy(p):
-    entropy = -p * T.log(p) - (1 - p) * T.log(1 - p)
     #p_c = T.clip(p, _clip, 1.0 - _clip)
+    entropy = -p * T.log(p) - (1 - p) * T.log(1 - p)
     #entropy = T.nnet.binary_crossentropy(p_c, p)
     return entropy.sum(axis=entropy.ndim-1)
 
@@ -382,16 +393,20 @@ def _normal_prob(p):
     mu = _slice(p, 0, dim)
     return mu
 
-def _neg_normal_log_prob(x, p):
+def _neg_normal_log_prob(x, p, clip=None):
     dim = p.shape[p.ndim-1] // 2
     mu = _slice(p, 0, dim)
     log_sigma = _slice(p, 1, dim)
+    if clip is not None:
+        log_sigma = T.maximum(log_sigma, clip)
     energy = 0.5 * (
         (x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
     return energy.sum(axis=energy.ndim-1)
 
-def _normal_entropy(p):
+def _normal_entropy(p, clip=None):
     dim = p.shape[p.ndim-1] // 2
     log_sigma = _slice(p, 1, dim)
+    if clip is not None:
+        log_sigma = T.maximum(log_sigma, clip)
     entropy = 0.5 * T.log(2 * pi * e) + log_sigma
     return entropy.sum(axis=entropy.ndim-1)

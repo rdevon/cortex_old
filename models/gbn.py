@@ -10,11 +10,11 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
 from distributions import Gaussian
 from layers import Layer
-from mlp import MLP
+from mlp import resolve as resolve_mlp
+from utils import floatX, intX, pi
 from utils import tools
 from utils.tools import (
     concatenate,
-    floatX,
     init_rngs,
     init_weights,
     log_mean_exp,
@@ -25,25 +25,34 @@ from utils.tools import (
 
 def unpack(dim_in=None,
            dim_h=None,
+           prior=None,
            recognition_net=None,
            generation_net=None,
            extra_args=dict(),
+           distributions=dict(),
+           dims=dict(),
+           dataset_args=dict(),
+           center_input=None,
            **model_args):
 
+    print 'Unpacking model with parameters %s' % model_args.keys()
+
+    print 'Forming Gaussian prior model'
     prior_model = Gaussian(dim_h)
     models = []
 
-    mlps = GBN.mlp_factory(dim_in, dim_h,
+    print 'Forming MLPs'
+    kwargs = GBN.mlp_factory(dim_h, dims, distributions,
                            recognition_net=recognition_net,
                            generation_net=generation_net)
 
-    models += mlps.values()
-    models.append(prior_model)
-
-    kwargs.update(**mlps)
     kwargs['prior'] = prior_model
-    model = GBN(dim_in, dim_h, **mlps)
+    models.append(prior_model)
+    print 'Forming GBN'
+    model = GBN(dim_in, dim_h, **kwargs)
     models.append(model)
+    models += [model.posterior, model.conditional]
+
     return models, model_args, extra_args
 
 
@@ -66,14 +75,23 @@ class GBN(Layer):
         super(GBN, self).__init__(name=name)
 
     @staticmethod
-    def mlp_factory(dim_h, dims, distributions, recognition_net=None, generation_net=None):
+    def mlp_factory(dim_h, dims, distributions,
+                    prototype=None,
+                    recognition_net=None, generation_net=None):
         mlps = {}
 
         if recognition_net is not None:
+            t = recognition_net.get('type', None)
+            if t == 'mmmlp':
+                raise NotImplementedError()
+            elif t == 'lfmlp':
+                recognition_net['prototype'] = prototype
+
             input_name = recognition_net.get('input_layer')
             recognition_net['distribution'] = 'gaussian'
             recognition_net['dim_in'] = dims[input_name]
-            posterior = MLP.factory(**recognition_net)
+            recognition_net['dim_out'] = dim_h
+            posterior = resolve_mlp(t).factory(**recognition_net)
             mlps['posterior'] = posterior
 
         if generation_net is not None:
@@ -81,18 +99,20 @@ class GBN(Layer):
             generation_net['dim_in'] = dim_h
 
             t = generation_net.get('type', None)
-            if t is None:
-                generation_net['dim_out'] = dims[output_name]
-                generation_net['distribution'] = distributions[output_name]
-                conditional = MLP.factory(**generation_net)
-            elif t == 'MMMLP':
+
+            if t == 'mmmlp':
                 for out in generation_net['graph']['outputs']:
                     generation_net['graph']['outs'][out] = dict(
                         dim=dims[out],
                         distribution=distributions[out])
-                conditional = MultiModalMLP.factory(**generation_net)
+                conditional = resolve_mlp(t).factory(**generation_net)
             else:
-                raise ValueError(t)
+                if t == 'lfmlp':
+                    generation_net['filter_in'] = False
+                    generation_net['prototype'] = prototype
+                generation_net['dim_out'] = dims[output_name]
+                generation_net['distribution'] = distributions[output_name]
+                conditional = resolve_mlp(t).factory(**generation_net)
             mlps['conditional'] = conditional
 
         return mlps
@@ -104,7 +124,7 @@ class GBN(Layer):
             self.prior = Gaussian(self.dim_h)
 
         if self.posterior is None:
-            self.posterior = MLP(self.dim_in, self.dim_h * 2,
+            self.posterior = MLP(self.dim_in, self.dim_h,
                                  dim_hs=[],
                                  rng=self.rng, trng=self.trng,
                                  h_act='T.nnet.sigmoid',
@@ -120,7 +140,6 @@ class GBN(Layer):
         self.conditional.name = self.name + '_conditional'
 
     def set_tparams(self, excludes=[]):
-        print 'Excluding the following parameters from learning: %s' % excludes
         tparams = super(GBN, self).set_tparams()
         tparams.update(**self.posterior.set_tparams())
         tparams.update(**self.conditional.set_tparams())
@@ -144,6 +163,18 @@ class GBN(Layer):
         h, updates = self.prior.sample(n_samples)
         py = self.conditional.feed(h)
         return self.get_center(py), updates
+
+    def visualize_latents(self):
+        h0 = self.prior.mu
+        y0_mu, y0_logsigma = self.conditional.distribution.split_prob(
+            self.conditional.feed(h0))
+
+        sigma = T.nlinalg.AllocDiag()(T.exp(self.prior.log_sigma))
+        h = 10 * sigma.astype(floatX) + h0[None, :]
+        y_mu, y_logsigma = self.conditional.distribution.split_prob(
+            self.conditional.feed(h))
+        py = y_mu - y0_mu[None, :]
+        return py# / py.std()#T.exp(y_logsigma)
 
     # Misc --------------------------------------------------------------------
 
@@ -176,15 +207,15 @@ class GBN(Layer):
         rval = OrderedDict(
             rec_l2_cost=rec_l2_cost,
             gen_l2_cost=gen_l2_cost,
-            cost = rec_l2_cost + gen_l2_cost
+            cost=rec_l2_cost+gen_l2_cost
         )
 
         return rval
 
+    def init_inference_samples(self, size):
+        return self.posterior.distribution.prototype_samples(size)
 
-    # Learning -----------------------------------------------------------------
-
-    def __call__(self, x, y, qk=None, n_posterior_samples=10):
+    def __call__(self, x, y, qk=None, n_posterior_samples=10, pass_gradients=False):
         q0 = self.posterior.feed(x)
 
         if qk is None:
@@ -195,10 +226,14 @@ class GBN(Layer):
 
         log_py_h    = -self.conditional.neg_log_prob(y[None, :, :], py)
         KL_qk_p     = self.prior.kl_divergence(qk)
-        KL_qk_q0    = self.kl_divergence(qk, q0)
+        qk_c        = qk.copy()
+        if pass_gradients:
+            KL_qk_q0 = T.constant(0.).astype(floatX)
+        else:
+            KL_qk_q0    = self.kl_divergence(qk_c, q0)
 
         log_ph      = -self.prior.neg_log_prob(h)
-        log_qh      = -self.posterior.neg_log_prob(h, qk)
+        log_qh      = -self.posterior.neg_log_prob(h, qk[None, :, :])
 
         log_p       = (log_sum_exp(log_py_h + log_ph - log_qh, axis=0)
                        - T.log(n_posterior_samples))
@@ -208,14 +243,23 @@ class GBN(Layer):
         q_entropy   = self.posterior.entropy(qk)
         nll         = -log_p
 
-        cost        = (y_energy + KL_qk_p + KL_qk_q0).sum(0)
         lower_bound = -(y_energy + KL_qk_p).mean()
+        if pass_gradients:
+            cost = (y_energy + KL_qk_p).mean(0)
+        else:
+            cost = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
+
+        mu, log_sigma = self.posterior.distribution.split_prob(qk)
 
         results = OrderedDict({
+            'mu': mu.mean(),
+            'log_sigma': log_sigma.mean(),
             '-log p(x|h)': y_energy.mean(0),
             '-log p(x)': nll.mean(0),
+            '-log p(h)': log_ph.mean(),
+            '-log q(h)': log_qh.mean(),
             'KL(q_k||p)': KL_qk_p.mean(0),
-            'KL(q_k||q_0)': KL_qk_q0.mean(0),
+            'KL(q_k||q_0)': KL_qk_q0.mean(),
             'H(p)': p_entropy,
             'H(q)': q_entropy.mean(0),
             'lower_bound': lower_bound,
@@ -227,7 +271,8 @@ class GBN(Layer):
             batch_energies=y_energy
         )
 
-        return results, samples
+        constants = [qk_c]
+        return results, samples, constants
 
 
 #Deep Gaussian Belief Networks==================================================
@@ -418,6 +463,7 @@ class DeepGBN(Layer):
 
         grads = theano.grad(cost, wrt=qs, consider_constant=consider_constant)
 
+        cost = kl_term.mean()
         return cost, grads
 
     def step_infer(self, *params):

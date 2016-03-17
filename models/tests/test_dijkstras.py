@@ -7,7 +7,7 @@ import theano
 from theano import tensor as T
 
 from datasets.euclidean import Euclidean
-from datasets.chains import Chains, load_data
+from datasets.chains import DChains, load_data
 from models.chainer import DijkstrasChainer as Chainer
 from models.rnn import RNN
 from utils import floatX, intX
@@ -18,11 +18,7 @@ np.set_printoptions(precision=3)
 def test_dijksras():
     E = T.matrix('E', dtype=floatX)
     D = E[:100].T
-    #D = E[0]
     X = T.vector('X', dtype=floatX)
-
-    #D_ = T.switch(T.lt(E[0, None] + D[0][None, :], D), E[0, None] + D[0][None, :], D)
-    #D_ = T.switch(T.lt(E[0, None] + D[0][None, :], D), E[0, None] + D[0][None, :], D)
 
     C = T.tile(T.arange(D.shape[0]), D.shape[0])
 
@@ -63,7 +59,8 @@ def test_dijksras():
     chain = T.switch(T.eq(Ps, -1), 0, chain)
     mask = T.neq(Ps, -1).astype(intX)
 
-    f = theano.function([E, X], [Ds, Qs, chain, mask], on_unused_input='ignore')
+    f = theano.function([E, X], [idx, Ds, Qs, chain, mask], on_unused_input='ignore')
+    keys = ['idx', 'Ds', 'Qs', 'chain', 'mask']
 
     N = 500
     edges = np.random.randint(1, 30, size=(N, N)).astype(floatX)
@@ -72,27 +69,47 @@ def test_dijksras():
 
     print edges
     #print x
-    for res in f(edges, x):
-        print res
+    for k, res in zip(keys, f(edges, x)):
+        print k, res, res.shape
 
     assert False
 
 
-def test_chainer(dim_in=5, n_samples=1000, batch_size=10):
+def test_chainer(dim_in=5, n_samples=10, batch_size=100):
     model = RNN(dim_in, [10])
     model.set_tparams()
     chainer = Chainer(model)
 
-    data_iter = Euclidean(n_samples=n_samples, dims=dim_in, batch_size=batch_size)
-    chain_iter = Chains(data_iter, model.dim_hs, batch_size=batch_size)
+    chain_iter = DChains(Euclidean, model.dim_hs,
+                         batch_size=batch_size, n_samples=n_samples, dims=dim_in,
+                         build_batch=10)
     chain_iter.set_chainer(chainer)
 
     outs = chain_iter.next()
+
+    x = chain_iter['x']
+    hs = chain_iter['hs']
+    mask = chain_iter['mask']
+    idx = chain_iter['idx']
+
+    X = T.tensor('X')
+    H0s = [T.matrix('H%d' % l) for l in range(model.n_layers)]
+    M = T.matrix('mask')
+
+    rval, updates = model(x, m=M, h0s=H0s)
+
+    Hs = rval['hs']
+    H_ns = [H[idx] for H in Hs]
+
+    updates += [(H_p, H_n) for H_p, H_n in zip(chain_iter.dataset.Hs)
+
+    '''
     for k, v in outs.iteritems():
         if isinstance(v, list):
             for v_ in v:
                 print k, v_.shape
         else:
             print k, v.shape
+    '''
 
     assert False

@@ -96,7 +96,7 @@ def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan', strict=Fals
         strict=strict
     )
 
-def init_weights(model, weight_noise=False, weight_scale=0.01, dropout=False, **kwargs):
+def init_weights(model, weight_noise=False, weight_scale=0.001, dropout=False, **kwargs):
     model.weight_noise = weight_noise
     model.weight_scale = weight_scale
     model.dropout = dropout
@@ -154,7 +154,7 @@ def load_experiment(experiment_yaml):
     print('Experiment hyperparams: %s' % pprint.pformat(exp_dict))
     return exp_dict
 
-def load_model(model_file, f_unpack=None):
+def load_model(model_file, f_unpack=None, **extra_args):
     '''
     Loads pretrained model.
     '''
@@ -163,8 +163,12 @@ def load_model(model_file, f_unpack=None):
     params = np.load(model_file)
     d = dict()
     for k in params.keys():
-        d[k] = params[k].item()
+        try:
+            d[k] = params[k].item()
+        except ValueError:
+            d[k] = params[k]
 
+    d.update(**extra_args)
     models, pretrained_kwargs, kwargs = f_unpack(**d)
 
     print('Pretrained model(s) has the following parameters: \n%s'

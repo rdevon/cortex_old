@@ -2,35 +2,46 @@
 Module for fMRI data
 '''
 
+from collections import OrderedDict
 from glob import glob
 import numpy as np
 import os
 from os import path
 import pprint
 import random
+import nipy
+from nipy.core.api import Image
 import theano
 import yaml
 
+from analysis.mri import rois
+from . import Dataset
 import nifti_viewer
-import nipy
-from nipy.core.api import Image
-import rois
+from utils import floatX
+from utils.tools import resolve_path
 
 
-floatX = theano.config.floatX
-
-def load_data(idx=None, **dataset_args):
-    train, valid, test, idx = make_datasets(MRI, idx=idx, **dataset_args)
+def load_data(idx=None, dataset='mri', **dataset_args):
+    if dataset == 'mri':
+        C = MRI
+    elif dataset == 'fmri_iid':
+        C = FMRI_IID
+    else:
+        raise ValueError(dataset)
+    train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
 
-def make_datasets(C, split=None, idx=None, **dataset_args):
-    assert C in [MRI]
+def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
+                  train_batch_size=None,
+                  valid_batch_size=None,
+                  test_batch_size=None,
+                  **dataset_args):
 
     if idx is None:
         assert split is not None
         if round(np.sum(split), 5) != 1. or len(split) != 3:
             raise ValueError(split)
-        dummy = C(**dataset_args)
+        dummy = C(batch_size=1, **dataset_args)
         N = dummy.n
         idx = range(N)
         random.shuffle(idx)
@@ -46,16 +57,26 @@ def make_datasets(C, split=None, idx=None, **dataset_args):
         test_idx = idx[split_idx[1]:]
         idx = [train_idx, valid_idx, test_idx]
 
-    train = C(idx=idx[0], **dataset_args)
-    valid = C(idx=idx[1], **dataset_args)
-    test = C(idx=idx[2], **dataset_args)
+    if train_batch_size is not None and len(train_idx) > 0:
+        train = C(idx=idx[0], batch_size=train_batch_size, **dataset_args)
+    else:
+        train = None
+    if valid_batch_size is not None and len(valid_idx) > 0:
+        valid = C(idx=idx[1], batch_size=valid_batch_size, **dataset_args)
+    else:
+        valid = None
+    if test_batch_size is not None and len(test_idx) > 0:
+        test = C(idx=idx[2], batch_size=test_batch_size, **dataset_args)
+    else:
+        test = None
 
     return train, valid, test, idx
 
 def medfilt(x, k):
-    """Apply a length-k median filter to a 1D array x.
+    '''
+    Apply a length-k median filter to a 1D array x.
     Boundaries are extended by repeating endpoints.
-    """
+    '''
     assert k % 2 == 1, "Median filter length must be odd."
     assert x.ndim == 1, "Input must be one-dimensional."
     k2 = (k - 1) // 2
@@ -79,61 +100,44 @@ def make_one_hot(labels):
     return one_hot.astype('float32')
 
 
-class MRI(object):
-    def __init__(self, source=None, batch_size=None,
-                 shuffle=True, idx=None):
-        print 'Loading MRI from %s' % source
+class MRI(Dataset):
+    def __init__(self, source=None, name='mri', idx=None,
+                 distribution='gaussian', **kwargs):
+        super(MRI, self).__init__(name=name, **kwargs)
 
+        print 'Loading %s from %s' % (name, source)
+        source = resolve_path(source)
         X, Y = self.get_data(source)
 
+        self.dims = {self.name: int(self.mask.sum()),
+                     'group': len(np.unique(Y))}
+        self.distributions = {self.name: distribution,
+                              'group': 'multinomial'}
+
         self.image_shape = X.shape[1:]
-        self.dims = dict(mri=int(self.mask.sum()), group=len(np.unique(Y)))
-        self.acts = dict(mri='lambda x: x', group='T.nnet.softmax')
-        self.shuffle = shuffle
-        self.pos = 0
-        self.batch_size = batch_size
-        self.next = self._next
-
-        if idx is not None:
-            X = X[idx]
-            Y = Y[idx]
-
-        self.n = X.shape[0]
-
         self.X = self._mask(X)
+        self.mean_image = self.X.mean(axis=0)
         self.Y = make_one_hot(Y)
 
-        self.mean_image = self.X.mean(axis=0)
+        if distribution == 'gaussian':
+            self.X -= self.mean_image
+            self.X /= self.X.std()
+        elif distribution in ['continuous_binomial', 'binomial']:
+            self.X -= self.X.min()
+            self.X /= (self.X.max() - self.X.min())
+        else:
+            raise ValueError(distribution)
 
-        if self.shuffle:
-            self._randomize()
+        if idx is not None:
+            self.X = self.X[idx]
+            self.Y = self.Y[idx]
 
-    def _randomize(self):
+        self.n = self.X.shape[0]
+
+    def randomize(self):
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
         self.X = self.X[rnd_idx, :]
         self.Y = self.Y[rnd_idx, :]
-
-    def _reset(self):
-        self.pos = 0
-        if self.shuffle:
-            self._randomize()
-
-    def _next(self, batch_size=None):
-        if batch_size is None:
-            batch_size = self.batch_size
-
-        if self.pos == -1:
-            self._reset()
-            raise StopIteration
-
-        x = self.X[self.pos:self.pos+batch_size]
-        y = self.Y[self.pos:self.pos+batch_size]
-        self.pos += batch_size
-
-        if self.pos + batch_size > self.n:
-            self.pos = -1
-
-        return x, y
 
     def get_data(self, source):
         print('Loading file locations from %s' % source)
@@ -146,7 +150,6 @@ class MRI(object):
         if not path.isdir(self.tmp_path):
             os.mkdir(self.tmp_path)
         self.anat_file = source_dict['anat_file']
-        sites_file = source_dict['sites']
 
         data_files = source_dict['data']
         if isinstance(data_files, str):
@@ -155,6 +158,7 @@ class MRI(object):
         X = []
         Y = []
         for i, data_file in enumerate(data_files):
+            print 'Loading %s' % data_file
             X_ = np.load(data_file)
             X.append(X_.astype(floatX))
             Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
@@ -168,28 +172,57 @@ class MRI(object):
 
         self.mask = mask
         self.base_nifti_file = nifti_file
-        self.sites = np.load(sites_file).tolist()
 
-        idx0 = [i for i, s in enumerate(self.sites) if s == 0]
-        idx1 = [i for i, s in enumerate(self.sites) if s == 1]
-        mi0 = X[idx0].mean(axis=0)
-        mi1 = X[idx1].mean(axis=0)
+        if 'sites' in source_dict.keys():
+            sites_file = source_dict['sites']
+            self.sites = np.load(sites_file).tolist()
+            print 'Regressing out site'
+            idx0 = [i for i, s in enumerate(self.sites) if s == 0]
+            idx1 = [i for i, s in enumerate(self.sites) if s == 1]
+            mi0 = X[idx0].mean(axis=0)
+            mi1 = X[idx1].mean(axis=0)
 
-        X[idx0] -= mi0
-        X[idx1] -= mi1
+            X[idx0] -= mi0
+            X[idx1] -= mi1
 
         return X, Y
+
+    def next(self, batch_size=None):
+        if batch_size is None:
+            batch_size = self.batch_size
+
+        if self.pos == -1:
+            self.reset()
+            raise StopIteration
+
+        x = self.X[self.pos:self.pos+batch_size]
+        y = self.Y[self.pos:self.pos+batch_size]
+        self.pos += batch_size
+
+        if self.pos + batch_size > self.n:
+            self.pos = -1
+
+        rval = {
+            self.name: x,
+            'group': y
+        }
+
+        return rval
 
     def _mask(self, X, mask=None):
         if mask is None:
             mask = self.mask
 
+        if X.shape[1] == mask.sum():
+            print 'Data already masked'
+            return X
+
         if X.shape[1:] != mask.shape:
-            raise ValueError()
+            raise ValueError((X.shape, mask.shape))
 
         mask_f = mask.flatten()
         mask_idx = np.where(mask_f == 1)[0].tolist()
-        X_masked = np.zeros((X.shape[0], self.dims['mri'])).astype(floatX)
+        X_masked = np.zeros((X.shape[0], self.dims[self.name])).astype(floatX)
 
         for i, x in enumerate(X):
             X_masked[i] = x.flatten()[mask_idx]
@@ -200,7 +233,7 @@ class MRI(object):
         if mask is None:
             mask = self.mask
 
-        if X_masked.shape[1] != self.dims['mri']:
+        if X_masked.shape[1] != self.dims[self.name]:
             raise ValueError(X_masked.shape)
 
         mask_f = mask.flatten()
@@ -233,7 +266,9 @@ class MRI(object):
         return images, out_files
 
     def save_images(self, x, out_file, remove_niftis=True,
-                    order=None, stats=dict()):
+                    order=None, stats=dict(), x_limit=None):
+        if len(x.shape) == 3:
+            x = x[:, 0, :]
         x = self._unmask(x)
 
         images, nifti_files = self.save_niftis(x)
@@ -250,28 +285,50 @@ class MRI(object):
         print 'Done'
 
 
-class FMRI_IID(object):
-    def __init__(self, source):
-        print 'Loading '
-        pass
+class FMRI_IID(MRI):
+    def __init__(self, name='fmri_iid', **kwargs):
+        super(FMRI_IID, self).__init__(name=name, **kwargs)
 
-    def randomize(self):
-        pass
+    def get_data(self, source):
+        print('Loading file locations from %s' % source)
+        source_dict = yaml.load(open(source))
+        print('Source locations: %s' % pprint.pformat(source_dict))
 
-    def __iter__(self):
-        return self
+        nifti_file = source_dict['nifti']
+        mask_file = source_dict['mask']
+        self.tmp_path = source_dict['tmp_path']
+        if not path.isdir(self.tmp_path):
+            os.mkdir(self.tmp_path)
+        self.anat_file = source_dict['anat_file']
 
-    def next(self, batch_size):
-        pass
+        data_files = source_dict['data']
+        if isinstance(data_files, str):
+            data_files = [data_files]
 
-    def name(self, ):
-        pass
+        targets_file = source_dict['targets']
+        novels_file = source_dict['novels']
 
-    def save_images(self, x, outfile):
-        pass
+        X = []
+        Y = []
+        for i, data_file in enumerate(data_files):
+            print 'Loading %s' % data_file
+            X_ = np.load(data_file)
+            X.append(X_.astype(floatX))
+            Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
 
-    def show(self, image):
-        pass
+        X = np.concatenate(X, axis=0)
+        Y = np.concatenate(Y, axis=0)
+
+        mask = np.load(mask_file)
+        if not np.all(np.bitwise_or(mask == 0, mask == 1)):
+            raise ValueError("Mask has incorrect values.")
+
+        self.mask = mask
+        self.base_nifti_file = nifti_file
+        self.targets = np.load(targets_file)
+        self.novels = np.load(novels_file)
+
+        return X, Y
 
 
 class ICA_Loadings(object):
