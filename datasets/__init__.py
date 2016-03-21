@@ -28,6 +28,7 @@ def load_data(dataset=None,
     elif dataset == 'snp':
         C = SNP
 
+
     if train_batch_size is not None:
         train = C(batch_size=train_batch_size,
                   mode='train',

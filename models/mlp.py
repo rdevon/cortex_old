@@ -60,23 +60,21 @@ class MLP(Layer):
             else:
                 raise ValueError(out_act)
 
+        if distribution is None:
+            distribution = 'binomial'
+
         if isinstance(distribution, Distribution):
             self.distribution = distribution
-        elif distribution is not None:
-            self.distribution = resolve_distribution(
-                distribution, conditional=True)(
-                dim_out, **distribution_args)
         else:
-            self.distribution = None
+            self.distribution = dist_class(distribution, conditional=True)(
+                dim_out, **distribution_args)
 
-        if self.distribution is not None:
-            self.dim_out = dim_out * self.distribution.scale
+        self.dim_out = dim_out * self.distribution.scale
 
         if dim_h is None:
             if dim_hs is None:
                 dim_hs = []
-            else:
-                dim_hs = [dim_h for dim_h in dim_hs]
+
             assert n_layers is None
         else:
             assert dim_hs is None
@@ -92,7 +90,8 @@ class MLP(Layer):
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
-        super(MLP, self).__init__(name=name, **kwargs)
+
+        super(MLP, self).__init__(name=name)
 
     @staticmethod
     def factory(dim_in=None, dim_out=None,
@@ -123,7 +122,6 @@ class MLP(Layer):
         return self.distribution.entropy(p)
 
     def get_center(self, p):
-        assert self.distribution is not None
         return self.distribution.get_center(p)
 
     def set_params(self):
@@ -139,6 +137,9 @@ class MLP(Layer):
             W = norm_weight(dim_in, dim_out,
                             scale=self.weight_scale, ortho=False)
             b = np.zeros((dim_out,)).astype(floatX)
+
+            if l == self.n_layers - 1:
+                b += self.distribution.get_bias()
 
             self.params['W%d' % l] = W
             self.params['b%d' % l] = b

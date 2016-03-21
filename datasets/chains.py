@@ -118,7 +118,7 @@ class Chains(object):
         self.cpos = -1
         self.X = None
         self.P = None
-        self.H = None
+        self.Hs = None
         self.C = None
         init_rngs(self, **kwargs)
 
@@ -135,11 +135,13 @@ class Chains(object):
             raise StopIteration
 
         chain_dict = self.chainer.build_data_chain(
-            self.dataset, l_chain=self.l_chain, c=condition_on)
+            self.dataset, l_chain=self.l_chain, batch_size=self.batch_size,
+            c=condition_on)
 
         self.X = chain_dict['x_chain']
         self.P = chain_dict['p_chain']
-        self.H = chain_dict['h_chain']
+        self.Hs = chain_dict['h_chain']
+
 
         if self.out_path is not None:
             self.dataset.save_images(x,
@@ -150,7 +152,7 @@ class Chains(object):
             print 'Trimming %d' % trim_end
             self.X = self.X[:-trim_end]
             self.P = self.P[:-trim_end]
-            self.H = self.H[:-trim_end]
+            self.Hs = [H[:-trim_end] for H in self.Hs]
 
             if self.out_path is not None:
                 self.dataset.save_images(x,
@@ -169,20 +171,16 @@ class Chains(object):
             y.append(y_)
         return np.array(y).astype('float32')
 
-    def get_batches(self, cs):
-        x = []
-        p = []
-        h = []
-        for c in cs:
-            x.append(self.X[c])
-            p.append(self.P[c])
-            h.append(self.H[c])
+    def get_batches(self, c):
+        hs = []
+        x = self.X[c]
+        p = self.P[c]
+        for i in range(len(self.Hs)):
+            hs.append(self.Hs[i][c])
 
-        x = np.array(x).astype(floatX)
-        p = np.array(p).astype(floatX)
-        h = np.array(h).astype(floatX)
+        hs = np.array(hs).astype(floatX)
 
-        return x, p, h
+        return x, p, hs
 
     def reset(self):
         self.dataset.reset()
@@ -204,22 +202,19 @@ class Chains(object):
             for i in xrange(0, self.X.shape[0] - window + 1, self.chain_stride):
                 self.C.append(range(i, i + window))
             self.randomize()
+        c = self.C[self.cpos]
 
-        try:
-            cs = [self.C[self.cpos + b] for b in range(batch_size)]
-        except:
-            assert False, (len(self.C), self.cpos, batch_size)
-        x, p, h = self.get_batches(cs)
+        x, p, hs = self.get_batches(c)
 
-        if self.cpos + 2 * self.batch_size >= len(self.C):
+        if self.cpos + 1 >= len(self.C):
             self.cpos = -1
         else:
-            self.cpos += self.batch_size
+            self.cpos += 1
 
         rval = OrderedDict(
             x=x,
             p=p,
-            h=h
+            hs=hs
         )
 
         return rval
