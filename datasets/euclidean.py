@@ -26,7 +26,7 @@ class Euclidean(Dataset):
 
         self.collection = None
         self.X = self.get_data(n_samples, dims)
-        self.make_fibrous()
+        self.make_spiral()
 
         self.n = self.X.shape[0]
 
@@ -132,23 +132,30 @@ class Euclidean(Dataset):
 
         x = self.X[self.pos:self.pos+batch_size]
 
-        self.pos += batch_size
-        if self.pos + batch_size > self.n:
-            self.pos = -1
-
-        outs = OrderedDict()
+        outs = OrderedDict(pos=self.pos)
         outs[self.name] = x
+
+        if self.pos + batch_size >= self.n:
+            self.pos = -1
+        else:
+            self.pos += batch_size
 
         return outs
 
-    def save_images(self, X, imgfile, density=False):
+    def save_images(self, X, imgfile, mode=None):
         ax = plt.axes()
         x = X[:, 0]
         y = X[:, 1]
-        if density:
+        if mode == 'density':
             xy = np.vstack([x,y])
             z = scipy.stats.gaussian_kde(xy)(xy)
             ax.scatter(x, y, c=z, marker='o', edgecolor='')
+        elif mode == 'vector':
+            u = 100 * (x[1:] - x[:-1])
+            u = np.append(u, [0])
+            v = 100 * (y[1:] - y[:-1])
+            v = np.append(v, [0])
+            ax.quiver(x, y, u, v, angles='xy', scale=1000, color='r')
         else:
             ax.scatter(x, y, marker='o', c=range(x.shape[0]),
                         cmap=plt.cm.coolwarm)

@@ -235,12 +235,13 @@ class DijkstrasChainer(RNNChainer):
                                          chain_dict['mask']]
         self.f_test = theano.function(Hs + [X, idx], chain_dict['extra'],
                                       on_unused_input='ignore')
-        self.f_build = theano.function(Hs + [X, idx], outs, updates=updates)
+        self.f_build = theano.function(Hs + [X, idx], outs, updates=updates,
+                                       profile=False)
 
     def __call__(self, X, Hs, idx):
         return self.assign(X, Hs, idx)
 
-    def build_data_chain(self, data_iter, batch_size, build_batch=100):
+    def build_data_chain(self, data_iter, build_batch=100):
         '''Build a chain or real data.
 
         Pulls a batch out of a Dataset class instance and performs all-pairs
@@ -256,32 +257,56 @@ class DijkstrasChainer(RNNChainer):
             rval: OrderedDict. mask, x_chain, i_chain, and h_chains.
 
         '''
-        batch_size = min(batch_size, data_iter.n)
-        build_batch = min(batch_size, build_batch)
-        outs = data_iter.next(batch_size=batch_size)
+        outs = data_iter.next()
         x = outs[data_iter.name]
+        build_batch = min(x.shape[0], build_batch)
         hs = outs['hs']
+        pos = outs['pos']
+        data_idx = outs['idx']
+
         x_chain = []
         i_chain = []
         hs_chain = [[] for _ in hs]
         masks = []
-        for i0 in range(0, batch_size - build_batch + 1, build_batch):
+        for i0 in range(0, x.shape[0] - build_batch + 1, build_batch):
+            #print 'here', i0, build_batch, hs[0].shape, x.shape, x[range(i0, i0 + build_batch)].shape
             inps = hs + [x, range(i0, i0 + build_batch)]
             outs = self.f_build(*inps)
+            #print 'build done'
             hs_ = outs[:-3]
             x_, idx, mask = outs[-3:]
             x_chain.append(x_)
             i_chain.append(idx)
+            #print x[range(i0, i0 + build_batch)]
+            #print x_.shape
+            #print x_[:, 0, 1]
+            #assert False, idx
             for i, h_ in enumerate(hs_):
                 hs_chain[i].append(h_)
             masks.append(mask)
 
+        max_length = max(m.shape[0] for m in masks)
+        for i, mask in enumerate(masks):
+
+            npad = ((0, max_length - mask.shape[0]), (0, 0), (0, 0), (0, 0))
+
+            masks[i] = np.pad(masks[i],
+                              pad_width=npad[:-1],
+                              mode='constant',
+                              constant_values=0)
+
+            x_chain[i] = np.pad(x_chain[i], pad_width=npad, mode='constant', constant_values=0)
+            i_chain[i] = np.pad(i_chain[i], pad_width=npad[:-1], mode='constant', constant_values=0)
+            for j, h_chain in enumerate(hs_chain):
+                hs_chain[j][i] = np.pad(h_chain[i], pad_width=npad, mode='constant', constant_values=0)
+
         mask     = np.concatenate(masks, axis=2).astype(floatX)
         x_chain  = np.concatenate(x_chain, axis=2).astype(floatX)
-        i_chain  = np.concatenate(i_chain, axis=2).astype(intX)
+        i_chain  = np.concatenate(i_chain, axis=2).astype(intX) + pos
         h_chains = [np.concatenate(h_chain, axis=2) for h_chain in hs_chain]
 
-        mask     = mask.reshape((mask.shape[0], mask.shape[1] * mask.shape[2]))
+        mask = mask.reshape((mask.shape[0], mask.shape[1] * mask.shape[2]))
+
         x_chain  = x_chain.reshape(
             (x_chain.shape[0],
              x_chain.shape[1] * x_chain.shape[2],
@@ -300,7 +325,8 @@ class DijkstrasChainer(RNNChainer):
             mask=mask,
             x_chain=x_chain,
             i_chain=i_chain,
-            h_chains=h_chains
+            h_chains=h_chains,
+            data_idx=data_idx
         )
         return rval
 
@@ -325,10 +351,14 @@ class DijkstrasChainer(RNNChainer):
             return Q, P
 
         # Step forward in RNN and calculate energies.
-        outs = self.rnn.step_sample(*(Hs + [X] + list(params)))
-        P    = outs[-1]
-        E    = self.rnn.neg_log_prob(X[:, None, :], P[None, :, :])
+        if False:
+            outs = self.rnn.step_sample(*(Hs + [X] + list(params)))
+            P    = outs[-1]
+            E    = self.rnn.neg_log_prob(X[:, None, :], P[None, :, :])
+        else:
+            E    = ((X[:, None, :] - X[None, :, :]) ** 2).sum(axis=2)
         D    = E[idx].T
+        #D *= self.rnn.trng.normal(size=D.shape, dtype=D.dtype)
 
         C = T.tile(T.arange(D.shape[0]), D.shape[0])
 
@@ -338,16 +368,6 @@ class DijkstrasChainer(RNNChainer):
             outputs_info=[D, T.constant(0)],
             non_sequences=[E]
         )
-
-        '''
-        Ds, updates = theano.scan(
-            step,
-            sequences=[C],
-            outputs_info=[D],
-            non_sequences=[E],
-            name='step'
-        )
-        '''
 
         Q0 = T.zeros_like(D) + T.arange(D.shape[0])[:, None]
         (Qs, Ps), updates = theano.scan(

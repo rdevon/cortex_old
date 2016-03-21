@@ -126,13 +126,14 @@ class MNIST(Dataset):
         x = self.X[self.pos:self.pos+batch_size]
         y = self.O[self.pos:self.pos+batch_size]
 
-        self.pos += batch_size
-        if self.pos + batch_size > self.n:
-            self.pos = -1
-
-        rval = OrderedDict()
+        rval = OrderedDict(pos=self.pos)
         rval[self.name] = x
         rval['label'] = y
+
+        if self.pos + batch_size > self.n:
+            self.pos = -1
+        else:
+            self.pos += batch_size
 
         return rval
 

@@ -304,6 +304,7 @@ class RNN(Layer):
                 name=self.name + '_recurrent_steps_%d' % i,
                 n_steps=n_steps)
             x = h
+            hs.append(h)
 
         o_params    = self.get_output_args(*params)
         out_net_out = self.output_net.step_call(h, *o_params)
