@@ -7,6 +7,7 @@
 *.blg
 *.bbl
 *.out
+.DS_Store
 
 mine_tweets.py
 # Byte-compiled / optimized / DLL files
