@@ -18,7 +18,7 @@ class SNP(Dataset):
     Currently only handled continuous preprocessed data.
     Discrete data TODO
     '''
-    def __init__(self, source=None, name='snp', convert_one_hot=None, idx=None, **kwargs):
+    def __init__(self, source=None, name='snp', convert_one_hot=False, idx=None, **kwargs):
         '''Initialize the SNP dataset.
 
         Arguments:
@@ -39,7 +39,7 @@ class SNP(Dataset):
         uniques = np.unique(self.Y).tolist()
         O = np.zeros((self.Y.shape[0], len(uniques)), dtype='float32')
 
-        if convert_one_hot is None:
+        if convert_one_hot:
             for idx in xrange(self.Y.shape[0]):
                 i = uniques.index(self.Y[idx])
                 O[idx, i] = 1.;
@@ -65,7 +65,7 @@ class SNP(Dataset):
     def get_data(self, source):
         '''Fetch the data from source.
         Arguments:
-           source: str. file names of genetic data and labels
+           source: dict. file names of genetic data and labels
                   {'snp' key for genetic data
                     'labels' key for diagnosis }
                     
