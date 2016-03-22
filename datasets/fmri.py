@@ -21,57 +21,6 @@ from utils import floatX
 from utils.tools import resolve_path
 
 
-def load_data(idx=None, dataset='mri', **dataset_args):
-    if dataset == 'mri':
-        C = MRI
-    elif dataset == 'fmri_iid':
-        C = FMRI_IID
-    else:
-        raise ValueError(dataset)
-    train, valid, test, idx = make_datasets(C, **dataset_args)
-    return train, valid, test, idx
-
-def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
-                  train_batch_size=None,
-                  valid_batch_size=None,
-                  test_batch_size=None,
-                  **dataset_args):
-
-    if idx is None:
-        assert split is not None
-        if round(np.sum(split), 5) != 1. or len(split) != 3:
-            raise ValueError(split)
-        dummy = C(batch_size=1, **dataset_args)
-        N = dummy.n
-        idx = range(N)
-        random.shuffle(idx)
-        split_idx = []
-        accum = 0
-        for s in split:
-            s_i = int(s * N + accum)
-            split_idx.append(s_i)
-            accum += s_i
-
-        train_idx = idx[:split_idx[0]]
-        valid_idx = idx[split_idx[0]:split_idx[1]]
-        test_idx = idx[split_idx[1]:]
-        idx = [train_idx, valid_idx, test_idx]
-
-    if train_batch_size is not None and len(train_idx) > 0:
-        train = C(idx=idx[0], batch_size=train_batch_size, **dataset_args)
-    else:
-        train = None
-    if valid_batch_size is not None and len(valid_idx) > 0:
-        valid = C(idx=idx[1], batch_size=valid_batch_size, **dataset_args)
-    else:
-        valid = None
-    if test_batch_size is not None and len(test_idx) > 0:
-        test = C(idx=idx[2], batch_size=test_batch_size, **dataset_args)
-    else:
-        test = None
-
-    return train, valid, test, idx
-
 def medfilt(x, k):
     '''
     Apply a length-k median filter to a 1D array x.

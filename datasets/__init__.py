@@ -10,12 +10,27 @@ def load_data(dataset=None,
               valid_batch_size=None,
               test_batch_size=None,
               **dataset_args):
+    '''Load dataset with a predefined split.
+
+    For these datasets, train/valid/test split has already been made.
+    For the batch sizes, if any are None, the corresponding dataset
+    will also be None.
+
+    Arguments:
+        dataset: str
+        train_batch_size (Optional) int.
+        valid_batch_size (Optional) int.
+        test_batch_size (Optional) int.
+
+    Returns:
+        train, valid, test Dataset objects.
+
+    '''
 
     from caltech import CALTECH
     from cifar import CIFAR
     from mnist import MNIST
     from uci import UCI
-    from snp import SNP
 
     if dataset == 'mnist':
         C = MNIST
@@ -25,8 +40,6 @@ def load_data(dataset=None,
         C = CALTECH
     elif dataset == 'uci':
         C = UCI
-    elif dataset == 'snp':
-        C = SNP
 
     if train_batch_size is not None:
         train = C(batch_size=train_batch_size,
@@ -51,6 +64,92 @@ def load_data(dataset=None,
         test = None
 
     return train, valid, test
+
+
+def load_data_split(idx=None, dataset='mri', **dataset_args):
+    '''Load dataset and split.
+
+    Arguments:
+        idx: (Optional) list of list of int. Indices for train/valid/test
+            datasets.
+        dataset: str.
+
+    Returns:
+        train, valid, test Dataset objects.
+        idx: Indices for if split is created.
+    '''
+
+    from fmri import MRI, FMRI_IID
+    from snp import SNP
+
+    if dataset == 'mri':
+        C = MRI
+    elif dataset == 'fmri_iid':
+        C = FMRI_IID
+    elif dataset == 'snp':
+        C = SNP
+    else:
+        raise ValueError(dataset)
+    train, valid, test, idx = make_datasets(C, **dataset_args)
+    return train, valid, test, idx
+
+def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
+                  train_batch_size=None,
+                  valid_batch_size=None,
+                  test_batch_size=None,
+                  **dataset_args):
+    '''Constructs train/valid/test datasets with idx or split.
+
+    If idx is None, use split ratios to create indices.
+
+    Arguments:
+        C: Dataset class.
+        split: (Optional) list of float. Split ratios over total.
+        idx: (Optional) list of list of int. Indices for train/valid/test
+            datasets.
+        train_batch_size (Optional) int.
+        valid_batch_size (Optional) int.
+        test_batch_size (Optional) int.
+
+    Returns:
+        train, valid, test Dataset objects.
+        idx: Indices for if split is created.
+    '''
+
+    if idx is None:
+        assert split is not None
+        if round(np.sum(split), 5) != 1. or len(split) != 3:
+            raise ValueError(split)
+        dummy = C(batch_size=1, **dataset_args)
+        N = dummy.n
+        idx = range(N)
+        random.shuffle(idx)
+        split_idx = []
+        accum = 0
+        for s in split:
+            s_i = int(s * N + accum)
+            split_idx.append(s_i)
+            accum += s_i
+
+        train_idx = idx[:split_idx[0]]
+        valid_idx = idx[split_idx[0]:split_idx[1]]
+        test_idx = idx[split_idx[1]:]
+        idx = [train_idx, valid_idx, test_idx]
+
+    if train_batch_size is not None and len(train_idx) > 0:
+        train = C(idx=idx[0], batch_size=train_batch_size, **dataset_args)
+    else:
+        train = None
+    if valid_batch_size is not None and len(valid_idx) > 0:
+        valid = C(idx=idx[1], batch_size=valid_batch_size, **dataset_args)
+    else:
+        valid = None
+    if test_batch_size is not None and len(test_idx) > 0:
+        test = C(idx=idx[2], batch_size=test_batch_size, **dataset_args)
+    else:
+        test = None
+
+    return train, valid, test, idx
 
 
 class Dataset(object):
