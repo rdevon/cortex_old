@@ -13,8 +13,8 @@ from utils.tools import (
 
 
 class SNP(Dataset):
-    def __init__(self, source=None, **kwargs):
-        kwargs = super(SNP, self).__init__(**kwargs)
+    def __init__(self, source=None, name='snp', **kwargs):
+        kwargs = super(SNP, self).__init__(name=name, **kwargs)
         
         if source is None:
             raise ValueError('No source provided')
@@ -22,23 +22,21 @@ class SNP(Dataset):
         # Fetch SNP data from "source"
         self.get_data(source)
         self.n = self.X.shape[0]
-
         # Reference for the dimension of the dataset. A dict is used for
         # multimodal data (e.g., mri and labels)
-        self.dims = dict()
-        self.dims[self.name] = self.X.shape[1]
-
+        self.dims = {self.name: self.X.shape[1],'labels': self.Y.shape[1]}
+        
         # This is reference for models to decide how the data should be modelled
         # E.g. with a binomial or gaussian variable
-        self.distributions = dict()
-        self.distributions[self.name] = 'gaussian'
+        self.distributions = {self.name: 'gaussian', 'labels': 'multinomial'}
+
 
     def get_data(self, source):
         from utils.tools import get_paths
         data_path = get_paths()['$snp_data']
         print('Loading genetic data from %s' %data_path)
         X = loadmat(data_path + source['snp'])
-        Y = loadmat(data_path + source['label'])
+        Y = loadmat(data_path + source['labels'])
         self.X = X[X.keys()[2]]
         self.Y = Y[Y.keys()[0]]
         
@@ -72,8 +70,8 @@ class SNP(Dataset):
             self.pos = -1
         
         rval = OrderedDict()
-        rval['snp'] = x
-        rval['label'] = y
+        rval[self.name] = x
+        rval['labels'] = y
 
         return rval
 
