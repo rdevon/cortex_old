@@ -64,11 +64,15 @@ class SNP(Dataset):
 
     def get_data(self, source):
         '''Fetch the data from source.
-           source contains the file name of genetic data under the key 'snp' and the file name of diagnosis data under the key 'labels'
-           Genetic data is in the matrix format with size Subjec*SNP
-           SNP can be either preprocessed or notprocessed
-           Labels is a vector with diagnosis info
-           Patients are coded with 1 and health control coded with 2
+        Arguments:
+           source: str. file names of genetic data and labels
+                  {'snp' key for genetic data
+                    'labels' key for diagnosis }
+                    
+        Genetic data is in the matrix format with size Subjec*SNP
+        SNP can be either preprocessed or notprocessed
+        Labels is a vector with diagnosis info
+        Patients are coded with 1 and health control coded with 2
         '''
         from utils.tools import get_paths
         data_path = get_paths()['$snp_data']
