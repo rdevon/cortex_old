@@ -151,9 +151,9 @@ class Euclidean(Dataset):
             z = scipy.stats.gaussian_kde(xy)(xy)
             ax.scatter(x, y, c=z, marker='o', edgecolor='')
         elif mode == 'vector':
-            u = 100 * (x[1:] - x[:-1])
+            u = 10 * (x[1:] - x[:-1])
             u = np.append(u, [0])
-            v = 100 * (y[1:] - y[:-1])
+            v = 10 * (y[1:] - y[:-1])
             v = np.append(v, [0])
             ax.quiver(x, y, u, v, angles='xy', scale=1000, color='r')
         else:

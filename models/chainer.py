@@ -232,6 +232,7 @@ class DijkstrasChainer(RNNChainer):
         chain_dict, updates = self.__call__(X, Hs, idx)
         outs = chain_dict['h_chains'] + [chain_dict['x_chain'],
                                          chain_dict['i_chain'],
+                                         chain_dict['distances'],
                                          chain_dict['mask']]
         self.f_test = theano.function(Hs + [X, idx], chain_dict['extra'],
                                       on_unused_input='ignore')
@@ -268,13 +269,15 @@ class DijkstrasChainer(RNNChainer):
         i_chain = []
         hs_chain = [[] for _ in hs]
         masks = []
+        ds = []
         for i0 in range(0, x.shape[0] - build_batch + 1, build_batch):
             #print 'here', i0, build_batch, hs[0].shape, x.shape, x[range(i0, i0 + build_batch)].shape
             inps = hs + [x, range(i0, i0 + build_batch)]
             outs = self.f_build(*inps)
             #print 'build done'
-            hs_ = outs[:-3]
-            x_, idx, mask = outs[-3:]
+            hs_ = outs[:-4]
+            x_, idx, d, mask = outs[-4:]
+            ds.append(d)
             x_chain.append(x_)
             i_chain.append(idx)
             #print x[range(i0, i0 + build_batch)]
@@ -288,23 +291,24 @@ class DijkstrasChainer(RNNChainer):
         max_length = max(m.shape[0] for m in masks)
         for i, mask in enumerate(masks):
 
-            npad = ((0, max_length - mask.shape[0]), (0, 0), (0, 0), (0, 0))
+            npad = ((0, max_length - mask.shape[0]), (0, 0), (0, 0))
 
             masks[i] = np.pad(masks[i],
                               pad_width=npad[:-1],
                               mode='constant',
                               constant_values=0)
-
             x_chain[i] = np.pad(x_chain[i], pad_width=npad, mode='constant', constant_values=0)
             i_chain[i] = np.pad(i_chain[i], pad_width=npad[:-1], mode='constant', constant_values=0)
             for j, h_chain in enumerate(hs_chain):
                 hs_chain[j][i] = np.pad(h_chain[i], pad_width=npad, mode='constant', constant_values=0)
 
-        mask     = np.concatenate(masks, axis=2).astype(floatX)
-        x_chain  = np.concatenate(x_chain, axis=2).astype(floatX)
-        i_chain  = np.concatenate(i_chain, axis=2).astype(intX) + pos
-        h_chains = [np.concatenate(h_chain, axis=2) for h_chain in hs_chain]
+        mask     = np.concatenate(masks, axis=1).astype(floatX)
+        x_chain  = np.concatenate(x_chain, axis=1).astype(floatX)
+        i_chain  = np.concatenate(i_chain, axis=1).astype(intX) + pos
+        h_chains = [np.concatenate(h_chain, axis=1) for h_chain in hs_chain]
+        distances = np.concatenate(ds, axis=0).astype(floatX)
 
+        '''
         mask = mask.reshape((mask.shape[0], mask.shape[1] * mask.shape[2]))
 
         x_chain  = x_chain.reshape(
@@ -320,6 +324,12 @@ class DijkstrasChainer(RNNChainer):
              h_chain.shape[1] * h_chain.shape[2],
              h_chain.shape[3]))
                     for h_chain in h_chains]
+        '''
+
+        #print distances.shape, x_chain.shape, mask.shape
+        #distances = distances.reshape((distances.shape[0] * distances.shape[1],))
+        #print distances.min(), distances.max(), distances.std(), distances.mean()
+        #assert False#, np.where(distances == 0)[0].tolist()
 
         rval = OrderedDict(
             mask=mask,
@@ -353,11 +363,11 @@ class DijkstrasChainer(RNNChainer):
         # Step forward in RNN and calculate energies.
         if False:
             outs = self.rnn.step_sample(*(Hs + [X] + list(params)))
-            P    = outs[-1]
-            E    = self.rnn.neg_log_prob(X[:, None, :], P[None, :, :])
+            P = outs[-1]
+            E = self.rnn.neg_log_prob(X[:, None, :], P[None, :, :])
         else:
-            E    = ((X[:, None, :] - X[None, :, :]) ** 2).sum(axis=2)
-        D    = E[idx].T
+            E = ((X[:, None, :] - X[None, :, :]) ** 2).sum(axis=2)
+        D = E[idx].T
         #D *= self.rnn.trng.normal(size=D.shape, dtype=D.dtype)
 
         C = T.tile(T.arange(D.shape[0]), D.shape[0])
@@ -378,16 +388,28 @@ class DijkstrasChainer(RNNChainer):
             name='path'
         )
 
-        idx = T.neq(Ps.sum(axis=(1, 2)), -(D.shape[0] * D.shape[1])).nonzero()[0]
-        Qs = Qs[idx]
-        Ps = Ps[idx]
+        # Append start and ends
         Qs0 = T.zeros_like(D) + T.arange(D.shape[1])[None, :]
         Qsl = T.zeros_like(D) + T.arange(D.shape[0])[:, None]
         Qs = T.concatenate([Qs0[None, :, :], Qs[::-1], Qsl[None, :, :]]).astype(intX)
         Ps = T.concatenate([Qs0[None, :, :], Ps[::-1], Qsl[None, :, :]])
 
+        # Keep chains with short distances and flatten across start / end axes
+        Ds = Ds[-1]
+        Ds = Ds.reshape((Ds.shape[0] * Ds.shape[1],))
+        c_idx = T.and_(T.lt(Ds, .1 * Ds.max()), T.neq(Ds, 0)).nonzero()[0]
+        Ds = Ds[c_idx]
+        Qs = Qs.reshape((Qs.shape[0], Qs.shape[1] * Qs.shape[2]))[:, c_idx]
+        Ps = Ps.reshape((Ps.shape[0], Ps.shape[1] * Ps.shape[2]))[:, c_idx]
+
+        # Remove chain steps with no changes
+        idx = T.neq(Ps.sum(axis=1), -(Ps.shape[1])).nonzero()[0]
+        Qs = Qs[idx]
+        Ps = Ps[idx]
+
+        # Build X chain
         x_chain = X[Qs]
-        x_chain = T.switch(T.eq(Ps[:, :, :, None], -1), 0, x_chain)
+        x_chain = T.switch(T.eq(Ps[:, :, None], -1), 0, x_chain)
         i_chain = Qs
         h_chains = [H[Qs] for H in Hs]
         mask = T.neq(Ps, -1).astype(intX)
@@ -397,7 +419,8 @@ class DijkstrasChainer(RNNChainer):
             mask=mask,
             x_chain=x_chain,
             i_chain=i_chain,
-            h_chains=h_chains
+            distances=Ds,
+            h_chains=h_chains,
         )
 
         return outs, theano.OrderedUpdates()
