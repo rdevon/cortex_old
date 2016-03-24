@@ -66,7 +66,7 @@ class MLP(Layer):
         if isinstance(distribution, Distribution):
             self.distribution = distribution
         else:
-            self.distribution = dist_class(distribution, conditional=True)(
+            self.distribution = resolve_distribution(distribution, conditional=True)(
                 dim_out, **distribution_args)
 
         self.dim_out = dim_out * self.distribution.scale
