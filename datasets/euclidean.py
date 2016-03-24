@@ -60,7 +60,7 @@ class Euclidean(Dataset):
             self.X += f
             self.X = np.clip(self.X, 0, 1)
 
-    def make_spiral(self, r=0.25, G=0.0001):
+    def make_spiral(self, r=.5, G=0.0001):
         for k in range(10):
             x = self.X[:, 0] - 0.5
             y = self.X[:, 1] - 0.5

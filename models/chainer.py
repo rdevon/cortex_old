@@ -273,6 +273,7 @@ class DijkstrasChainer(RNNChainer):
         for i0 in range(0, x.shape[0] - build_batch + 1, build_batch):
             #print 'here', i0, build_batch, hs[0].shape, x.shape, x[range(i0, i0 + build_batch)].shape
             inps = hs + [x, range(i0, i0 + build_batch)]
+            #assert False, self.f_test(*inps)
             outs = self.f_build(*inps)
             #print 'build done'
             hs_ = outs[:-4]
@@ -361,7 +362,7 @@ class DijkstrasChainer(RNNChainer):
             return Q, P
 
         # Step forward in RNN and calculate energies.
-        if False:
+        if True:
             outs = self.rnn.step_sample(*(Hs + [X] + list(params)))
             P = outs[-1]
             E = self.rnn.neg_log_prob(X[:, None, :], P[None, :, :])
@@ -397,12 +398,30 @@ class DijkstrasChainer(RNNChainer):
         # Keep chains with short distances and flatten across start / end axes
         Ds = Ds[-1]
         Ds = Ds.reshape((Ds.shape[0] * Ds.shape[1],))
-        c_idx = T.and_(T.lt(Ds, .1 * Ds.max()), T.neq(Ds, 0)).nonzero()[0]
-        Ds = Ds[c_idx]
-        Qs = Qs.reshape((Qs.shape[0], Qs.shape[1] * Qs.shape[2]))[:, c_idx]
-        Ps = Ps.reshape((Ps.shape[0], Ps.shape[1] * Ps.shape[2]))[:, c_idx]
+        #c_idx = T.and_(T.lt(Ds, 2 * Ds.max()), T.neq(Ds, 0)).nonzero()[0]
+        #Ds = Ds[c_idx]
+        Qs = Qs.reshape((Qs.shape[0], Qs.shape[1] * Qs.shape[2]))#[:, c_idx]
+        Ps = Ps.reshape((Ps.shape[0], Ps.shape[1] * Ps.shape[2]))#[:, c_idx]
 
-        # Remove chain steps with no changes
+        # Compress and remove chain steps with no changes
+
+        def step_unique(Q, P):
+            idx = T.neq(P, -1).nonzero()[0]
+            Q_ = T.zeros_like(Q)
+            Q = T.set_subtensor(Q_[:idx.shape[0]], Q[idx])
+            P_ = T.zeros_like(P) - 1
+            P = T.set_subtensor(P_[:idx.shape[0]], P[idx])
+            return Q, P
+
+        (Qs, Ps), _ = theano.scan(
+            step_unique,
+            sequences=[Qs.T, Ps.T],
+            outputs_info=[None, None],
+            name='unique'
+        )
+        Qs = Qs.T
+        Ps = Ps.T
+
         idx = T.neq(Ps.sum(axis=1), -(Ps.shape[1])).nonzero()[0]
         Qs = Qs[idx]
         Ps = Ps[idx]
@@ -415,7 +434,7 @@ class DijkstrasChainer(RNNChainer):
         mask = T.neq(Ps, -1).astype(intX)
 
         outs = OrderedDict(
-            extra=i_chain,
+            extra=(Ps, Qs, mask, x_chain),
             mask=mask,
             x_chain=x_chain,
             i_chain=i_chain,
