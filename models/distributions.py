@@ -58,7 +58,7 @@ def resolve(c, conditional=False):
 class Distribution(Layer):
     def __init__(self, dim, name='distribution', must_sample=False, scale=1,
                  **kwargs):
-        self.dim = dim * scale
+        self.dim = dim
         self.must_sample = must_sample
         self.scale = scale
 
@@ -77,9 +77,6 @@ class Distribution(Layer):
         raise NotImplementedError()
 
     def kl_divergence(self, q):
-        raise NotImplementedError()
-
-    def get_bias(self):
         raise NotImplementedError()
 
     def __call__(self, z):
@@ -118,19 +115,14 @@ class Distribution(Layer):
 
 
 class Binomial(Distribution):
-    def __init__(self, dim, name='binomial', bias_args=dict(), **kwargs):
+    def __init__(self, dim, name='binomial', **kwargs):
         self.f_sample = _binomial
         self.f_neg_log_prob = _cross_entropy
         self.f_entropy = _binary_entropy
-
-        bias_args = dict(z=0)
-        bias_args.update(**bias_args)
-        self.bias = bias_args['z']
-
         super(Binomial, self).__init__(dim, name=name, **kwargs)
 
     def set_params(self):
-        z = np.zeros((self.dim,)).astype(floatX) + self.bias
+        z = np.zeros((self.dim,)).astype(floatX)
         self.params = OrderedDict(z=z)
 
     def get_params(self):
@@ -138,9 +130,6 @@ class Binomial(Distribution):
 
     def get_prob(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
-
-    def get_bias(self):
-        return self.bias
 
     def __call__(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
@@ -202,21 +191,16 @@ class ConditionalMultinomial(Multinomial):
 
 
 class Gaussian(Distribution):
-    def __init__(self, dim, name='gaussian', bias_args=dict(), **kwargs):
+    def __init__(self, dim, name='gaussian', clip=-10, **kwargs):
         self.f_sample = _normal
         self.f_neg_log_prob = _neg_normal_log_prob
         self.f_entropy = _normal_entropy
-
-        bias_args = dict(mu=0.5, log_sigma=-3)
-        bias_args.update(**bias_args)
-        self.mu_bias = (np.zeros((dim,)) + bias_args['mu']).astype(floatX)
-        self.log_sigma_bias = (np.zeros((dim,)) + bias_args['log_sigma']).astype(floatX)
-
+        self.clip = clip
         super(Gaussian, self).__init__(dim, name=name, scale=2, **kwargs)
 
     def set_params(self):
-        mu = self.mu_bias
-        log_sigma = self.log_sigma_bias
+        mu = np.zeros((self.dim,)).astype(floatX)
+        log_sigma = np.zeros((self.dim,)).astype(floatX)
 
         self.params = OrderedDict(
             mu=mu, log_sigma=log_sigma)
@@ -227,14 +211,11 @@ class Gaussian(Distribution):
     def get_prob(self, mu, log_sigma):
         return concatenate([mu, log_sigma], axis=mu.ndim-1)
 
-    def get_bias(self):
-        return np.concatenate([self.mu_bias, self.log_sigma_bias])
-
     def __call__(self, z):
         return z
 
     def get_center(self, p):
-        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
+        mu = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
         return mu
 
     def split_prob(self, p):
@@ -288,57 +269,6 @@ class Gaussian(Distribution):
         if p is None:
             p = self.get_prob(*self.get_params())
         return self.f_entropy(p, clip=self.clip)
-
-
-class TruncatedGaussian(Gaussian):
-    def __init__(self, dim, name='truncated_gaussian', minmax=(0, 1), **kwargs):
-        self.min, self.max = minmax
-        super(TruncatedGaussian, self).__init__(dim, name=name, **kwargs)
-
-    def get_params(self):
-        return [T.clip(self.mu, self.min, self.max), self.log_sigma]
-
-    def __call__(self, p):
-        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
-        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // 2)
-        mu = T.clip(mu, self.min, self.max)
-        return concatenate([mu, log_sigma], axis=mu.ndim-1)
-
-    def sample(self, n_samples, p=None):
-        samples, updates = super(TruncatedGaussian, self).sample(n_samples, p=p)
-        return T.clip(samples, self.min, self.max), updates
-
-    def step_sample(self, epsilon, p):
-        return T.clip(super(TruncatedGaussian, self).step_sample(epsilon, p),
-                      self.min, self.max)
-
-    def step_kl_divergence(self, q, mu, log_sigma):
-        mu_q = _slice(q, 0, self.dim)
-        mu = T.clip(mu, self.min, self.max)
-        mu_q = T.clip(mu_q, self.min, self.max)
-        log_sigma_q = _slice(q, 1, self.dim)
-
-        kl = log_sigma - log_sigma_q + 0.5 * (
-            (T.exp(2 * log_sigma_q) + (mu - mu_q) ** 2) /
-            T.exp(2 * log_sigma)
-            - 1)
-        return kl.sum(axis=kl.ndim-1)
-
-    def step_neg_log_prob(self, x, p):
-        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
-        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // 2)
-        mu = T.clip(mu, self.min, self.max)
-        p = concatenate([mu, log_sigma], axis=mu.ndim-1)
-        return self.f_neg_log_prob(x, p)
-
-    def neg_log_prob(self, x, p=None):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
-        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // 2)
-        mu = T.clip(mu, self.min, self.max)
-        p = concatenate([mu, log_sigma], axis=mu.ndim-1)
-        return self.f_neg_log_prob(x, p)
 
 
 class TruncatedGaussian(Gaussian):
