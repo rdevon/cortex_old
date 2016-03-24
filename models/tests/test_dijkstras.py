@@ -87,6 +87,7 @@ def test_chainer(dim_in=5, n_samples=53, batch_size=17, data_batch_size=37):
                          build_batch=10)
     chain_iter.set_chainer(chainer)
 
+    chain_iter.reset()
     outs = chain_iter.next()
 
     x = outs['x']
