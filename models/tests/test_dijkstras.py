@@ -75,7 +75,7 @@ def test_dijksras():
     assert False
 
 
-def test_chainer(dim_in=5, n_samples=53, batch_size=17, data_batch_size=37):
+def test_chainer(dim_in=2, n_samples=53, batch_size=17, data_batch_size=37):
     model = RNN(dim_in, [13])
     model.set_tparams()
     chainer = Chainer(model)
@@ -125,7 +125,7 @@ def test_chainer(dim_in=5, n_samples=53, batch_size=17, data_batch_size=37):
             step_count,
             sequences=[idx_os],
             outputs_info=[None],
-            non_sequences=[I, H, M_e]
+            non_sequences=[I[1:], H[:-1], M_e]
         )
         H_ns.append(H_n)
         H_u = H_p.copy()
@@ -134,10 +134,10 @@ def test_chainer(dim_in=5, n_samples=53, batch_size=17, data_batch_size=37):
 
     updates = [(H_p, H_n) for H_p, H_n in zip(chain_iter.dataset.Hs, H_us)]
 
-    f = theano.function([X] + H0s + [M, I, DI], H_ns, updates=updates)
+    f = theano.function([X] + H0s + [M, I, DI], Hs[0], updates=updates)
     print chain_iter.dataset.Hs[0].get_value(), chain_iter.dataset.Hs[0].get_value().shape
     inps = [x] + [h[0] for h in hs] + [mask, idx, data_idx]
-    f(*inps)
+    print f(*inps).shape
     print chain_iter.dataset.Hs[0].get_value(), chain_iter.dataset.Hs[0].get_value().shape
 
     '''
