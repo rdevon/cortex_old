@@ -362,7 +362,7 @@ class DijkstrasChainer(RNNChainer):
             return Q, P
 
         # Step forward in RNN and calculate energies.
-        if True:
+        if False:
             outs = self.rnn.step_sample(*(Hs + [X] + list(params)))
             P = outs[-1]
             E = self.rnn.neg_log_prob(X[:, None, :], P[None, :, :])
