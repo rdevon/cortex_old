@@ -79,8 +79,8 @@ class SNP(Dataset):
         print('Loading genetic data from %s' % data_path)
         X = loadmat(data_path + source['snp'])
         Y = loadmat(data_path + source['labels'])
-        self.X = X[X.keys()[2]]
-        self.Y = Y[Y.keys()[0]]
+        self.X = np.float32(X[X.keys()[2]])
+        self.Y = np.float32(Y[Y.keys()[0]])
 
     def randomize(self):
         '''Randomize the dataset.'''

@@ -3,7 +3,7 @@ Generic dataset class
 '''
 
 from collections import OrderedDict
-
+import numpy as np
 
 def load_data(dataset=None,
               train_batch_size=None,
@@ -123,7 +123,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         dummy = C(batch_size=1, **dataset_args)
         N = dummy.n
         idx = range(N)
-        random.shuffle(idx)
+        np.random.shuffle(idx)
         split_idx = []
         accum = 0
         for s in split:

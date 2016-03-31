@@ -173,7 +173,7 @@ class Multinomial(Distribution):
         self.f_sample = _sample_multinomial
         self.f_neg_log_prob = _categorical_cross_entropy
         self.f_entropy = _categorical_entropy
-        super(Multinomal, self).__init__(dim, name=name, **kwargs)
+        super(Multinomial, self).__init__(dim, name=name, **kwargs)
 
     def set_params(self):
         z = np.zeros((self.dim,)).astype(floatX)
