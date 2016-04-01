@@ -46,18 +46,9 @@ class RNNChainer(Layer):
         x = np.zeros((x.shape[0], batch_size, x.shape[1])).astype(floatX) + x[:, None, :]
         for b in range(batch_size):
             np.random.shuffle(x[:, b])
-
-       # widgets = ['Building {batch_size} chains from dataset {dataset} '
-       #            'of length {length} ('.format(
-       #             batch_size=batch_size, dataset=data_iter.name,
-       #             length=l_chain),
-       #            Timer(), ')']
-        #pbar = ProgressBar(widgets=widgets, maxval=1).start()
         outs = self.f_build(x)
         h_chains = outs[:-3]
         idx, p_chain, x_chain = outs[-3:]
-        #pbar.update(1)
-        #print
 
         rval = OrderedDict(
             idx=idx,
@@ -75,13 +66,6 @@ class RNNChainer(Layer):
         energy    = self.rnn.neg_log_prob(x, p)
         #energy    = ((x - x_p) ** 2).sum(axis=x.ndim-1)
         return energy, hs, p
-
-    '''
-    def step_energy_cond(rnn, x, x_p, h_p, c, *params):
-        h, x_s, p = self.step_sample_cond(h_p, x_p, c, *params)
-        energy = self.rnn.neg_log_prob(x, p)
-        return energy, h, p
-    '''
 
     def step_scale(self, scaling, counts, idx, alpha, beta):
         counts         = T.set_subtensor(counts[idx, T.arange(counts.shape[1])], 1)
@@ -106,10 +90,6 @@ class RNNChainer(Layer):
         Us         = Us - T.log(scaling)
 
         idx        = T.argmin(Us, axis=0)
-        #V = x - x_p
-        #KEs = (V ** 2 * self.rnn.M[None, None, :]).sum(axis=2)
-        #idx = T.argmin(abs(Us + KEs - e_p[None, :]), axis=0)
-        #e_n         = (Us + KEs)[idx, T.arange(Us.shape[1])]
         e_n        = Us[idx, T.arange(Us.shape[1])]
 
         scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
@@ -130,25 +110,14 @@ class RNNChainer(Layer):
         return h_n, x_n, p_n
 
     '''
-    def step_assign_cond(self, idx, h_p, counts, scaling, x, alpha, beta, c, *params):
-        energies, h_n, p = self.step_energy_cond(x, x[idx, T.arange(x.shape[1])], h_p, c, *params)
-        energies -= T.log(scaling)
-
-        idx = T.argmin(energies, axis=0)
-
-        scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
-        return (idx, h_n, p, energies[idx, T.arange(energies.shape[1])], counts, scaling), theano.scan_module.until(T.all(counts))
-
     def step_assign_sample(self, idx, h_p, counts, scaling, x, alpha, beta, *params):
         energies, h_n, p = self.step_energy(x, x[idx, T.arange(x.shape[1])], h_p, *params)
         energies -= T.log(scaling)
-
         e_max = (-energies).max()
         probs = T.exp(-energies - e_max)
         probs = probs
         probs = probs / probs.sum()
         idx = T.argmax(self.rnn.trng.multinomial(pvals=probs).astype('int64'), axis=0)
-
         scaling, counts = self.step_scale(scaling, counts, idx, alpha, beta)
         return (idx, h_n, p, energies[idx, T.arange(energies.shape[1])], counts, scaling), theano.scan_module.until(T.all(counts))
     '''
@@ -261,7 +230,9 @@ class DijkstrasChainer(RNNChainer):
         idx = T.vector('idx', dtype=intX)
 
         chain_dict, updates = self.__call__(X, Hs, idx)
-        outs = chain_dict['h_chains'] + [chain_dict['x_chain'], chain_dict['mask']]
+        outs = chain_dict['h_chains'] + [chain_dict['x_chain'],
+                                         chain_dict['i_chain'],
+                                         chain_dict['mask']]
         self.f_test = theano.function(Hs + [X, idx], chain_dict['extra'],
                                       on_unused_input='ignore')
         self.f_build = theano.function(Hs + [X, idx], outs, updates=updates)
@@ -270,36 +241,65 @@ class DijkstrasChainer(RNNChainer):
         return self.assign(X, Hs, idx)
 
     def build_data_chain(self, data_iter, batch_size, build_batch=100):
+        '''Build a chain or real data.
+
+        Pulls a batch out of a Dataset class instance and performs all-pairs
+        shortest path (APSP) using Dijkstra's algorithm.
+
+        Args:
+            data_iter: Dataset class instance.
+            batch_size: int.
+            build_batch: int (optional). Number of SSSP problems to solve at
+                once.
+
+        Returns:
+            rval: OrderedDict. mask, x_chain, i_chain, and h_chains.
+
+        '''
+        batch_size = min(batch_size, data_iter.n)
         build_batch = min(batch_size, build_batch)
         outs = data_iter.next(batch_size=batch_size)
-        x = outs[0]
-        hs = outs[1:]
+        x = outs[data_iter.name]
+        hs = outs['hs']
         x_chain = []
+        i_chain = []
         hs_chain = [[] for _ in hs]
         masks = []
         for i0 in range(0, batch_size - build_batch + 1, build_batch):
-            #print i0
-            #extra = self.f_test(*(list(hs) + [x, range(i0, i0 + build_batch)]))
-            #assert False, [ex.shape for ex in extra]
-            outs = self.f_build(*(list(hs) + [x, range(i0, i0 + build_batch)]))
-            hs_ = outs[:-2]
-            x_, mask = outs[-2:]
+            inps = hs + [x, range(i0, i0 + build_batch)]
+            outs = self.f_build(*inps)
+            hs_ = outs[:-3]
+            x_, idx, mask = outs[-3:]
             x_chain.append(x_)
+            i_chain.append(idx)
             for i, h_ in enumerate(hs_):
                 hs_chain[i].append(h_)
             masks.append(mask)
 
-        mask=np.concatenate(masks, axis=2).astype(floatX)
-        x_chain=np.concatenate(x_chain, axis=2).astype(floatX)
-        h_chains=[np.concatenate(h_chain, axis=2) for h_chain in hs_chain]
+        mask     = np.concatenate(masks, axis=2).astype(floatX)
+        x_chain  = np.concatenate(x_chain, axis=2).astype(floatX)
+        i_chain  = np.concatenate(i_chain, axis=2).astype(intX)
+        h_chains = [np.concatenate(h_chain, axis=2) for h_chain in hs_chain]
 
-        mask = mask.reshape((mask.shape[0], mask.shape[1] * mask.shape[2]))
-        x_chain = x_chain.reshape((x_chain.shape[0], x_chain.shape[1] * x_chain.shape[2], x_chain.shape[3]))
-        h_chains = [h_chain.reshape((h_chain.shape[0], h_chain.shape[1] * h_chain.shape[2], h_chain.shape[3])) for h_chain in h_chains]
+        mask     = mask.reshape((mask.shape[0], mask.shape[1] * mask.shape[2]))
+        x_chain  = x_chain.reshape(
+            (x_chain.shape[0],
+             x_chain.shape[1] * x_chain.shape[2],
+             x_chain.shape[3]))
+
+        i_chain  = i_chain.reshape(
+            i_chain.shape[0], i_chain.shape[1] * i_chain.shape[2])
+
+        h_chains = [h_chain.reshape(
+            (h_chain.shape[0],
+             h_chain.shape[1] * h_chain.shape[2],
+             h_chain.shape[3]))
+                    for h_chain in h_chains]
 
         rval = OrderedDict(
             mask=mask,
             x_chain=x_chain,
+            i_chain=i_chain,
             h_chains=h_chains
         )
         return rval
@@ -309,24 +309,29 @@ class DijkstrasChainer(RNNChainer):
         def step(i, D, c, E):
             c = T.switch(T.eq(i, 0), 0, c)
             D_new = T.switch(T.lt(E[i][:, None] + D[i][None, :], D), E[i][:, None] + D[i][None, :], D)
-            c = T.switch(T.all(T.eq(D, D_new)), c, c+1)
-            stop = T.eq(c, 0) and T.eq(i, D.shape[0]-1)
+            c = T.switch(T.all(T.eq(D, D_new)), c, c + 1)
+            stop = T.eq(c, 0) and T.eq(i, D.shape[0] - 1)
             return (D_new, c), theano.scan_module.until(stop)
+
+        '''
+        def step(i, D, E):
+            D_new = T.switch(T.lt(E[i][:, None] + D[i][None, :], D), E[i][:, None] + D[i][None, :], D)
+            return D_new, theano.scan_module.until(T.all(T.eq(D, D_new)))
+        '''
 
         def step_path(i, Q, Ds):
             P = T.switch(T.eq(Ds[i], Ds[i-1]), -1, i % Ds.shape[1])
             Q = T.switch(T.neq(P, -1), P, Q)
             return Q, P
 
+        # Step forward in RNN and calculate energies.
         outs = self.rnn.step_sample(*(Hs + [X] + list(params)))
         P    = outs[-1]
         E    = self.rnn.neg_log_prob(X[:, None, :], P[None, :, :])
-        #energy    = ((x - x_p) ** 2).sum(axis=x.ndim-1)
-
-        D = E[idx].T
-        #assert False, (E.ndim, D.ndim)
+        D    = E[idx].T
 
         C = T.tile(T.arange(D.shape[0]), D.shape[0])
+
         (Ds, Cs), updates = theano.scan(
             step,
             sequences=[C],
@@ -334,12 +339,23 @@ class DijkstrasChainer(RNNChainer):
             non_sequences=[E]
         )
 
+        '''
+        Ds, updates = theano.scan(
+            step,
+            sequences=[C],
+            outputs_info=[D],
+            non_sequences=[E],
+            name='step'
+        )
+        '''
+
         Q0 = T.zeros_like(D) + T.arange(D.shape[0])[:, None]
         (Qs, Ps), updates = theano.scan(
             step_path,
             sequences=[T.arange(1, Ds.shape[0])[::-1]],
             outputs_info=[Q0, None],
-            non_sequences=[Ds]
+            non_sequences=[Ds],
+            name='path'
         )
 
         idx = T.neq(Ps.sum(axis=(1, 2)), -(D.shape[0] * D.shape[1])).nonzero()[0]
@@ -352,13 +368,15 @@ class DijkstrasChainer(RNNChainer):
 
         x_chain = X[Qs]
         x_chain = T.switch(T.eq(Ps[:, :, :, None], -1), 0, x_chain)
+        i_chain = Qs
         h_chains = [H[Qs] for H in Hs]
         mask = T.neq(Ps, -1).astype(intX)
 
         outs = OrderedDict(
-            extra=[mask, x_chain] + h_chains,
+            extra=i_chain,
             mask=mask,
             x_chain=x_chain,
+            i_chain=i_chain,
             h_chains=h_chains
         )
 
@@ -366,8 +384,8 @@ class DijkstrasChainer(RNNChainer):
 
     def assign(self, X, Hs, idx):
         params = self.rnn.get_sample_params()
-
         return self.step_assign_call(X, Hs, idx, *params)
+
 
 class LSTMChainer(RNNChainer):
     def step_energy(self, x, x_p, h_p, c_p, *params):
