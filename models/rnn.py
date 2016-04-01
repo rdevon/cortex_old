@@ -52,6 +52,7 @@ def init_h(h_init, X, batch_size, models, **h_args):
 
     return h0s
 
+
 class RNN(Layer):
     def __init__(self, dim_in, dim_hs, dim_out=None,
                  conditional=None, input_net=None, output_net=None,
@@ -207,8 +208,8 @@ class RNN(Layer):
 
     # Extra functions ---------------------------------------------------------
 
-    def energy(self, X, h0=None):
-        outs, updates = self.__call__(X[:-1], h0=h0)
+    def energy(self, X, h0s=None):
+        outs, updates = self.__call__(X[:-1], h0s=h0s)
         p = outs['p']
         energy = self.neg_log_prob(X[1:], p).sum(axis=0)
         return energy
@@ -355,33 +356,40 @@ class RNN(Layer):
 
         return OrderedDict(x=x, p=p, hs=hs, x0=x0, p0=p0, h0s=h0s), updates
 
-    # Some on-hold functions ------------------------------------------------
-    '''
-    def step_sample_cond(self, h_, x_, c, *params):
-        assert self.conditional is not None
 
-        Ur            = self.get_recurrent_args(*params)[0]
-        input_params  = self.get_input_args(*params)
-        output_params = self.get_output_args(*params)
+class SimpleRNN(RNN):
+    '''Simple RNN class, single hidden layer.'''
+    def __init__(self, dim_in, dim_h, **kwargs):
+        super(SimpleRNN, self).__init__(dim_in, [dim_h], **kwargs)
 
-        y = self.input_net.step_preact(x_, *input_params)
-        y = y + c
-        h = self._step(y, h_, Ur)
+    @staticmethod
+    def factory(dim_in=None, dim_h=None, **kwargs):
+        return SimpleRNN(dim_in, dim_h, **kwargs)
 
-        preact = self.output_net.step_preact(h, *output_params)
+    @staticmethod
+    def mlp_factory(dim_in, dim_h, data_iter, **kwargs):
+        return super(SimpleRNN, self).mlp_factory(
+            dim_in, [dim_h], data_iter, **kwargs)
 
-        p = self.output_net.distribution(preact)
-        x = self.output_net.sample(p)
-        return h, x, p
+    def energy(self, X, h0=None):
+        if h0 is not None:
+            h0s = [h0]
+        else:
+            h0s = None
+        return super(SimpleRNN, self).energy(X, h0s=h0s)
 
-    def step_sample_cond_x(self, h_, x_, *params):
-        assert self.conditional is not None
+    def __call__(self, x, m=None, h0=None, condition_on=None):
+        if h0 is not None:
+            h0s = [h0]
+        else:
+            h0s = None
+        return super(SimpleRNN, self).__call__(
+            x, m=m, h0s=h0s, condition_on=condition_on)
 
-        h, preact = self.step_sample_preact(h_, x_, *params)
-        c_params  = self.get_conditional_args(*params)
-        preact    = preact + self.conditional.step_preact(x_, *c_params)
+    def sample(self, x0=None, h0=None, **kwargs):
+        if h0 is not None:
+            h0s = [h0]
+        else:
+            h0s = None
+        return super(SimpleRNN, self).sample(x0=x0, h0s=h0s, **kwargs)
 
-        p = self.output_net.distribution(preact)
-        x = self.output_net.sample(p)
-        return h, x, p
-    '''
