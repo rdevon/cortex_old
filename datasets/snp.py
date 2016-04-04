@@ -18,7 +18,7 @@ class SNP(Dataset):
     Currently only handled continuous preprocessed data.
     Discrete data TODO
     '''
-    def __init__(self, source=None, name='snp', convert_one_hot=False, idx=None, **kwargs):
+    def __init__(self, source=None, name='snp', convert_one_hot=True, idx=None, **kwargs):
         '''Initialize the SNP dataset.
 
         Arguments:
@@ -33,32 +33,35 @@ class SNP(Dataset):
             raise ValueError('No source provided')
 
         # Fetch SNP data from "source"
-        self.get_data(source)
+        X, Y = self.get_data(source)
         
         # One-hot code the labels
-        uniques = np.unique(self.Y).tolist()
-        O = np.zeros((self.Y.shape[0], len(uniques)), dtype='float32')
+        uniques = np.unique(Y).tolist()
+        O = np.zeros((Y.shape[0], len(uniques)), dtype='float32')
 
         if convert_one_hot:
-            for idx in xrange(self.Y.shape[0]):
-                i = uniques.index(self.Y[idx])
-                O[idx, i] = 1.;
+            for indx in xrange(Y.shape[0]):
+                i = uniques.index(Y[indx])
+                O[indx, i] = 1.;
+        else:
+            O = Y
 
-        self.O = O
-                
+
         # Reference for the dimension of the dataset. A dict is used for
         # multimodal data (e.g., mri and labels)
-        self.dims = {self.name: self.X.shape[1],'labels': self.Y.shape[1]}
+        self.dims = {self.name: X.shape[1],'labels': O.shape[1]}
 
         # This is reference for models to decide how the data should be modelled
         # E.g. with a binomial or gaussian variable
         self.distributions = {self.name: 'gaussian', 'labels': 'multinomial'}
 
-        self.mean_image = self.X.mean(axis=0)
-
+        self.mean_image = X.mean(axis=0)
+        self.X = X
+        self.O = O
+        
         if idx is not None:
             self.X = self.X[idx]
-            self.Y = self.Y[idx]
+            self.O = self.O[idx]
 
         self.n = self.X.shape[0]
 
@@ -79,14 +82,15 @@ class SNP(Dataset):
         print('Loading genetic data from %s' % data_path)
         X = loadmat(data_path + source['snp'])
         Y = loadmat(data_path + source['labels'])
-        self.X = np.float32(X[X.keys()[2]])
-        self.Y = np.float32(Y[Y.keys()[0]])
+        X = np.float32(X[X.keys()[2]])
+        Y = np.float32(Y[Y.keys()[0]])
+        return X, Y
 
     def randomize(self):
         '''Randomize the dataset.'''
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
         self.X = self.X[rnd_idx,:]
-        self.Y = self.Y[rnd_idx]
+        self.O = self.O[rnd_idx]
 
     def reset(self):
         '''Reset the iterator'''
@@ -105,7 +109,7 @@ class SNP(Dataset):
             raise StopIteration
 
         x = self.X[self.pos:self.pos + batch_size]
-        y = self.Y[self.pos:self.pos + batch_size]
+        y = self.O[self.pos:self.pos + batch_size]
 
         rval = OrderedDict(pos=self.pos)
 
