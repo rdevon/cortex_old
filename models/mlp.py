@@ -99,7 +99,7 @@ class MLP(Layer):
                 **kwargs):
         return MLP(dim_in, dim_out, **kwargs)
 
-    def get_L2_weight_cost(self, gamma, layers=None):
+    def l2_decay(self, gamma, layers=None):
         if layers is None:
             layers = range(self.n_layers)
 
@@ -527,7 +527,7 @@ class MultiModalMLP(Layer):
 
         return x
 
-    def get_L2_weight_cost(self, gamma, layers=None):
+    def l2_decay(self, gamma, layers=None):
         if layers is None:
             layers = self.layers.keys()
             layers = [l for l in layers if l != 'i']
