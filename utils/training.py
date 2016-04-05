@@ -5,6 +5,7 @@ Generic training scripts.
 import argparse
 from collections import OrderedDict
 from glob import glob
+import numpy as np
 import os
 from os import path
 from progressbar import (
@@ -26,7 +27,8 @@ from tools import (
     itemlist,
     load_experiment,
     load_model,
-    resolve_path
+    resolve_path,
+    update_dict_of_lists
 )
 
 
@@ -110,7 +112,7 @@ def set_optimizer(inputs, cost, tparams, constants, updates, extra_outs,
 
     return f_grad_shared, f_grad_updates, learning_args
 
-def test(data_iter, f_test):
+def test(data_iter, f_test, f_test_keys):
     '''Tests the model using a data iterator'''
     data_iter.reset()
     maxvalid = data_iter.n
@@ -142,26 +144,27 @@ def test(data_iter, f_test):
 
     return results
 
-def validate(results, save=None, valid_key=None, valid_sign=None, bestfile=None):
+def validate(tparams, results, best_valid, e, best_epoch,
+             save=None, valid_key=None, valid_sign=None, bestfile=None):
     '''Generic validation method'''
     valid_value = results[valid_key]
     if valid_sign == '-':
         valid_value *= -1
 
-    if valid_value < best_cost:
+    if valid_value < best_valid:
         print 'Found best %s: %.2f' % (valid_key, valid_value)
-        best_cost = valid_value
+        best_valid = valid_value
         best_epoch = e
         if save is not None and bestfile is not None:
             print 'Saving best to %s' % bestfile
             save(tparams, bestfile)
     else:
-        print 'Best (%.2f) at epoch %d' % (best_cost, best_epoch)
+        print 'Best (%.2f) at epoch %d' % (best_valid, best_epoch)
 
     return best_valid, best_epoch
 
 def main_loop(train, valid, tparams,
-              f_grad_shared, f_grad_updates,
+              f_grad_shared, f_grad_updates, f_test, f_test_keys,
               name=None,
               save=None,
               save_images=None,
@@ -203,10 +206,12 @@ def main_loop(train, valid, tparams,
                 epoch_t1 = time.time()
                 dt_epoch = epoch_t1 - epoch_t0
                 training_time += dt_epoch
-                results = test(train, f_test)
-                results_valid = test(valid, f_test)
+                results = test(train, f_test, f_test_keys)
+                results_valid = test(valid, f_test, f_test_keys)
                 best_valid, best_epoch = validate(
-                    valid_results, bestfile=bestfile,
+                    tparams,
+                    results_valid, best_valid, e, best_epoch,
+                    bestfile=bestfile,
                     save=save, **validation_args)
 
                 if monitor is not None:

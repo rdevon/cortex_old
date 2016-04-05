@@ -57,6 +57,10 @@ class RBM(Layer):
         kwargs = init_rngs(self, **kwargs)
         super(RBM, self).__init__(name=name, **kwargs)
 
+    @staticmethod
+    def factory(dim_v=None, dim_h=None, **kwargs):
+        return RBM(dim_v, dim_h, **kwargs)
+
     def set_params(self):
         W = norm_weight(self.dim_v, self.dim_h)
         b = np.zeros((self.dim_v,)).astype(floatX)
@@ -89,19 +93,19 @@ class RBM(Layer):
 
     def step_gibbs(self, r_h, r_v, h, W, b, c):
         '''Step Gibbs sample'''
-        pv, v = self.step_sv_h(r_v, h, W, b)
-        ph, h = self.step_sh_v(r_h, v, W, c)
+        v, pv = self.step_sv_h(r_v, h, W, b)
+        h, ph = self.step_sh_v(r_h, v, W, c)
         return h, v, ph, pv
 
     def sample(self, h0, n_steps=1):
         '''Gibbs sampling function.'''
 
         r_vs = self.trng.uniform(
-            size=(n_steps, h0.shape[0], h0.shape[1], self.dim_v),
+            size=(n_steps, h0.shape[0], self.dim_v),
             dtype=floatX)
 
         r_hs = self.trng.uniform(
-            size=(n_steps, h0.shape[0], h0.shape[1], self.dim_h),
+            size=(n_steps, h0.shape[0], self.dim_h),
             dtype=floatX)
 
         seqs = [r_hs, r_vs]
@@ -156,26 +160,30 @@ class RBM(Layer):
         '''
         ph0 = self.step_ph_v(x, self.W, self.c)
         if h_p is None:
-            r = self.trng.uniform(size=(x.shape[0], n_chains, self.dim_h))
-            h_p = (r <= ph0[:, None, :]).astype(floatX)
+            r = self.trng.uniform(size=(x.shape[0], self.dim_h))
+            h_p = (r <= ph0).astype(floatX)
         outs, updates = self.sample(h0=h_p, n_steps=n_steps)
 
         v0 = x
         vk = outs['vs'][-1]
 
         positive_cost = self.free_energy(v0)
-        negative_cost = self.free_energy(vk).mean(axis=1)
-        cost          = positive_cost - negative_cost
+        negative_cost = self.free_energy(vk)
+        cost          = positive_cost.mean() - negative_cost.mean()
         fe            = self.free_energy(v0)
 
         results = OrderedDict(
-            cost=cost.mean(),
+            cost=cost,
+            positive_cost=positive_cost.mean(),
+            negative_cost=negative_cost.mean(),
             free_energy=fe.mean()
         )
 
         samples = OrderedDict(
             vs=outs['vs'],
-            hs=outs['hs']
+            hs=outs['hs'],
+            positive_cost=positive_cost,
+            negative_cost=negative_cost,
         )
 
         return results, samples, updates, []
