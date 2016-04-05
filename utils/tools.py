@@ -7,6 +7,14 @@ from ConfigParser import ConfigParser
 import numpy as np
 import os
 import pprint
+from progressbar import (
+    Bar,
+    Percentage,
+    ProgressBar,
+    RotatingMarker,
+    SimpleProgress,
+    Timer
+)
 import random
 import theano
 from theano import tensor as T
