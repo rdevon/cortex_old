@@ -6,12 +6,10 @@ from collections import OrderedDict
 import numpy as np
 import theano
 from theano import tensor as T
-from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
-import yaml
 
-from layers import Layer
-import tools
-from tools import (
+from . import Layer
+from utils import floatX
+from utils.tools import (
     init_rngs,
     init_weights,
     norm_weight,
@@ -33,19 +31,21 @@ def unpack(dim_h=None,
 
 
 class RBM(Layer):
-    def __init__(self, dim_in, dim_h, name='rbm', **kwargs):
+    def __init__(self, dim_v, dim_h, name='rbm', **kwargs):
 
-        self.dim_in = dim_in
+        self.dim_v = dim_v
         self.dim_h = dim_h
+
+        self.h_act = 'T.nnet.sigmoid'
+        self.v_act = 'T.nnet.sigmoid'
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
-        assert len(kwargs) == 0, kwargs.keys()
-        super(RNN, self).__init__(name=name)
+        super(RNN, self).__init__(name=name, **kwargs)
 
     def set_params(self):
-        W = norm_weight(self.dim_in, self.dim_h)
-        b = np.zeros((self.dim_in,)).astype(floatX)
+        W = norm_weight(self.dim_v, self.dim_h)
+        b = np.zeros((self.dim_v,)).astype(floatX)
         c = np.zeros((self.dim_h,)).astype(floatX)
 
         self.params = OrderedDict(W=W, b=b, c=c)
@@ -53,82 +53,65 @@ class RBM(Layer):
     def get_params(self):
         return [self.W, self.b, self.c]
 
-    def _step_down(self, h, W, b, c):
+    def step_pv_h(self, h, W, b):
+        '''Step function for probility of v given h'''
         return eval(self.v_act)(T.dot(h, W.T) + b)
 
-    def _step_sample_down(self, h, W, b, c):
-        p = self._step_down(h, W, b, c)
-        return eval(self.v_sample)(p)
+    def step_sv_h(self, r, h, W, b):
+        '''Step function for samples from v given h'''
+        p = self.step_pv_h(h, W, b)
+        return (r <= p).astype(floatX), p
 
-    def _step_up(self, x, W, b, c):
+    def step_ph_v(self, x, W, c):
+        '''Step function for probability of h given v'''
         z = T.dot(x, W) + c
         p = eval(self.h_act)(z)
         return p
 
-    def _step_sample_up(self, x, W, b, c):
-        p = self._step_up(x, W, b, c)
-        return eval(self.h_sample)(p)
+    def step_sh_v(self, r, x, W, c):
+        '''Step function for sampling h given v'''
+        p = self.step_ph_v(x, W, c)
+        return (r <= p).astype(floatX), p
 
-    def _step_energy(self, x_, x, e_, W, b, c):
-        q = eval(self.h_act)(T.dot(x_, W) + c)
-        p = T.nnet.sigmoid(T.dot(q, W.T) + b)
-        e = -(x * T.log(p + 1e-7) + (1. - x) * T.log(1. - p + 1e-7))
-        e = e.sum(axis=e.ndim-1)
-        return e_ + e, e
+    def step_gibbs(self, r_v, r_h, x, W, b, c):
+        '''Step Gibbs sample'''
+        ph, h = self.step_sh_v(r_h, x, W, c)
+        pv, v = self.step_sv_h(r_v, h, W, b)
+        return v, h, pv, ph
 
-    def energy(self, x):
-        n_steps = x.shape[0] - 1
-        x_s = x[1:]
-        x = x[:-1]
+    def sample(self, x0=None, h0=None, n_steps=1, n_samples=10):
+        '''Gibbs sampling function.'''
 
-        seqs = [x, x_s]
-        outputs_info = [T.alloc(0., x.shape[1]).astype(floatX), None]
-        non_seqs = [self.W, self.b, self.c]
-
-        rval, updates = theano.scan(
-            self._step_energy,
-            sequences=seqs,
-            outputs_info=outputs_info,
-            non_sequences=non_seqs,
-            name=tools._p(self.name, '_layers'),
-            n_steps=n_steps,
-            profile=tools.profile,
-            strict=True
-        )
-
-        return OrderedDict(acc_neg_log_p=rval[0][-1], neg_log_p=rval[1]), updates
-
-    def joint_energy(self, v, h):
-        e = -T.dot(T.dot(h, self.W), v.T) - T.dot(v, self.b) - T.dot(h, self.c)
-        return e
-
-    def _step_sample(self, x_, W, b, c):
-        q = T.nnet.sigmoid(T.dot(x_, W) + c)
-        h = self.trng.binomial(p=q, size=q.shape, n=1, dtype=q.dtype)
-        p = T.nnet.sigmoid(T.dot(h, W.T) + b)
-        x = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
-
-        return x, h, p, q
-
-    def sample(self, x0=None, h0=None, n_steps=1):
         if x0 is None:
             assert h0 is not None
+            r = self.trng.uniform(size=(h0.shape[0], n_samples))
+            x0 = self.step_sv_h(r, h0[:, None, :], self.W, self.b)
         else:
-            x0 = self.trng.binomial(p=self.b,
-                                    size=(h0.shape[0], self.dim_in),
-                                    n=1, dtype=floatX)
+            x0 = T.zeros((x0.shape[0], n_samples, self.dim_v)) + x0[:, None, :]
 
-        seqs = []
+        r_vs = self.trng.uniform(
+            size=(n_samples, x0.shape[0], x0.shape[1]), dtype=floatX)
+
+        r_hs = self.trng.uniform(
+            size=(n_samples, x0.shape[0], x0.shape[1]), dtype=floatX)
+
+        seqs = [r_vs, r_hs]
         outputs_info = [x0, None, None, None]
         non_seqs = self.get_params()
 
-        (x, h, p, q), updates = scan(
+        (vs, hs, pvs, pxs), updates = scan(
             self._step_sample, seqs, outputs_info, non_seqs, n_steps,
             name=self.name+'_sample', strict=False)
 
-        x = T.concatenate([x0[None, :, :], x], axis=0)
-
         return OrderedDict(x=x, h=h, p=p, q=q), updates
+
+    def energy(self, v, h):
+        '''Energy of a visible, hidden configuration.'''
+        joint_term = -(h[:, None, :] * W[None, :, :] * v[:, :, None]).sum(axis=(1, 2))
+        v_bias_term = (v * self.b[None, :]).sum(axis=1)
+        h_bias_term = (h * self.c[None, :]).sum(axis=1)
+        energy = -joint_term - v_bias_term - h_bias_term
+        return energy
 
     def __call__(self, x):
         n_steps = x.shape[0]

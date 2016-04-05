@@ -99,7 +99,7 @@ class MLP(Layer):
                 **kwargs):
         return MLP(dim_in, dim_out, **kwargs)
 
-    def get_L2_weight_cost(self, gamma, layers=None):
+    def l2_decay(self, gamma, layers=None):
         if layers is None:
             layers = range(self.n_layers)
 
@@ -107,8 +107,9 @@ class MLP(Layer):
         for l in layers:
             W = self.__dict__['W%d' % l]
             cost += gamma * (W ** 2).sum()
-
-        return cost
+        
+        rval = OrderedDict(cost = cost)
+        return rval
 
     def sample(self, p, n_samples=1):
         assert self.distribution is not None
@@ -183,9 +184,9 @@ class MLP(Layer):
             if self.dropout and l != self.n_layers - 1:
                 print 'Adding dropout to layer {layer} for MLP {name}'.format(
                     layer=l, name=self.name)
-                if activ == 'T.tanh':
+                if self.h_act == 'T.tanh':
                     raise NotImplementedError('dropout for tanh units not implemented yet')
-                elif activ in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
+                elif self.h_act in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
                     x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
                                              dtype=x.dtype)
                     x = x * x_d / (1 - self.dropout)
@@ -527,7 +528,7 @@ class MultiModalMLP(Layer):
 
         return x
 
-    def get_L2_weight_cost(self, gamma, layers=None):
+    def l2_decay(self, gamma, layers=None):
         if layers is None:
             layers = self.layers.keys()
             layers = [l for l in layers if l != 'i']
@@ -536,8 +537,9 @@ class MultiModalMLP(Layer):
         for k in layers:
             W = self.__dict__['W_%s' % k]
             cost += gamma * (W ** 2).sum()
-
-        return cost
+        
+        rval = OrderedDict(cost = cost)
+        return rval
 
     def split(self, p):
         start = 0
