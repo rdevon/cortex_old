@@ -98,26 +98,6 @@ class RBM(Layer):
         h, ph = self.step_sh_v(r_h, v, W, c)
         return h, v, ph, pv
 
-    def step_gibbs_ais(self, r_h_a, r_h_b, r_v, v, beta,
-                       W_a, b_a, c_a, W_b, b_b, c_b):
-        '''Step Gibbs sample for AIS'''
-        W_a = (1 - beta) * W_a
-        b_a = (1 - beta) * b_a
-        c_a = (1 - beta) * c_a
-
-        W_b = beta * W_b
-        b_b = beta * b_b
-        c_b = beta * c_b
-
-        h_a, _ = self.step_sh_v(r_h_a, v, W_a, c_a)
-        h_b, _ = self.step_sh_v(r_h_b, v, W_b, c_b)
-
-        pv_act = T.dot(h_a, W_a.T) + T.dot(h_b, W_b.T) + b_a + b_b
-        pv = eval(self.v_act)(pv_act)
-        v = (r_v <= pv).astype(floatX)
-
-        return v
-
     def sample(self, h0, n_steps=1):
         '''Gibbs sampling function.'''
 
@@ -139,9 +119,29 @@ class RBM(Layer):
 
         return OrderedDict(vs=vs, hs=hs, pvs=pvs, phs=phs), updates
 
-    def estimate_nll(self, X, K=67):
+    def estimate_nll(self, X, K=100):
         log_Z = self.ais(X, K)
-        return -(self.free_energy(X) - log_Z).mean()
+        return -(-self.free_energy(X) - log_Z).mean()
+
+    def step_gibbs_ais(self, r_h_a, r_h_b, r_v, v, beta,
+                       W_a, b_a, c_a, W_b, b_b, c_b):
+        '''Step Gibbs sample for AIS'''
+        W_a = (1 - beta) * W_a
+        b_a = (1 - beta) * b_a
+        c_a = (1 - beta) * c_a
+
+        W_b = beta * W_b
+        b_b = beta * b_b
+        c_b = beta * c_b
+
+        h_a, _ = self.step_sh_v(r_h_a, v, W_a, c_a)
+        h_b, _ = self.step_sh_v(r_h_b, v, W_b, c_b)
+
+        pv_act = T.dot(h_a, W_a.T) + T.dot(h_b, W_b.T) + b_a + b_b
+        pv = eval(self.v_act)(pv_act)
+        v = (r_v <= pv).astype(floatX)
+
+        return v
 
     def ais(self, X, K):
         '''Performs AIS to estimate the log of the partition function, Z.'''
@@ -186,7 +186,7 @@ class RBM(Layer):
         params = [W_a, b_a, c_a] + self.get_params()
 
         x0 = self.step_gibbs_ais(r_hs_a[0], r_hs_b[0], r_vs[0], X, 0, *params)
-        log_w0 = -free_energy(0, *params)
+        log_w0 = T.zeros((X.shape[0],)).astype(floatX)
 
         seqs         = [r_hs_a[1:], r_hs_b[1:], r_vs[1:], T.arange(1, K)]
         outputs_info = [log_w0, x0]
@@ -198,9 +198,10 @@ class RBM(Layer):
         )
 
         log_wk = log_ws[-1]
-        log_Z = get_log_z(log_wk)
+        d_logz = get_log_z(log_wk)
+        log_za = self.dim_h * T.log(2).astype(floatX) + T.log(1 + T.exp(b_a)).sum(axis=0)
 
-        return log_Z
+        return log_za + d_logz
 
     def energy(self, v, h):
         if v.ndim == 3:

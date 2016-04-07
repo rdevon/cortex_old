@@ -1,0 +1,18 @@
+{
+  name: 'rbm_mnist',
+  learning_args: {
+    optimizer: 'sgd',
+    learning_rate: 0.01
+  },
+  inference_args: {
+    n_chains: 10,
+    persistent: True,
+    n_steps: 1
+  },
+  dim_h: 50,
+  center_input: False,
+  dataset_args: {
+    dataset: 'mnist',
+    source: '$irvi_data/mnist_binarized_salakhutdinov.pkl.gz'
+  }
+}
