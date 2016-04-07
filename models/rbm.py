@@ -13,6 +13,7 @@ from utils.tools import (
     concatenate,
     init_rngs,
     init_weights,
+    log_sum_exp,
     norm_weight,
     ortho_weight,
     scan
@@ -97,6 +98,26 @@ class RBM(Layer):
         h, ph = self.step_sh_v(r_h, v, W, c)
         return h, v, ph, pv
 
+    def step_gibbs_ais(self, r_h_a, r_h_b, r_v, v, beta,
+                       W_a, b_a, c_a, W_b, b_b, c_b):
+        '''Step Gibbs sample for AIS'''
+        W_a = (1 - beta) * W_a
+        b_a = (1 - beta) * b_a
+        c_a = (1 - beta) * c_a
+
+        W_b = beta * W_b
+        b_b = beta * b_b
+        c_b = beta * c_b
+
+        h_a, _ = self.step_sh_v(r_h_a, v, W_a, c_a)
+        h_b, _ = self.step_sh_v(r_h_b, v, W_b, c_b)
+
+        pv_act = T.dot(h_a, W_a.T) + T.dot(h_b, W_b.T) + b_a + b_b
+        pv = eval(self.v_act)(pv_act)
+        v = (r_v <= pv).astype(floatX)
+
+        return v
+
     def sample(self, h0, n_steps=1):
         '''Gibbs sampling function.'''
 
@@ -118,6 +139,69 @@ class RBM(Layer):
 
         return OrderedDict(vs=vs, hs=hs, pvs=pvs, phs=phs), updates
 
+    def estimate_nll(self, X, K=67):
+        log_Z = self.ais(X, K)
+        return -(self.free_energy(X) - log_Z).mean()
+
+    def ais(self, X, K):
+        '''Performs AIS to estimate the log of the partition function, Z.'''
+
+        def free_energy(beta, W_a, b_a, c_a, W_b, b_b, c_b):
+            fe_a = self.step_free_energy(X, 1 - beta, W_a, b_a, c_a)
+            fe_b = self.step_free_energy(X, beta, W_b, b_b, c_b)
+            fe   = fe_a + fe_b
+            return fe
+
+        def step_anneal(r_h_a, r_h_b, r_v, k, log_w, x, *params):
+            beta_ = ((k - 1) / (K - 1)).astype(floatX)
+            beta  = (k / (K - 1)).astype(floatX)
+            log_w += free_energy(beta_, *params) - free_energy(beta, *params)
+            x = self.step_gibbs_ais(
+                r_h_a, r_h_b, r_v, x, beta, *params)
+
+            return log_w, x
+
+        def get_log_z(log_w):
+            log_wn = log_w - T.log(log_w.shape[0])
+            z_norm = log_sum_exp(log_wn, axis=0)
+            log_z  = log_wn - T.shape_padleft(z_norm)
+            return log_z
+
+        r_vs = self.trng.uniform(
+            size=(K+1, X.shape[0], self.dim_v),
+            dtype=floatX)
+
+        r_hs_a = self.trng.uniform(
+            size=(K+1, X.shape[0], self.dim_h),
+            dtype=floatX)
+
+        r_hs_b = self.trng.uniform(
+            size=(K+1, X.shape[0], self.dim_h),
+            dtype=floatX)
+
+        W_a = T.zeros_like(self.W).astype(floatX)
+        b_a = X.mean(axis=0)
+        c_a = T.zeros_like(self.b).astype(floatX)
+
+        params = [W_a, b_a, c_a] + self.get_params()
+
+        x0 = self.step_gibbs_ais(r_hs_a[0], r_hs_b[0], r_vs[0], X, 0, *params)
+        log_w0 = -free_energy(0, *params)
+
+        seqs         = [r_hs_a[1:], r_hs_b[1:], r_vs[1:], T.arange(1, K)]
+        outputs_info = [log_w0, x0]
+        non_seqs     = params
+
+        (log_ws, xs), updates = scan(
+            step_anneal, seqs, outputs_info, non_seqs, K-1,
+            name=self.name + '_ais', strict=False
+        )
+
+        log_wk = log_ws[-1]
+        log_Z = get_log_z(log_wk)
+
+        return log_Z
+
     def energy(self, v, h):
         if v.ndim == 3:
             reduce_dims = (v.shape[0], v.shape[1])
@@ -136,15 +220,19 @@ class RBM(Layer):
 
         return energy
 
+    def step_free_energy(self, x, beta, W, b, c):
+        fe = -beta * (x * b[None, :]).sum(axis=1) - T.log(
+            1 + T.exp(beta * (
+                c[None, :] + (W[None, :, :] * x[:, :, None]).sum(axis=1)))).sum(axis=1)
+        return fe
+
     def free_energy(self, x):
         if x.ndim == 3:
             reduce_dims = (x.shape[0], x.shape[1])
             x = x.reshape((reduce_dims[0] * reduce_dims[1], x.shape[2]))
         else:
             reduce_dims = None
-        fe = -(x * self.b[None, :]).sum(axis=1) - T.log(
-            1 + T.exp(
-                self.c[None, :] + (self.W[None, :, :] * x[:, :, None]).sum(axis=1))).sum(axis=1)
+        fe = self.step_free_energy(x, 1, *self.get_params())
 
         if reduce_dims is not None:
             fe = fe.reshape(reduce_dims)
@@ -176,12 +264,15 @@ class RBM(Layer):
             cost=cost,
             positive_cost=positive_cost.mean(),
             negative_cost=negative_cost.mean(),
-            free_energy=fe.mean()
+            free_energy=fe.mean(),
+            nll=self.estimate_nll(x)
         )
 
         samples = OrderedDict(
             vs=outs['vs'],
             hs=outs['hs'],
+            pvs=outs['pvs'],
+            phs=outs['phs'],
             positive_cost=positive_cost,
             negative_cost=negative_cost,
         )

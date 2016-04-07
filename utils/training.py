@@ -247,7 +247,7 @@ def main_loop(train, valid, tparams,
 
             rval = f_grad_shared(x)
             if output_every is not None and s % output_every == 0:
-                print rval
+                #print rval
                 if save_images is not None:
                     save_images()
             check_bad_nums(rval, extra_outs_keys)
