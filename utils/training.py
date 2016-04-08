@@ -112,18 +112,20 @@ def set_optimizer(inputs, cost, tparams, constants, updates, extra_outs,
 
     return f_grad_shared, f_grad_updates, learning_args
 
-def test(data_iter, f_test, f_test_keys):
+def test(data_iter, f_test, f_test_keys, n_samples=None):
     '''Tests the model using a data iterator'''
     data_iter.reset()
     maxvalid = data_iter.n
 
-    widgets = ['Validating: ', Percentage(), ' (', Timer(), ')']
+    widgets = ['Validating (%s): ' % data_iter.mode, Percentage(), ' (', Timer(), ')']
     pbar    = ProgressBar(widgets=widgets, maxval=maxvalid).start()
     results = OrderedDict()
     while True:
         try:
             outs = data_iter.next()
             x = outs[data_iter.name]
+            if n_samples is not None:
+                x = x[:n_samples]
             r = f_test(x)
             results_i = dict((k, v) for k, v in zip(f_test_keys, r))
             update_dict_of_lists(results, **results_i)
@@ -206,7 +208,7 @@ def main_loop(train, valid, tparams,
                 epoch_t1 = time.time()
                 dt_epoch = epoch_t1 - epoch_t0
                 training_time += dt_epoch
-                results = test(train, f_test, f_test_keys)
+                results = test(train, f_test, f_test_keys, n_samples=valid.n)
                 results_valid = test(valid, f_test, f_test_keys)
                 best_valid, best_epoch = validate(
                     tparams,

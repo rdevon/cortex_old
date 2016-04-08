@@ -119,9 +119,20 @@ class RBM(Layer):
 
         return OrderedDict(vs=vs, hs=hs, pvs=pvs, phs=phs), updates
 
+    def reconstruct(self, x):
+        r = self.trng.uniform(
+            size=(x.shape[0], self.dim_h),
+            dtype=floatX)
+
+        h, ph = self.step_sh_v(r, x, self.W, self.c)
+        pv = self.step_pv_h(h, self.W, self.b)
+
+        return pv
+
     def estimate_nll(self, X, K=100):
-        log_Z = self.ais(X, K)
-        return -(-self.free_energy(X) - log_Z).mean()
+        log_za, d_logz = self.ais(X, K)
+        log_Z = log_za + d_logz
+        return (self.free_energy(X) + log_Z).mean(), self.free_energy(X).mean(), log_Z, log_za, d_logz
 
     def step_gibbs_ais(self, r_h_a, r_h_b, r_v, v, beta,
                        W_a, b_a, c_a, W_b, b_b, c_b):
@@ -149,39 +160,37 @@ class RBM(Layer):
         def free_energy(beta, W_a, b_a, c_a, W_b, b_b, c_b):
             fe_a = self.step_free_energy(X, 1 - beta, W_a, b_a, c_a)
             fe_b = self.step_free_energy(X, beta, W_b, b_b, c_b)
-            fe   = fe_a + fe_b
+            fe = fe_a + fe_b
             return fe
 
         def step_anneal(r_h_a, r_h_b, r_v, k, log_w, x, *params):
             beta_ = ((k - 1) / (K - 1)).astype(floatX)
             beta  = (k / (K - 1)).astype(floatX)
             log_w += free_energy(beta_, *params) - free_energy(beta, *params)
-            x = self.step_gibbs_ais(
-                r_h_a, r_h_b, r_v, x, beta, *params)
-
+            x = self.step_gibbs_ais(r_h_a, r_h_b, r_v, x, beta, *params)
             return log_w, x
 
         def get_log_z(log_w):
             log_wn = log_w - T.log(log_w.shape[0])
-            z_norm = log_sum_exp(log_wn, axis=0)
-            log_z  = log_wn - T.shape_padleft(z_norm)
+            log_z = log_sum_exp(log_wn, axis=0)
             return log_z
 
         r_vs = self.trng.uniform(
-            size=(K+1, X.shape[0], self.dim_v),
+            size=(K + 1, X.shape[0], self.dim_v),
             dtype=floatX)
 
         r_hs_a = self.trng.uniform(
-            size=(K+1, X.shape[0], self.dim_h),
+            size=(K + 1, X.shape[0], self.dim_h),
             dtype=floatX)
 
         r_hs_b = self.trng.uniform(
-            size=(K+1, X.shape[0], self.dim_h),
+            size=(K + 1, X.shape[0], self.dim_h),
             dtype=floatX)
 
         W_a = T.zeros_like(self.W).astype(floatX)
-        b_a = X.mean(axis=0)
-        c_a = T.zeros_like(self.b).astype(floatX)
+        X_mean = T.clip(X.mean(axis=0), 1e-6, 1 - 1e-6)
+        b_a = -T.log(1 / X_mean - 1)
+        c_a = T.zeros_like(self.c).astype(floatX)
 
         params = [W_a, b_a, c_a] + self.get_params()
 
@@ -193,15 +202,15 @@ class RBM(Layer):
         non_seqs     = params
 
         (log_ws, xs), updates = scan(
-            step_anneal, seqs, outputs_info, non_seqs, K-1,
+            step_anneal, seqs, outputs_info, non_seqs, K - 1,
             name=self.name + '_ais', strict=False
         )
 
         log_wk = log_ws[-1]
         d_logz = get_log_z(log_wk)
-        log_za = self.dim_h * T.log(2).astype(floatX) + T.log(1 + T.exp(b_a)).sum(axis=0)
+        log_za = self.dim_h * T.log(2.).astype(floatX) + T.log(1. + T.exp(b_a)).sum(axis=0)
 
-        return log_za + d_logz
+        return log_za, d_logz
 
     def energy(self, v, h):
         if v.ndim == 3:
@@ -223,8 +232,7 @@ class RBM(Layer):
 
     def step_free_energy(self, x, beta, W, b, c):
         fe = -beta * (x * b[None, :]).sum(axis=1) - T.log(
-            1 + T.exp(beta * (
-                c[None, :] + (W[None, :, :] * x[:, :, None]).sum(axis=1)))).sum(axis=1)
+            1 + T.exp(beta * (c[None, :] + T.dot(x, W)))).sum(axis=1)
         return fe
 
     def free_energy(self, x):
@@ -239,6 +247,10 @@ class RBM(Layer):
             fe = fe.reshape(reduce_dims)
 
         return fe
+
+    def neg_log_prob(self, x, p):
+        p = T.clip(p, 1e-6, 1 - 1e-6)
+        return (-x * T.log(p) - (1 - x) * T.log(1 - p)).sum(axis=x.ndim-1)
 
     def __call__(self, x, h_p=None, n_steps=1, n_chains=10):
         '''Call function.
@@ -260,13 +272,21 @@ class RBM(Layer):
         negative_cost = self.free_energy(vk)
         cost          = positive_cost.mean() - negative_cost.mean()
         fe            = self.free_energy(v0)
+        recon_error   = self.neg_log_prob(x, self.reconstruct(x)).mean()
 
+        nll, fe_, log_z, log_za, d_logz = self.estimate_nll(x)
         results = OrderedDict(
             cost=cost,
             positive_cost=positive_cost.mean(),
             negative_cost=negative_cost.mean(),
             free_energy=fe.mean(),
-            nll=self.estimate_nll(x)
+            nll=nll,
+            hid=T.log(1 + T.exp(self.c[None, :] + (self.W[None, :, :] * x[:, :, None]).sum(axis=1))).sum(axis=1).mean(),
+            vis=(self.b[None, :] * x).sum(axis=1).mean(),
+            log_z=log_z,
+            log_za=log_za,
+            logz_d=d_logz,
+            recon_error=recon_error
         )
 
         samples = OrderedDict(
