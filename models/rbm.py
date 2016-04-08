@@ -14,6 +14,7 @@ from utils.tools import (
     init_rngs,
     init_weights,
     log_sum_exp,
+    log_mean_exp,
     norm_weight,
     ortho_weight,
     scan
@@ -45,29 +46,36 @@ class RBM(Layer):
         b: T.tensor. visible bias
         c: T.tensor. hidden bias.
     '''
-    def __init__(self, dim_v, dim_h, name='rbm', **kwargs):
+    def __init__(self, dim_v, dim_h, mean_image=None, name='rbm', **kwargs):
         '''Init method for RBM class.
         '''
         self.dim_v = dim_v
         self.dim_h = dim_h
-
         self.h_act = 'T.nnet.sigmoid'
         self.v_act = 'T.nnet.sigmoid'
 
+        if mean_image is None:
+            mean_image = theano.shared(
+                np.zeros(self.dim_v,).astype(floatX) + 0.5, name='mean_image')
+        self.mean_image = theano.shared(np.clip(mean_image, 1e-7, 1 - 1e-7),
+                                        name='mean_image')
+
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
-        super(RBM, self).__init__(name=name, **kwargs)
+        super(RBM, self).__init__(name=name, excludes=['log_Z'], **kwargs)
 
     @staticmethod
     def factory(dim_v=None, dim_h=None, **kwargs):
+        '''Convenience factory method'''
         return RBM(dim_v, dim_h, **kwargs)
 
     def set_params(self):
         W = norm_weight(self.dim_v, self.dim_h)
         b = np.zeros((self.dim_v,)).astype(floatX)
         c = np.zeros((self.dim_h,)).astype(floatX)
+        log_Z = (self.dim_h * np.log(2.)).astype(floatX)
 
-        self.params = OrderedDict(W=W, b=b, c=c)
+        self.params = OrderedDict(W=W, b=b, c=c, log_Z=log_Z)
 
     def get_params(self):
         return [self.W, self.b, self.c]
@@ -101,13 +109,8 @@ class RBM(Layer):
     def sample(self, h0, n_steps=1):
         '''Gibbs sampling function.'''
 
-        r_vs = self.trng.uniform(
-            size=(n_steps, h0.shape[0], self.dim_v),
-            dtype=floatX)
-
-        r_hs = self.trng.uniform(
-            size=(n_steps, h0.shape[0], self.dim_h),
-            dtype=floatX)
+        r_vs = self.trng.uniform(size=(n_steps, h0.shape[0], self.dim_v), dtype=floatX)
+        r_hs = self.trng.uniform(size=(n_steps, h0.shape[0], self.dim_h), dtype=floatX)
 
         seqs = [r_hs, r_vs]
         outputs_info = [h0, None, None, None]
@@ -120,6 +123,7 @@ class RBM(Layer):
         return OrderedDict(vs=vs, hs=hs, pvs=pvs, phs=phs), updates
 
     def reconstruct(self, x):
+        '''Reconstruction error (cross entropy).'''
         r = self.trng.uniform(
             size=(x.shape[0], self.dim_h),
             dtype=floatX)
@@ -129,10 +133,9 @@ class RBM(Layer):
 
         return pv
 
-    def estimate_nll(self, X, K=100):
-        log_za, d_logz = self.ais(X, K)
-        log_Z = log_za + d_logz
-        return (self.free_energy(X) + log_Z).mean(), self.free_energy(X).mean(), log_Z, log_za, d_logz
+    def estimate_nll(self, X):
+        fe = self.free_energy(X)
+        return fe.mean() + self.log_Z
 
     def step_gibbs_ais(self, r_h_a, r_h_b, r_v, v, beta,
                        W_a, b_a, c_a, W_b, b_b, c_b):
@@ -154,63 +157,82 @@ class RBM(Layer):
 
         return v
 
-    def ais(self, X, K):
+    def update_partition_function(self, K=10000, M=100):
+        '''Updates the partition function'''
+        log_za, d_logz = self.ais(K, M)
+        return theano.OrderedUpdates([(self.log_Z, log_za + d_logz)])
+
+    def ais(self, K, M):
         '''Performs AIS to estimate the log of the partition function, Z.'''
 
-        def free_energy(beta, W_a, b_a, c_a, W_b, b_b, c_b):
-            fe_a = self.step_free_energy(X, 1 - beta, W_a, b_a, c_a)
-            fe_b = self.step_free_energy(X, beta, W_b, b_b, c_b)
-            fe = fe_a + fe_b
-            return fe
+        def free_energy(x, beta, *params):
+            '''Calculates the free energy from the annealed distribution.'''
+            fe_a = self.step_free_energy(x, 1 - beta, *(params[:3]))
+            fe_b = self.step_free_energy(x, beta, *(params[3:]))
+            return fe_a + fe_b
+
+        def get_beta(k):
+            return (k / K).astype(floatX)
 
         def step_anneal(r_h_a, r_h_b, r_v, k, log_w, x, *params):
-            beta_ = ((k - 1) / (K - 1)).astype(floatX)
-            beta  = (k / (K - 1)).astype(floatX)
-            log_w += free_energy(beta_, *params) - free_energy(beta, *params)
+            '''Step annealing function for scan.'''
+            beta_ = get_beta(k - 1)
+            beta  = get_beta(k)
+            log_w += free_energy(x, beta_, *params) - free_energy(x, beta, *params)
             x = self.step_gibbs_ais(r_h_a, r_h_b, r_v, x, beta, *params)
             return log_w, x
 
-        def get_log_z(log_w):
-            log_wn = log_w - T.log(log_w.shape[0])
-            log_z = log_sum_exp(log_wn, axis=0)
-            return log_z
+        # Random numbers for scan
+        r_vs   = self.trng.uniform(size=(K, M, self.dim_v), dtype=floatX)
+        r_hs_a = self.trng.uniform(size=(K, M, self.dim_h), dtype=floatX)
+        r_hs_b = self.trng.uniform(size=(K, M, self.dim_h), dtype=floatX)
 
-        r_vs = self.trng.uniform(
-            size=(K + 1, X.shape[0], self.dim_v),
-            dtype=floatX)
-
-        r_hs_a = self.trng.uniform(
-            size=(K + 1, X.shape[0], self.dim_h),
-            dtype=floatX)
-
-        r_hs_b = self.trng.uniform(
-            size=(K + 1, X.shape[0], self.dim_h),
-            dtype=floatX)
-
+        # Parameters for RBM a and b
         W_a = T.zeros_like(self.W).astype(floatX)
-        X_mean = T.clip(X.mean(axis=0), 1e-6, 1 - 1e-6)
-        b_a = -T.log(1 / X_mean - 1)
+        b_a = -T.log(1. / self.mean_image - 1.)
         c_a = T.zeros_like(self.c).astype(floatX)
-
         params = [W_a, b_a, c_a] + self.get_params()
 
-        x0 = self.step_gibbs_ais(r_hs_a[0], r_hs_b[0], r_vs[0], X, 0, *params)
-        log_w0 = T.zeros((X.shape[0],)).astype(floatX)
+        # x0 and log_w0
+        p0     = T.tile(1. / (1. + T.exp(-b_a)), (M, 1))
+        r      = self.trng.uniform(size=(M, self.dim_v), dtype=floatX)
+        x0     = (r <= p0).astype(floatX)
+        log_w0 = T.zeros((M,)).astype(floatX)
 
-        seqs         = [r_hs_a[1:], r_hs_b[1:], r_vs[1:], T.arange(1, K)]
+        seqs         = [r_hs_a, r_hs_b, r_vs, T.arange(1, K + 1)]
         outputs_info = [log_w0, x0]
         non_seqs     = params
 
         (log_ws, xs), updates = scan(
-            step_anneal, seqs, outputs_info, non_seqs, K - 1,
-            name=self.name + '_ais', strict=False
-        )
+            step_anneal, seqs, outputs_info, non_seqs, K,
+            name=self.name + '_ais', strict=False)
 
-        log_wk = log_ws[-1]
-        d_logz = get_log_z(log_wk)
-        log_za = self.dim_h * T.log(2.).astype(floatX) + T.log(1. + T.exp(b_a)).sum(axis=0)
+        log_w  = log_ws[-1]
+        d_logz = T.log(T.sum(T.exp(log_w - log_w.max()))) + log_w.max() - T.log(M)
+        log_za = self.dim_h * T.log(2.).astype(floatX) + T.log(1. + T.exp(b_a)).sum()
 
         return log_za, d_logz
+
+    def step_free_energy(self, x, beta, W, b, c):
+        '''Step free energy function.'''
+        vis_term = beta * T.dot(x, b)
+        hid_act = beta * (T.dot(x, W) + c)
+        fe = -vis_term - T.log(1 + T.exp(hid_act)).sum(axis=1)
+        return fe
+
+    def free_energy(self, x):
+        '''Free energy function'''
+        if x.ndim == 3:
+            reduce_dims = (x.shape[0], x.shape[1])
+            x = x.reshape((reduce_dims[0] * reduce_dims[1], x.shape[2]))
+        else:
+            reduce_dims = None
+        fe = self.step_free_energy(x, 1, *self.get_params())
+
+        if reduce_dims is not None:
+            fe = fe.reshape(reduce_dims)
+
+        return fe
 
     def energy(self, v, h):
         if v.ndim == 3:
@@ -229,24 +251,6 @@ class RBM(Layer):
             energy = energy.reshape((reduce_dims[0], reduce_dims[1], energy.shape[1]))
 
         return energy
-
-    def step_free_energy(self, x, beta, W, b, c):
-        fe = -beta * (x * b[None, :]).sum(axis=1) - T.log(
-            1 + T.exp(beta * (c[None, :] + T.dot(x, W)))).sum(axis=1)
-        return fe
-
-    def free_energy(self, x):
-        if x.ndim == 3:
-            reduce_dims = (x.shape[0], x.shape[1])
-            x = x.reshape((reduce_dims[0] * reduce_dims[1], x.shape[2]))
-        else:
-            reduce_dims = None
-        fe = self.step_free_energy(x, 1, *self.get_params())
-
-        if reduce_dims is not None:
-            fe = fe.reshape(reduce_dims)
-
-        return fe
 
     def neg_log_prob(self, x, p):
         p = T.clip(p, 1e-6, 1 - 1e-6)
@@ -274,18 +278,14 @@ class RBM(Layer):
         fe            = self.free_energy(v0)
         recon_error   = self.neg_log_prob(x, self.reconstruct(x)).mean()
 
-        nll, fe_, log_z, log_za, d_logz = self.estimate_nll(x)
+        nll = self.estimate_nll(x)
         results = OrderedDict(
             cost=cost,
             positive_cost=positive_cost.mean(),
             negative_cost=negative_cost.mean(),
             free_energy=fe.mean(),
             nll=nll,
-            hid=T.log(1 + T.exp(self.c[None, :] + (self.W[None, :, :] * x[:, :, None]).sum(axis=1))).sum(axis=1).mean(),
-            vis=(self.b[None, :] * x).sum(axis=1).mean(),
-            log_z=log_z,
-            log_za=log_za,
-            logz_d=d_logz,
+            log_z=self.log_Z,
             recon_error=recon_error
         )
 
