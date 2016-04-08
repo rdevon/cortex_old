@@ -55,14 +55,14 @@ class RBM(Layer):
         self.v_act = 'T.nnet.sigmoid'
 
         if mean_image is None:
-            mean_image = theano.shared(
-                np.zeros(self.dim_v,).astype(floatX) + 0.5, name='mean_image')
+            mean_image = np.zeros(self.dim_v,).astype(floatX) + 0.5
         self.mean_image = theano.shared(np.clip(mean_image, 1e-7, 1 - 1e-7),
                                         name='mean_image')
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
-        super(RBM, self).__init__(name=name, excludes=['log_Z'], **kwargs)
+        super(RBM, self).__init__(name=name, excludes=['log_Z', 'var_log_Z'],
+                                  **kwargs)
 
     @staticmethod
     def factory(dim_v=None, dim_h=None, **kwargs):
@@ -74,8 +74,9 @@ class RBM(Layer):
         b = np.zeros((self.dim_v,)).astype(floatX)
         c = np.zeros((self.dim_h,)).astype(floatX)
         log_Z = (self.dim_h * np.log(2.)).astype(floatX)
+        var_log_Z = (np.array(0.)).astype(floatX)
 
-        self.params = OrderedDict(W=W, b=b, c=c, log_Z=log_Z)
+        self.params = OrderedDict(W=W, b=b, c=c, log_Z=log_Z, var_log_Z=var_log_Z)
 
     def get_params(self):
         return [self.W, self.b, self.c]
@@ -159,8 +160,8 @@ class RBM(Layer):
 
     def update_partition_function(self, K=10000, M=100):
         '''Updates the partition function'''
-        log_za, d_logz = self.ais(K, M)
-        return theano.OrderedUpdates([(self.log_Z, log_za + d_logz)])
+        log_za, d_logz, var_dlogz = self.ais(K, M)
+        return theano.OrderedUpdates([(self.log_Z, log_za + d_logz), (self.var_log_Z, var_dlogz)])
 
     def ais(self, K, M):
         '''Performs AIS to estimate the log of the partition function, Z.'''
@@ -207,11 +208,14 @@ class RBM(Layer):
             step_anneal, seqs, outputs_info, non_seqs, K,
             name=self.name + '_ais', strict=False)
 
-        log_w  = log_ws[-1]
+        log_w  = log_ws[-1] + free_energy(xs[-1], 1, *params)
         d_logz = T.log(T.sum(T.exp(log_w - log_w.max()))) + log_w.max() - T.log(M)
         log_za = self.dim_h * T.log(2.).astype(floatX) + T.log(1. + T.exp(b_a)).sum()
 
-        return log_za, d_logz
+        var_dlogz = (M * T.exp(2. * (log_w - log_w.max())).sum() /
+                     T.exp(log_w - log_w.max()).sum() ** 2 - 1.)
+
+        return log_za, d_logz, var_dlogz
 
     def step_free_energy(self, x, beta, W, b, c):
         '''Step free energy function.'''
@@ -235,13 +239,15 @@ class RBM(Layer):
         return fe
 
     def energy(self, v, h):
+        '''Energy of a visible, hidden configuration.'''
+
         if v.ndim == 3:
             reduce_dims = (v.shape[0], v.shape[1])
             v = v.reshape((reduce_dims[0] * reduce_dims[1], v.shape[2]))
             h = h.reshape((reduce_dims[0] * reduce_dims[1], h.shape[2]))
         else:
             reduce_dims = None
-        '''Energy of a visible, hidden configuration.'''
+
         joint_term = (h[:, None, :] * self.W[None, :, :] * v[:, :, None]).sum(axis=1)
         v_bias_term = (v * self.b[None, :]).sum(axis=1)
         h_bias_term = (h * self.c[None, :])
