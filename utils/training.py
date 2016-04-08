@@ -117,7 +117,7 @@ def test(data_iter, f_test, f_test_keys, n_samples=None):
     data_iter.reset()
     maxvalid = data_iter.n
 
-    widgets = ['Validating (%s): ' % data_iter.mode, Percentage(), ' (', Timer(), ')']
+    widgets = ['Testing (%s set): ' % data_iter.mode, Percentage(), ' (', Timer(), ')']
     pbar    = ProgressBar(widgets=widgets, maxval=maxvalid).start()
     results = OrderedDict()
     while True:
@@ -167,6 +167,8 @@ def validate(tparams, results, best_valid, e, best_epoch,
 
 def main_loop(train, valid, tparams,
               f_grad_shared, f_grad_updates, f_test, f_test_keys,
+              f_extra=None,
+              test_every=None,
               name=None,
               save=None,
               save_images=None,
@@ -204,24 +206,28 @@ def main_loop(train, valid, tparams,
                     epoch_pbar.update(train.pos)
 
             except StopIteration:
-                print
-                epoch_t1 = time.time()
-                dt_epoch = epoch_t1 - epoch_t0
-                training_time += dt_epoch
-                results = test(train, f_test, f_test_keys, n_samples=valid.n)
-                results_valid = test(valid, f_test, f_test_keys)
-                best_valid, best_epoch = validate(
-                    tparams,
-                    results_valid, best_valid, e, best_epoch,
-                    bestfile=bestfile,
-                    save=save, **validation_args)
+                if (test_every is None) or ((e + 1) % test_every == 0):
+                    print
+                    if f_extra is not None:
+                        print 'Performing initial evaluation function...'
+                        f_extra()
+                    epoch_t1 = time.time()
+                    dt_epoch = epoch_t1 - epoch_t0
+                    training_time += dt_epoch
+                    results = test(train, f_test, f_test_keys, n_samples=valid.n)
+                    results_valid = test(valid, f_test, f_test_keys)
+                    best_valid, best_epoch = validate(
+                        tparams,
+                        results_valid, best_valid, e, best_epoch,
+                        bestfile=bestfile,
+                        save=save, **validation_args)
 
-                if monitor is not None:
-                    monitor.update(**results)
-                    monitor.update(dt_epoch=dt_epoch,
-                                   training_time=training_time)
-                    monitor.update_valid(**results_valid)
-                    monitor.display()
+                    if monitor is not None:
+                        monitor.update(**results)
+                        monitor.update(dt_epoch=dt_epoch,
+                                       training_time=training_time)
+                        monitor.update_valid(**results_valid)
+                        monitor.display()
 
                 if save_images is not None:
                     save_images()
