@@ -1,6 +1,7 @@
 {
   name: 'rbm_mnist',
   learning_args: {
+    epochs: 1000,
     optimizer: 'sgd',
     learning_rate: 0.01
   },
@@ -9,7 +10,8 @@
     persistent: True,
     n_steps: 1
   },
-  dim_h: 50,
+  dim_h: 500,
+  test_every: 10,
   center_input: False,
   dataset_args: {
     dataset: 'mnist',

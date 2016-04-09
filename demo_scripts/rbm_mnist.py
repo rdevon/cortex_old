@@ -45,7 +45,7 @@ def init_inference_args(
     return locals()
 
 def train(
-    out_path='', name='', model_to_load=None, save_images=True,
+    out_path='', name='', model_to_load=None, save_images=True, test_every=None,
     dim_h=None, center_input=False,
     learning_args=dict(),
     inference_args=dict(),
@@ -87,7 +87,7 @@ def train(
     print_section('Loading model and forming graph')
 
     def create_model():
-        model = RBM(dim_in, dim_h)
+        model = RBM(dim_in, dim_h, mean_image=train.mean_image)
         models = OrderedDict()
         models[model.name] = model
         return models
@@ -122,6 +122,9 @@ def train(
     print_section('Test functions')
     f_test_keys = results.keys()
     f_test = theano.function([X], results.values())
+
+    _, z_updates = model.update_partition_function()
+    f_update_partition = theano.function([], [], updates=z_updates)
 
     H0 = model.trng.binomial(size=(10, model.dim_h), dtype=floatX)
     s_outs, s_updates = model.sample(H0, n_steps=100)
@@ -162,6 +165,8 @@ def train(
     main_loop(
         train, valid, tparams,
         f_grad_shared, f_grad_updates, f_test, f_test_keys,
+        f_extra=f_update_partition,
+        test_every=test_every,
         save=save,
         save_images=save_images,
         monitor=monitor,
