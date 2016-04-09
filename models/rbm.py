@@ -22,12 +22,15 @@ from utils.tools import (
 
 def unpack(dim_h=None,
            dim_in=None,
+           dataset_args=None,
+           data_iter=None,
+           center_input=None,
            **model_args):
 
     dim_in = int(dim_in)
     dim_h = int(dim_h)
 
-    rbm = RBM(dim_in, dim_h)
+    rbm = RBM(dim_in, dim_h, mean_image=data_iter.mean_image)
     models = [rbm]
 
     return models, model_args, None
@@ -61,7 +64,7 @@ class RBM(Layer):
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
-        super(RBM, self).__init__(name=name, excludes=['log_Z', 'var_log_Z'],
+        super(RBM, self).__init__(name=name, excludes=['log_Z', 'std_log_Z'],
                                   **kwargs)
 
     @staticmethod
@@ -160,26 +163,35 @@ class RBM(Layer):
 
     def update_partition_function(self, K=10000, M=100):
         '''Updates the partition function'''
-        log_za, d_logz, var_dlogz = self.ais(K, M)
-        return theano.OrderedUpdates([(self.log_Z, log_za + d_logz), (self.std_log_Z, T.sqrt(dlogz))])
+        log_za, d_logz, var_dlogz, log_ws, samples = self.ais(K, M)
+        updates = theano.OrderedUpdates([
+            (self.log_Z, log_za + d_logz),
+            (self.std_log_Z, T.sqrt(var_dlogz))])
+        results = OrderedDict(
+            log_za=log_za,
+            d_logz=d_logz,
+            var_dlogz=var_dlogz,
+            log_ws=log_ws
+        )
+        return results, updates
 
     def ais(self, K, M):
         '''Performs AIS to estimate the log of the partition function, Z.'''
 
         def free_energy(x, beta, *params):
             '''Calculates the free energy from the annealed distribution.'''
-            fe_a = self.step_free_energy(x, 1 - beta, *(params[:3]))
+            fe_a = self.step_free_energy(x, 1. - beta, *(params[:3]))
             fe_b = self.step_free_energy(x, beta, *(params[3:]))
             return fe_a + fe_b
 
         def get_beta(k):
-            return (k / K).astype(floatX)
+            return (k / float(K)).astype(floatX)
 
         def step_anneal(r_h_a, r_h_b, r_v, k, log_w, x, *params):
             '''Step annealing function for scan.'''
             beta_ = get_beta(k - 1)
             beta  = get_beta(k)
-            log_w += free_energy(x, beta_, *params) - free_energy(x, beta, *params)
+            log_w = log_w + free_energy(x, beta_, *params) - free_energy(x, beta, *params)
             x = self.step_gibbs_ais(r_h_a, r_h_b, r_v, x, beta, *params)
             return log_w, x
 
@@ -208,20 +220,20 @@ class RBM(Layer):
             step_anneal, seqs, outputs_info, non_seqs, K,
             name=self.name + '_ais', strict=False)
 
-        log_w  = log_ws[-1] - free_energy(xs[-1], 1, *params)
+        log_w  = log_ws[-1]
         d_logz = T.log(T.sum(T.exp(log_w - log_w.max()))) + log_w.max() - T.log(M)
         log_za = self.dim_h * T.log(2.).astype(floatX) + T.log(1. + T.exp(b_a)).sum()
 
         var_dlogz = (M * T.exp(2. * (log_w - log_w.max())).sum() /
                      T.exp(log_w - log_w.max()).sum() ** 2 - 1.)
 
-        return log_za, d_logz, var_dlogz
+        return log_za, d_logz, var_dlogz, log_ws, xs[-1]
 
     def step_free_energy(self, x, beta, W, b, c):
         '''Step free energy function.'''
         vis_term = beta * T.dot(x, b)
         hid_act = beta * (T.dot(x, W) + c)
-        fe = -vis_term - T.log(1 + T.exp(hid_act)).sum(axis=1)
+        fe = -vis_term - T.log(1. + T.exp(hid_act)).sum(axis=1)
         return fe
 
     def free_energy(self, x):
@@ -231,7 +243,7 @@ class RBM(Layer):
             x = x.reshape((reduce_dims[0] * reduce_dims[1], x.shape[2]))
         else:
             reduce_dims = None
-        fe = self.step_free_energy(x, 1, *self.get_params())
+        fe = self.step_free_energy(x, 1., *self.get_params())
 
         if reduce_dims is not None:
             fe = fe.reshape(reduce_dims)
@@ -292,7 +304,7 @@ class RBM(Layer):
             free_energy=fe.mean(),
             nll=nll,
             log_z=self.log_Z,
-            var_log_z=self.var_log_Z,
+            std_log_z=self.std_log_Z,
             recon_error=recon_error
         )
 
