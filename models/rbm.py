@@ -74,9 +74,9 @@ class RBM(Layer):
         b = np.zeros((self.dim_v,)).astype(floatX)
         c = np.zeros((self.dim_h,)).astype(floatX)
         log_Z = (self.dim_h * np.log(2.)).astype(floatX)
-        var_log_Z = (np.array(0.)).astype(floatX)
+        std_log_Z = (np.array(0.)).astype(floatX)
 
-        self.params = OrderedDict(W=W, b=b, c=c, log_Z=log_Z, var_log_Z=var_log_Z)
+        self.params = OrderedDict(W=W, b=b, c=c, log_Z=log_Z, std_log_Z=std_log_Z)
 
     def get_params(self):
         return [self.W, self.b, self.c]
@@ -161,7 +161,7 @@ class RBM(Layer):
     def update_partition_function(self, K=10000, M=100):
         '''Updates the partition function'''
         log_za, d_logz, var_dlogz = self.ais(K, M)
-        return theano.OrderedUpdates([(self.log_Z, log_za + d_logz), (self.var_log_Z, var_dlogz)])
+        return theano.OrderedUpdates([(self.log_Z, log_za + d_logz), (self.std_log_Z, T.sqrt(dlogz))])
 
     def ais(self, K, M):
         '''Performs AIS to estimate the log of the partition function, Z.'''
@@ -208,7 +208,7 @@ class RBM(Layer):
             step_anneal, seqs, outputs_info, non_seqs, K,
             name=self.name + '_ais', strict=False)
 
-        log_w  = log_ws[-1] + free_energy(xs[-1], 1, *params)
+        log_w  = log_ws[-1] - free_energy(xs[-1], 1, *params)
         d_logz = T.log(T.sum(T.exp(log_w - log_w.max()))) + log_w.max() - T.log(M)
         log_za = self.dim_h * T.log(2.).astype(floatX) + T.log(1. + T.exp(b_a)).sum()
 
@@ -292,6 +292,7 @@ class RBM(Layer):
             free_energy=fe.mean(),
             nll=nll,
             log_z=self.log_Z,
+            var_log_z=self.var_log_Z,
             recon_error=recon_error
         )
 
