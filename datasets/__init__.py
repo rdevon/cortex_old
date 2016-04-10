@@ -3,6 +3,8 @@ Generic dataset class
 '''
 
 from collections import OrderedDict
+import numpy as np
+import random
 
 
 def load_data(dataset=None,
@@ -66,30 +68,19 @@ def load_data(dataset=None,
     return train, valid, test
 
 
-def load_data_split(idx=None, dataset='mri', **dataset_args):
+def load_data_split(C, idx=None, dataset=None, **dataset_args):
     '''Load dataset and split.
 
     Arguments:
         idx: (Optional) list of list of int. Indices for train/valid/test
             datasets.
-        dataset: str.
+        C: Dataset Object.
 
     Returns:
         train, valid, test Dataset objects.
         idx: Indices for if split is created.
     '''
 
-    from fmri import MRI, FMRI_IID
-    from snp import SNP
-
-    if dataset == 'mri':
-        C = MRI
-    elif dataset == 'fmri_iid':
-        C = FMRI_IID
-    elif dataset == 'snp':
-        C = SNP
-    else:
-        raise ValueError(dataset)
     train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
 
@@ -121,7 +112,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         if round(np.sum(split), 5) != 1. or len(split) != 3:
             raise ValueError(split)
         dummy = C(batch_size=1, **dataset_args)
-        N = dummy.n
+        N = dummy.X.shape[0]
         idx = range(N)
         random.shuffle(idx)
         split_idx = []

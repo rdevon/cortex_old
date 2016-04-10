@@ -52,7 +52,6 @@ def make_argument_parser():
     parser.add_argument('-r', '--load_last', action='store_true')
     parser.add_argument('-l', '--load_model', default=None)
     parser.add_argument('-n', '--name', default=None)
-    parser.add_argument('-i', '--save_images', action='store_true')
     return parser
 
 def make_argument_parser_test():
@@ -224,7 +223,7 @@ def set_optimizer(inputs, cost, tparams, constants, updates, extra_outs,
 
     return f_grad_shared, f_grad_updates, learning_args
 
-def test(data_iter, f_test, f_test_keys, n_samples=None):
+def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
     '''Tests the model using a data iterator.
 
     Args:
@@ -232,6 +231,8 @@ def test(data_iter, f_test, f_test_keys, n_samples=None):
         f_test: Theano funciton.
         f_test_keys: list of str. The keys that go with the corresponding list
             of outputs from `f_test`.
+        input_keys: list of str. Used to extract multiple modes from dataset
+            for `f_test`.
         n_samples: int (optional). If not None, use only this number of samples
             as input to `f_test`.
     Returns:
@@ -247,10 +248,10 @@ def test(data_iter, f_test, f_test_keys, n_samples=None):
     while True:
         try:
             outs = data_iter.next()
-            x = outs[data_iter.name]
+            inps = [outs[k] for k in input_keys]
             if n_samples is not None:
-                x = x[:n_samples]
-            r = f_test(x)
+                inps = [x[:n_samples] for x in inps]
+            r = f_test(*inps)
             results_i = dict((k, v) for k, v in zip(f_test_keys, r))
             update_dict_of_lists(results, **results_i)
 
@@ -307,6 +308,7 @@ def validate(tparams, results, best_valid, e, best_epoch,
 
 def main_loop(train, valid, tparams,
               f_grad_shared, f_grad_updates, f_test, f_test_keys,
+              input_keys=None,
               f_extra=None,
               test_every=None,
               name=None,
@@ -332,6 +334,8 @@ def main_loop(train, valid, tparams,
         f_grad_updates: Theano function. Updates parameters.
         f_test: Theano function. Tests model are returns results.
         f_test_keys: list of str. List of keys that go with `f_test`.
+        input_keys: list of str (optional). If not None, used to extract
+            multiple modes from dataset for `f_grad_shared`.
         f_extra: Theano or python function. Function that is run just prior to
             testing.
         test_every: int (optional). If not None, then controls how many epochs
@@ -353,6 +357,9 @@ def main_loop(train, valid, tparams,
     best_valid = float('inf')
     best_epoch = 0
 
+    if input_keys is None:
+        input_keys = [train.name]
+
     if out_path is not None:
         bestfile = path.join(out_path, '{name}_best.npz'.format(name=name))
 
@@ -367,7 +374,8 @@ def main_loop(train, valid, tparams,
         training_time = 0
         while True:
             try:
-                x = train.next()[train.name]
+                outs = train.next()
+                inps = [outs[k] for k in input_keys]
                 if train.pos == -1:
                     epoch_pbar.update(train.n)
                 else:
@@ -382,8 +390,9 @@ def main_loop(train, valid, tparams,
                     epoch_t1 = time.time()
                     dt_epoch = epoch_t1 - epoch_t0
                     training_time += dt_epoch
-                    results = test(train, f_test, f_test_keys, n_samples=valid.n)
-                    results_valid = test(valid, f_test, f_test_keys)
+                    results = test(train, f_test, f_test_keys, input_keys,
+                                   n_samples=valid.n)
+                    results_valid = test(valid, f_test, f_test_keys, input_keys)
                     best_valid, best_epoch = validate(
                         tparams,
                         results_valid, best_valid, e, best_epoch,
@@ -421,7 +430,7 @@ def main_loop(train, valid, tparams,
             if e > epochs:
                 break
 
-            rval = f_grad_shared(x)
+            rval = f_grad_shared(*inps)
             if output_every is not None and s % output_every == 0:
                 print rval
                 if save_images is not None:

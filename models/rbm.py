@@ -120,9 +120,14 @@ class RBM(Layer):
         outputs_info = [h0, None, None, None]
         non_seqs = self.get_params()
 
-        (hs, vs, phs, pvs), updates = scan(
-            self.step_gibbs, seqs, outputs_info, non_seqs, n_steps,
-            name=self.name+'_sample', strict=False)
+        if n_steps == 1:
+            inps = seqs + outputs_info[:1] + non_seqs
+            hs, vs, phs, pvs = self.step_gibbs(*inps)
+            updates = theano.OrderedUpdates()
+        else:
+            (hs, vs, phs, pvs), updates = scan(
+                self.step_gibbs, seqs, outputs_info, non_seqs, n_steps,
+                name=self.name+'_sample', strict=False)
 
         return OrderedDict(vs=vs, hs=hs, pvs=pvs, phs=phs), updates
 

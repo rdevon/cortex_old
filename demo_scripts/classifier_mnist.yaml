@@ -1,0 +1,18 @@
+{
+  name: 'classifier_mnist',
+  learning_args: {
+    epochs: 1000,
+    optimizer: 'sgd',
+    learning_rate: 0.01
+  },
+  classifier: {
+    input_layer: 'mnist',
+    dim_hs: [200, 100],
+  },
+  center_input: True,
+  dataset_args: {
+    dataset: 'mnist',
+    keys: ['mnist', 'label'],
+    source: '$irvi_data/mnist.pkl.gz'
+  }
+}

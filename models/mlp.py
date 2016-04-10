@@ -181,11 +181,11 @@ class MLP(Layer):
                 outs['p'] = x
 
             if self.dropout and l != self.n_layers - 1:
-                print 'Adding dropout to layer {layer} for MLP {name}'.format(
+                print 'Adding dropout to layer {layer} for MLP "{name}"'.format(
                     layer=l, name=self.name)
-                if activ == 'T.tanh':
+                if self.h_act == 'T.tanh':
                     raise NotImplementedError('dropout for tanh units not implemented yet')
-                elif activ in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
+                elif self.h_act in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
                     x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
                                              dtype=x.dtype)
                     x = x * x_d / (1 - self.dropout)

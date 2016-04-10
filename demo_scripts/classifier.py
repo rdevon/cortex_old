@@ -1,7 +1,7 @@
 '''
-Demo for training RBM with MNIST dataset.
+Demo for training a classifier.
 
-Try with `python rbm_mnist.py rbm_mnist.yaml`.
+Try with `python classifier.py classifier_mnist.yaml`
 '''
 
 from collections import OrderedDict
@@ -14,7 +14,7 @@ from theano import tensor as T
 import time
 
 from datasets import load_data
-from models.rbm import RBM, unpack
+from models.mlp import MLP
 from utils.monitor import SimpleMonitor
 from utils import floatX
 from utils.tools import get_trng, print_profile, print_section
@@ -29,40 +29,64 @@ from utils.training import (
 
 
 def init_learning_args(
-    learning_rate=0.0001,
-    optimizer='sgd',
+    learning_rate=0.01,
+    l2_decay=0.,
+    dropout=0.,
+    optimizer='rmsprop',
     optimizer_args=dict(),
     learning_rate_schedule=None,
     batch_size=100,
     valid_batch_size=100,
     epochs=100,
-    valid_key='nll',
+    valid_key='error',
     valid_sign='+'):
-    return locals()
+    '''Default learning args.
 
-def init_inference_args(
-    n_chains=10,
-    persistent=False,
-    n_steps=1):
+    This method acts as a filter for kwargs.
+
+    Args:
+        learning_rate: float.
+        l2_decay: float, L2 decay rate.
+        dropout: float, dropout_rate.
+        optimizer: str, see utils.op
+        optimizer_args: dict, extra kwargs for op.
+        learning_rate_schedule: OrderedDict, schedule for learning rate.
+        batch_size: int
+        valid_batch_size: int
+        epochs: int
+        valid_key: str, key from results to validate model on.
+        valid_sign: str, + or -. If -, then sign is switched at validation.
+            Good for upperbounds.
+    Returns:
+        locals().
+    '''
     return locals()
 
 def train(
-    out_path='', name='', model_to_load=None, save_images=True, test_every=None,
-    dim_h=None, center_input=False,
+    out_path='', name='', model_to_load=None, test_every=None,
+    classifier=None, center_input=False,
     learning_args=dict(),
-    inference_args=dict(),
     dataset_args=dict()):
+    '''Basic training script.
+
+    Args:
+        out_path: str, path for output directory.
+        name: str, name of experiment.
+        test_every: int (optional), if not None, test every n epochs instead of
+            every 1 epoch.
+        classifier: dict, kwargs for MLP factory.
+        learning_args: dict, see `init_learning_args` above for options.
+        dataset_args: dict, arguments for Dataset class.
+    '''
 
     # ========================================================================
     learning_args = init_learning_args(**learning_args)
-    inference_args = init_inference_args(**inference_args)
-
     print 'Dataset args: %s' % pprint.pformat(dataset_args)
     print 'Learning args: %s' % pprint.pformat(learning_args)
-    print 'Inference args: %s' % pprint.pformat(inference_args)
 
     # ========================================================================
     print_section('Setting up data')
+    input_keys = dataset_args.pop('keys')
     batch_size = learning_args.pop('batch_size')
     valid_batch_size = learning_args.pop('valid_batch_size')
     train, valid, test = load_data(
@@ -72,10 +96,13 @@ def train(
 
     # ========================================================================
     print_section('Setting model and variables')
-    dim_in = train.dims[train.name]
+    dim_in = train.dims[input_keys[0]]
+    dim_out = train.dims[input_keys[1]]
 
-    X = T.matrix('x', dtype=floatX)
+    X = T.matrix('x', dtype=floatX) # Input data
+    Y = T.matrix('y', dtype=floatX) # Lables
     X.tag.test_value = np.zeros((batch_size, dim_in), dtype=X.dtype)
+    Y.tag.test_value = np.zeros((batch_size, dim_out), dtype=X.dtype)
     trng = get_trng()
 
     if center_input:
@@ -87,51 +114,58 @@ def train(
 
     # ========================================================================
     print_section('Loading model and forming graph')
+    dropout = learning_args.pop('dropout')
 
     def create_model():
-        model = RBM(dim_in, dim_h, mean_image=train.mean_image)
+        model = MLP.factory(dim_in=dim_in, dim_out=dim_out,
+                            distribution=train.distributions[input_keys[1]],
+                            dropout=dropout,
+                            **classifier)
         models = OrderedDict()
         models[model.name] = model
         return models
 
+    def unpack(dim_in=None, dim_out=None, mlp=None, **model_args):
+        model = MLP.factory(dim_in=dim_in, dim_out=dim_out, **mlp)
+        models = [model]
+        return models, model_args, None
+
     models = set_model(create_model, model_to_load, unpack)
-    model = models['rbm']
+    model = models['MLP']
     tparams = model.set_tparams()
     print_profile(tparams)
 
     # ==========================================================================
     print_section('Getting cost')
-
-    persistent = inference_args.pop('persistent')
-    if persistent:
-        H_p = theano.shared(
-            np.zeros((inference_args['n_chains'], model.dim_h)).astype(floatX),
-            name='h_p')
-    else:
-        H_p = None
-    results, samples, updates, constants = model(
-        X_i, h_p=H_p, **inference_args)
+    outs = model(X_i)
+    p = outs['p']
+    base_cost = model.neg_log_prob(Y, p).sum(axis=0)
+    cost = base_cost
 
     updates = theano.OrderedUpdates()
-    if persistent:
-        updates += theano.OrderedUpdates([(H_p, samples['hs'][-1])])
 
-    cost = results['cost']
-    extra_outs = [results['free_energy']]
-    extra_outs_keys = ['cost', 'free_energy']
+    l2_decay = learning_args.pop('l2_decay')
+    if l2_decay > 0.:
+        print 'Adding %.5f L2 weight decay' % l2_decay
+        l2_rval = model.l2_decay(l2_decay)
+        l2_cost = l2_rval.pop('cost')
+        cost += l2_cost
+
+    constants = []
+    extra_outs = []
+    extra_outs_keys = ['cost']
 
     # ==========================================================================
     print_section('Test functions')
-    f_test_keys = results.keys()
-    f_test = theano.function([X], results.values())
+    error = (Y * (1 - p)).sum(axis=1).mean()
 
-    _, z_updates = model.update_partition_function()
-    f_update_partition = theano.function([], [], updates=z_updates)
+    f_test_keys = ['error', 'cost']
+    f_test_vals = [error, base_cost]
 
-    H0 = model.trng.binomial(size=(10, model.dim_h), dtype=floatX)
-    s_outs, s_updates = model.sample(H0, n_steps=100)
-    f_chain = theano.function(
-        [], s_outs['pvs'], updates=s_updates)
+    if l2_decay > 0.:
+        f_test_keys.append('L2 cost')
+        f_test_vals.append(l2_cost)
+    f_test = theano.function([X, Y], f_test_vals)
 
      # ========================================================================
     print_section('Setting final tparams and save function')
@@ -141,24 +175,15 @@ def train(
         d = dict((k, v.get_value()) for k, v in all_params.items())
         d.update(
             dim_in=dim_in,
-            dim_h=dim_h,
-            center_input=center_input,
-            dataset_args=dataset_args
+            dim_out=dim_out,
+            mlp=classifier
         )
         np.savez(outfile, **d)
-
-    def save_images():
-        w = model.W.get_value().T
-        w = w.reshape((w.shape[0] // 10, 10, w.shape[1]))
-        train.save_images(w, path.join(out_path, 'weights.png'))
-
-        chain = f_chain()
-        train.save_images(chain, path.join(out_path, 'chain.png'))
 
     # ========================================================================
     print_section('Getting gradients and building optimizer.')
     f_grad_shared, f_grad_updates, learning_args = set_optimizer(
-        [X], cost, tparams, constants, updates, extra_outs, **learning_args)
+        [X, Y], cost, tparams, constants, updates, extra_outs, **learning_args)
 
     # ========================================================================
     print_section('Actually running (main loop)')
@@ -167,10 +192,9 @@ def train(
     main_loop(
         train, valid, tparams,
         f_grad_shared, f_grad_updates, f_test, f_test_keys,
-        f_extra=f_update_partition,
+        input_keys=input_keys,
         test_every=test_every,
         save=save,
-        save_images=save_images,
         monitor=monitor,
         out_path=out_path,
         name=name,
@@ -179,7 +203,6 @@ def train(
 
 if __name__ == '__main__':
     parser = make_argument_parser()
-    parser.add_argument('-i', '--save_images', action='store_true')
     args = parser.parse_args()
     exp_dict = set_experiment(args)
 
