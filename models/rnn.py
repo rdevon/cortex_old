@@ -54,9 +54,25 @@ def init_h(h_init, X, batch_size, models, **h_args):
 
 
 class RNN(Layer):
+    '''RNN class.
+
+    Implements a generic multilayer RNN.
+
+    Attributes:
+        dim_in: int, input dimension.
+        dim_out: int, output dimension.
+        dim_hs: list of int: dimenstions of recurrent units.
+        n_layers: int, number of recurrent layers. Should match len(dim_hs).
+        input_net: MLP object, MLP to feed input into recurrent layers.
+        output_net: MLP object, MLP to read from recurrent layers.
+        condtional: MLP object (optional), MLP to condition output on previous
+            output.
+    '''
+
     def __init__(self, dim_in, dim_hs, dim_out=None,
                  conditional=None, input_net=None, output_net=None,
                  name='rnn', **kwargs):
+        '''Init function for RNN'''
 
         self.dim_in = dim_in
         self.dim_hs = dim_hs
@@ -79,16 +95,34 @@ class RNN(Layer):
         super(RNN, self).__init__(name=name)
 
     @staticmethod
-    def factory(dim_in=None, dim_hs=None, **kwargs):
-        return RNN(dim_in, dim_hs, **kwargs)
+    def factory(data_iter=None, dim_in=None, dim_out=None, dim_hs=None,
+                    i_net=None, o_net=None, c_net=None, **kwargs):
+        '''Factory for creating MLPs for RNN and returning .
 
-    @staticmethod
-    def mlp_factory(dim_in, dim_hs, data_iter, dim_out=None,
-                    i_net=None, a_net=None, o_net=None, c_net=None):
-        mlps = {}
+        Convenience to quickly create MLPs from dictionaries, linking all
+        relevent dimensions and distributions.
 
+        Args:
+            dim_in: int, input dimention.
+            dim_hs: list of int, dimensions of reccurent units.
+            data_iter: Dataset object, provides dimension and distribution info.
+            dim_out: int (optional), output dimension. If not provided, assumed
+                to be dim_in.
+            i_net: dict, input network args.
+            o_net: dict, output network args.
+            c_net: dict, conditional network args.
+
+        Returns:
+            mlps: dict of MLP objects.
+
+        '''
+
+        if dim_in is None:
+            dim_in = data_iter.dims[data_iter.name]
         if dim_out is None:
             dim_out = dim_in
+
+        mlps = {}
 
         if i_net is not None:
             i_net['distribution'] = 'centered_binomial'
@@ -109,9 +143,12 @@ class RNN(Layer):
                                       name='conditional', **c_net)
             mlps['conditional'] = conditional
 
-        return mlps
+        kwargs.update(**mlps)
+
+        return RNN(dim_in, dim_hs, dim_out, **kwargs)
 
     def set_params(self):
+        '''Initialize RNN parameters.'''
         self.params = OrderedDict()
         for i, dim_h in enumerate(self.dim_hs):
             Ur = ortho_weight(dim_h)
@@ -120,6 +157,7 @@ class RNN(Layer):
         self.set_net_params()
 
     def set_net_params(self):
+        '''Initialize MLP parameters.'''
         if self.input_net is None:
             self.input_net = MLP(
                 self.dim_in, self.dim_hs[0],
@@ -158,6 +196,7 @@ class RNN(Layer):
             self.inter_nets.append(n)
 
     def set_tparams(self):
+        '''Sets and returns theano parameters.'''
         tparams = super(RNN, self).set_tparams()
         for net in self.inter_nets + self.nets:
             if net is not None:
@@ -174,6 +213,7 @@ class RNN(Layer):
         return tparams
 
     def get_params(self):
+        '''Returns parameters for scan.'''
         params = [self.__dict__['Ur%d' % i] for i in range(self.n_layers)]
         for net in self.inter_nets:
             params += net.get_params()
@@ -181,6 +221,7 @@ class RNN(Layer):
         return params
 
     def get_net_params(self):
+        '''Returns MLP parameters for scan.'''
         params = []
         for net in self.nets:
             if net is not None:
@@ -188,6 +229,7 @@ class RNN(Layer):
         return params
 
     def get_sample_params(self):
+        '''Returns parameters used for sampling.'''
         params = self.get_params() + self.get_net_params()
         return params
 
@@ -209,15 +251,18 @@ class RNN(Layer):
     # Extra functions ---------------------------------------------------------
 
     def energy(self, X, h0s=None):
+        '''Negative log probability of data point.'''
         outs, updates = self.__call__(X[:-1], h0s=h0s)
         p = outs['p']
         energy = self.neg_log_prob(X[1:], p).sum(axis=0)
         return energy
 
     def neg_log_prob(self, x, p):
+        '''Negative log prob function.'''
         return self.output_net.neg_log_prob(x, p)
 
     def l2_decay(self, rate):
+        '''L2 decay.'''
         cost = sum([rate * (self.__dict__['Ur%d' % i] ** 2).sum()
                     for i in range(self.n_layers)])
         cost += sum([rate * (self.__dict__['W%d' % i] ** 2).sum()
@@ -260,12 +305,18 @@ class RNN(Layer):
         return tuple(hs) + (preact,)
 
     def step_sample(self, *params):
-        outs      = self.step_sample_preact(*params)
-        hs        = outs[:self.n_layers]
-        preact    = outs[-1]
-        p         = self.output_net.distribution(preact)
-        x, _      = self.output_net.sample(p, n_samples=1)
-        x         = x[0]
+        '''RNN step sample function for scan.
+
+        A convenience function for scan, this method samples the output given
+        the input, returning the current states and sample.
+
+        '''
+        outs   = self.step_sample_preact(*params)
+        hs     = outs[:self.n_layers]
+        preact = outs[-1]
+        p      = self.output_net.distribution(preact)
+        x, _   = self.output_net.sample(p, n_samples=1)
+        x      = x[0]
         return tuple(hs) + (x, p)
 
     def _step(self, m, y, h_, Ur):
@@ -392,4 +443,3 @@ class SimpleRNN(RNN):
         else:
             h0s = None
         return super(SimpleRNN, self).sample(x0=x0, h0s=h0s, **kwargs)
-

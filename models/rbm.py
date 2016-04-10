@@ -84,6 +84,14 @@ class RBM(Layer):
     def get_params(self):
         return [self.W, self.b, self.c]
 
+    def pv_h(self, h):
+        '''Function for probility of v given h'''
+        return self.step_pv_h(h, self.W, self.c)
+
+    def ph_v(self, x):
+        '''Function for probability of h given v'''
+        return self.step_ph_v(x, self.W, self.b)
+
     def step_pv_h(self, h, W, b):
         '''Step function for probility of v given h'''
         return eval(self.v_act)(T.dot(h, W.T) + b)
