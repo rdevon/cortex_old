@@ -7,10 +7,19 @@ from ConfigParser import ConfigParser
 import numpy as np
 import os
 import pprint
+from progressbar import (
+    Bar,
+    Percentage,
+    ProgressBar,
+    RotatingMarker,
+    SimpleProgress,
+    Timer
+)
 import random
 import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+from theano.tensor.shared_randomstreams import RandomStreams as SRandomStreams
 import warnings
 import yaml
 
@@ -46,6 +55,10 @@ def resolve_path(p):
     for k, v in path_dict.iteritems():
         p = p.replace(k, v)
     return p
+
+def get_srng():
+    srng = SRandomStreams(random.randint(0, 1000000))
+    return srng
 
 def get_trng():
     trng = RandomStreams(random.randint(0, 1000000))

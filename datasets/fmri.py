@@ -21,57 +21,6 @@ from utils import floatX
 from utils.tools import resolve_path
 
 
-def load_data(idx=None, dataset='mri', **dataset_args):
-    if dataset == 'mri':
-        C = MRI
-    elif dataset == 'fmri_iid':
-        C = FMRI_IID
-    else:
-        raise ValueError(dataset)
-    train, valid, test, idx = make_datasets(C, **dataset_args)
-    return train, valid, test, idx
-
-def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
-                  train_batch_size=None,
-                  valid_batch_size=None,
-                  test_batch_size=None,
-                  **dataset_args):
-
-    if idx is None:
-        assert split is not None
-        if round(np.sum(split), 5) != 1. or len(split) != 3:
-            raise ValueError(split)
-        dummy = C(batch_size=1, **dataset_args)
-        N = dummy.n
-        idx = range(N)
-        random.shuffle(idx)
-        split_idx = []
-        accum = 0
-        for s in split:
-            s_i = int(s * N + accum)
-            split_idx.append(s_i)
-            accum += s_i
-
-        train_idx = idx[:split_idx[0]]
-        valid_idx = idx[split_idx[0]:split_idx[1]]
-        test_idx = idx[split_idx[1]:]
-        idx = [train_idx, valid_idx, test_idx]
-
-    if train_batch_size is not None and len(train_idx) > 0:
-        train = C(idx=idx[0], batch_size=train_batch_size, **dataset_args)
-    else:
-        train = None
-    if valid_batch_size is not None and len(valid_idx) > 0:
-        valid = C(idx=idx[1], batch_size=valid_batch_size, **dataset_args)
-    else:
-        valid = None
-    if test_batch_size is not None and len(test_idx) > 0:
-        test = C(idx=idx[2], batch_size=test_batch_size, **dataset_args)
-    else:
-        test = None
-
-    return train, valid, test, idx
-
 def medfilt(x, k):
     '''
     Apply a length-k median filter to a 1D array x.
@@ -98,6 +47,20 @@ def make_one_hot(labels):
         j = unique_labels.index(l)
         one_hot[i][j] = 1
     return one_hot.astype('float32')
+
+def resolve(dataset):
+    if dataset == 'mri':
+        C = MRI
+    elif dataset == 'fmri':
+        C = FMRI
+    elif dataset == 'fmri_iid':
+        C = FMRI_IID
+    elif dataset == 'snp':
+        C = SNP
+    else:
+        raise ValueError(dataset)
+
+    return C
 
 
 class MRI(Dataset):
@@ -326,7 +289,71 @@ class FMRI_IID(MRI):
         self.targets = np.load(targets_file)
         self.novels = np.load(novels_file)
 
+        self.n_scans = self.targets.shape[0]
+        self.n_subjects = X.shape[0] // self.n_scans
+
         return X, Y
+
+
+class FMRI(FMRI_IID):
+    '''fMRI dataset class.
+
+    Treats fMRI as sequences, instead as IID as with FMRI_IID.
+    '''
+    def __init__(self, name='fmri', window=10, stride=1, idx=None, **kwargs):
+        super(FMRI, self).__init__(name=name, **kwargs)
+
+        self.window = window
+        self.stride = stride
+
+        self.X = self.X.reshape((self.n_subjects, self.n_scans, self.X.shape[1]))
+        self.Y = self.Y.reshape((self.n_subjects, self.n_scans, self.Y.shape[1]))
+
+        if idx is not None:
+            self.X = self.X[idx]
+            self.Y = self.Y[idx]
+            self.n_subjects = len(idx)
+
+        scan_idx = range(0, self.n_scans - window + 1, stride)
+        scan_idx_e = scan_idx * self.n_subjects
+        subject_idx = range(self.n_subjects)
+        # Similar to np.repeat, but using list comprehension.
+        subject_idx_e = [i for j in [[s] * len(scan_idx) for s in subject_idx]
+                         for i in j]
+        # idx is list of (subject, scan)
+        self.idx = zip(subject_idx_e, scan_idx_e)
+        self.n = len(self.idx)
+
+        if self.shuffle:
+            self.randomize()
+
+    def randomize(self):
+        rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
+        self.idx = [self.idx[i] for i in rnd_idx]
+
+    def next(self, batch_size=None):
+        if batch_size is None:
+            batch_size = self.batch_size
+
+        if self.pos == -1:
+            self.reset()
+            raise StopIteration
+
+        idxs = [self.idx[i] for i in range(self.pos, self.pos+batch_size)]
+        x = np.array([self.X[i][j:j+self.window] for i, j in idxs]).astype(floatX).transpose(1, 0, 2)
+        y = np.array([self.Y[i][j:j+self.window] for i, j in idxs]).astype(floatX).transpose(1, 0, 2)
+
+        self.pos += batch_size
+
+        if self.pos + batch_size > self.n:
+            self.pos = -1
+
+        rval = {
+            self.name: x,
+            'group': y
+        }
+
+        return rval
 
 
 class ICA_Loadings(object):

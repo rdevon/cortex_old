@@ -185,7 +185,7 @@ class ConditionalContinuousBinomial(ContinuousBinomial):
 
 
 class Multinomial(Distribution):
-    def __init(self, dim, name='multinomial', **kwargs):
+    def __init__(self, dim, name='multinomial', **kwargs):
         self.f_sample = _sample_multinomial
         self.f_neg_log_prob = _categorical_cross_entropy
         self.f_entropy = _categorical_entropy
@@ -278,7 +278,7 @@ class Gaussian(Distribution):
         if p is None:
             p = self.get_prob(*self.get_params())
         return self.f_neg_log_prob(x, p, clip=self.clip, sum_probs=sum_probs)
-    
+
     def standard_prob(self, x, p=None):
         if p is None:
             p = self.get_prob(*self.get_params())
