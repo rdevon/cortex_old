@@ -114,19 +114,20 @@ class MRI(Dataset):
         self.distributions = {self.name: distribution,
                               'group': 'multinomial'}
 
-        self.image_shape = X.shape[1:]
+        self.image_shape = self.mask.shape
         self.X = self._mask(X)
-        self.mean_image = self.X.mean(axis=0)
         self.Y = make_one_hot(Y)
 
         if distribution == 'gaussian':
-            self.X -= self.mean_image
+            self.X -= self.X.mean(axis=0)
             self.X /= self.X.std()
         elif distribution in ['continuous_binomial', 'binomial']:
             self.X -= self.X.min()
             self.X /= (self.X.max() - self.X.min())
         else:
             raise ValueError(distribution)
+
+        self.mean_image = self.X.mean(axis=0)
 
         if idx is not None:
             self.X = self.X[idx]
@@ -239,7 +240,6 @@ class MRI(Dataset):
         mask_f = mask.flatten()
         mask_idx = np.where(mask_f == 1)[0].tolist()
         X = np.zeros((X_masked.shape[0],) + self.image_shape).astype(floatX)
-
         for i, x_m in enumerate(X_masked):
             x_f = X[i].flatten()
             x_f[mask_idx] = x_m
@@ -277,12 +277,10 @@ class MRI(Dataset):
         if remove_niftis:
             for f in nifti_files:
                 os.remove(f)
-        print 'Saving montage'
         nifti_viewer.montage(images, self.anat_file, roi_dict,
                              out_file=out_file,
                              order=order,
                              stats=stats)
-        print 'Done'
 
 
 class FMRI_IID(MRI):
