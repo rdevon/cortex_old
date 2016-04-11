@@ -28,14 +28,18 @@ class GDIR(IRVI):
     def e_step(self, epsilon, q, y, *params):
         model        = self.model
         prior_params = model.get_prior_params(*params)
-
         h            = model.prior.step_sample(epsilon, q)
         py           = model.p_y_given_h(h, *params)
 
         consider_constant = [y] + list(params)
 
         log_py_h = -model.conditional.neg_log_prob(y[None, :, :], py)
-        KL_q_p   = model.prior.step_kl_divergence(q, *prior_params)
+        if model.prior.has_kl:
+            KL_q_p = model.prior.step_kl_divergence(q, *prior_params)
+        else:
+            log_ph = -model.prior.neg_log_prob(h)
+            log_qh = -model.posterior.neg_log_prob(h, q[None, :, :])
+            KL_q_p = (log_qh - log_ph).mean(axis=0)
         y_energy = -log_py_h.mean(axis=0)
 
         cost = (y_energy + KL_q_p).mean(axis=0)

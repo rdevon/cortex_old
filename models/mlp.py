@@ -114,9 +114,9 @@ class MLP(Layer):
         assert self.distribution is not None
         return self.distribution.sample(p=p, n_samples=n_samples)
 
-    def neg_log_prob(self, x, p):
+    def neg_log_prob(self, x, p, sum_probs=True):
         assert self.distribution is not None
-        return self.distribution.neg_log_prob(x, p)
+        return self.distribution.neg_log_prob(x, p, sum_probs=sum_probs)
 
     def entropy(self, p):
         assert self.distribution is not None

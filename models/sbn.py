@@ -31,6 +31,7 @@ from utils.tools import (
 def unpack(dim_in=None,
            dim_h=None,
            prior=None,
+           noise_model=None,
            recognition_net=None,
            generation_net=None,
            extra_args=dict(),
@@ -89,17 +90,14 @@ class SBN(Layer):
 
         if recognition_net is not None:
             t = recognition_net.get('type', None)
-            if t is None:
-                input_name = recognition_net.get('input_layer')
+            input_name = recognition_net.get('input_layer')
+            if recognition_net.get('distribution', None) is None:
                 recognition_net['distribution'] = 'binomial'
-                recognition_net['dim_in'] = dims[input_name]
-                recognition_net['dim_out'] = dim_h
+            recognition_net['dim_in'] = dims[input_name]
+            recognition_net['dim_out'] = dim_h
+            if t is None:
                 posterior = MLP.factory(**recognition_net)
             elif t == 'darn':
-                input_name = recognition_net.get('input_layer')
-                recognition_net['distribution'] = 'binomial'
-                recognition_net['dim_in'] = dims[input_name]
-                recognition_net['dim_out'] = dim_h
                 posterior = DARN.factory(**recognition_net)
             else:
                 raise ValueError(t)
@@ -193,11 +191,11 @@ class SBN(Layer):
         return center
 
     def visualize_latents(self):
-        h = T.eye(self.prior.dim).astype(floatX)
-        py = self.conditional.get_center(self.conditional.feed(h))
-        h0 = T.zeros_like(h)
-        py0 = self.conditional.get_center(self.conditional.feed(h0))
-        return py - py0
+        h0, h = self.prior.generate_latent_pair()
+        p0 = self.conditional.feed(h0)
+        p = self.conditional.feed(h)
+        py = self.conditional.distribution.visualize(p0, p)
+        return py
 
     # Misc --------------------------------------------------------------------
 
@@ -239,7 +237,7 @@ class SBN(Layer):
     def init_inference_samples(self, size):
         return self.posterior.distribution.prototype_samples(size)
 
-    def __call__(self, x, y, qk=None, n_posterior_samples=10):
+    def __call__(self, x, y, qk=None, n_posterior_samples=10, pass_gradients=False):
         q0  = self.posterior.feed(x)
 
         if qk is None:
@@ -247,7 +245,7 @@ class SBN(Layer):
 
         r   = self.init_inference_samples(
             (n_posterior_samples, y.shape[0], self.dim_h))
-        h   = (r <= qk[None, :, :]).astype(floatX)
+        h   = self.posterior.distribution.step_sample(r, qk[None, :, :])
         py  = self.conditional.feed(h)
 
         log_ph   = -self.prior.neg_log_prob(h)
@@ -259,7 +257,13 @@ class SBN(Layer):
 
         y_energy      = -log_py_h.mean(axis=0)
         prior_energy  = -log_ph.mean(axis=0)
-        h_energy      = -log_qh.mean(axis=0)
+
+        if pass_gradients:
+            h_energy = T.constant(0.).astype(floatX)
+            h_energy_mean = h_energy
+        else:
+            h_energy = -log_qh.mean(axis=0)
+            h_energy_mean = h_energy.mean(axis=0)
 
         nll           = -log_p
         prior_entropy = self.prior.entropy()
@@ -271,7 +275,7 @@ class SBN(Layer):
         results = OrderedDict({
             '-log p(x|h)': y_energy.mean(0),
             '-log p(h)': prior_energy.mean(0),
-            '-log q(h)': h_energy.mean(0),
+            '-log q(h)': h_energy_mean,
             '-log p(x)': nll.mean(0),
             'H(p)': prior_entropy,
             'H(q)': q_entropy.mean(0),
