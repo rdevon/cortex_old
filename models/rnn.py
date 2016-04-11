@@ -1,5 +1,5 @@
 '''
-Module for RNN layers
+Module for RNN layers.
 '''
 
 import copy
@@ -29,6 +29,17 @@ def raise_type_error(o, t):
 pi = theano.shared(np.pi).astype(floatX)
 
 def init_h(h_init, X, batch_size, models, **h_args):
+    '''Initializes the RNN hidden state.
+
+    Args:
+        h_init: str. Type of initialization.
+        X: 3D T.tensor. Input tensor for initialization through MLP.
+        batch_size: int
+        models: list of Layer, pulls 'h_net' for initialization (TODO change this).
+        **h_args: kwargs for different initializations.
+    Returns:
+        h0s: 3D Tensor of initializations. Full 3D tensor returned to train `h_net`.
+    '''
     if h_init is None:
         h0 = None
     elif h_init == 'last':
@@ -72,7 +83,16 @@ class RNN(Layer):
     def __init__(self, dim_in, dim_hs, dim_out=None,
                  conditional=None, input_net=None, output_net=None,
                  name='rnn', **kwargs):
-        '''Init function for RNN'''
+        '''Init function for RNN.
+
+        Args:
+            dim_in: int, input dimension.
+            dim_hs: list of int, dimensions of the recurrent layers.
+            dim_out: int, output dimention.
+            conditional: MLP (optional), conditional network for p(x_t | x_{t-1})
+            input_net: MLP, input network.
+            output_net: MLP, output network.
+        '''
 
         self.dim_in = dim_in
         self.dim_hs = dim_hs
@@ -113,8 +133,7 @@ class RNN(Layer):
             c_net: dict, conditional network args.
 
         Returns:
-            mlps: dict of MLP objects.
-
+            RNN: RNN object
         '''
 
         if dim_in is None:
@@ -323,6 +342,7 @@ class RNN(Layer):
         return h
 
     def call_seqs(self, x, condition_on, level, *params):
+        '''Prepares the input for __call__'''
         if level == 0:
             i_params = self.get_input_args(*params)
             a        = self.input_net.step_preact(x, *i_params)
@@ -336,6 +356,7 @@ class RNN(Layer):
         return [a]
 
     def step_call(self, x, m, h0s, *params):
+        '''Step version of __call__ for scan'''
         n_steps = x.shape[0]
         n_samples = x.shape[1]
 
@@ -362,6 +383,19 @@ class RNN(Layer):
         return OrderedDict(hs=hs, p=p, z=preact), updates
 
     def __call__(self, x, m=None, h0s=None, condition_on=None):
+        '''Call function.
+
+        For learning RNNs.
+
+        Args:
+            x: 3D T.tensor, input sequence. window x batch x dim
+            m: T.tensor, mask. window x batch. For masking in recurrent steps.
+            h0s: list of T.tensor (optional), initial h0s.
+            condition_on: T.tensor (optional), conditional for recurrent step.
+        Returns:
+            results: OrderedDict of hiddens, probabilities, and preacts.
+            updates: OrderedUpdates.
+        '''
         if h0s is None:
             h0s = [T.alloc(0., x.shape[1], dim_h).astype(floatX) for dim_h in self.dim_hs]
 
@@ -374,6 +408,18 @@ class RNN(Layer):
 
     def sample(self, x0=None, h0s=None, n_samples=10, n_steps=10,
                condition_on=None, debug=False):
+        '''Samples from an initial state.
+
+        Args:
+            x0: T.tensor (optional), initial input state.
+            h0: T.tensor (optional), initial recurrent state.
+            n_samples: int (optional), if no x0 or h0, used to initial batch.
+                Number of chains.
+            n_steps: int, number of sampling steps.
+        Returns:
+            results: OrderedDict of samples, probs, recurrent states, etc.
+            updates: OrderedUpdates.
+        '''
         if x0 is None:
             x0, _ = self.output_net.sample(
                 p=T.constant(0.5).astype(floatX),
@@ -406,13 +452,19 @@ class RNN(Layer):
 
 
 class SimpleRNN(RNN):
-    '''Simple RNN class, single hidden layer.'''
+    '''Simple RNN class, single hidden layer.
+
+    Wraps RNN but with a single hidden layer in __init__ instead of list.
+
+    '''
     def __init__(self, dim_in, dim_h, **kwargs):
+        '''SimpleRNN init function.'''
         super(SimpleRNN, self).__init__(dim_in, [dim_h], **kwargs)
 
     @staticmethod
     def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
                     i_net=dict(), o_net=dict(), c_net=None, **kwargs):
+        '''Convenience factory for SimpleRNN (see `RNN.factory`).'''
 
         if dim_in is None:
             dim_in = data_iter.dims[data_iter.name]
@@ -442,6 +494,7 @@ class SimpleRNN(RNN):
         return SimpleRNN(dim_in, dim_h, dim_out=dim_out, **kwargs)
 
     def energy(self, X, h0=None):
+        '''Energy function.'''
         if h0 is not None:
             h0s = [h0]
         else:
@@ -449,6 +502,7 @@ class SimpleRNN(RNN):
         return super(SimpleRNN, self).energy(X, h0s=h0s)
 
     def __call__(self, x, m=None, h0=None, condition_on=None):
+        '''Call function (see `RNN.__call__`).'''
         if h0 is not None:
             h0s = [h0]
         else:
@@ -457,6 +511,7 @@ class SimpleRNN(RNN):
             x, m=m, h0s=h0s, condition_on=condition_on)
 
     def sample(self, x0=None, h0=None, **kwargs):
+        '''Sample the SimpleRNN (see `RNN.sample`).'''
         if h0 is not None:
             h0s = [h0]
         else:
