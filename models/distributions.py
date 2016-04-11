@@ -137,6 +137,10 @@ class Binomial(Distribution):
     def prototype_samples(self, size):
         return self.trng.uniform(size, dtype=floatX)
 
+    def get_energy_bias(self, z):
+        return z
+
+
 class CenteredBinomial(Binomial):
     def __call__(self, z):
         return T.tanh(z)

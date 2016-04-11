@@ -8,6 +8,7 @@ import theano
 from theano import tensor as T
 
 from . import Layer
+from distributions import Bernoulli
 from utils import floatX
 from utils.tools import (
     concatenate,
@@ -20,11 +21,10 @@ from utils.tools import (
     scan
 )
 
+
 def unpack(dim_h=None,
            dim_in=None,
-           dataset_args=None,
            data_iter=None,
-           center_input=None,
            **model_args):
 
     dim_in = int(dim_in)
@@ -40,21 +40,32 @@ class RBM(Layer):
     '''
     RBM class.
 
+    Currently supports only binary hidden units.
+
     Attributes:
-        dim_v: int. number of visible units.
-        dim_h: int. number of hidden units.
-        h_act: str. Theano function name for hidden activation.
-        v_act: str. Theano function name for visible activation.
-        W: T.tensor. weights
-        b: T.tensor. visible bias
-        c: T.tensor. hidden bias.
+        dim_v: int, number of visible units.
+        dim_h: int, number of hidden units.
+        h_act: str, Theano function name for hidden activation.
+        v_act: str, Theano function name for visible activation.
+        W: T.tensor, weights
+        b: T.tensor, visible bias
+        c: T.tensor, hidden bias.
+        log_Z: T.tensor, current approximation of the log marginal.
+        std_log_Z: T.tensor, current std of the approximate log marginal.
+        mean_image: T.tensor, used for marginal approximation.
     '''
     def __init__(self, dim_v, dim_h, mean_image=None, name='rbm', **kwargs):
         '''Init method for RBM class.
+
+        Args:
+            dim_v: int, number of visible layer units
+            dim_h: int, number of hidden layer units
+            mean_image: np.array (optional), used for marginal approximation.
+                if None, then set to 0.5.
         '''
         self.dim_v = dim_v
         self.dim_h = dim_h
-        self.h_act = 'T.nnet.sigmoid'
+        self.h_dist = Bernoulli(dim_h)
         self.v_act = 'T.nnet.sigmoid'
 
         if mean_image is None:
@@ -73,24 +84,23 @@ class RBM(Layer):
         return RBM(dim_v, dim_h, **kwargs)
 
     def set_params(self):
-        W = norm_weight(self.dim_v, self.dim_h)
+        W = norm_weight(self.dim_v, self.h_dist.dim)
         b = np.zeros((self.dim_v,)).astype(floatX)
-        c = np.zeros((self.dim_h,)).astype(floatX)
         log_Z = (self.dim_h * np.log(2.)).astype(floatX)
         std_log_Z = (np.array(0.)).astype(floatX)
 
-        self.params = OrderedDict(W=W, b=b, c=c, log_Z=log_Z, std_log_Z=std_log_Z)
+        self.params = OrderedDict(W=W, b=b, log_Z=log_Z, std_log_Z=std_log_Z)
 
     def get_params(self):
-        return [self.W, self.b, self.c]
+        return [self.W, self.b] + self.h_dist.get_params()
 
     def pv_h(self, h):
         '''Function for probility of v given h'''
-        return self.step_pv_h(h, self.W, self.c)
+        return self.step_pv_h(h, self.W, self.b)
 
     def ph_v(self, x):
         '''Function for probability of h given v'''
-        return self.step_ph_v(x, self.W, self.b)
+        return self.step_ph_v(x, self.W, *self.h_dist.get_params())
 
     def step_pv_h(self, h, W, b):
         '''Step function for probility of v given h'''
@@ -101,10 +111,10 @@ class RBM(Layer):
         p = self.step_pv_h(h, W, b)
         return (r <= p).astype(floatX), p
 
-    def step_ph_v(self, x, W, c):
+    def step_ph_v(self, x, W, *params):
         '''Step function for probability of h given v'''
-        z = T.dot(x, W) + c
-        p = eval(self.h_act)(z)
+        z = T.dot(x, W) + self.h_dist.get_energy_bias(z)
+        p = self.h_dist(z)
         return p
 
     def step_sh_v(self, r, x, W, c):
@@ -119,7 +129,18 @@ class RBM(Layer):
         return h, v, ph, pv
 
     def sample(self, h0, n_steps=1):
-        '''Gibbs sampling function.'''
+        '''Gibbs sampling function.
+
+        Sampling starts from hidden state (arbitrary design choice).
+
+        Args:
+            h0: T.tensor, Initial hidden layer state.
+            n_steps: int, number of Gibbs steps.
+        Returns:
+            results: OrderedDict, all of the visible and hidden states as well
+                as the probability densities from Gibbs sampling.
+            updates: OrderedUpdates, from scan
+        '''
 
         r_vs = self.trng.uniform(size=(n_steps, h0.shape[0], self.dim_v), dtype=floatX)
         r_hs = self.trng.uniform(size=(n_steps, h0.shape[0], self.dim_h), dtype=floatX)
@@ -137,10 +158,21 @@ class RBM(Layer):
                 self.step_gibbs, seqs, outputs_info, non_seqs, n_steps,
                 name=self.name+'_sample', strict=False)
 
-        return OrderedDict(vs=vs, hs=hs, pvs=pvs, phs=phs), updates
+        results = OrderedDict(vs=vs, hs=hs, pvs=pvs, phs=phs)
+
+        return results, updates
 
     def reconstruct(self, x):
-        '''Reconstruction error (cross entropy).'''
+        '''Reconstruction error (cross entropy).
+
+        Performs one step of Gibbs.
+
+        Args:
+            x: T.tensor, input
+        Returns:
+            pv: T.tensor, visible conditional probability density from
+                hidden sampled from p(h | x)
+        '''
         r = self.trng.uniform(
             size=(x.shape[0], self.dim_h),
             dtype=floatX)
@@ -151,12 +183,27 @@ class RBM(Layer):
         return pv
 
     def estimate_nll(self, X):
+        '''Estimate the NLL using the estimate of log_Z.'''
         fe = self.free_energy(X)
         return fe.mean() + self.log_Z
 
     def step_gibbs_ais(self, r_h_a, r_h_b, r_v, v, beta,
                        W_a, b_a, c_a, W_b, b_b, c_b):
-        '''Step Gibbs sample for AIS'''
+        '''Step Gibbs sample for AIS.
+
+        Gibbs sampling for the transition operator that keeps p*_{k-1} invariant.
+
+        Args:
+            r_h_a: T.tensor, random tensor for sampling h_a.
+            r_h_b: T.tensor, random tensor for sampling h_b.
+            r_v: T.tensor, random tensor for sampling v.
+            v: T.tensor, input to T_{k-1}(.|v_{k-1})
+            beta: float, annealing factor.
+            W_a, b_a, c_a: T.tensor, parameters of RBM a.
+            W_b, b_b, c_b: T.tensor, parameters of RBM b.
+        Returns:
+            v: T.tensor, sample v_k \sim T_{k-1}(.|v_{k-1}).
+        '''
         W_a = (1 - beta) * W_a
         b_a = (1 - beta) * b_a
         c_a = (1 - beta) * c_a
@@ -175,7 +222,15 @@ class RBM(Layer):
         return v
 
     def update_partition_function(self, K=10000, M=100):
-        '''Updates the partition function'''
+        '''Updates the partition function.
+
+        Args:
+            K: int, number of AIS steps.
+            M: int, number of AIS runs.
+        Returns:
+            results: OrderedDict, results from AIS.
+            updates: OrderedUpdates, updates for partition function.
+        '''
         log_za, d_logz, var_dlogz, log_ws, samples = self.ais(K, M)
         updates = theano.OrderedUpdates([
             (self.log_Z, log_za + d_logz),
@@ -189,7 +244,18 @@ class RBM(Layer):
         return results, updates
 
     def ais(self, K, M):
-        '''Performs AIS to estimate the log of the partition function, Z.'''
+        '''Performs AIS to estimate the log of the partition function, Z.
+
+        Args:
+            K, int. Number of annealing steps.
+            M: int. Number of annealing runs.
+        Returns:
+            log_za: T.tensor.
+            d_logz: T.tensor.
+            var_dlogz: T.tensor.
+            log_ws: T.tensor, log weights.
+            xs[-1]: T.tensor, samples.
+        '''
 
         def free_energy(x, beta, *params):
             '''Calculates the free energy from the annealed distribution.'''
@@ -284,6 +350,7 @@ class RBM(Layer):
         return energy
 
     def neg_log_prob(self, x, p):
+        '''Convenience negative log prob function.'''
         p = T.clip(p, 1e-6, 1 - 1e-6)
         return (-x * T.log(p) - (1 - x) * T.log(1 - p)).sum(axis=x.ndim-1)
 
@@ -293,6 +360,16 @@ class RBM(Layer):
         Returns results, including generic cost function, and samples from
         Gibbs chain.
 
+        Args:
+            x: T.tensor, input visible state.
+            h_p: T.tensor (optional), for PCD.
+            n_steps: int, number of Gibbs steps.
+            n_chains: int (optional), for CD.
+        Returns:
+            results: OrderedDict, dictionary of results, all nums.
+            samples: OrderedDict, dictionary of results, all arrays.
+            updates: OrderedUpdates.
+            []: (constants, TODO)
         '''
         ph0 = self.step_ph_v(x, self.W, self.c)
         if h_p is None:
@@ -331,124 +408,3 @@ class RBM(Layer):
         )
 
         return results, samples, updates, []
-
-
-class GradInferRBM(RBM):
-    def __init__(self, dim_in, dim_h, name='grad_infer_rbm', h_init_mode=None,
-                 trng=None, stochastic=True, param_file=None, learn=True):
-        self.h_init_mode = h_init_mode
-
-        super(GradInferRBM, self).__init__(dim_in, dim_h, name=name, learn=learn,
-                                           stochastic=stochastic, trng=trng)
-
-    def set_params():
-        super(GradInferRBM, self).set_params()
-
-        if self.h_init_mode == 'average':
-            h0 = np.zeros((self.dim_h, )).astype(floatX)
-            self.params.update(h0=h0)
-        elif self.h_init_mode == 'ffn':
-            W0 = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
-                             rng=self.rng)
-            U0 = norm_weight(self.dim_in, self.dim_h, scale=self.weight_scale,
-                             rng=self.rng)
-            b0 = np.zeros((self.dim_h,)).astype('float32')
-            self.params.update(W0=W0, U0=U0, b0=b0)
-        elif self.h_init_mode is not None:
-            raise ValueError(self.h_init_mode)
-
-    def step_h(self, x, h_, XHa, Ura, bha, XHb, Urb, bhb, HX, bx):
-        preact = T.dot(h_, Ura) + T.dot(x, XHa) + bha
-        r, u = self.get_gates(preact)
-        preactx = T.dot(h_, Urb) * r + T.dot(x, XHb) + bhb
-        h = T.tanh(preactx)
-        h = u * h_ + (1. - u) * h
-        return h
-
-    def move_h(self, h0, x, l, HX, bx, *params):
-        h1 = self.step_h(x[0], h0, *params)
-        h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
-        p = T.nnet.sigmoid(T.dot(h, HX) + bx)
-        energy = self.energy(x, p).mean()
-        grad = theano.grad(energy, wrt=h0, consider_constant=[x])
-        h0 = h0 - l * grad
-        return h0
-
-    def step_infer(self, h0, m, x, l, HX, bx, *params):
-        h0 = self.move_h(h0, x, l, HX, bx, *params)
-        h1 = self.step_h(x[0], h0, *params)
-        h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
-        p = T.nnet.sigmoid(T.dot(h, HX) + bx)
-        x_hat = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
-        energy = self.energy(x, p)
-
-        return h0, x_hat, p, energy
-
-    def inference(self, x, mask, l, n_inference_steps=1, max_k=10):
-        x0 = x[0]
-        x1 = x[1]
-
-        if self.h0_mode == 'average':
-            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
-        elif self.h0_mode == 'ffn':
-            h0 = T.dot(x0, self.W0) + T.dot(x0, self.U0) + self.b0
-
-        p0 = T.nnet.sigmoid(T.dot(h0, self.HX) + self.bx)
-
-        seqs = []
-        outputs_info = [x0, p0, h0]
-        non_seqs = self.get_non_seqs()
-
-        (xs, ps, hs), updates = theano.scan(
-            self.step_sample,
-            sequences=seqs,
-            outputs_info=outputs_info,
-            non_sequences=non_seqs,
-            name=tools._p(self.name, 'sample_init'),
-            n_steps=max_k,
-            profile=tools.profile,
-            strict=True
-        )
-
-        xs = T.concatenate([x0[None, :, :], xs], axis=0)
-        x0 = xs[self.k]
-        x_n = T.concatenate([x0[None, :, :], x1[None, :, :]], axis=0)
-
-        if self.h0_mode == 'average':
-            h0 = T.alloc(0., x0.shape[0], self.dim_h).astype(floatX) + self.h0[None, :]
-        elif self.h0_mode == 'ffn':
-            h0 = T.dot(x0, self.W0) + T.dot(x1, self.U0) + self.b0
-
-        h1 = self.step_h(x[0], h0, *self.get_non_seqs())
-        h = T.concatenate([h0[None, :, :], h1[None, :, :]], axis=0)
-        p = T.nnet.sigmoid(T.dot(h, self.HX) + self.bx)
-        x_hat = self.trng.binomial(p=p, size=p.shape, n=1, dtype=p.dtype)
-
-        seqs = []
-        outputs_info = [h0, None, None, None]
-        non_seqs = [mask, x_n, l, self.HX, self.bx] + self.get_non_seqs()
-
-        (h0s, x_hats, ps, energies), updates_2 = theano.scan(
-            self.step_infer,
-            sequences=seqs,
-            outputs_info=outputs_info,
-            non_sequences=non_seqs,
-            name=tools._p(self.name, 'infer'),
-            n_steps=n_inference_steps,
-            profile=tools.profile,
-            strict=True
-        )
-        updates.update(updates_2)
-
-        h0s = T.concatenate([h0[None, :, :], h0s], axis=0)
-        x_hats = T.concatenate([x[None, :, :, :],
-                                x_hat[None, :, :, :],
-                                x_hats], axis=0)
-        energy = self.energy(x, ps[-1])
-
-        if self.h0_mode == 'average':
-            h0_mean = h0s[-1].mean(axis=0)
-            new_h = (1. - self.rate) * h0_mean + self.rate * h0_mean
-            updates += [(self.h0, new_h)]
-
-        return (x_hats, h0s, energy), updates

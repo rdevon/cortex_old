@@ -82,9 +82,8 @@ class SBN(Layer):
         super(SBN, self).__init__(name=name)
 
     @staticmethod
-    def mlp_factory(dim_h, dims, distributions,
-                    recognition_net=None, generation_net=None,
-                    prototype=None):
+    def factory(dim_h, dims, distributions, recognition_net=None,
+                generation_net=None, prototype=None):
         mlps = {}
 
         if recognition_net is not None:

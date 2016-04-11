@@ -24,6 +24,7 @@ from utils.tools import (
 
 
 def resolve(c):
+    '''Resolves the MLP subclass from str.'''
     if c == 'mlp' or c is None:
         return MLP
     elif c == 'lfmlp':
@@ -35,6 +36,17 @@ def resolve(c):
 
 
 class MLP(Layer):
+    '''Multilayer perceptron model.
+
+    Attributes:
+        dim_in: int, input dimension.
+        dim_out: int, output dimension.
+        distribution: Distribution (optional), distribution of output. Used for
+            sampling, density calculations, etc.
+        dim_h: int (optional): dimention of hidden layer.
+        dim_hs: list of ints (optional), for multiple hidden layers.
+        n_layers: int, number of output and hidden layers.
+    '''
     must_sample = False
     def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
                  f_sample=None, f_neg_log_prob=None, f_entropy=None,
