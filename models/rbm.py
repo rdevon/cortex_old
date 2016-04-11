@@ -8,7 +8,7 @@ import theano
 from theano import tensor as T
 
 from . import Layer
-from distributions import Bernoulli
+from distributions import Binomial
 from utils import floatX
 from utils.tools import (
     concatenate,
@@ -43,13 +43,9 @@ class RBM(Layer):
     Currently supports only binary hidden units.
 
     Attributes:
-        dim_v: int, number of visible units.
-        dim_h: int, number of hidden units.
-        h_act: str, Theano function name for hidden activation.
-        v_act: str, Theano function name for visible activation.
+        h_dist: Distribution, conditional distribution of hiddens.
+        v_dist: Distribution, conditional distribution of visibles.
         W: T.tensor, weights
-        b: T.tensor, visible bias
-        c: T.tensor, hidden bias.
         log_Z: T.tensor, current approximation of the log marginal.
         std_log_Z: T.tensor, current std of the approximate log marginal.
         mean_image: T.tensor, used for marginal approximation.
@@ -63,10 +59,8 @@ class RBM(Layer):
             mean_image: np.array (optional), used for marginal approximation.
                 if None, then set to 0.5.
         '''
-        self.dim_v = dim_v
-        self.dim_h = dim_h
-        self.h_dist = Bernoulli(dim_h)
-        self.v_act = 'T.nnet.sigmoid'
+        self.h_dist = Binomial(dim_h)
+        self.v_dist = Binomial(dim_v)
 
         if mean_image is None:
             mean_image = np.zeros(self.dim_v,).astype(floatX) + 0.5
@@ -84,48 +78,62 @@ class RBM(Layer):
         return RBM(dim_v, dim_h, **kwargs)
 
     def set_params(self):
-        W = norm_weight(self.dim_v, self.h_dist.dim)
-        b = np.zeros((self.dim_v,)).astype(floatX)
-        log_Z = (self.dim_h * np.log(2.)).astype(floatX)
+        W = norm_weight(self.v_dist.dim, self.h_dist.dim)
+        log_Z = (self.h_dist.dim * np.log(2.)).astype(floatX)
         std_log_Z = (np.array(0.)).astype(floatX)
+        self.params = OrderedDict(W=W, log_Z=log_Z, std_log_Z=std_log_Z)
 
-        self.params = OrderedDict(W=W, b=b, log_Z=log_Z, std_log_Z=std_log_Z)
+    def set_tparams(self):
+        tparams = super(RBM, self).set_tparams()
+        tparams.update(**self.v_dist.set_tparams())
+        tparams.update(**self.h_dist.set_tparams())
+        return tparams
 
     def get_params(self):
-        return [self.W, self.b] + self.h_dist.get_params()
+        return [self.W] + self.v_dist.get_params() + self.h_dist.get_params()
+
+    def split_params(self, *params):
+        W = params[0]
+        v_params = params[1:1+self.v_dist.n_params]
+        h_params = params[1+self.v_dist.n_params:]
+        return W, v_params, h_params
 
     def pv_h(self, h):
         '''Function for probility of v given h'''
-        return self.step_pv_h(h, self.W, self.b)
+        return self.step_pv_h(h, *self.get_params())
 
     def ph_v(self, x):
         '''Function for probability of h given v'''
-        return self.step_ph_v(x, self.W, *self.h_dist.get_params())
+        return self.step_ph_v(x, *self.get_params())
 
-    def step_pv_h(self, h, W, b):
-        '''Step function for probility of v given h'''
-        return eval(self.v_act)(T.dot(h, W.T) + b)
+    def step_pv_h(self, h, *params):
+        '''Step function for cacluating probility of v given h.'''
+        W, v_params, h_params = self.split_params(*params)
+        h = self.h_dist.scale_for_energy_model(h, *h_params)
+        center = T.dot(h, W.T) + self.v_dist.get_center(*v_params)
+        return self.v_dist.get_prob(center, *(v_params[1:]))
 
-    def step_sv_h(self, r, h, W, b):
-        '''Step function for samples from v given h'''
-        p = self.step_pv_h(h, W, b)
-        return (r <= p).astype(floatX), p
-
-    def step_ph_v(self, x, W, *params):
+    def step_ph_v(self, x, *params):
         '''Step function for probability of h given v'''
-        z = T.dot(x, W) + self.h_dist.get_energy_bias(z)
-        p = self.h_dist(z)
-        return p
+        W, v_params, h_params = self.split_params(*params)
+        x = self.v_dist.scale_for_energy_model(x, *v_params)
+        center = T.dot(x, W) + self.h_dist.get_center(*h_params)
+        return self.h_dist.get_prob(center, *(h_params[1:]))
 
-    def step_sh_v(self, r, x, W, c):
+    def step_sv_h(self, r, h, *params):
+        '''Step function for samples from v given h'''
+        p = self.step_pv_h(h, *params)
+        return self.v_dist.step_sample(r, p), p
+
+    def step_sh_v(self, r, x, *params):
         '''Step function for sampling h given v'''
-        p = self.step_ph_v(x, W, c)
-        return (r <= p).astype(floatX), p
+        p = self.step_ph_v(x, *params)
+        return self.h_dist.step_sample(r, p), p
 
-    def step_gibbs(self, r_h, r_v, h, W, b, c):
+    def step_gibbs(self, r_h, r_v, h, *params):
         '''Step Gibbs sample'''
-        v, pv = self.step_sv_h(r_v, h, W, b)
-        h, ph = self.step_sh_v(r_h, v, W, c)
+        v, pv = self.step_sv_h(r_v, h, *params)
+        h, ph = self.step_sh_v(r_h, v, *params)
         return h, v, ph, pv
 
     def sample(self, h0, n_steps=1):
@@ -142,8 +150,8 @@ class RBM(Layer):
             updates: OrderedUpdates, from scan
         '''
 
-        r_vs = self.trng.uniform(size=(n_steps, h0.shape[0], self.dim_v), dtype=floatX)
-        r_hs = self.trng.uniform(size=(n_steps, h0.shape[0], self.dim_h), dtype=floatX)
+        r_vs = self.trng.uniform(size=(n_steps, h0.shape[0], self.v_dist.dim), dtype=floatX)
+        r_hs = self.trng.uniform(size=(n_steps, h0.shape[0], self.h_dist.dim), dtype=floatX)
 
         seqs = [r_hs, r_vs]
         outputs_info = [h0, None, None, None]
@@ -174,11 +182,11 @@ class RBM(Layer):
                 hidden sampled from p(h | x)
         '''
         r = self.trng.uniform(
-            size=(x.shape[0], self.dim_h),
+            size=(x.shape[0], self.h_dist.dim),
             dtype=floatX)
 
-        h, ph = self.step_sh_v(r, x, self.W, self.c)
-        pv = self.step_pv_h(h, self.W, self.b)
+        h, ph = self.step_sh_v(r, x, *self.get_params())
+        pv = self.step_pv_h(h, *self.get_params())
 
         return pv
 
@@ -191,6 +199,7 @@ class RBM(Layer):
                        W_a, b_a, c_a, W_b, b_b, c_b):
         '''Step Gibbs sample for AIS.
 
+        Only works for Binomial / Binomial
         Gibbs sampling for the transition operator that keeps p*_{k-1} invariant.
 
         Args:
@@ -212,17 +221,19 @@ class RBM(Layer):
         b_b = beta * b_b
         c_b = beta * c_b
 
-        h_a, _ = self.step_sh_v(r_h_a, v, W_a, c_a)
-        h_b, _ = self.step_sh_v(r_h_b, v, W_b, c_b)
+        h_a, _ = self.step_sh_v(r_h_a, v, W_a, b_a, c_a)
+        h_b, _ = self.step_sh_v(r_h_b, v, W_b, b_b, c_b)
 
         pv_act = T.dot(h_a, W_a.T) + T.dot(h_b, W_b.T) + b_a + b_b
-        pv = eval(self.v_act)(pv_act)
+        pv = self.v_dist(pv_act)
         v = (r_v <= pv).astype(floatX)
 
         return v
 
     def update_partition_function(self, K=10000, M=100):
         '''Updates the partition function.
+
+        Only works for Binomial / Binomial.
 
         Args:
             K: int, number of AIS steps.
@@ -231,6 +242,10 @@ class RBM(Layer):
             results: OrderedDict, results from AIS.
             updates: OrderedUpdates, updates for partition function.
         '''
+
+        if not (isinstance(self.v_dist, Binomial) and isinstance(self.h_dist, Binomial)):
+            raise NotImplementedError('Only binomial / binomial RBM supported for AIS.')
+
         log_za, d_logz, var_dlogz, log_ws, samples = self.ais(K, M)
         updates = theano.OrderedUpdates([
             (self.log_Z, log_za + d_logz),
@@ -246,6 +261,8 @@ class RBM(Layer):
     def ais(self, K, M):
         '''Performs AIS to estimate the log of the partition function, Z.
 
+        Only works for Binomial / Binomial.
+
         Args:
             K, int. Number of annealing steps.
             M: int. Number of annealing runs.
@@ -256,6 +273,9 @@ class RBM(Layer):
             log_ws: T.tensor, log weights.
             xs[-1]: T.tensor, samples.
         '''
+
+        if not (isinstance(self.v_dist, Binomial) and isinstance(self.h_dist, Binomial)):
+            raise NotImplementedError('Only binomial / binomial RBM supported for AIS.')
 
         def free_energy(x, beta, *params):
             '''Calculates the free energy from the annealed distribution.'''
@@ -275,19 +295,19 @@ class RBM(Layer):
             return log_w, x
 
         # Random numbers for scan
-        r_vs   = self.trng.uniform(size=(K, M, self.dim_v), dtype=floatX)
-        r_hs_a = self.trng.uniform(size=(K, M, self.dim_h), dtype=floatX)
-        r_hs_b = self.trng.uniform(size=(K, M, self.dim_h), dtype=floatX)
+        r_vs   = self.trng.uniform(size=(K, M, self.v_dist.dim), dtype=floatX)
+        r_hs_a = self.trng.uniform(size=(K, M, self.h_dist.dim), dtype=floatX)
+        r_hs_b = self.trng.uniform(size=(K, M, self.h_dist.dim), dtype=floatX)
 
         # Parameters for RBM a and b
         W_a = T.zeros_like(self.W).astype(floatX)
         b_a = -T.log(1. / self.mean_image - 1.)
-        c_a = T.zeros_like(self.c).astype(floatX)
+        c_a = T.zeros_like(self.h_dist.z).astype(floatX)
         params = [W_a, b_a, c_a] + self.get_params()
 
         # x0 and log_w0
         p0     = T.tile(1. / (1. + T.exp(-b_a)), (M, 1))
-        r      = self.trng.uniform(size=(M, self.dim_v), dtype=floatX)
+        r      = self.trng.uniform(size=(M, self.v_dist.dim), dtype=floatX)
         x0     = (r <= p0).astype(floatX)
         log_w0 = T.zeros((M,)).astype(floatX)
 
@@ -301,17 +321,20 @@ class RBM(Layer):
 
         log_w  = log_ws[-1]
         d_logz = T.log(T.sum(T.exp(log_w - log_w.max()))) + log_w.max() - T.log(M)
-        log_za = self.dim_h * T.log(2.).astype(floatX) + T.log(1. + T.exp(b_a)).sum()
+        log_za = self.h_dist.dim * T.log(2.).astype(floatX) + T.log(1. + T.exp(b_a)).sum()
 
         var_dlogz = (M * T.exp(2. * (log_w - log_w.max())).sum() /
                      T.exp(log_w - log_w.max()).sum() ** 2 - 1.)
 
         return log_za, d_logz, var_dlogz, log_ws, xs[-1]
 
-    def step_free_energy(self, x, beta, W, b, c):
+    def step_free_energy(self, x, beta, *params):
         '''Step free energy function.'''
-        vis_term = beta * T.dot(x, b)
-        hid_act = beta * (T.dot(x, W) + c)
+        W, v_params, h_params = self.split_params(*params)
+
+        vis_term = beta * self.v_dist.get_energy_bias(x, *v_params)
+        x = self.v_dist.scale_for_energy_model(x, *v_params)
+        hid_act = beta * (T.dot(x, W) + self.h_dist.get_center(*h_params))
         fe = -vis_term - T.log(1. + T.exp(hid_act)).sum(axis=1)
         return fe
 
@@ -339,9 +362,15 @@ class RBM(Layer):
         else:
             reduce_dims = None
 
+        v_params = self.v_dist.get_params()
+        h_params = self.h_dist.get_params()
+
+        v_bias_term = self.v_dist.get_energy_bias(x, *v_params)
+        h_bias_term = self.h_dist.get_energy_bias(h, *h_params)
+
+        v = self.v_dist.scale_for_energy_model(v, *v_params)
+        h = self.h_dist.scale_for_energy_model(h, *h_params)
         joint_term = (h[:, None, :] * self.W[None, :, :] * v[:, :, None]).sum(axis=1)
-        v_bias_term = (v * self.b[None, :]).sum(axis=1)
-        h_bias_term = (h * self.c[None, :])
         energy = -joint_term - v_bias_term[:, None] - h_bias_term
 
         if reduce_dims is not None:
@@ -349,10 +378,13 @@ class RBM(Layer):
 
         return energy
 
-    def neg_log_prob(self, x, p):
+    def v_neg_log_prob(self, x, p):
         '''Convenience negative log prob function.'''
-        p = T.clip(p, 1e-6, 1 - 1e-6)
-        return (-x * T.log(p) - (1 - x) * T.log(1 - p)).sum(axis=x.ndim-1)
+        return self.v_dist.neg_log_prob(x, p)
+
+    def h_neg_log_prob(self, h, p):
+        '''Convenience negative log prob function.'''
+        return self.h_dist.neg_log_prob(h, p)
 
     def __call__(self, x, h_p=None, n_steps=1, n_chains=10):
         '''Call function.
@@ -371,9 +403,9 @@ class RBM(Layer):
             updates: OrderedUpdates.
             []: (constants, TODO)
         '''
-        ph0 = self.step_ph_v(x, self.W, self.c)
+        ph0 = self.step_ph_v(x, *self.get_params())
         if h_p is None:
-            r = self.trng.uniform(size=(x.shape[0], self.dim_h))
+            r = self.trng.uniform(size=(x.shape[0], self.h_dist.dim))
             h_p = (r <= ph0).astype(floatX)
         outs, updates = self.sample(h0=h_p, n_steps=n_steps)
 
@@ -384,7 +416,7 @@ class RBM(Layer):
         negative_cost = self.free_energy(vk)
         cost          = positive_cost.mean() - negative_cost.mean()
         fe            = self.free_energy(v0)
-        recon_error   = self.neg_log_prob(x, self.reconstruct(x)).mean()
+        recon_error   = self.v_neg_log_prob(x, self.reconstruct(x)).mean()
 
         nll = self.estimate_nll(x)
         results = OrderedDict(

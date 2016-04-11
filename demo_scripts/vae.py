@@ -1,7 +1,7 @@
 '''
-Demo for training RBM with MNIST dataset.
+Demo for training VAE.
 
-Try with `python rbm_mnist.py rbm_mnist.yaml`.
+Try with `python vae.py vae_mnist.yaml`.
 '''
 
 from collections import OrderedDict
@@ -12,7 +12,7 @@ import theano
 from theano import tensor as T
 
 from datasets import load_data
-from models.rbm import RBM, unpack
+from models.gbn import GBN
 from utils import floatX
 from utils.monitor import SimpleMonitor
 from utils.preprocessor import Preprocessor
@@ -29,42 +29,32 @@ from utils.training import (
 
 def init_learning_args(
     learning_rate=0.0001,
-    optimizer='sgd',
+    l2_decay=0.,
+    optimizer='rmsprop',
     optimizer_args=None,
     learning_rate_schedule=None,
     batch_size=100,
     valid_batch_size=100,
     epochs=100,
     valid_key='nll',
-    valid_sign='+'):
+    valid_sign='+',
+    excludes=['gaussian_log_sigma', 'gaussian_mu']):
     if optimizer_args is None: optimizer_args = dict()
-    return locals()
-
-def init_inference_args(
-    n_chains=10,
-    persistent=False,
-    n_steps=1):
     return locals()
 
 def train(
     out_path='', name='', model_to_load=None, save_images=True, test_every=None,
-    dim_h=None, preprocessing=None,
+    recognition_net=None, generation_net=None, preprocessing=None,
     learning_args=None,
-    inference_args=None,
     dataset_args=None):
 
     # ========================================================================
     if preprocessing is None: preprocessing = []
     if learning_args is None: learning_args = dict()
-    if inference_args is None: inference_args = dict()
     if dataset_args is None: raise ValueError('Dataset args must be provided')
-
-    learning_args = init_learning_args(**learning_args)
-    inference_args = init_inference_args(**inference_args)
 
     print 'Dataset args: %s' % pprint.pformat(dataset_args)
     print 'Learning args: %s' % pprint.pformat(learning_args)
-    print 'Inference args: %s' % pprint.pformat(inference_args)
 
     # ========================================================================
     print_section('Setting up data')
@@ -91,8 +81,12 @@ def train(
     print_section('Loading model and forming graph')
 
     def create_model():
-        model = RBM(dim_in, dim_h, mean_image=train.mean_image)
-        models = OrderedDict()
+        mlps = GBN.mlp_factory(
+            dim_h, train.dims, train.distributions,
+            recognition_net=recognition_net,
+            generation_net=generation_net)
+
+        model = C(dim_in, dim_h, trng=trng, prior=prior_model, **mlps)
         models[model.name] = model
         return models
 
@@ -107,7 +101,7 @@ def train(
     persistent = inference_args.pop('persistent')
     if persistent:
         H_p = theano.shared(
-            np.zeros((inference_args['n_chains'], model.h_dist.dim)).astype(floatX),
+            np.zeros((inference_args['n_chains'], model.dim_h)).astype(floatX),
             name='h_p')
     else:
         H_p = None
@@ -127,10 +121,10 @@ def train(
     f_test_keys = results.keys()
     f_test = theano.function([X], results.values())
 
-    _, z_updates = model.update_partition_function(K=1000)
+    _, z_updates = model.update_partition_function()
     f_update_partition = theano.function([], [], updates=z_updates)
 
-    H0 = model.trng.binomial(size=(10, model.h_dist.dim), dtype=floatX)
+    H0 = model.trng.binomial(size=(10, model.dim_h), dtype=floatX)
     s_outs, s_updates = model.sample(H0, n_steps=100)
     f_chain = theano.function(
         [], s_outs['pvs'], updates=s_updates)
@@ -143,7 +137,9 @@ def train(
         d = dict((k, v.get_value()) for k, v in all_params.items())
         d.update(
             dim_in=dim_in,
-            dim_h=dim_h
+            dim_h=dim_h,
+            center_input=center_input,
+            dataset_args=dataset_args
         )
         np.savez(outfile, **d)
 

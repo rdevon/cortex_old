@@ -15,8 +15,9 @@ import time
 
 from datasets import load_data
 from models.mlp import MLP
-from utils.monitor import SimpleMonitor
 from utils import floatX
+from utils.monitor import SimpleMonitor
+from utils.preprocessor import Preprocessor
 from utils.tools import get_trng, print_profile, print_section
 from utils.training import (
     main_loop,
@@ -64,9 +65,9 @@ def init_learning_args(
 
 def train(
     out_path='', name='', model_to_load=None, test_every=None,
-    classifier=None, center_input=False,
-    learning_args=dict(),
-    dataset_args=dict()):
+    classifier=None, preprocessing=None,
+    learning_args=None,
+    dataset_args=None):
     '''Basic training script.
 
     Args:
@@ -75,11 +76,15 @@ def train(
         test_every: int (optional), if not None, test every n epochs instead of
             every 1 epoch.
         classifier: dict, kwargs for MLP factory.
-        learning_args: dict, see `init_learning_args` above for options.
+        learning_args: dict or None, see `init_learning_args` above for options.
         dataset_args: dict, arguments for Dataset class.
     '''
 
     # ========================================================================
+    if preprocessing is None: preprocessing = []
+    if learning_args is None: learning_args = dict()
+    if dataset_args is None: raise ValueError('Dataset args must be provided')
+
     learning_args = init_learning_args(**learning_args)
     print 'Dataset args: %s' % pprint.pformat(dataset_args)
     print 'Learning args: %s' % pprint.pformat(learning_args)
@@ -105,12 +110,9 @@ def train(
     Y.tag.test_value = np.zeros((batch_size, dim_out), dtype=X.dtype)
     trng = get_trng()
 
-    if center_input:
-        print 'Centering input with train dataset mean image'
-        X_mean = theano.shared(train.mean_image.astype(floatX), name='X_mean')
-        X_i = X - X_mean
-    else:
-        X_i = X
+    preproc = Preprocessor(preprocessing)
+    X_i = preproc(X, data_iter=train)
+    inps = [X, Y]
 
     # ========================================================================
     print_section('Loading model and forming graph')
@@ -183,7 +185,7 @@ def train(
     # ========================================================================
     print_section('Getting gradients and building optimizer.')
     f_grad_shared, f_grad_updates, learning_args = set_optimizer(
-        [X, Y], cost, tparams, constants, updates, extra_outs, **learning_args)
+        inps, cost, tparams, constants, updates, extra_outs, **learning_args)
 
     # ========================================================================
     print_section('Actually running (main loop)')

@@ -9,7 +9,9 @@
     input_layer: 'mnist',
     dim_hs: [200, 100],
   },
-  center_input: True,
+  preprocessing: [
+    'center'
+  ],
   dataset_args: {
     dataset: 'mnist',
     keys: ['mnist', 'label'],

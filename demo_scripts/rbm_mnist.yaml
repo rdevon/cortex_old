@@ -10,9 +10,8 @@
     persistent: True,
     n_steps: 1
   },
-  dim_h: 500,
+  dim_h: 200,
   test_every: 10,
-  center_input: False,
   dataset_args: {
     dataset: 'mnist',
     source: '$irvi_data/mnist_binarized_salakhutdinov.pkl.gz'
