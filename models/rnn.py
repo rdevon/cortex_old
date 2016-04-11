@@ -96,7 +96,7 @@ class RNN(Layer):
 
     @staticmethod
     def factory(data_iter=None, dim_in=None, dim_out=None, dim_hs=None,
-                    i_net=None, o_net=None, c_net=None, **kwargs):
+                    i_net=dict(), o_net=dict(), c_net=None, **kwargs):
         '''Factory for creating MLPs for RNN and returning .
 
         Convenience to quickly create MLPs from dictionaries, linking all
@@ -124,17 +124,14 @@ class RNN(Layer):
 
         mlps = {}
 
-        if i_net is not None:
-            i_net['distribution'] = 'centered_binomial'
-            input_net = MLP.factory(dim_in=dim_in, dim_out=dim_hs[0],
-                                    name='input_net', **i_net)
-            mlps['input_net'] = input_net
+        i_net['distribution'] = 'centered_binomial'
+        input_net = MLP.factory(dim_in=dim_in, dim_out=dim_hs[0],
+                                name='input_net', **i_net)
 
-        if o_net is not None:
-            o_net['distribution'] = data_iter.distributions[data_iter.name]
-            output_net = MLP.factory(dim_in=dim_hs[-1], dim_out=dim_out,
-                                     name='output_net', **o_net)
-            mlps['output_net'] = output_net
+        o_net['distribution'] = data_iter.distributions[data_iter.name]
+        output_net = MLP.factory(dim_in=dim_hs[-1], dim_out=dim_out,
+                                 name='output_net', **o_net)
+        mlps.update(input_net=input_net, output_net=output_net)
 
         if c_net is not None:
             if not c_net.get('dim_in', False):
@@ -414,13 +411,35 @@ class SimpleRNN(RNN):
         super(SimpleRNN, self).__init__(dim_in, [dim_h], **kwargs)
 
     @staticmethod
-    def factory(dim_in=None, dim_h=None, **kwargs):
-        return SimpleRNN(dim_in, dim_h, **kwargs)
+    def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
+                    i_net=dict(), o_net=dict(), c_net=None, **kwargs):
 
-    @staticmethod
-    def mlp_factory(dim_in, dim_h, data_iter, **kwargs):
-        return super(SimpleRNN, self).mlp_factory(
-            dim_in, [dim_h], data_iter, **kwargs)
+        if dim_in is None:
+            dim_in = data_iter.dims[data_iter.name]
+        if dim_out is None:
+            dim_out = dim_in
+
+        mlps = {}
+
+        i_net['distribution'] = 'centered_binomial'
+        input_net = MLP.factory(dim_in=dim_in, dim_out=dim_h,
+                                name='input_net', **i_net)
+
+        o_net['distribution'] = data_iter.distributions[data_iter.name]
+        output_net = MLP.factory(dim_in=dim_h, dim_out=dim_out,
+                                 name='output_net', **o_net)
+        mlps.update(input_net=input_net, output_net=output_net)
+
+        if c_net is not None:
+            if not c_net.get('dim_in', False):
+                c_net['dim_in'] = dim_in
+            conditional = MLP.factory(dim_out=dim_h,
+                                      name='conditional', **c_net)
+            mlps['conditional'] = conditional
+
+        kwargs.update(**mlps)
+
+        return SimpleRNN(dim_in, dim_h, dim_out=dim_out, **kwargs)
 
     def energy(self, X, h0=None):
         if h0 is not None:

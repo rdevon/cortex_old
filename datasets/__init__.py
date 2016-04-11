@@ -128,15 +128,18 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         idx = [train_idx, valid_idx, test_idx]
 
     if train_batch_size is not None and len(train_idx) > 0:
-        train = C(idx=idx[0], batch_size=train_batch_size, **dataset_args)
+        train = C(idx=idx[0], batch_size=train_batch_size, mode='train',
+                  **dataset_args)
     else:
         train = None
     if valid_batch_size is not None and len(valid_idx) > 0:
-        valid = C(idx=idx[1], batch_size=valid_batch_size, **dataset_args)
+        valid = C(idx=idx[1], batch_size=valid_batch_size, mode='valid',
+                  **dataset_args)
     else:
         valid = None
     if test_batch_size is not None and len(test_idx) > 0:
-        test = C(idx=idx[2], batch_size=test_batch_size, **dataset_args)
+        test = C(idx=idx[2], batch_size=test_batch_size, mode='test',
+                 **dataset_args)
     else:
         test = None
 
@@ -145,7 +148,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
 
 class Dataset(object):
     def __init__(self, batch_size=None, shuffle=True, inf=False, name='dataset',
-                 stop=None, **kwargs):
+                 mode=None, stop=None, **kwargs):
         if batch_size is None:
             raise ValueError('Batch size argument must be given')
 
@@ -155,6 +158,7 @@ class Dataset(object):
         self.name = name
         self.pos = 0
         self.stop = stop
+        self.mode = mode
 
         return kwargs
 
@@ -172,7 +176,7 @@ class Dataset(object):
     def save_images(self, *args):
         pass
 
-class BasicDataset(object):
+class BasicDataset(Dataset):
     '''
     Dataset with numpy arrays as inputs. No visualization available.
 

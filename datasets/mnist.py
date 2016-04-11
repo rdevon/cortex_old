@@ -32,7 +32,7 @@ class MNIST(Dataset):
     def __init__(self, source=None, restrict_digits=None, mode='train',
                  binarize=False, name='mnist',
                  out_path=None, **kwargs):
-        super(MNIST, self).__init__(name=name, **kwargs)
+        super(MNIST, self).__init__(name=name, mode=mode, **kwargs)
         source = resolve_path(source)
 
         if source is None:
@@ -40,8 +40,7 @@ class MNIST(Dataset):
         print 'Loading {name} ({mode}) from {source}'.format(
             name=name, mode=mode, source=source)
 
-        X, Y = self.get_data(source, mode)
-        self.mode = mode
+        X, Y = self.get_data(source, self.mode)
 
         self.image_shape = (28, 28)
         self.out_path = out_path

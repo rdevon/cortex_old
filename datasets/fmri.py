@@ -48,6 +48,20 @@ def make_one_hot(labels):
         one_hot[i][j] = 1
     return one_hot.astype('float32')
 
+def resolve(dataset):
+    if dataset == 'mri':
+        C = MRI
+    elif dataset == 'fmri':
+        C = FMRI
+    elif dataset == 'fmri_iid':
+        C = FMRI_IID
+    elif dataset == 'snp':
+        C = SNP
+    else:
+        raise ValueError(dataset)
+
+    return C
+
 
 class MRI(Dataset):
     def __init__(self, source=None, name='mri', idx=None,
@@ -277,7 +291,71 @@ class FMRI_IID(MRI):
         self.targets = np.load(targets_file)
         self.novels = np.load(novels_file)
 
+        self.n_scans = self.targets.shape[0]
+        self.n_subjects = X.shape[0] // self.n_scans
+
         return X, Y
+
+
+class FMRI(FMRI_IID):
+    '''fMRI dataset class.
+
+    Treats fMRI as sequences, instead as IID as with FMRI_IID.
+    '''
+    def __init__(self, name='fmri', window=10, stride=1, idx=None, **kwargs):
+        super(FMRI, self).__init__(name=name, **kwargs)
+
+        self.window = window
+        self.stride = stride
+
+        self.X = self.X.reshape((self.n_subjects, self.n_scans, self.X.shape[1]))
+        self.Y = self.Y.reshape((self.n_subjects, self.n_scans, self.Y.shape[1]))
+
+        if idx is not None:
+            self.X = self.X[idx]
+            self.Y = self.Y[idx]
+            self.n_subjects = len(idx)
+
+        scan_idx = range(0, self.n_scans - window + 1, stride)
+        scan_idx_e = scan_idx * self.n_subjects
+        subject_idx = range(self.n_subjects)
+        # Similar to np.repeat, but using list comprehension.
+        subject_idx_e = [i for j in [[s] * len(scan_idx) for s in subject_idx]
+                         for i in j]
+        # idx is list of (subject, scan)
+        self.idx = zip(subject_idx_e, scan_idx_e)
+        self.n = len(self.idx)
+
+        if self.shuffle:
+            self.randomize()
+
+    def randomize(self):
+        rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
+        self.idx = [self.idx[i] for i in rnd_idx]
+
+    def next(self, batch_size=None):
+        if batch_size is None:
+            batch_size = self.batch_size
+
+        if self.pos == -1:
+            self.reset()
+            raise StopIteration
+
+        idxs = [self.idx[i] for i in range(self.pos, self.pos+batch_size)]
+        x = np.array([self.X[i][j:j+self.window] for i, j in idxs]).astype(floatX).transpose(1, 0, 2)
+        y = np.array([self.Y[i][j:j+self.window] for i, j in idxs]).astype(floatX).transpose(1, 0, 2)
+
+        self.pos += batch_size
+
+        if self.pos + batch_size > self.n:
+            self.pos = -1
+
+        rval = {
+            self.name: x,
+            'group': y
+        }
+
+        return rval
 
 
 class ICA_Loadings(object):
