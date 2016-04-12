@@ -250,9 +250,9 @@ class GBN(Layer):
             KL_qk_q0 = (kl_scale * self.kl_divergence(qk_c, q0)).astype(floatX)
 
         log_ph      = -self.prior.neg_log_prob(h)
-        log_qh      = -self.posterior.neg_log_prob(h, qk[None, :, :])
+        log_qkh     = -self.posterior.neg_log_prob(h, qk[None, :, :])
 
-        log_p       = (log_sum_exp(log_py_h + log_ph - log_qh, axis=0)
+        log_p       = (log_sum_exp(log_py_h + log_ph - log_qkh, axis=0)
                        - T.log(n_posterior_samples))
 
         y_energy    = -log_py_h.mean(axis=0)
@@ -261,10 +261,7 @@ class GBN(Layer):
         nll         = -log_p
 
         lower_bound = -(y_energy + KL_qk_p).mean()
-        if pass_gradients:
-            cost = (y_energy + KL_qk_p).mean(0)
-        else:
-            cost = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
+        cost = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
 
         mu, log_sigma = self.posterior.distribution.split_prob(qk)
 

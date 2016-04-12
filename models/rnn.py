@@ -10,23 +10,14 @@ from theano import tensor as T
 
 from . import Layer
 from mlp import MLP
-from utils import tools
+from utils import floatX, pi, tools
 from utils.tools import (
     concatenate,
-    floatX,
     init_rngs,
     init_weights,
-    norm_weight,
-    ortho_weight,
-    pi,
     scan
 )
 
-
-def raise_type_error(o, t):
-    raise ValueError('%s is not of type %s' % (type(o), t))
-
-pi = theano.shared(np.pi).astype(floatX)
 
 def init_h(h_init, X, batch_size, models, **h_args):
     '''Initializes the RNN hidden state.

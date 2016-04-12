@@ -16,9 +16,9 @@ from theano import tensor as T
 import time
 import traceback
 
+from utils import floatX
 from utils.tools import (
     concatenate,
-    floatX,
     init_rngs,
     rng_,
     scan

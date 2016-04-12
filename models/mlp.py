@@ -9,14 +9,11 @@ from theano import tensor as T
 import warnings
 
 import distributions
-from distributions import (
-    Distribution,
-    resolve as resolve_distribution
-)
-from layers import Layer
+from distributions import Distribution, resolve as resolve_distribution
+from . import Layer
+from utils import floatX
 from utils.tools import (
     concatenate,
-    floatX,
     init_rngs,
     init_weights,
     norm_weight
