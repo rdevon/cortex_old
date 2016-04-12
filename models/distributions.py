@@ -155,6 +155,7 @@ def make_conditional(C):
     class Conditional(C):
         def set_params(self): self.params = OrderedDict()
         def get_params(self): return []
+    Conditional.__name__ = Conditional.__name__ + '_' + C.__name__
 
     return Conditional
 

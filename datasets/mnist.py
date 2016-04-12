@@ -75,7 +75,7 @@ class MNIST(Dataset):
 
         self.dims = dict(label=len(np.unique(Y)))
         self.dims[name] = X.shape[1]
-        self.distributions = dict(label='binomial')
+        self.distributions = dict(label='multinomial')
         self.distributions[name] = 'binomial'
 
         if binarize:

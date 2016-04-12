@@ -31,7 +31,8 @@ from tools import (
     load_experiment,
     load_model,
     resolve_path,
-    update_dict_of_lists
+    update_dict_of_lists,
+    warn_kwargs
 )
 
 
@@ -272,7 +273,8 @@ def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
     return results
 
 def validate(tparams, results, best_valid, e, best_epoch,
-             save=None, valid_key=None, valid_sign=None, bestfile=None):
+             save=None, valid_key=None, valid_sign=None, bestfile=None,
+             **kwargs):
     '''Generic validation method.
 
     Compares the validation result against previous best.
@@ -290,6 +292,9 @@ def validate(tparams, results, best_valid, e, best_epoch,
         best_valid: float
         best_epoch: int
     '''
+
+    warn_kwargs(None, **kwargs)
+
     valid_value = results[valid_key]
     if valid_sign == '-':
         valid_value *= -1

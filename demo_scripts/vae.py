@@ -12,7 +12,7 @@ import theano
 from theano import tensor as T
 
 from datasets import load_data
-from models.gbn import GBN
+from models.helmholtz import Helmholtz, unpack
 from utils import floatX
 from utils.monitor import SimpleMonitor
 from utils.preprocessor import Preprocessor
@@ -29,14 +29,15 @@ from utils.training import (
 
 def init_learning_args(
     learning_rate=0.0001,
+    learning_rate_schedule=None,
     l2_decay=0.,
     optimizer='rmsprop',
     optimizer_args=None,
-    learning_rate_schedule=None,
+    n_posterior_samples=20,
     batch_size=100,
     valid_batch_size=100,
     epochs=100,
-    valid_key='nll',
+    valid_key='-log p(x)',
     valid_sign='+',
     excludes=['gaussian_log_sigma', 'gaussian_mu']):
     if optimizer_args is None: optimizer_args = dict()
@@ -44,7 +45,8 @@ def init_learning_args(
 
 def train(
     out_path='', name='', model_to_load=None, save_images=True, test_every=None,
-    recognition_net=None, generation_net=None, preprocessing=None,
+    dim_h=None, rec_args=None, gen_args=None, prior='gaussian',
+    preprocessing=None,
     learning_args=None,
     dataset_args=None):
 
@@ -52,6 +54,7 @@ def train(
     if preprocessing is None: preprocessing = []
     if learning_args is None: learning_args = dict()
     if dataset_args is None: raise ValueError('Dataset args must be provided')
+    learning_args = init_learning_args(**learning_args)
 
     print 'Dataset args: %s' % pprint.pformat(dataset_args)
     print 'Learning args: %s' % pprint.pformat(learning_args)
@@ -81,80 +84,92 @@ def train(
     print_section('Loading model and forming graph')
 
     def create_model():
-        mlps = GBN.mlp_factory(
-            dim_h, train.dims, train.distributions,
-            recognition_net=recognition_net,
-            generation_net=generation_net)
+        model = Helmholtz.factory(
+            dim_h, train,
+            prior=prior,
+            rec_args=rec_args,
+            gen_args=gen_args)
 
-        model = C(dim_in, dim_h, trng=trng, prior=prior_model, **mlps)
+        models = OrderedDict()
         models[model.name] = model
         return models
 
     models = set_model(create_model, model_to_load, unpack)
-    model = models['rbm']
+    model = next((v for k, v in models.iteritems() if k in ['sbn', 'gbn', 'lbn']), None)
+    posterior = model.posterior
+    if not posterior.distribution.is_continuous:
+        raise ValueError('Cannot perform VAE with posterior with distribution '
+                         '%r' % type(posterior.distribution))
     tparams = model.set_tparams()
     print_profile(tparams)
 
     # ==========================================================================
     print_section('Getting cost')
-
-    persistent = inference_args.pop('persistent')
-    if persistent:
-        H_p = theano.shared(
-            np.zeros((inference_args['n_chains'], model.dim_h)).astype(floatX),
-            name='h_p')
-    else:
-        H_p = None
-    results, samples, updates, constants = model(
-        X_i, h_p=H_p, **inference_args)
-
+    constants = []
     updates = theano.OrderedUpdates()
-    if persistent:
-        updates += theano.OrderedUpdates([(H_p, samples['hs'][-1])])
+    n_posterior_samples = learning_args.pop('n_posterior_samples')
+    results, samples, updates, constants = model(
+        X_i, X, qk=None, pass_gradients=True,
+        n_posterior_samples=n_posterior_samples)
 
     cost = results['cost']
-    extra_outs = [results['free_energy']]
-    extra_outs_keys = ['cost', 'free_energy']
+    extra_outs = []
+    extra_outs_keys = ['cost']
+
+    l2_decay = learning_args.pop('l2_decay')
+    if l2_decay is not False and l2_decay > 0.:
+        print 'Adding %.5f L2 weight decay' % l2_decay
+        l2_rval = model.l2_decay(l2_decay)
+        cost += l2_rval.pop('cost')
+        extra_outs += l2_rval.values()
+        extra_outs_keys += l2_rval.keys()
 
     # ==========================================================================
     print_section('Test functions')
     f_test_keys = results.keys()
     f_test = theano.function([X], results.values())
 
-    _, z_updates = model.update_partition_function()
-    f_update_partition = theano.function([], [], updates=z_updates)
+    prior_samples, p_updates = model.sample_from_prior()
+    f_prior = theano.function([], prior_samples, updates=p_updates)
 
-    H0 = model.trng.binomial(size=(10, model.dim_h), dtype=floatX)
-    s_outs, s_updates = model.sample(H0, n_steps=100)
-    f_chain = theano.function(
-        [], s_outs['pvs'], updates=s_updates)
+    latent_vis = model.visualize_latents()
+    f_latent = theano.function([], latent_vis)
 
-     # ========================================================================
+    py = samples['py']
+    f_py_h = theano.function([X], py)
+
+    # ========================================================================
     print_section('Setting final tparams and save function')
-    tparams, all_params = set_params(tparams, updates)
+    excludes = learning_args.pop('excludes')
+    tparams, all_params = set_params(
+        tparams, updates, excludes=excludes)
 
     def save(tparams, outfile):
         d = dict((k, v.get_value()) for k, v in all_params.items())
         d.update(
-            dim_in=dim_in,
             dim_h=dim_h,
-            center_input=center_input,
-            dataset_args=dataset_args
+            rec_args=rec_args,
+            gen_args=gen_args
         )
         np.savez(outfile, **d)
 
     def save_images():
-        w = model.W.get_value().T
-        w = w.reshape((w.shape[0] // 10, 10, w.shape[1]))
-        train.save_images(w, path.join(out_path, 'weights.png'))
+        p_samples = f_prior()
+        p_samples = p_samples.reshape(
+            (p_samples.shape[0] // 10, 10, p_samples.shape[1]))
+        train.save_images(p_samples, path.join(out_path, 'prior_samples.png'))
 
-        chain = f_chain()
-        train.save_images(chain, path.join(out_path, 'chain.png'))
+        l_vis = f_latent()
+        l_vis = l_vis.reshape((l_vis.shape[0] // 10, 10, l_vis.shape[1]))
+        train.save_images(l_vis, path.join(out_path, 'latent_vis.png'))
+
+        py_h = f_py_h(train.X[:100])
+        train.save_images(py_h, path.join(out_path, 'py_h.png'))
 
     # ========================================================================
     print_section('Getting gradients and building optimizer.')
     f_grad_shared, f_grad_updates, learning_args = set_optimizer(
-        [X], cost, tparams, constants, updates, extra_outs, **learning_args)
+        inps, cost, tparams, constants, updates, extra_outs, **learning_args)
 
     # ========================================================================
     print_section('Actually running (main loop)')
@@ -163,7 +178,6 @@ def train(
     main_loop(
         train, valid, tparams,
         f_grad_shared, f_grad_updates, f_test, f_test_keys,
-        f_extra=f_update_partition,
         test_every=test_every,
         save=save,
         save_images=save_images,
