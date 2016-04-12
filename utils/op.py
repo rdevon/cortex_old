@@ -1,6 +1,8 @@
-"""
+'''
 Optimization routines.
-"""
+
+Based (and copied) on Kyunghyun Cho's arctic repo.
+'''
 import ipdb
 import numpy as np
 import theano
@@ -12,7 +14,7 @@ from collections import OrderedDict
 profile = False
 def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
     gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k) for k, p in tparams.iteritems()]
-    """
+    '''
     g_norm = 0.
 
     for i in xrange(len(grads)):
@@ -25,7 +27,7 @@ def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_pa
 
     for i in xrange(len(grads)):
         grads[i] *= scaler
-    """
+    '''
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
     f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
@@ -61,14 +63,14 @@ def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_pa
         if p.name not in exclude_params:
             updates[p] = p_t
 
-    """
+    '''
     for k, updated_param in updates.items():
         if 'W' in str(k):
             col_norms = T.sqrt(T.sqr(updated_param).sum(axis=0))
             desired_norms = T.clip(col_norms, 0, 1.9365)
             ratio = (desired_norms / (1e-8 + col_norms))
             updates[k] = updated_param * ratio
-    """
+    '''
     updates[i] = i_t
 
     f_update = theano.function([lr], [], updates=updates,
@@ -79,7 +81,7 @@ def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_pa
 
 def adam2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
     gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k) for k, p in tparams.iteritems()]
-    """
+    '''
     g_norm = 0.
 
     for i in xrange(len(grads)):
@@ -92,7 +94,7 @@ def adam2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_pa
 
     for i in xrange(len(grads)):
         grads[i] *= scaler
-    """
+    '''
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
     f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
@@ -127,14 +129,14 @@ def adam2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_pa
         if p.name not in exclude_params:
             updates[p] = p_t
 
-    """
+    '''
     for k, updated_param in updates.items():
         if 'W' in str(k):
             col_norms = T.sqrt(T.sqr(updated_param).sum(axis=0))
             desired_norms = T.clip(col_norms, 0, 1.9365)
             ratio = (desired_norms / (1e-8 + col_norms))
             updates[k] = updated_param * ratio
-    """
+    '''
     updates[i] = i_t
 
     f_update = theano.function([lr], [], updates=updates,
@@ -142,13 +144,10 @@ def adam2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_pa
 
     return f_grad_shared, f_update
 
-
-# optimizers
-# name(hyperp, tparams, grads, inputs (list), cost) = f_grad_shared, f_update
 def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
     gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k) for k, p in tparams.iteritems()]
 
-    """
+    '''
     g_norm = 0.
 
     for i in xrange(len(grads)):
@@ -161,7 +160,7 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_par
 
     for i in xrange(len(grads)):
         grads[i] *= scaler
-    """
+    '''
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
@@ -206,6 +205,7 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_par
     return f_grad_shared, f_update
 
 def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
+    '''Adadelta'''
     zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k) for k, p in tparams.iteritems()]
     running_up2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rup2'%k) for k, p in tparams.iteritems()]
     running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k) for k, p in tparams.iteritems()]
@@ -226,6 +226,7 @@ def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude
 def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([]),
             relaxation=1e-4, momentum=0.9, coefficient=0.95
             ):
+    '''RMSProp'''
     print 'RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f' % (relaxation, momentum, coefficient)
     zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k) for k, p in tparams.iteritems()]
     running_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad'%k) for k, p in tparams.iteritems()]
@@ -245,6 +246,7 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_
     return f_grad_shared, f_update
 
 def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
+    '''Stochastic gradient descent'''
     gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k) for k, p in tparams.iteritems()]
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
@@ -256,10 +258,9 @@ def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_para
 
     return f_grad_shared, f_update
 
-
 def rmsprop2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([]),
-            relaxation=1e-4, momentum=0.9, coefficient=0.95
-            ):
+            relaxation=1e-4, momentum=0.9, coefficient=0.95):
+    '''An alternative RMSProp'''
     print 'RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f' % (relaxation, momentum, coefficient)
     zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k) for k, p in tparams.iteritems()]
     running_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad'%k) for k, p in tparams.iteritems()]
