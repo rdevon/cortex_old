@@ -15,6 +15,8 @@ from utils.tools import (
     concatenate,
     init_rngs,
     init_weights,
+    ortho_weight,
+    norm_weight,
     scan
 )
 
@@ -107,7 +109,7 @@ class RNN(Layer):
 
     @staticmethod
     def factory(data_iter=None, dim_in=None, dim_out=None, dim_hs=None,
-                    i_net=dict(), o_net=dict(), c_net=None, **kwargs):
+                i_net=None, o_net=None, c_net=None, **kwargs):
         '''Factory for creating MLPs for RNN and returning .
 
         Convenience to quickly create MLPs from dictionaries, linking all
@@ -131,6 +133,8 @@ class RNN(Layer):
             dim_in = data_iter.dims[data_iter.name]
         if dim_out is None:
             dim_out = dim_in
+        if i_net is None: i_net = dict()
+        if o_net is None: o_net = dict()
 
         mlps = {}
 
@@ -454,13 +458,15 @@ class SimpleRNN(RNN):
 
     @staticmethod
     def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
-                    i_net=dict(), o_net=dict(), c_net=None, **kwargs):
+                    i_net=None, o_net=None, c_net=None, **kwargs):
         '''Convenience factory for SimpleRNN (see `RNN.factory`).'''
 
         if dim_in is None:
             dim_in = data_iter.dims[data_iter.name]
         if dim_out is None:
             dim_out = dim_in
+        if i_net is None: i_net = dict()
+        if o_net is None: o_net = dict()
 
         mlps = {}
 

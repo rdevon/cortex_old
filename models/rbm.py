@@ -45,6 +45,8 @@ class RBM(Layer):
     Attributes:
         h_dist: Distribution, conditional distribution of hiddens.
         v_dist: Distribution, conditional distribution of visibles.
+        dim_h: int, number of hidden units.
+        dim_v: int, number of visible units.
         W: T.tensor, weights
         log_Z: T.tensor, current approximation of the log marginal.
         std_log_Z: T.tensor, current std of the approximate log marginal.
@@ -60,7 +62,9 @@ class RBM(Layer):
                 if None, then set to 0.5.
         '''
         self.h_dist = Binomial(dim_h)
+        self.dim_h = self.h_dist.dim
         self.v_dist = Binomial(dim_v)
+        self.dim_v = self.v_dist.dim
 
         if mean_image is None:
             mean_image = np.zeros(self.dim_v,).astype(floatX) + 0.5
