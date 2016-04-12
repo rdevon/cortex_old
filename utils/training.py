@@ -90,7 +90,7 @@ def set_experiment(args):
     exp_dict.update(args)
 
     if not 'out_path' in exp_dict.keys():
-        exp_dict['out_path'] = resolve_path('$irvi_outs')
+        exp_dict['out_path'] = resolve_path('$outs')
 
     exp_dict['out_path'] = path.join(exp_dict['out_path'], exp_dict['name'])
 

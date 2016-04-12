@@ -15,6 +15,6 @@
   dataset_args: {
     dataset: 'mnist',
     keys: ['mnist', 'label'],
-    source: '$irvi_data/mnist.pkl.gz'
+    source: '$data/mnist.pkl.gz'
   }
 }
