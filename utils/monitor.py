@@ -20,6 +20,12 @@ np.set_printoptions(precision=4)
 
 
 class SimpleMonitor(object):
+    '''Simple monitor for displaying and saving results.
+
+    Attributes:
+        d: OrderedDict: dictionary of results.
+        d_valid: OrderedDict: dictionary of results for validation.
+    '''
     def __init__(self, *args):
         self.d = OrderedDict()
         self.d_valid = OrderedDict()
@@ -96,14 +102,16 @@ class SimpleMonitor(object):
 
 
 class Monitor(object):
-    """Training monitor.
+    '''Training monitor.
+
+    (TODO) Out of date. Use at your own risk.
 
     Early stopping is done for each err_keys variable on validation set
     separately and following files are saved:
         - model_<err_key>_<timestamp>.npz : model parameters
         - config_<timestamp>.pkl : model hyper parameters
         - timing_<timestamp>.pkl : monitoring channel timings
-    """
+    '''
     def __init__(self, tparams, data, cost_fn, err_fn, out_fn, name='model',
                  sample_fn=None, first_order_stats=False, savefile='monitors.png',
                  early_stopping=False, hyperparams=None):
@@ -148,16 +156,6 @@ class Monitor(object):
 
     def update(self, *inps):
         train_c, train_e, train_o = self.get_stats(*inps)
-        #r_hat = train_o['logistic_y_hat']
-        #a_max = np.argmax(r_hat)
-        #target_value = r_hat[a_max]
-        #max_v = a_max
-        #for i in range(a_max,len(r_hat)):
-        #    if(target_value==r_hat[i]):
-        #        max_v = i
-        #train_tweets = self.data['train'].next_tweet
-        #train_tweets = train_tweets[a_max:max_v][:]
-        #self.data['train'].detokenize(train_tweets)
 
         check_bad_nums(dict((k, v) for k, v in train_c.iteritems()),
                        self.data['train'].count)
@@ -166,10 +164,6 @@ class Monitor(object):
                        self.data['train'].count)
         self.append_stats('train', train_c)
         self.append_stats('train', train_e)
-        #self.append_stats('train', dict(sm_out=train_o['softmax_y_hat'].mean()))
-        #print 'train'
-        #print inps[1]
-        #print train_o['softmax_y_hat']
 
         if self.sample_fn is not None:
             self.samples['train'] = self.sample_fn(*inps)
@@ -180,14 +174,8 @@ class Monitor(object):
             except StopIteration:
                 return
             valid_c, valid_e, valid_o = self.get_stats(*inps)
-            #valid_costs, valid_outs, valid_errs =\
-            #    self._validate(self.data['valid'])
             self.append_stats('valid', valid_c)
             self.append_stats('valid', valid_e)
-            #self.append_stats('valid', dict(sm_out=valid_o['softmax_y_hat'].mean()))
-            #print 'valid'
-            #print inps[1]
-            #print valid_o['softmax_y_hat']
 
             # Early stopping mechanism
             if self.early_stopping:
@@ -325,13 +313,6 @@ class Monitor(object):
                                                            t=timestamp))
             np.savez(outfile, **dict((k, v.get_value())
                                   for k, v in self.tparams.items()))
-
-        # save timings and model config
-        #pkl.dump([self.costs, self.errs], open(
-        #    os.path.join(outdir, 'timing_{}.pkl'.format(timestamp)), 'w'))
-        #pkl.dump(hparams, open(
-        #    os.path.join(outdir, 'config_{}.pkl'.format(timestamp)), 'w'))
-        #signal.signal(signal.SIGINT, s)
 
     def _track_current_model(self, errs):
         """Keep track of best model and record it if necessary."""

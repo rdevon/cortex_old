@@ -9,14 +9,11 @@ from theano import tensor as T
 import warnings
 
 import distributions
-from distributions import (
-    Distribution,
-    resolve as resolve_distribution
-)
-from layers import Layer
+from distributions import Distribution, resolve as resolve_distribution
+from . import Layer
+from utils import floatX
 from utils.tools import (
     concatenate,
-    floatX,
     init_rngs,
     init_weights,
     norm_weight
@@ -24,6 +21,7 @@ from utils.tools import (
 
 
 def resolve(c):
+    '''Resolves the MLP subclass from str.'''
     if c == 'mlp' or c is None:
         return MLP
     elif c == 'lfmlp':
@@ -35,6 +33,17 @@ def resolve(c):
 
 
 class MLP(Layer):
+    '''Multilayer perceptron model.
+
+    Attributes:
+        dim_in: int, input dimension.
+        dim_out: int, output dimension.
+        distribution: Distribution (optional), distribution of output. Used for
+            sampling, density calculations, etc.
+        dim_h: int (optional): dimention of hidden layer.
+        dim_hs: list of ints (optional), for multiple hidden layers.
+        n_layers: int, number of output and hidden layers.
+    '''
     must_sample = False
     def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
                  f_sample=None, f_neg_log_prob=None, f_entropy=None,
@@ -115,9 +124,9 @@ class MLP(Layer):
         assert self.distribution is not None
         return self.distribution.sample(p=p, n_samples=n_samples)
 
-    def neg_log_prob(self, x, p):
+    def neg_log_prob(self, x, p, sum_probs=True):
         assert self.distribution is not None
-        return self.distribution.neg_log_prob(x, p)
+        return self.distribution.neg_log_prob(x, p, sum_probs=sum_probs)
 
     def entropy(self, p):
         assert self.distribution is not None
@@ -182,7 +191,7 @@ class MLP(Layer):
                 outs['p'] = x
 
             if self.dropout and l != self.n_layers - 1:
-                print 'Adding dropout to layer {layer} for MLP {name}'.format(
+                print 'Adding dropout to layer {layer} for MLP "{name}"'.format(
                     layer=l, name=self.name)
                 if self.h_act == 'T.tanh':
                     raise NotImplementedError('dropout for tanh units not implemented yet')

@@ -8,56 +8,66 @@ import theano
 from theano import tensor as T
 
 from models.layers import Layer
+from utils import e, floatX, pi
 from utils.tools import (
     concatenate,
-    e,
-    floatX,
     init_rngs,
     init_weights,
-    pi,
     _slice
 )
 
 
-_clip = 1e-7
-
+_clip = 1e-7 # clipping for Guassian distributions.
 
 def resolve(c, conditional=False):
-    if not conditional:
-        if c == 'binomial':
-            return Binomial
-        elif c == 'continuous_binomial':
-            return ContinuousBinomial
-        elif c == 'centered_binomial':
-            return CenteredBinomial
-        elif c == 'multinomial':
-            return Multinomial
-        elif c == 'gaussian':
-            return Gaussian
-        elif c == 'truncated_gaussian':
-            return TruncatedGaussian
-        else:
-            raise ValueError(c)
-    else:
-        if c == 'binomial':
-            return ConditionalBinomial
-        elif c == 'continuous_binomial':
-            return ConditionalContinuousBinomial
-        elif c == 'centered_binomial':
-            return ConditionalCenteredBinomial
-        elif c == 'multinomial':
-            return ConditionalMultinomial
-        elif c == 'gaussian':
-            return ConditionalGaussian
-        elif c == 'truncated_gaussian':
-            return ConditionalTruncatedGaussian
-        else:
-            raise ValueError(c)
+    '''Resolves Distribution subclass from str.'''
+    resolve_dict = dict(
+        binomial=Binomial,
+        continuous_binomial=ContinuousBinomial,
+        centered_binomial=CenteredBinomial,
+        multinomial=Multinomial,
+        gaussian=Gaussian,
+        logistic=Logistic
+    )
+
+    C = resolve_dict.get(c, None)
+    if C is None:
+        raise ValueError(C)
+    if conditional:
+        C = make_conditional(C)
+    return C
 
 
 class Distribution(Layer):
+    '''Distribution parent class.
+
+    Not meant to be used alone, use subclass.
+
+    Attributes:
+        has_kl: bool, convenience for if distribution subclass has exact KL.
+        is_continuous: bool, whether distribution is continuous (as opposed to
+            discrete).
+        dim: int, dimension of distribution.
+        must_sample: bool, whether sampling is required for calculating
+            density.
+        scale: int, scaling for distributions whose probs are higher order,
+            such as Gaussian, which has mu and sigma.
+        f_sample: function (optional), sampling function.
+        f_neg_log_prob: function (optional), negative log probability funciton.
+        f_entropy: function (optional), entropy function.
+    '''
+    has_kl = False
+    is_continuous = False
+
     def __init__(self, dim, name='distribution', must_sample=False, scale=1,
                  **kwargs):
+        '''Init function for Distribution class.
+
+        Args:
+            dim: int, dimension of distribution.
+            must_sample: bool.
+            scale: int, scale for distribution tesnor.
+        '''
         self.dim = dim
         self.must_sample = must_sample
         self.scale = scale
@@ -71,18 +81,23 @@ class Distribution(Layer):
         raise NotImplementedError()
 
     def get_params(self):
+        '''Fetches distribution parameters.'''
         raise NotImplementedError()
 
     def get_prob(self):
+        '''Returns single tensory from params.'''
         raise NotImplementedError()
 
     def kl_divergence(self, q):
+        '''KL divergence function.'''
         raise NotImplementedError()
 
     def __call__(self, z):
+        '''Call function.'''
         raise NotImplementedError()
 
     def sample(self, n_samples, p=None):
+        '''Samples from distribution.'''
         if p is None:
             p = self.get_prob(*self.get_params())
         if p.ndim == 1:
@@ -97,24 +112,56 @@ class Distribution(Layer):
         return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
 
     def step_neg_log_prob(self, x, *params):
+        '''Step negative log probability for scan.'''
         p = self.get_prob(*params)
         return self.f_neg_log_prob(x, p)
 
-    def neg_log_prob(self, x, p=None):
+    def neg_log_prob(self, x, p=None, sum_probs=True):
+        '''Negative log probability.'''
         if p is None:
             p = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(x, p)
+        return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
 
     def entropy(self, p=None):
+        '''Entropy function.'''
         if p is None:
             p = self.get_prob(*self.get_params())
         return self.f_entropy(p)
 
     def get_center(self, p):
+        '''Center of the distribution.'''
         return p
+
+    def get_energy_bias(self, x, z):
+        '''For use in RBMs and other energy based models'''
+        raise NotImplementedError()
+
+    def scale_for_energy_model(self, x, *params):
+        '''Scales input for energy based models.'''
+        return x
+
+
+def make_conditional(C):
+    '''Conditional distribution.
+
+    Conditional distributions do not own their parameters, they are given,
+    such as from an MLP.
+
+    Args:
+        C: Distribution subclass.
+    Returns:
+        Conditional subclass.
+    '''
+    class Conditional(C):
+        def set_params(self): self.params = OrderedDict()
+        def get_params(self): return []
+    Conditional.__name__ = Conditional.__name__ + '_' + C.__name__
+
+    return Conditional
 
 
 class Binomial(Distribution):
+    '''Binomial distribution.'''
     def __init__(self, dim, name='binomial', **kwargs):
         self.f_sample = _binomial
         self.f_neg_log_prob = _cross_entropy
@@ -131,44 +178,59 @@ class Binomial(Distribution):
     def get_prob(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
 
+    def split_prob(self, p):
+        return p
+
     def __call__(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
+
+    def step_sample(self, epsilon, p):
+        return (epsilon <= p).astype(floatX)
 
     def prototype_samples(self, size):
         return self.trng.uniform(size, dtype=floatX)
 
+    def generate_latent_pair(self):
+        h0 = T.zeros((self.dim,)).astype(floatX)[None, :]
+        h = T.eye(self.dim).astype(floatX)
+        return h0, h
+
+    def visualize(self, p0, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return p - p0
+
+    def get_energy_bias(self, x, z):
+        '''For use in RBMs and other energy based models'''
+        return T.dot(x, z)
+
+
 class CenteredBinomial(Binomial):
+    '''Centered binomial.'''
     def __call__(self, z):
         return T.tanh(z)
 
-    def neg_log_prob(self, x, p=None):
+    def neg_log_prob(self, x, p=None, sum_probs=True):
         if p is None:
             p = self.get_prob(*self.get_params())
         x = 0.5 * (x + 1)
         p = 0.5 * (p + 1)
-        return self.f_neg_log_prob(x, p)
+        return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
 
 
 class ContinuousBinomial(Binomial):
+    '''Continuous binomial.
+
+    Doesn't sample.
+    '''
     def sample(self, n_samples, p=None):
         if p is None:
             p = self.get_prob(*self.get_params())
         return T.shape_padleft(p), theano.OrderedUpdates()
 
-class ConditionalBinomial(Binomial):
-    def set_params(self): self.params = OrderedDict()
-    def get_params(self): return []
-
-class ConditionalCenteredBinomial(CenteredBinomial):
-    def set_params(self): self.params = OrderedDict()
-    def get_params(self): return []
-
-class ConditionalContinuousBinomial(ContinuousBinomial):
-    def set_params(self): self.params = OrderedDict()
-    def get_params(self): return []
-
 
 class Multinomial(Distribution):
+    '''Multinomial distribuion.'''
     def __init__(self, dim, name='multinomial', **kwargs):
         self.f_sample = _sample_multinomial
         self.f_neg_log_prob = _categorical_cross_entropy
@@ -185,12 +247,12 @@ class Multinomial(Distribution):
     def __call__(self, z):
         return _softmax(z)
 
-class ConditionalMultinomial(Multinomial):
-    def set_params(self): self.params = OrderedDict()
-    def get_params(self): return []
-
 
 class Gaussian(Distribution):
+    '''Gaussian distribution.'''
+    has_kl = True
+    is_continuous = True
+
     def __init__(self, dim, name='gaussian', clip=-10, **kwargs):
         self.f_sample = _normal
         self.f_neg_log_prob = _neg_normal_log_prob
@@ -255,10 +317,10 @@ class Gaussian(Distribution):
         p = self.get_prob(*params)
         return self.f_neg_log_prob(x, p=p, clip=self.clip)
 
-    def neg_log_prob(self, x, p=None):
+    def neg_log_prob(self, x, p=None, sum_probs=True):
         if p is None:
             p = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(x, p, clip=self.clip)
+        return self.f_neg_log_prob(x, p, clip=self.clip, sum_probs=sum_probs)
 
     def standard_prob(self, x, p=None):
         if p is None:
@@ -270,67 +332,116 @@ class Gaussian(Distribution):
             p = self.get_prob(*self.get_params())
         return self.f_entropy(p, clip=self.clip)
 
+    def generate_latent_pair(self):
+        h0 = self.mu
+        sigma = T.nlinalg.AllocDiag()(T.exp(self.log_sigma)).astype(floatX)
+        h = 2 * sigma + h0[None, :]
+        return h0, h
 
-class TruncatedGaussian(Gaussian):
-    def __init__(self, dim, name='truncated_gaussian', minmax=(0, 1), **kwargs):
-        self.min, self.max = minmax
-        super(TruncatedGaussian, self).__init__(dim, name=name, **kwargs)
-
-    def get_params(self):
-        return [T.clip(self.mu, self.min, self.max), self.log_sigma]
-
-    def __call__(self, p):
-        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
-        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // 2)
-        mu = T.clip(mu, self.min, self.max)
-        return concatenate([mu, log_sigma], axis=mu.ndim-1)
-
-    def sample(self, n_samples, p=None):
-        samples, updates = super(TruncatedGaussian, self).sample(n_samples, p=p)
-        return T.clip(samples, self.min, self.max), updates
-
-    def step_sample(self, epsilon, p):
-        return T.clip(super(TruncatedGaussian, self).step_sample(epsilon, p),
-                      self.min, self.max)
-
-    def step_kl_divergence(self, q, mu, log_sigma):
-        mu_q = _slice(q, 0, self.dim)
-        mu = T.clip(mu, self.min, self.max)
-        mu_q = T.clip(mu_q, self.min, self.max)
-        log_sigma_q = _slice(q, 1, self.dim)
-
-        kl = log_sigma - log_sigma_q + 0.5 * (
-            (T.exp(2 * log_sigma_q) + (mu - mu_q) ** 2) /
-            T.exp(2 * log_sigma)
-            - 1)
-        return kl.sum(axis=kl.ndim-1)
-
-    def step_neg_log_prob(self, x, p):
-        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
-        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // 2)
-        mu = T.clip(mu, self.min, self.max)
-        p = concatenate([mu, log_sigma], axis=mu.ndim-1)
-        return self.f_neg_log_prob(x, p)
-
-    def neg_log_prob(self, x, p=None):
+    def visualize(self, p0, p=None):
         if p is None:
             p = self.get_prob(*self.get_params())
-        mu = _slice(p, 0, p.shape[p.ndim-1] // 2)
-        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // 2)
-        mu = T.clip(mu, self.min, self.max)
-        p = concatenate([mu, log_sigma], axis=mu.ndim-1)
-        return self.f_neg_log_prob(x, p)
+
+        outs0 = self.split_prob(p0)
+        outs = self.split_prob(p)
+        y0_mu, y0_logsigma = outs0
+        y_mu, y_logsigma = outs
+        py = (y_mu - y0_mu) / T.exp(y0_logsigma)
+        return py
+
+    def scale_for_energy_model(self, x, mu, log_sigma):
+        '''Scales input for energy based models.'''
+        return x / T.exp(2 * log_sigma)
+
+    def get_energy_bias(self, x, mu, log_sigma):
+        '''For use in RBMs and other energy based models'''
+        return -((x - mu) ** 2 / (2. * T.exp(log_sigma)) ** 2).sum(axis=x.ndim-1)
 
 
-class ConditionalGaussian(Gaussian):
-    def set_params(self): self.params = OrderedDict()
-    def get_params(self): return []
+class Logistic(Distribution):
+    '''Logistic distribution.
 
-class ConditionalTrucatedGaussian(TruncatedGaussian):
-    def set_params(self): self.params = OrderedDict()
-    def get_params(self): return []
+    Not to be confused with logistic function.
+    '''
+    is_continuous = True
 
+    def __init__(self, dim, name='logistic', **kwargs):
+        self.f_sample = _logistic
+        self.f_neg_log_prob = _neg_logistic_log_prob
+        self.f_entropy = _logistic_entropy
+        super(Logistic, self).__init__(dim, name=name, scale=2, **kwargs)
 
+    def set_params(self):
+        mu = np.zeros((self.dim,)).astype(floatX)
+        log_s = np.zeros((self.dim,)).astype(floatX)
+
+        self.params = OrderedDict(
+            mu=mu, log_s=log_s)
+
+    def get_params(self):
+        return [self.mu, self.log_s]
+
+    def get_prob(self, mu, log_s):
+        return concatenate([mu, log_s], axis=mu.ndim-1)
+
+    def __call__(self, z):
+        return z
+
+    def get_center(self, p):
+        mu = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
+        return mu
+
+    def split_prob(self, p):
+        mu    = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
+        log_s = _slice(p, 1, p.shape[p.ndim-1] // self.scale)
+        return mu, log_s
+
+    def step_sample(self, epsilon, p):
+        dim = p.shape[p.ndim-1] // self.scale
+        mu = _slice(p, 0, dim)
+        log_s = _slice(p, 1, dim)
+        return mu + T.log(epsilon / (1 - epsilon)) * T.exp(log_s)
+
+    def prototype_samples(self, size):
+        return self.trng.uniform(size=size, dtype=floatX)
+
+    def step_neg_log_prob(self, x, *params):
+        p = self.get_prob(*params)
+        return self.f_neg_log_prob(x, p=p)
+
+    def neg_log_prob(self, x, p=None, sum_probs=True):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
+
+    def standard_prob(self, x, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return T.exp(-self.neg_log_prob(x, p))
+
+    def entropy(self, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return self.f_entropy(p)
+
+    def generate_latent_pair(self):
+        h0 = self.mu
+        s = T.nlinalg.AllocDiag()(T.exp(self.log_s)).astype(floatX)
+        h = 2 * s + h0[None, :]
+        return h0, h
+
+    def visualize(self, p0, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+
+        outs0 = self.split_prob(p0)
+        outs = self.split_prob(p)
+        y0_mu, y0_logs = outs0
+        y_mu, y_logs = outs
+        py = (y_mu - y0_mu) / T.exp(y0_logs)
+        return py
+
+# Various functions for distributions.
 # BERNOULLI --------------------------------------------------------------------
 
 def _binomial(trng, p, size=None):
@@ -343,16 +454,15 @@ def _centered_binomial(trng, p, size=None):
         size = p.shape
     return 2 * trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
 
-def _cross_entropy(x, p):
-    #p = T.clip(p, _clip, 1.0 - _clip)
+def _cross_entropy(x, p, sum_probs=True):
     energy = -x * T.log(p) - (1 - x) * T.log(1 - p)
-    #energy = T.nnet.binary_crossentropy(p, x)
-    return energy.sum(axis=energy.ndim-1)
+    if sum_probs:
+        return energy.sum(axis=energy.ndim-1)
+    else:
+        return energy
 
 def _binary_entropy(p):
-    #p_c = T.clip(p, _clip, 1.0 - _clip)
     entropy = -p * T.log(p) - (1 - p) * T.log(1 - p)
-    #entropy = T.nnet.binary_crossentropy(p_c, p)
     return entropy.sum(axis=entropy.ndim-1)
 
 # SOFTMAX ----------------------------------------------------------------------
@@ -368,9 +478,13 @@ def _sample_multinomial(trng, p, size=None):
         size = p.shape
     return trng.multinomial(pvals=p, size=size).astype('float32')
 
-def _categorical_cross_entropy(x, p):
+def _categorical_cross_entropy(x, p, sum_probs=True):
     p = T.clip(p, _clip, 1.0 - _clip)
-    return T.nnet.binary_crossentropy(p, x).sum(axis=x.ndim-1)
+    energy = T.nnet.binary_crossentropy(p, x)
+    if sum_probs:
+        return energy.sum(axis=x.ndim-1)
+    else:
+        return energy
 
 def _categorical_entropy(p):
     p_c = T.clip(p, _clip, 1.0 - _clip)
@@ -393,7 +507,7 @@ def _normal_prob(p):
     mu = _slice(p, 0, dim)
     return mu
 
-def _neg_normal_log_prob(x, p, clip=None):
+def _neg_normal_log_prob(x, p, clip=None, sum_probs=True):
     dim = p.shape[p.ndim-1] // 2
     mu = _slice(p, 0, dim)
     log_sigma = _slice(p, 1, dim)
@@ -401,7 +515,10 @@ def _neg_normal_log_prob(x, p, clip=None):
         log_sigma = T.maximum(log_sigma, clip)
     energy = 0.5 * (
         (x - mu)**2 / (T.exp(2 * log_sigma)) + 2 * log_sigma + T.log(2 * pi))
-    return energy.sum(axis=energy.ndim-1)
+    if sum_probs:
+        return energy.sum(axis=energy.ndim-1)
+    else:
+        return energy
 
 def _normal_entropy(p, clip=None):
     dim = p.shape[p.ndim-1] // 2
@@ -409,4 +526,31 @@ def _normal_entropy(p, clip=None):
     if clip is not None:
         log_sigma = T.maximum(log_sigma, clip)
     entropy = 0.5 * T.log(2 * pi * e) + log_sigma
+    return entropy.sum(axis=entropy.ndim-1)
+
+# LOGISTIC ---------------------------------------------------------------------
+
+def _logistic(trng, p, size=None):
+    dim = p.shape[p.ndim-1] // 2
+    mu = _slice(p, 0, dim)
+    log_s = _slice(p, 1, dim)
+    if size is None:
+        size = mu.shape
+    epsilon = trng.uniform(size=size, dtype=floatX)
+    return mu + T.log(epsilon / (1 - epsilon)) * T.exp(log_s)
+
+def _neg_logistic_log_prob(x, p, sum_probs=True):
+    dim = p.shape[p.ndim-1] // 2
+    mu = _slice(p, 0, dim)
+    log_s = _slice(p, 1, dim)
+    energy = -(x - mu) / T.exp(log_s) + log_s + 2 * T.log(1 + T.exp((x - mu) / T.exp(log_s)))
+    if sum_probs:
+        return energy.sum(axis=energy.ndim-1)
+    else:
+        return energy
+
+def _logistic_entropy(p):
+    dim = p.shape[p.ndim-1] // 2
+    log_s = _slice(p, 1, dim)
+    entropy = log_s + 2
     return entropy.sum(axis=entropy.ndim-1)

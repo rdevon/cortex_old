@@ -4,6 +4,7 @@ Generic dataset class
 
 from collections import OrderedDict
 import numpy as np
+import random
 
 def load_data(dataset=None,
               train_batch_size=None,
@@ -66,30 +67,19 @@ def load_data(dataset=None,
     return train, valid, test
 
 
-def load_data_split(idx=None, dataset='mri', **dataset_args):
+def load_data_split(C, idx=None, dataset=None, **dataset_args):
     '''Load dataset and split.
 
     Arguments:
         idx: (Optional) list of list of int. Indices for train/valid/test
             datasets.
-        dataset: str.
+        C: Dataset Object.
 
     Returns:
         train, valid, test Dataset objects.
         idx: Indices for if split is created.
     '''
 
-    from fmri import MRI, FMRI_IID
-    from snp import SNP
-
-    if dataset == 'mri':
-        C = MRI
-    elif dataset == 'fmri_iid':
-        C = FMRI_IID
-    elif dataset == 'snp':
-        C = SNP
-    else:
-        raise ValueError(dataset)
     train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
 
@@ -121,7 +111,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         if round(np.sum(split), 5) != 1. or len(split) != 3:
             raise ValueError(split)
         dummy = C(batch_size=1, **dataset_args)
-        N = dummy.n
+        N = dummy.X.shape[0]
         idx = range(N)
         np.random.shuffle(idx)
         split_idx = []
@@ -137,15 +127,18 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         idx = [train_idx, valid_idx, test_idx]
 
     if train_batch_size is not None and len(train_idx) > 0:
-        train = C(idx=idx[0], batch_size=train_batch_size, **dataset_args)
+        train = C(idx=idx[0], batch_size=train_batch_size, mode='train',
+                  **dataset_args)
     else:
         train = None
     if valid_batch_size is not None and len(valid_idx) > 0:
-        valid = C(idx=idx[1], batch_size=valid_batch_size, **dataset_args)
+        valid = C(idx=idx[1], batch_size=valid_batch_size, mode='valid',
+                  **dataset_args)
     else:
         valid = None
     if test_batch_size is not None and len(test_idx) > 0:
-        test = C(idx=idx[2], batch_size=test_batch_size, **dataset_args)
+        test = C(idx=idx[2], batch_size=test_batch_size, mode='test',
+                 **dataset_args)
     else:
         test = None
 
@@ -154,7 +147,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
 
 class Dataset(object):
     def __init__(self, batch_size=None, shuffle=True, inf=False, name='dataset',
-                 stop=None, **kwargs):
+                 mode=None, stop=None, **kwargs):
         if batch_size is None:
             raise ValueError('Batch size argument must be given')
 
@@ -164,6 +157,7 @@ class Dataset(object):
         self.name = name
         self.pos = 0
         self.stop = stop
+        self.mode = mode
 
         return kwargs
 
@@ -181,7 +175,7 @@ class Dataset(object):
     def save_images(self, *args):
         pass
 
-class BasicDataset(object):
+class BasicDataset(Dataset):
     '''
     Dataset with numpy arrays as inputs. No visualization available.
 

@@ -26,6 +26,7 @@ from utils.tools import (
 def unpack(dim_in=None,
            dim_h=None,
            prior=None,
+           noise_model=None,
            recognition_net=None,
            generation_net=None,
            extra_args=dict(),
@@ -49,9 +50,11 @@ def unpack(dim_in=None,
     kwargs['prior'] = prior_model
     models.append(prior_model)
     print 'Forming GBN'
-    model = GBN(dim_in, dim_h, **kwargs)
+    model = GBN(dim_in, dim_h, noise_model=noise_model, **kwargs)
     models.append(model)
     models += [model.posterior, model.conditional]
+    if model.noise is not None:
+        models.append(model.noise)
 
     return models, model_args, extra_args
 
@@ -59,6 +62,7 @@ def unpack(dim_in=None,
 class GBN(Layer):
     def __init__(self, dim_in, dim_h,
                  posterior=None, conditional=None, prior=None,
+                 noise_model=False,
                  name='gbn',
                  **kwargs):
 
@@ -68,6 +72,7 @@ class GBN(Layer):
         self.posterior = posterior
         self.conditional = conditional
         self.prior = prior
+        self.noise_model = noise_model
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
@@ -119,6 +124,12 @@ class GBN(Layer):
 
     def set_params(self):
         self.params = OrderedDict()
+        if self.noise_model:
+            alpha = np.array([1, 0]).astype(floatX)
+            self.noise = Gaussian(self.dim_in, name='noise', clip=-5)
+            self.params['alpha'] = alpha
+        else:
+            self.noise = None
 
         if self.prior is None:
             self.prior = Gaussian(self.dim_h)
@@ -144,6 +155,8 @@ class GBN(Layer):
         tparams.update(**self.posterior.set_tparams())
         tparams.update(**self.conditional.set_tparams())
         tparams.update(**self.prior.set_tparams())
+        if self.noise is not None:
+            tparams.update(**self.noise.set_tparams())
         tparams = OrderedDict((k, v) for k, v in tparams.iteritems()
             if k not in excludes)
 
@@ -151,6 +164,8 @@ class GBN(Layer):
 
     def get_params(self):
         params = self.prior.get_params() + self.conditional.get_params()
+        if self.noise is not None:
+            params += self.noise.get_params()
         return params
 
     def get_prior_params(self, *params):
@@ -165,16 +180,11 @@ class GBN(Layer):
         return self.get_center(py), updates
 
     def visualize_latents(self):
-        h0 = self.prior.mu
-        y0_mu, y0_logsigma = self.conditional.distribution.split_prob(
-            self.conditional.feed(h0))
-
-        sigma = T.nlinalg.AllocDiag()(T.exp(self.prior.log_sigma))
-        h = 10 * sigma.astype(floatX) + h0[None, :]
-        y_mu, y_logsigma = self.conditional.distribution.split_prob(
-            self.conditional.feed(h))
-        py = y_mu - y0_mu[None, :]
-        return py# / py.std()#T.exp(y_logsigma)
+        h0, h = self.prior.generate_latent_pair()
+        p0 = self.conditional.feed(h0)
+        p = self.conditional.feed(h)
+        py = self.conditional.distribution.visualize(p0, p)
+        return py
 
     # Misc --------------------------------------------------------------------
 
@@ -215,27 +225,34 @@ class GBN(Layer):
     def init_inference_samples(self, size):
         return self.posterior.distribution.prototype_samples(size)
 
-    def __call__(self, x, y, qk=None, n_posterior_samples=10, pass_gradients=False):
+    def __call__(self, x, y, qk=None, n_posterior_samples=10, pass_gradients=False, kl_scale=1.):
         q0 = self.posterior.feed(x)
 
         if qk is None:
             qk = q0
 
         h, updates  = self.posterior.sample(qk, n_samples=n_posterior_samples)
-        py          = self.conditional.feed(h)
+        py_h        = self.conditional.feed(h)
 
-        log_py_h    = -self.conditional.neg_log_prob(y[None, :, :], py)
-        KL_qk_p     = self.prior.kl_divergence(qk)
+        if self.noise is None:
+            log_py_h    = -self.conditional.neg_log_prob(y[None, :, :], py_h)
+        else:
+            log_py_h = -self.conditional.neg_log_prob(y[None, :, :], py_h)
+            log_py_n = -self.noise.neg_log_prob(y[None, :, :])
+            log_py_hn = concatenate([(self.alpha[0] * log_py_h)[None, :, :], (self.alpha[1] * log_py_n)[None, :, :]])
+            log_py_h = log_sum_exp(log_py_hn, axis=0)
+
+        KL_qk_p     = (kl_scale * self.prior.kl_divergence(qk)).astype(floatX)
         qk_c        = qk.copy()
         if pass_gradients:
             KL_qk_q0 = T.constant(0.).astype(floatX)
         else:
-            KL_qk_q0    = self.kl_divergence(qk_c, q0)
+            KL_qk_q0 = (kl_scale * self.kl_divergence(qk_c, q0)).astype(floatX)
 
         log_ph      = -self.prior.neg_log_prob(h)
-        log_qh      = -self.posterior.neg_log_prob(h, qk[None, :, :])
+        log_qkh     = -self.posterior.neg_log_prob(h, qk[None, :, :])
 
-        log_p       = (log_sum_exp(log_py_h + log_ph - log_qh, axis=0)
+        log_p       = (log_sum_exp(log_py_h + log_ph - log_qkh, axis=0)
                        - T.log(n_posterior_samples))
 
         y_energy    = -log_py_h.mean(axis=0)
@@ -244,10 +261,7 @@ class GBN(Layer):
         nll         = -log_p
 
         lower_bound = -(y_energy + KL_qk_p).mean()
-        if pass_gradients:
-            cost = (y_energy + KL_qk_p).mean(0)
-        else:
-            cost = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
+        cost = (y_energy + KL_qk_p + KL_qk_q0).mean(0)
 
         mu, log_sigma = self.posterior.distribution.split_prob(qk)
 
@@ -267,7 +281,7 @@ class GBN(Layer):
         })
 
         samples = OrderedDict(
-            py=py,
+            py=py_h,
             batch_energies=y_energy
         )
 
