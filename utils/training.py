@@ -292,7 +292,6 @@ def validate(tparams, results, best_valid, e, best_epoch,
         best_valid: float
         best_epoch: int
     '''
-
     warn_kwargs(None, **kwargs)
 
     valid_value = results[valid_key]
