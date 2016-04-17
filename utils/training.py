@@ -409,6 +409,9 @@ def main_loop(train, valid, tparams,
                                        training_time=training_time)
                         monitor.update_valid(**results_valid)
                         monitor.display()
+                        monitor.save(path.join(out_path, '{name}_monitor.png').format(name=name))
+                        monitor.save_stats(path.join(out_path, '{name}_monitor.npz').format(name=name))
+                        monitor.save_stats_valid(path.join(out_path, '{name}_monitor_valid.npz').format(name=name))
 
                 if save_images is not None:
                     save_images()
