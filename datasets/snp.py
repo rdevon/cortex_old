@@ -7,7 +7,6 @@ import numpy as np
 from scipy.io import loadmat
 from . import Dataset
 from utils.tools import (
-    floatX,
     warn_kwargs
 )
 
@@ -28,7 +27,6 @@ class SNP(Dataset):
                 split.
         '''
         kwargs = super(SNP, self).__init__(name=name, **kwargs)
-
         if source is None:
             raise ValueError('No source provided')
 
@@ -80,8 +78,8 @@ class SNP(Dataset):
         from utils.tools import get_paths
         data_path = get_paths()['$snp_data']
         print('Loading genetic data from %s' % data_path)
-        X = loadmat(data_path + source['snp'])
-        Y = loadmat(data_path + source['labels'])
+        X = loadmat(data_path + '/' + source['snp'])
+        Y = loadmat(data_path + '/' + source['labels'])
         X = np.float32(X[X.keys()[2]])
         Y = np.float32(Y[Y.keys()[0]])
         return X, Y
