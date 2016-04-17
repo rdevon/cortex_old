@@ -67,19 +67,21 @@ def load_data(dataset=None,
     return train, valid, test
 
 
-def load_data_split(C, idx=None, dataset=None, **dataset_args):
+def load_data_split(idx=None, dataset=None, **dataset_args):
     '''Load dataset and split.
-
     Arguments:
         idx: (Optional) list of list of int. Indices for train/valid/test
             datasets.
-        C: Dataset Object.
 
     Returns:
         train, valid, test Dataset objects.
         idx: Indices for if split is created.
     '''
-
+    from snp import SNP
+    
+    if dataset == 'snp':
+        C = SNP
+    
     train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
 
@@ -105,7 +107,6 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         train, valid, test Dataset objects.
         idx: Indices for if split is created.
     '''
-
     if idx is None:
         assert split is not None
         if round(np.sum(split), 5) != 1. or len(split) != 3:
@@ -125,7 +126,6 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         valid_idx = idx[split_idx[0]:split_idx[1]]
         test_idx = idx[split_idx[1]:]
         idx = [train_idx, valid_idx, test_idx]
-
     if train_batch_size is not None and len(train_idx) > 0:
         train = C(idx=idx[0], batch_size=train_batch_size, mode='train',
                   **dataset_args)
