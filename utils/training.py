@@ -25,6 +25,7 @@ from theano import tensor as T
 import time
 
 import op
+from learning_scheduler import Scheduler
 from tools import (
     check_bad_nums,
     itemlist,
@@ -107,7 +108,7 @@ def set_experiment(args):
     if load_model is not None:
         model_to_load = load_model
     elif load_last:
-        model_to_load = glob(path.join(out_path, '*last.npz'))
+        model_to_load = glob(path.join(out_path, '*last.npz'))[0]
     else:
         model_to_load = None
 
@@ -183,6 +184,13 @@ def set_model(create_model, model_to_load, unpack):
         models = create_model()
     return models
 
+def set_tparams(model_dict):
+    '''Generic tparams setter.'''
+    tparams = OrderedDict()
+    for model in model_dict.values():
+        tparams.update(**model.set_tparams())
+    return tparams
+
 def set_params(tparams, updates, excludes=[]):
     '''Sets params, removing updates from tparams.
 
@@ -214,6 +222,10 @@ def set_params(tparams, updates, excludes=[]):
 def set_optimizer(inputs, cost, tparams, constants, updates, extra_outs,
                   optimizer=None, optimizer_args=None,
                   **learning_args):
+    '''Sets the parameter update functions with optimizer.'''
+
+    if optimizer_args is None:
+        optimizer_args = dict()
     grads = T.grad(cost, wrt=itemlist(tparams),
                    consider_constant=constants)
 
@@ -320,7 +332,7 @@ def main_loop(train, valid, tparams,
               save_images=None,
               epochs=None,
               learning_rate=None,
-              learning_rate_schedule=None,
+              learning_rate_scheduler=None,
               monitor=None,
               out_path=None,
               extra_outs_keys=None,
@@ -349,7 +361,7 @@ def main_loop(train, valid, tparams,
         save_images: function (optional). Function to save images.
         epochs: int. Number of training epochs.
         learning_rate: float.
-        learning_rate_schedule: OrderedDict. For scheduling learning rate.
+        learning_rate_scheduler: Schedule object. For scheduling learning rate.
         monitor: utils.monitor.Monitor.
         out_path: str. Director path for output files.
         extra_outs_keys: list of str. Keys for extra outs of `f_grad_shared`.
@@ -360,6 +372,12 @@ def main_loop(train, valid, tparams,
 
     best_valid = float('inf')
     best_epoch = 0
+
+    if learning_rate_scheduler is not None:
+        learning_rate_scheduler = Scheduler(**learning_rate_scheduler)
+        learning_rate = [v['learning_rate'] for v in learning_rate_scheduler.d.values()]
+    elif isinstance(learning_rate, float):
+        learning_rate = (learning_rate,)
 
     if input_keys is None:
         input_keys = [train.name]
@@ -417,17 +435,11 @@ def main_loop(train, valid, tparams,
                     save_images()
 
                 e += 1
+
+                if learning_rate_scheduler is not None:
+                    learning_rate = learning_rate_scheduler(e)
+
                 epoch_t0 = time.time()
-
-                if learning_rate_schedule is not None:
-                    if 'decay' in learning_rate_schedule.keys():
-                        learning_rate /= learning_rate_schedule['decay']
-                        print 'Changing learning rate to %.5f' % learning_rate
-                    elif e in learning_rate_schedule.keys():
-                        lr = learning_rate_schedule[e]
-                        print 'Changing learning rate to %.5f' % lr
-                        learning_rate = lr
-
                 widgets = ['Epoch {epoch} ({name}, '.format(epoch=e, name=name),
                            Timer(), '): ', Bar()]
                 epoch_pbar = ProgressBar(widgets=widgets, maxval=train.n).start()
@@ -439,14 +451,16 @@ def main_loop(train, valid, tparams,
 
             rval = f_grad_shared(*inps)
             if output_every is not None and s % output_every == 0:
-                print rval
+                for k, v in zip(rval, extra_outs_keys):
+                    print k, v
+
                 if save_images is not None:
                     save_images()
             check_bad_nums(rval, extra_outs_keys)
             if check_bad_nums(rval[:1], extra_outs_keys[:1]):
                 print 'Dying, found bad cost... Sorry (bleh)'
                 exit()
-            f_grad_updates(learning_rate)
+            f_grad_updates(*learning_rate)
             s += 1
 
     except KeyboardInterrupt:

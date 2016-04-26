@@ -315,6 +315,14 @@ def parzen_estimation(samples, tests, h=1.0):
         log_p += e - z
     return log_p / float(tests.shape[0])
 
+def get_w_tilde(log_factor):
+    '''Gets normalized weights'''
+    log_factor = log_factor - T.log(log_factor.shape[0])
+    w_norm   = log_sum_exp(log_factor, axis=0)
+    log_w    = log_factor - T.shape_padleft(w_norm)
+    w_tilde  = T.exp(log_w)
+    return w_tilde
+
 def log_mean_exp(x, axis=None, as_numpy=False):
     '''Numerically stable log(exp(x).mean())'''
     if as_numpy:

@@ -6,6 +6,16 @@ from collections import OrderedDict
 import numpy as np
 import random
 
+def make_one_hot(Y):
+    class_list = np.unique(Y).tolist()
+    n_classes = len(class_list)
+
+    O = np.zeros((Y.shape[0], n_classes), dtype='float32')
+    for idx in xrange(Y.shape[0]):
+        i = class_list.index(Y[idx])
+        O[idx, i] = 1.;
+    return O
+
 def load_data(dataset=None,
               train_batch_size=None,
               valid_batch_size=None,
@@ -25,7 +35,6 @@ def load_data(dataset=None,
 
     Returns:
         train, valid, test Dataset objects.
-
     '''
 
     from caltech import CALTECH
@@ -147,7 +156,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
 
 class Dataset(object):
     def __init__(self, batch_size=None, shuffle=True, inf=False, name='dataset',
-                 mode=None, stop=None, **kwargs):
+                 mode=None, stop=None, balance=False, **kwargs):
         if batch_size is None:
             raise ValueError('Batch size argument must be given')
 
@@ -158,6 +167,7 @@ class Dataset(object):
         self.pos = 0
         self.stop = stop
         self.mode = mode
+        self.balance = balance
 
         return kwargs
 
@@ -181,38 +191,79 @@ class BasicDataset(Dataset):
 
     Arrays must be a dictionary of name/numpy array key/value pairs.
     '''
-    def __init__(self, arrays, distributions=None, name=None, **kwargs):
-        if not isinstance(arrays, dict):
+    def __init__(self, data, distributions=None, labels='label', name=None,
+                **kwargs):
+        if not isinstance(data, dict):
             raise ValueError('array argument must be a dict.')
         if name is None:
-            name = arrays.keys()[0]
+            name = data.keys()[0]
 
         super(BasicDataset, self).__init__(name=name, **kwargs)
-        self.arrays = arrays
+        self.data = data
         self.n = None
 
         self.dims = dict()
-        if self.distributions is None:
+        if distributions is None:
             self.distributions = dict()
         else:
             self.distributions = distributions
 
-        for a_name, array in self.arrays.iteritems():
+        if labels is None: labels = []
+
+        for k, v in self.data.iteritems():
+            if k == labels and len(v.shape) == 1:
+                v = make_one_hot(v)
+            if self.stop is not None:
+                v = v[:self.stop]
+            self.data[k] = v
+
             if self.n is None:
-                self.n = array.shape[0]
+                self.n = v.shape[0]
             else:
-                if array.shape[0] != self.n:
+                if v.shape[0] != self.n:
                     raise ValueError('All input arrays must have the same'
                                     'number of samples (shape[0]), '
-                                    '(%d vs %d)' % (self.n, array.shape[0]))
-            self.dims[a_name] = array.shape[1]
-            if not a_name in self.distributions.keys():
-                self.distributions[a_name] = 'binomial'
+                                    '(%d vs %d)' % (self.n, v.shape[0]))
+            self.dims[k] = v.shape[1]
+            if not k in self.distributions.keys():
+                self.distributions[k] = 'binomial'
+
+        self.label_nums = self.data[labels].sum(axis=0)
+        self.label_props = self.label_nums / float(self.n)
+
+        self.labels = labels
+        if self.balance:
+            self.balance_labels()
+
+    def balance_labels(self):
+        label_nums = self.data[self.labels].sum(axis=0)
+        max_num = int(max(label_nums))
+
+        dup_idx = []
+        for i, label in enumerate(self.data[self.labels].T):
+            l_sum = label.sum()
+            if l_sum == max_num:
+                continue
+            idx = np.where(label == 1)[0].tolist()
+
+            dup_idx = [idx[j] for j in range(max_num - len(idx))]
+            print 'Balancing label %d by duplicating %d samples' % (i, len(dup_idx))
+
+        dup_idx = np.unique(dup_idx)
+
+        if len(dup_idx) > 0:
+            for k, v in self.data.iteritems():
+                self.data[k] = np.concatenate([self.data[k], self.data[k][dup_idx]])
+
+        self.n += len(dup_idx)
+
+        self.label_nums = self.data[self.labels].sum(axis=0)
+        self.label_props = self.label_nums / float(self.n)
 
     def randomize(self):
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
-        for a_name in self.arrays.keys():
-            self.arrays[a_name] = self.arrays[a_name][rnd_idx, :]
+        for k in self.data.keys():
+            self.data[k] = self.data[k][rnd_idx]
 
     def next(self, batch_size=None):
         if batch_size is None:
@@ -226,8 +277,8 @@ class BasicDataset(Dataset):
 
         rval = OrderedDict()
 
-        for a_name, array in self.arrays.iteritems():
-            rval[a_name] = array[self.pos:self.pos+batch_size]
+        for k, v in self.data.iteritems():
+            rval[k] = v[self.pos:self.pos+batch_size]
 
         self.pos += batch_size
         if self.pos + batch_size > self.n:
