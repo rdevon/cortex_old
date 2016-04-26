@@ -12,8 +12,11 @@ from collections import OrderedDict
 
 
 profile = False
-def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
-    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k) for k, p in tparams.iteritems()]
+
+def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+          exclude_params=set([])):
+    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k)
+               for k, p in tparams.iteritems()]
     '''
     g_norm = 0.
 
@@ -30,7 +33,8 @@ def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_pa
     '''
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
-    f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
+    f_grad_shared = theano.function(
+        inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
 
     b1 = 0.9
     b2 = 0.999
@@ -73,14 +77,17 @@ def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_pa
     '''
     updates[i] = i_t
 
-    f_update = theano.function([lr], [], updates=updates,
+    if not isinstance(lr, list): lr = [lr]
+    f_update = theano.function(lr, [], updates=updates,
                                on_unused_input='ignore', profile=profile)
 
     return f_grad_shared, f_update
 
 
-def adam2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
-    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k) for k, p in tparams.iteritems()]
+def adam2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+          exclude_params=set([])):
+    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k)
+               for k, p in tparams.iteritems()]
     '''
     g_norm = 0.
 
@@ -97,7 +104,8 @@ def adam2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_pa
     '''
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
-    f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
+    f_grad_shared = theano.function(
+        inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
 
     b1 = 0.9
     b2 = 0.999
@@ -139,13 +147,16 @@ def adam2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_pa
     '''
     updates[i] = i_t
 
-    f_update = theano.function([lr], [], updates=updates,
+    if not isinstance(lr, list): lr = [lr]
+    f_update = theano.function(lr, [], updates=updates,
                                on_unused_input='ignore', profile=profile)
 
     return f_grad_shared, f_update
 
-def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
-    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k) for k, p in tparams.iteritems()]
+def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+         exclude_params=set([])):
+    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k)
+               for k, p in tparams.iteritems()]
 
     '''
     g_norm = 0.
@@ -164,7 +175,8 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_par
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
-    f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
+    f_grad_shared = theano.function(
+        inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
 
     b1 = 0.9
     b2 = 0.999
@@ -199,81 +211,124 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_par
 
     updates[i] = i_t
 
-    f_update = theano.function([lr], [], updates=updates,
+    if not isinstance(lr, list): lr = [lr]
+    f_update = theano.function(lr, [], updates=updates,
                                on_unused_input='ignore', profile=profile)
 
     return f_grad_shared, f_update
 
-def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
+def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+             exclude_params=set([])):
     '''Adadelta'''
-    zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k) for k, p in tparams.iteritems()]
-    running_up2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rup2'%k) for k, p in tparams.iteritems()]
-    running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k) for k, p in tparams.iteritems()]
+    zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k)
+                    for k, p in tparams.iteritems()]
+    running_up2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rup2'%k)
+                   for k, p in tparams.iteritems()]
+    running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k)
+                      for k, p in tparams.iteritems()]
 
     zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
-    rg2up = [(rg2, 0.95 * rg2 + 0.05 * (g ** 2)) for rg2, g in zip(running_grads2, grads)]
+    rg2up = [(rg2, 0.95 * rg2 + 0.05 * (g ** 2))
+        for rg2, g in zip(running_grads2, grads)]
 
-    f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=zgup+rg2up+extra_ups, profile=profile)
+    f_grad_shared = theano.function(
+        inp, [cost]+extra_outs, updates=zgup+rg2up+extra_ups, profile=profile)
 
-    updir = [-T.sqrt(ru2 + 1e-6) / T.sqrt(rg2 + 1e-6) * zg for zg, ru2, rg2 in zip(zipped_grads, running_up2, running_grads2)]
-    ru2up = [(ru2, 0.95 * ru2 + 0.05 * (ud ** 2)) for ru2, ud in zip(running_up2, updir)]
-    param_up = [(p, p + ud) for p, ud in zip(tools.itemlist(tparams), updir) if p.name not in exclude_params]
+    updir = [-T.sqrt(ru2 + 1e-6) / T.sqrt(rg2 + 1e-6) * zg
+             for zg, ru2, rg2 in zip(zipped_grads, running_up2, running_grads2)]
+    ru2up = [(ru2, 0.95 * ru2 + 0.05 * (ud ** 2))
+        for ru2, ud in zip(running_up2, updir)]
+    param_up = [(p, p + ud) for p, ud in zip(tools.itemlist(tparams), updir)
+        if p.name not in exclude_params]
 
-    f_update = theano.function([lr], [], updates=ru2up+param_up, on_unused_input='ignore', profile=profile)
+    if not isinstance(lr, list): lr = [lr]
+    f_update = theano.function(lr, [], updates=ru2up+param_up,
+        on_unused_input='ignore', profile=profile)
 
     return f_grad_shared, f_update
 
-def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([]),
+def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+            exclude_params=set([]),
             relaxation=1e-4, momentum=0.9, coefficient=0.95
             ):
     '''RMSProp'''
-    print 'RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f' % (relaxation, momentum, coefficient)
-    zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k) for k, p in tparams.iteritems()]
-    running_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad'%k) for k, p in tparams.iteritems()]
-    running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k) for k, p in tparams.iteritems()]
+    print ('RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f'
+           % (relaxation, momentum, coefficient))
+    zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k)
+                    for k, p in tparams.iteritems()]
+    running_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad'%k)
+                     for k, p in tparams.iteritems()]
+    running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k)
+                      for k, p in tparams.iteritems()]
 
     zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
-    rgup = [(rg, coefficient * rg + (1.0 - coefficient) * g) for rg, g in zip(running_grads, grads)]
-    rg2up = [(rg2, coefficient * rg2 + (1.0 - coefficient) * (g ** 2)) for rg2, g in zip(running_grads2, grads)]
+    rgup = [(rg, coefficient * rg + (1.0 - coefficient) * g)
+        for rg, g in zip(running_grads, grads)]
+    rg2up = [(rg2, coefficient * rg2 + (1.0 - coefficient) * (g ** 2))
+        for rg2, g in zip(running_grads2, grads)]
 
-    f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=zgup+rgup+rg2up+extra_ups, profile=profile)
+    f_grad_shared = theano.function(
+        inp, [cost]+extra_outs, updates=zgup+rgup+rg2up+extra_ups, profile=profile)
 
-    updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k) for k, p in tparams.iteritems()]
-    updir_new = [(ud, momentum * ud - lr * zg / T.sqrt(rg2 - rg ** 2 + relaxation)) for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads, running_grads2)]
-    param_up = [(p, p + udn[1]) for p, udn in zip(tools.itemlist(tparams), updir_new) if p.name not in exclude_params]
-    f_update = theano.function([lr], [], updates=updir_new+param_up, on_unused_input='ignore', profile=profile)
+    updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k)
+             for k, p in tparams.iteritems()]
+    updir_new = [(ud, momentum * ud - lr * zg / T.sqrt(rg2 - rg ** 2 + relaxation))
+        for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads, running_grads2)]
+    param_up = [(p, p + udn[1]) for p, udn in zip(tools.itemlist(tparams), updir_new)
+        if p.name not in exclude_params]
+
+    if not isinstance(lr, list): lr = [lr]
+    f_update = theano.function(
+        lr, [], updates=updir_new+param_up, on_unused_input='ignore',
+        profile=profile)
 
     return f_grad_shared, f_update
 
-def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([])):
+def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+        exclude_params=set([])):
     '''Stochastic gradient descent'''
-    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k) for k, p in tparams.iteritems()]
+    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k)
+               for k, p in tparams.iteritems()]
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
-    f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
+    f_grad_shared = theano.function(
+        inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
 
-    pup = [(p, p - lr * g) for p, g in zip(tools.itemlist(tparams), gshared) if p.name not in exclude_params]
-    f_update = theano.function([lr], [], updates=pup, profile=profile)
+    pup = [(p, p - lr * g) for p, g in zip(tools.itemlist(tparams), gshared)
+        if p.name not in exclude_params]
+
+    if not isinstance(lr, list): lr = [lr]
+    f_update = theano.function(lr, [], updates=pup, profile=profile)
 
     return f_grad_shared, f_update
 
-def rmsprop2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude_params=set([]),
+def rmsprop2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+             exclude_params=set([]),
             relaxation=1e-4, momentum=0.9, coefficient=0.95):
     '''An alternative RMSProp'''
     print 'RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f' % (relaxation, momentum, coefficient)
-    zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k) for k, p in tparams.iteritems()]
-    running_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad'%k) for k, p in tparams.iteritems()]
-    running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k) for k, p in tparams.iteritems()]
+    zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k)
+                    for k, p in tparams.iteritems()]
+    running_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad'%k)
+                     for k, p in tparams.iteritems()]
+    running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k)
+                      for k, p in tparams.iteritems()]
 
     zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
-    rgup = [(rg, coefficient * rg + (1.0 - coefficient) * g) for rg, g in zip(running_grads, grads)]
-    rg2up = [(rg2, coefficient * rg2 + (1.0 - coefficient) * (g ** 2)) for rg2, g in zip(running_grads2, grads)]
+    rgup = [(rg, coefficient * rg + (1.0 - coefficient) * g)
+        for rg, g in zip(running_grads, grads)]
+    rg2up = [(rg2, coefficient * rg2 + (1.0 - coefficient) * (g ** 2))
+        for rg2, g in zip(running_grads2, grads)]
 
-    f_grad_shared = theano.function(inp, [cost]+extra_outs, updates=zgup+rgup+rg2up+extra_ups, profile=profile)
+    f_grad_shared = theano.function(
+        inp, [cost]+extra_outs, updates=zgup+rgup+rg2up+extra_ups, profile=profile)
 
-    updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k) for k, p in tparams.iteritems()]
-    updir_temp = [momentum * ud - lr * zg / T.sqrt(rg2 - rg ** 2 + relaxation) for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads, running_grads2)]
+    updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k)
+             for k, p in tparams.iteritems()]
+    updir_temp = [momentum * ud - lr * zg / T.sqrt(rg2 - rg ** 2 + relaxation)
+                  for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads,
+                                             running_grads2)]
 
     for i, (k, updated_param) in enumerate(zip(updir, updir_temp)):
         if 'W' in str(k):
@@ -284,7 +339,12 @@ def rmsprop2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[], exclude
 
     #updir_new = [(ud, momentum * ud - lr * zg / T.sqrt(rg2 - rg ** 2 + relaxation)) for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads, running_grads2)]
     updir_new = [(ud, ud_new) for ud, ud_new in zip(updir, updir_temp)]
-    param_up = [(p, p + udn[1]) for p, udn in zip(tools.itemlist(tparams), updir_new) if p.name not in exclude_params]
-    f_update = theano.function([lr], [], updates=updir_new+param_up, on_unused_input='ignore', profile=profile)
+    param_up = [(p, p + udn[1]) for p, udn in zip(tools.itemlist(tparams), updir_new)
+        if p.name not in exclude_params]
+
+    if not isinstance(lr, list): lr = [lr]
+    f_update = theano.function(
+        lr, [], updates=updir_new+param_up, on_unused_input='ignore',
+        profile=profile)
 
     return f_grad_shared, f_update
