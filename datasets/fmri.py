@@ -2,15 +2,17 @@
 Module for fMRI data
 '''
 
+import cPickle
 from collections import OrderedDict
 from glob import glob
+import nipy
+from nipy.core.api import Image
 import numpy as np
 import os
 from os import path
 import pprint
 import random
-import nipy
-from nipy.core.api import Image
+from sklearn.decomposition import PCA
 import theano
 import yaml
 
@@ -65,21 +67,27 @@ def resolve(dataset):
 
 class MRI(Dataset):
     def __init__(self, source=None, name='mri', idx=None,
-                 distribution='gaussian', **kwargs):
+                 pca_components=0, distribution='gaussian', **kwargs):
         super(MRI, self).__init__(name=name, **kwargs)
 
         print 'Loading %s from %s' % (name, source)
         source = resolve_path(source)
         X, Y = self.get_data(source)
 
-        self.dims = {self.name: int(self.mask.sum()),
-                     'group': len(np.unique(Y))}
-        self.distributions = {self.name: distribution,
-                              'group': 'multinomial'}
-
         self.image_shape = self.mask.shape
         self.X = self._mask(X)
         self.Y = make_one_hot(Y)
+        self.pca_components = pca_components
+
+        if self.pca_components and self.pca is None:
+            self.pca = PCA(pca_components)
+            print 'Performing PCA...'
+            self.X = self.pca.fit_transform(self.X)
+
+        self.dims = {self.name: self.X.shape[1],
+                     'group': len(np.unique(Y))}
+        self.distributions = {self.name: distribution,
+                              'group': 'multinomial'}
 
         if distribution == 'gaussian':
             self.X -= self.X.mean(axis=0)
@@ -114,6 +122,12 @@ class MRI(Dataset):
         if not path.isdir(self.tmp_path):
             os.mkdir(self.tmp_path)
         self.anat_file = source_dict['anat_file']
+        pca_file = source_dict.get('pca', None)
+        if pca_file is not None:
+            with open(pca_file, 'rb') as f:
+                self.pca = cPickle.load(f)
+        else:
+            self.pca = None
 
         data_files = source_dict['data']
         if isinstance(data_files, str):
@@ -186,7 +200,7 @@ class MRI(Dataset):
 
         mask_f = mask.flatten()
         mask_idx = np.where(mask_f == 1)[0].tolist()
-        X_masked = np.zeros((X.shape[0], self.dims[self.name])).astype(floatX)
+        X_masked = np.zeros((X.shape[0], mask.sum())).astype(floatX)
 
         for i, x in enumerate(X):
             X_masked[i] = x.flatten()[mask_idx]
@@ -197,7 +211,7 @@ class MRI(Dataset):
         if mask is None:
             mask = self.mask
 
-        if X_masked.shape[1] != self.dims[self.name]:
+        if X_masked.shape[1] != mask.sum():
             raise ValueError(X_masked.shape)
 
         mask_f = mask.flatten()
@@ -210,17 +224,22 @@ class MRI(Dataset):
 
         return X
 
-    def make_image(self, X, base_nifti):
+    def make_image(self, X, base_nifti, do_pca=True):
+        if self.pca is not None and do_pca and self.pca_components:
+            X = self.pca.inverse_transform(X)
         image = Image.from_image(base_nifti, data=X)
         return image
 
     def save_niftis(self, X):
         base_nifti = nipy.load_image(self.base_nifti_file)
 
+        if self.pca is not None and self.pca_components:
+            X = self.pca.inverse_transform(X)
+
         images = []
         out_files = []
         for i, x in enumerate(X):
-            image = self.make_image(x, base_nifti)
+            image = self.make_image(x, base_nifti, do_pca=False)
             out_file = path.join(self.tmp_path, 'tmp_image_%d.nii.gz' % i)
             nipy.save_image(image, out_file)
             images.append(image)
@@ -261,6 +280,12 @@ class FMRI_IID(MRI):
         if not path.isdir(self.tmp_path):
             os.mkdir(self.tmp_path)
         self.anat_file = source_dict['anat_file']
+        pca_file = source_dict.get('pca', None)
+        if pca_file is not None:
+            with open(pca_file, 'rb') as f:
+                self.pca = cPickle.load(f)
+        else:
+            self.pca = None
 
         data_files = source_dict['data']
         if isinstance(data_files, str):
