@@ -142,7 +142,8 @@ class RNN(Layer):
         input_net = MLP.factory(dim_in=dim_in, dim_out=dim_hs[0],
                                 name='input_net', **i_net)
 
-        o_net['distribution'] = data_iter.distributions[data_iter.name]
+        if not o_net.get('distribution', False):
+            o_net['distribution'] = data_iter.distributions[data_iter.name]
         output_net = MLP.factory(dim_in=dim_hs[-1], dim_out=dim_out,
                                  name='output_net', **o_net)
         mlps.update(input_net=input_net, output_net=output_net)
@@ -328,7 +329,7 @@ class RNN(Layer):
         p      = self.output_net.distribution(preact)
         x, _   = self.output_net.sample(p, n_samples=1)
         x      = x[0]
-        return tuple(hs) + (x, p)
+        return tuple(hs) + (x, p, preact)
 
     def _step(self, m, y, h_, Ur):
         preact = T.dot(h_, Ur) + y
@@ -424,26 +425,27 @@ class RNN(Layer):
             h0s = [T.alloc(0., x.shape[1], dim_h).astype(floatX) for dim_h in self.dim_hs]
 
         seqs = []
-        outputs_info = h0s + [x0, None]
+        outputs_info = h0s + [x0, None, None]
         non_seqs = []
-        step = self.step_sample
-
         non_seqs += self.get_sample_params()
 
-        outs, updates = scan(step, seqs, outputs_info, non_seqs, n_steps,
-                             name=self.name+'_sampling', strict=False)
-        hs = outs[:self.n_layers]
-        x  = outs[self.n_layers]
-        p  = outs[self.n_layers+1]
+        if n_steps == 1:
+            inps = outputs_info[:-2] + non_seqs
+            outs = self.step_sample(*inps)
+            updates = theano.OrderedUpdates()
+            hs = outs[:self.n_layers]
+            x, p, z = outs[-3:]
+            x = T.shape_padleft(x)
+            p = T.shape_padleft(p)
+            z = T.shape_padleft(z)
+            hs = [T.shape_padleft(h) for h in hs]
+        else:
+            outs, updates = scan(self.step_sample, seqs, outputs_info, non_seqs,
+                                 n_steps, name=self.name+'_sampling', strict=False)
+            hs = outs[:self.n_layers]
+            x, p, z = outs[-3:]
 
-        x  = concatenate([x0[None, :, :], x])
-        for i in xrange(self.n_layers):
-            hs[i]  = concatenate([h0s[i][None, :, :], hs[i]])
-        z0 = self.output_net.preact(h0s[-1])
-        p0 = self.output_net.distribution(z0)
-        p  = concatenate([p0[None, :, :], p])
-
-        return OrderedDict(x=x, p=p, hs=hs, x0=x0, p0=p0, h0s=h0s), updates
+        return OrderedDict(x=x, p=p, z=z, hs=hs), updates
 
 
 class SimpleRNN(RNN):
