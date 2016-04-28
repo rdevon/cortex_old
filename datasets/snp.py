@@ -26,7 +26,6 @@ class SNP(BasicDataset):
             idx: (Optional) list. List of indices for train/test/validation
                 split.
         '''
-        #kwargs = super(SNP, self).__init__(name=name, **kwargs)
         if source is None:
             raise ValueError('No source provided')
 
@@ -34,8 +33,6 @@ class SNP(BasicDataset):
         X, Y = self.get_data(source)
         
         data = {name: X, 'label': Y}
-        import ipdb
-        ipdb.set_trace()
         balance = False
         if idx is not None:
             balance=True
@@ -69,39 +66,9 @@ class SNP(BasicDataset):
         Y.resize(max(Y.shape,))
         return X, Y
 
-    """def randomize(self):
-        '''Randomize the dataset.'''
-        rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
-        self.X = self.X[rnd_idx,:]
-        self.O = self.O[rnd_idx]"""
-
     def reset(self):
         '''Reset the iterator'''
         self.pos = 0
         if self.shuffle:
             self.randomize()
 
-    """def next(self, batch_size=None):
-        '''Iterate the data.'''
-
-        if batch_size is None:
-            batch_size = self.batch_size
-
-        if self.pos == -1:
-            self.reset()
-            raise StopIteration
-
-        x = self.X[self.pos:self.pos + batch_size]
-        y = self.O[self.pos:self.pos + batch_size]
-
-        rval = OrderedDict(pos=self.pos)
-
-        if self.pos + batch_size > self.n:
-            self.pos = -1
-        else:
-            self.pos += batch_size
-
-        rval[self.name] = x
-        rval['labels'] = y
-
-        return rval"""
