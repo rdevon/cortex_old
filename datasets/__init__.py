@@ -90,7 +90,6 @@ def load_data_split(idx=None, dataset=None, **dataset_args):
     
     if dataset == 'snp':
         C = SNP
-    
     train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
 
@@ -121,7 +120,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         if round(np.sum(split), 5) != 1. or len(split) != 3:
             raise ValueError(split)
         dummy = C(batch_size=1, **dataset_args)
-        N = dummy.X.shape[0]
+        N = dummy.n
         idx = range(N)
         np.random.shuffle(idx)
         split_idx = []

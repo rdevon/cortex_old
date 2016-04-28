@@ -5,19 +5,19 @@ SNP dataset class.
 from collections import OrderedDict
 import numpy as np
 from scipy.io import loadmat
-from . import Dataset
+from . import BasicDataset, Dataset
 from utils.tools import (
     warn_kwargs
 )
 
 
-class SNP(Dataset):
+class SNP(BasicDataset):
     '''SNP dataset class.
 
     Currently only handled continuous preprocessed data.
     Discrete data TODO
     '''
-    def __init__(self, source=None, name='snp', convert_one_hot=True, idx=None, **kwargs):
+    def __init__(self, source=None, name='snp', mode='train', convert_one_hot=True, idx=None, **kwargs):
         '''Initialize the SNP dataset.
 
         Arguments:
@@ -26,42 +26,26 @@ class SNP(Dataset):
             idx: (Optional) list. List of indices for train/test/validation
                 split.
         '''
-        kwargs = super(SNP, self).__init__(name=name, **kwargs)
+        #kwargs = super(SNP, self).__init__(name=name, **kwargs)
         if source is None:
             raise ValueError('No source provided')
 
         # Fetch SNP data from "source"
         X, Y = self.get_data(source)
         
-        # One-hot code the labels
-        uniques = np.unique(Y).tolist()
-        O = np.zeros((Y.shape[0], len(uniques)), dtype='float32')
-
-        if convert_one_hot:
-            for indx in xrange(Y.shape[0]):
-                i = uniques.index(Y[indx])
-                O[indx, i] = 1.;
-        else:
-            O = Y
-
-
-        # Reference for the dimension of the dataset. A dict is used for
-        # multimodal data (e.g., mri and labels)
-        self.dims = {self.name: X.shape[1],'labels': O.shape[1]}
-
-        # This is reference for models to decide how the data should be modelled
-        # E.g. with a binomial or gaussian variable
-        self.distributions = {self.name: 'gaussian', 'labels': 'multinomial'}
-
-        self.mean_image = X.mean(axis=0)
-        self.X = X
-        self.O = O
-        
+        data = {name: X, 'label': Y}
+        import ipdb
+        ipdb.set_trace()
+        balance = False
         if idx is not None:
-            self.X = self.X[idx]
-            self.O = self.O[idx]
+            balance=True
+            data[name] = data[name][idx]
+            data['label'] = data['label'][idx]
+        
+        distributions = {name: 'gaussian', 'labels': 'multinomial'}
+        super(SNP, self).__init__(data, name=name, balance=balance, distributions=distributions,  mode=mode, **kwargs)
 
-        self.n = self.X.shape[0]
+        self.mean_image = self.data[name].mean(axis=0)
 
     def get_data(self, source):
         '''Fetch the data from source.
@@ -82,13 +66,14 @@ class SNP(Dataset):
         Y = loadmat(data_path + '/' + source['labels'])
         X = np.float32(X[X.keys()[2]])
         Y = np.float32(Y[Y.keys()[0]])
+        Y.resize(max(Y.shape,))
         return X, Y
 
-    def randomize(self):
+    """def randomize(self):
         '''Randomize the dataset.'''
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
         self.X = self.X[rnd_idx,:]
-        self.O = self.O[rnd_idx]
+        self.O = self.O[rnd_idx]"""
 
     def reset(self):
         '''Reset the iterator'''
@@ -96,7 +81,7 @@ class SNP(Dataset):
         if self.shuffle:
             self.randomize()
 
-    def next(self, batch_size=None):
+    """def next(self, batch_size=None):
         '''Iterate the data.'''
 
         if batch_size is None:
@@ -119,4 +104,4 @@ class SNP(Dataset):
         rval[self.name] = x
         rval['labels'] = y
 
-        return rval
+        return rval"""
