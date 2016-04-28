@@ -36,7 +36,8 @@ def init_learning_args(
     valid_batch_size=100,
     epochs=100,
     valid_key='nll',
-    valid_sign='+'):
+    valid_sign='+',
+    excludes=[]):
     if optimizer_args is None: optimizer_args = dict()
     return locals()
 
@@ -47,7 +48,7 @@ def init_inference_args(
     return locals()
 
 def train(
-    out_path='', name='', model_to_load=None, save_images=True, test_every=None,
+    out_path=None, name='', model_to_load=None, save_images=True, test_every=None,
     dim_h=None, preprocessing=None,
     learning_args=None,
     inference_args=None,
@@ -91,7 +92,8 @@ def train(
     print_section('Loading model and forming graph')
 
     def create_model():
-        model = RBM(dim_in, dim_h, mean_image=train.mean_image)
+        model = RBM(dim_in, dim_h, v_dist=train.distributions[train.name],
+                    mean_image=train.mean_image)
         models = OrderedDict()
         models[model.name] = model
         return models
@@ -127,17 +129,21 @@ def train(
     f_test_keys = results.keys()
     f_test = theano.function([X], results.values())
 
-    _, z_updates = model.update_partition_function(K=1000)
-    f_update_partition = theano.function([], [], updates=z_updates)
+    try:
+        _, z_updates = model.update_partition_function(K=1000)
+        f_update_partition = theano.function([], [], updates=z_updates)
+    except NotImplementedError:
+        f_update_partition = None
 
     H0 = model.trng.binomial(size=(10, model.h_dist.dim), dtype=floatX)
     s_outs, s_updates = model.sample(H0, n_steps=100)
     f_chain = theano.function(
-        [], s_outs['pvs'], updates=s_updates)
+        [], model.v_dist.get_center(s_outs['pvs']), updates=s_updates)
 
      # ========================================================================
     print_section('Setting final tparams and save function')
-    tparams, all_params = set_params(tparams, updates)
+    excludes = learning_args.pop('excludes')
+    tparams, all_params = set_params(tparams, updates, excludes=excludes)
 
     def save(tparams, outfile):
         d = dict((k, v.get_value()) for k, v in all_params.items())
@@ -149,7 +155,7 @@ def train(
 
     def save_images():
         w = model.W.get_value().T
-        w = w.reshape((w.shape[0] // 10, 10, w.shape[1]))
+        w = w.reshape((10, w.shape[0] // 10, w.shape[1]))
         train.save_images(w, path.join(out_path, 'weights.png'))
 
         chain = f_chain()

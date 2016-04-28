@@ -236,6 +236,10 @@ class BasicDataset(Dataset):
         if self.balance:
             self.balance_labels()
 
+        self.X = self.data[self.name]
+        if labels in self.data.keys():
+            self.Y = self.data[labels]
+
     def balance_labels(self):
         label_nums = self.data[self.labels].sum(axis=0)
         max_num = int(max(label_nums))

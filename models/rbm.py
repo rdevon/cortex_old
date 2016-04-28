@@ -8,7 +8,7 @@ import theano
 from theano import tensor as T
 
 from . import Layer
-from distributions import Binomial
+from distributions import Binomial, resolve as resolve_dist
 from utils import floatX
 from utils.tools import (
     concatenate,
@@ -52,7 +52,8 @@ class RBM(Layer):
         std_log_Z: T.tensor, current std of the approximate log marginal.
         mean_image: T.tensor, used for marginal approximation.
     '''
-    def __init__(self, dim_v, dim_h, mean_image=None, name='rbm', **kwargs):
+    def __init__(self, dim_v, dim_h, mean_image=None, name='rbm',
+                 v_dist='binomial', **kwargs):
         '''Init method for RBM class.
 
         Args:
@@ -61,9 +62,12 @@ class RBM(Layer):
             mean_image: np.array (optional), used for marginal approximation.
                 if None, then set to 0.5.
         '''
-        self.h_dist = Binomial(dim_h)
+
+        if v_dist is None:
+            v_dist = 'binomial'
+        self.h_dist = Binomial(dim_h, name='rbm_hidden')
         self.dim_h = self.h_dist.dim
-        self.v_dist = Binomial(dim_v)
+        self.v_dist = resolve_dist(v_dist)(dim_v, name='rbm_visible')
         self.dim_v = self.v_dist.dim
 
         if mean_image is None:
@@ -114,8 +118,8 @@ class RBM(Layer):
         '''Step function for cacluating probility of v given h.'''
         W, v_params, h_params = self.split_params(*params)
         h = self.h_dist.scale_for_energy_model(h, *h_params)
-        center = T.dot(h, W.T) + self.v_dist.get_center(*v_params)
-        return self.v_dist.get_prob(center, *(v_params[1:]))
+        center = T.dot(h, W.T) + v_params[0]
+        return self.v_dist.get_prob(*([center] + [v[None, :] for v in v_params[1:]]))
 
     def step_ph_v(self, x, *params):
         '''Step function for probability of h given v'''
@@ -342,6 +346,16 @@ class RBM(Layer):
         fe = -vis_term - T.log(1. + T.exp(hid_act)).sum(axis=1)
         return fe
 
+    def step_free_energy_h(self, h, beta, *params):
+        '''Step free energy function for hidden states.'''
+        W, v_params, h_params = self.split_params(*params)
+
+        hid_term = beta * self.h_dist.get_energy_bias(h, *h_params)
+        h = self.h_dist.scale_for_energy_model(h, *h_params)
+        vis_act = beta * (T.dot(h, W.T) + self.v_dist.get_center(*v_params))
+        fe = -hid_term - T.log(1. + T.exp(vis_act)).sum(axis=1)
+        return fe
+
     def free_energy(self, x):
         '''Free energy function'''
         if x.ndim == 3:
@@ -350,6 +364,20 @@ class RBM(Layer):
         else:
             reduce_dims = None
         fe = self.step_free_energy(x, 1., *self.get_params())
+
+        if reduce_dims is not None:
+            fe = fe.reshape(reduce_dims)
+
+        return fe
+
+    def free_energy_h(self, h):
+        '''Free energy function for hidden states.'''
+        if h.ndim == 3:
+            reduce_dims = (h.shape[0], h.shape[1])
+            h = h.reshape((reduce_dims[0] * reduce_dims[1], h.shape[2]))
+        else:
+            reduce_dims = None
+        fe = self.step_free_energy_h(h, 1., *self.get_params())
 
         if reduce_dims is not None:
             fe = fe.reshape(reduce_dims)
@@ -422,17 +450,21 @@ class RBM(Layer):
         fe            = self.free_energy(v0)
         recon_error   = self.v_neg_log_prob(x, self.reconstruct(x)).mean()
 
-        nll = self.estimate_nll(x)
         results = OrderedDict(
             cost=cost,
             positive_cost=positive_cost.mean(),
             negative_cost=negative_cost.mean(),
             free_energy=fe.mean(),
-            nll=nll,
             log_z=self.log_Z,
             std_log_z=self.std_log_Z,
             recon_error=recon_error
         )
+
+        try:
+            nll = self.estimate_nll(x)
+            results['nll'] = nll
+        except NotImplementedError:
+            pass
 
         samples = OrderedDict(
             vs=outs['vs'],

@@ -6,10 +6,7 @@ from collections import OrderedDict
 import numpy as np
 from scipy.io import loadmat
 from . import Dataset
-from utils.tools import (
-    floatX,
-    warn_kwargs
-)
+from utils import floatX
 
 
 class SNP(Dataset):
@@ -34,7 +31,7 @@ class SNP(Dataset):
 
         # Fetch SNP data from "source"
         self.get_data(source)
-        
+
         # One-hot code the labels
         uniques = np.unique(self.Y).tolist()
         O = np.zeros((self.Y.shape[0], len(uniques)), dtype='float32')
@@ -45,7 +42,7 @@ class SNP(Dataset):
                 O[idx, i] = 1.;
 
         self.O = O
-                
+
         # Reference for the dimension of the dataset. A dict is used for
         # multimodal data (e.g., mri and labels)
         self.dims = {self.name: self.X.shape[1],'labels': self.Y.shape[1]}
@@ -68,7 +65,7 @@ class SNP(Dataset):
            source: dict. file names of genetic data and labels
                   {'snp' key for genetic data
                     'labels' key for diagnosis }
-                    
+
         Genetic data is in the matrix format with size Subjec*SNP
         SNP can be either preprocessed or notprocessed
         Labels is a vector with diagnosis info

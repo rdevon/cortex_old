@@ -8,15 +8,18 @@ from theano import tensor as T
 
 from datasets.mnist import MNIST
 from inference import gdir
-from models.gbn import GBN
-from utils.tools import (
-    floatX,
-    print_profile
-)
+from models.helmholtz import Helmholtz
+from utils import floatX
+from utils.tools import print_profile
 
 
 def test_build_GBN(dim_in=17, dim_h=13):
-    gbn = GBN(dim_in, dim_h)
+    rec_args = dict(input_layer='input')
+    gen_args = dict(output='input')
+    distributions = dict(input='gaussian')
+    dims = dict(input=dim_in)
+    gbn = Helmholtz.factory(dim_h, distributions=distributions, dims=dims,
+                    rec_args=rec_args, gen_args=gen_args)
     tparams = gbn.set_tparams()
 
     print_profile(tparams)
@@ -28,9 +31,9 @@ def test_call():
     gbn = test_build_GBN(dim_in=data_iter.dims[data_iter.name])
 
     X = T.matrix('x', dtype=floatX)
-    results, samples = gbn(X, X, n_samples=7)
+    results, samples, _, _ = gbn(X, X, n_posterior_samples=7)
 
     f = theano.function([X], samples.values() + results.values())
 
     x = data_iter.next()[data_iter.name]
-    assert False, f(x)
+    f(x)

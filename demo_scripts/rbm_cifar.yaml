@@ -1,0 +1,20 @@
+{
+  name: 'rbm_cifar',
+  learning_args: {
+    epochs: 1000,
+    optimizer: 'sgd',
+    learning_rate: 0.001,
+    excludes: ['rbm_visible_log_sigma']
+  },
+  inference_args: {
+    n_chains: 10,
+    persistent: True,
+    n_steps: 1
+  },
+  dim_h: 200,
+  test_every: 10,
+  dataset_args: {
+    dataset: 'cifar',
+    source: '$data/cifar-10-batches-py'
+  }
+}

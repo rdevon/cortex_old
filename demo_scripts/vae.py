@@ -44,7 +44,7 @@ def init_learning_args(
     return locals()
 
 def train(
-    out_path='', name='', model_to_load=None, save_images=True, test_every=None,
+    out_path=None, name='', model_to_load=None, save_images=True, test_every=None,
     dim_h=None, rec_args=None, gen_args=None, prior='gaussian',
     preprocessing=None,
     learning_args=None,

@@ -43,5 +43,3 @@ def test_build(dim_f=3, prototype_shape=(10, 10, 10), shape=(3, 4, 5), stride=2,
 
     x = np.random.normal(size=(batch_size, 19)).astype(floatX)
     f(x)
-
-    assert False

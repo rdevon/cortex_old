@@ -157,7 +157,7 @@ class RNN(Layer):
 
         kwargs.update(**mlps)
 
-        return RNN(dim_in, dim_hs, dim_out, **kwargs)
+        return RNN(dim_in, dim_hs, dim_out=dim_out, **kwargs)
 
     def set_params(self):
         '''Initialize RNN parameters.'''
@@ -221,7 +221,6 @@ class RNN(Layer):
             if net is not None:
                 accum += len(net.get_params())
             self.param_idx.append(accum)
-
         return tparams
 
     def get_params(self):
@@ -292,6 +291,7 @@ class RNN(Layer):
         return rval
 
     def step_sample_preact(self, *params):
+        '''Returns preact for sampling step.'''
         params = list(params)
         hs_ = params[:self.n_layers]
         x = params[self.n_layers]
@@ -343,8 +343,8 @@ class RNN(Layer):
             i_params = self.get_input_args(*params)
             a        = self.input_net.step_preact(x, *i_params)
         else:
-            i_params = self.get_inter_args(level-1, *params)
-            a        = self.inter_nets[level-1].step_preact(x, *i_params)
+            i_params = self.get_inter_args(level - 1, *params)
+            a        = self.inter_nets[level - 1].step_preact(x, *i_params)
 
         if condition_on is not None:
             a += condition_on
@@ -356,20 +356,23 @@ class RNN(Layer):
         n_steps = x.shape[0]
         n_samples = x.shape[1]
 
+        updates = theano.OrderedUpdates()
+
         hs = []
         for i, h0 in enumerate(h0s):
             seqs         = [m[:, :, None]] + self.call_seqs(x, None, i, *params)
             outputs_info = [h0]
             non_seqs     = [self.get_recurrent_args(*params)[i]]
-
-            h, updates = theano.scan(
+            h, updates_ = theano.scan(
                 self._step,
                 sequences=seqs,
                 outputs_info=outputs_info,
                 non_sequences=non_seqs,
                 name=self.name + '_recurrent_steps_%d' % i,
                 n_steps=n_steps)
+            hs.append(h)
             x = h
+            updates += updates_
 
         o_params    = self.get_output_args(*params)
         out_net_out = self.output_net.step_call(h, *o_params)

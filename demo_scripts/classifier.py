@@ -64,7 +64,7 @@ def init_learning_args(
     return locals()
 
 def train(
-    out_path='', name='', model_to_load=None, test_every=None,
+    out_path=None, name='', model_to_load=None, test_every=None,
     classifier=None, preprocessing=None,
     learning_args=None,
     dataset_args=None):

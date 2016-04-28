@@ -14,6 +14,7 @@ from . import Layer
 from darn import AutoRegressor, DARN
 from distributions import (
     Binomial,
+    Distribution,
     Gaussian,
     Logistic,
     resolve as resolve_prior
@@ -104,7 +105,7 @@ class Helmholtz(Layer):
         super(Helmholtz, self).__init__(name=name)
 
     @staticmethod
-    def factory(dim_h, data_iter, **kwargs):
+    def factory(dim_h, data_iter=None, distributions=None, dims=None, **kwargs):
         '''Factory for forming conditional, posterior, and prior.
 
         Args:
@@ -116,17 +117,24 @@ class Helmholtz(Layer):
         '''
 
         posterior, conditional, prior = Helmholtz.mlp_factory(
-            dim_h, data_iter, **kwargs)
+            dim_h, data_iter=data_iter, distributions=distributions, dims=dims,
+            **kwargs)
         return Helmholtz(posterior, conditional, prior)
 
     @staticmethod
-    def mlp_factory(dim_h, data_iter, prior=None, rec_args=None, gen_args=None):
+    def mlp_factory(dim_h, data_iter=None, distributions=None, dims=None,
+                    prior=None, rec_args=None, gen_args=None):
         '''Factory for forming conditional, posterior, and prior.
 
         Args:
             dim_h: int, latent dimension.
-            data_iter: Dataset class.
-            prior: str (optional), type of prior. See `distributions.py`.
+            data_iter: Dataset class (optional). Must be provided if
+                distributions and dims are not
+            distributions: dict (optional). keys are data mode names,
+                values are str for distribution (see distributions.py)
+            dims: dict (optional). Keys are data mode names, values are int.
+            prior: str or Distribution object (optional), type (str) or instance of prior.
+                See `distributions.py`.
             rec_args: dict (optional), arguments for approximate posterior.
             gen_args: dict (optional), arguments for conditional network.
         Returns:
@@ -135,13 +143,15 @@ class Helmholtz(Layer):
             prior: Distribution.
         '''
 
-        distributions = data_iter.distributions
-        dims = data_iter.dims
+        if data_iter is not None:
+            distributions = data_iter.distributions
+            dims = data_iter.dims
+        assert dims is not None and distributions is not None
 
         if rec_args is None:
-            rec_args = dict(input_layer=distributions[data_iter.name])
+            rec_args = dict(input_layer=data_iter.name)
         if gen_args is None:
-            gen_args = dict(output=distributions[data_iter.name])
+            gen_args = dict(output=data_iter.name)
 
         # Forming the prior model.
         if prior is None:
@@ -149,7 +159,10 @@ class Helmholtz(Layer):
                 prior = 'binomial'
             else:
                 prior = rec_args['distribution']
-        PC = resolve_prior(prior)
+        if isinstance(prior, Distribution):
+            PC = prior
+        else:
+            PC = resolve_prior(prior)
         prior_model = PC(dim_h)
 
         # Forming the recogntion network, aka posterior
@@ -172,9 +185,9 @@ class Helmholtz(Layer):
             GC = resolve_mlp(t)
         if t == 'dag':
             for out in gen_args['graph']['outputs']:
-                gen_args['graph']['outs'][out] = dict(
-                    dim=dims[out],
-                    distribution=distributions[out])
+                gen_args['graph']['outs'][output_name] = dict(
+                    dim=dims[output_name],
+                    distribution=distributions[output_name])
         else:
             gen_args['dim_out'] = dims[output_name]
             gen_args['distribution'] = distributions[output_name]
@@ -271,8 +284,8 @@ class Helmholtz(Layer):
 
     def l2_decay(self, rate):
         '''Get L2 decay costs.'''
-        rec_l2_cost = self.posterior.get_L2_weight_cost(rate)
-        gen_l2_cost = self.conditional.get_L2_weight_cost(rate)
+        rec_l2_cost = self.posterior.l2_decay(rate)
+        gen_l2_cost = self.conditional.l2_decay(rate)
 
         rval = OrderedDict(
             rec_l2_cost=rec_l2_cost,
@@ -324,18 +337,31 @@ class Helmholtz(Layer):
         q0  = self.posterior.feed(x)
         if qk is None:
             qk = q0
+        elif qk.ndim == 3:
+            qk = T.zeros((n_posterior_samples,
+                          qk.shape[0],
+                          qk.shape[1],
+                          qk.shape[2])).astype(floatX) + qk[None, :, :, :]
+            qk = qk.reshape(
+                (n_posterior_samples *qk.shape[0], qk.shape[1], qk.shape[2]))
+            n_posterior_samples = qk.shape[0]
+        else:
+            qk = qk[None, :, :]
 
         r = self.init_inference_samples(
             (n_posterior_samples, y.shape[0], self.dim_h))
-        h = self.posterior.distribution.step_sample(r, qk[None, :, :])
+        h = self.posterior.distribution.step_sample(r, qk)
         py_h = self.conditional.feed(h)
 
         log_py_h = -self.conditional.neg_log_prob(y[None, :, :], py_h)
         log_ph = -self.prior.neg_log_prob(h)
         log_qh0 = -self.posterior.neg_log_prob(h, q0[None, :, :])
-        log_qkh = -self.posterior.neg_log_prob(h, qk[None, :, :])
+        log_qkh = -self.posterior.neg_log_prob(h, qk)
         prior_entropy = self.prior.entropy()
+
         q_entropy = self.posterior.entropy(qk)
+        if q_entropy.ndim == 2:
+            q_entropy = q_entropy.mean(0)
 
         # Log marginal
         log_p = log_sum_exp(
@@ -353,7 +379,7 @@ class Helmholtz(Layer):
             lower_bound -= KL_qk_p
         else:
             prior_energy = -log_ph.mean(axis=0)
-            cost += prior_energy
+            cost += prior_energy - q_entropy
             results['-log p(h)'] = prior_energy.mean(0)
             lower_bound -= (prior_energy - q_entropy)
 
@@ -366,10 +392,10 @@ class Helmholtz(Layer):
                 cost += KL_qk_q0
                 results['KL(q_k||q_0)'] = KL_qk_q0.mean(0)
             else:
-                h_energy = -log_qhk.mean(axis=0)
+                h_energy = -log_qkh.mean(axis=0)
                 h_energy_mean = h_energy.mean(axis=0)
                 cost += h_energy
-                results['-log q(h)'] = h_energy.mean(0),
+                results['-log q(h)'] = h_energy.mean(0)
 
         results.update(**{
             '-log p(x|h)': y_energy.mean(0),
