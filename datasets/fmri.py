@@ -212,7 +212,7 @@ class MRI(Dataset):
             mask = self.mask
 
         if X_masked.shape[1] != mask.sum():
-            raise ValueError(X_masked.shape)
+            raise ValueError('Masked data does not fit mask %r vs %r' % (X_masked.shape, mask.sum()))
 
         mask_f = mask.flatten()
         mask_idx = np.where(mask_f == 1)[0].tolist()
@@ -252,7 +252,6 @@ class MRI(Dataset):
         if len(x.shape) == 3:
             x = x[:, 0, :]
         x = self._unmask(x)
-
         images, nifti_files = self.save_niftis(x)
         roi_dict = rois.main(nifti_files)
 
