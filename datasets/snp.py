@@ -11,6 +11,7 @@ from utils.tools import (
 )
 
 
+
 class SNP(BasicDataset):
     '''SNP dataset class.
 
@@ -31,8 +32,8 @@ class SNP(BasicDataset):
 
         # Fetch SNP data from "source"
         X, Y = self.get_data(source)
-        
         data = {name: X, 'label': Y}
+        # balance data for traning, valid, and test parts
         balance = False
         if idx is not None:
             balance=True
@@ -50,7 +51,7 @@ class SNP(BasicDataset):
            source: dict. file names of genetic data and labels
                   {'snp' key for genetic data
                     'labels' key for diagnosis }
-                    
+
         Genetic data is in the matrix format with size Subjec*SNP
         SNP can be either preprocessed or notprocessed
         Labels is a vector with diagnosis info

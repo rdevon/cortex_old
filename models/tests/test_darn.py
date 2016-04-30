@@ -10,10 +10,8 @@ from models.darn import (
     AutoRegressor,
     DARN
 )
-from models.sbn import SigmoidBeliefNetwork as SBN
-from utils.tools import (
-    floatX
-)
+from models.helmholtz import Helmholtz
+from utils import floatX
 
 
 sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))
@@ -44,18 +42,17 @@ def test_autoregressor(dim=3, n_samples=5):
 
     assert np.allclose(z_t, z_np), (z_t, z_np)
     p_np = sigmoid(z_np)
-    assert np.allclose(p_t, p_np), (p_t, p_np)
+    assert np.allclose(p_t, p_np, atol=1e-4), (p_t - p_np)
 
     p_np = np.clip(p_np, 1e-7, 1 - 1e-7)
     nlp_np = (- x * np.log(p_np) - (1 - x) * np.log(1 - p_np)).sum(axis=1)
 
-    assert np.allclose(nlp_t, nlp_np), (nlp_t, nlp_np)
+    assert np.allclose(nlp_t, nlp_np, atol=1e-3), (nlp_t - nlp_np)
 
     samples, updates = ar.sample(n_samples=n_samples)
 
     f = theano.function([], samples, updates=updates)
     print f()
-    assert False
 
 def test_darn(dim_in=5, dim_h=3, dim_out=7, n_samples=13):
     darn = DARN(dim_in, dim_h, dim_out, 2, h_act='T.tanh', out_act='T.nnet.sigmoid')
@@ -95,34 +92,3 @@ def test_darn(dim_in=5, dim_h=3, dim_out=7, n_samples=13):
     samples, updates_s = darn.sample(C, n_samples=n_samples-1)
     f = theano.function([H], samples, updates=updates_s)
     print f(h)
-    assert False
-
-def test_air(dim_in=5, dim_h=3, dim_out=7, n_inference_steps=1,
-             n_mcmc_samples=11, n_samples=9):
-
-    X = T.matrix('X', dtype=floatX)
-
-    kwargs = dict(
-        z_init='recognition_net',
-        inference_method='adaptive',
-        inference_rate=0.1,
-        n_inference_samples=17,
-        extra_inference_args=dict()
-    )
-
-    ar = AutoRegressor(dim_out)
-    darn = DARN(dim_in, dim_h, dim_out, 2, h_act='T.tanh', out_act='T.nnet.sigmoid')
-
-    sbn = SBN(dim_in, dim_out, prior=ar, posterior=darn, **kwargs)
-    tparams = sbn.set_tparams()
-
-    (z, prior_energy, h_energy, y_energy, entropy), updates, constants = sbn.inference(
-        X, X, n_inference_steps=n_inference_steps, n_samples=n_mcmc_samples)
-
-    cost = prior_energy + h_energy + y_energy
-
-    f = theano.function([X], cost, updates=updates)
-
-    x = np.random.randint(0, 2, size=(n_samples, dim_in)).astype(floatX)
-    print f(x)
-    assert False

@@ -384,6 +384,8 @@ def main_loop(train, valid, tparams,
 
     if out_path is not None:
         bestfile = path.join(out_path, '{name}_best.npz'.format(name=name))
+    else:
+        bestfile = None
 
     try:
         epoch_t0 = time.time()
@@ -431,7 +433,7 @@ def main_loop(train, valid, tparams,
                         monitor.save_stats(path.join(out_path, '{name}_monitor.npz').format(name=name))
                         monitor.save_stats_valid(path.join(out_path, '{name}_monitor_valid.npz').format(name=name))
 
-                if save_images is not None:
+                if save_images is not None and out_path is not None:
                     save_images()
 
                 e += 1
@@ -454,7 +456,7 @@ def main_loop(train, valid, tparams,
                 for k, v in zip(rval, extra_outs_keys):
                     print k, v
 
-                if save_images is not None:
+                if save_images is not None and out_path is not None:
                     save_images()
             check_bad_nums(rval, extra_outs_keys)
             if check_bad_nums(rval[:1], extra_outs_keys[:1]):

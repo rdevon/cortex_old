@@ -14,7 +14,6 @@ from utils.tools import (
 )
 
 class IRVI(object):
-
     def __init__(self,
                  model,
                  name='IRVI',
@@ -23,6 +22,7 @@ class IRVI(object):
                  n_inference_steps=20,
                  pass_gradients=True,
                  init_inference='recognition_network',
+                 use_all_samples=False,
                  **kwargs):
 
         self.name = name
@@ -32,6 +32,8 @@ class IRVI(object):
         self.n_inference_steps = n_inference_steps
         self.n_inference_samples = n_inference_samples
         self.pass_gradients = pass_gradients
+        self.use_all_samples = use_all_samples
+
         warn_kwargs(self, **kwargs)
 
     def step_infer(self, *params):  raise NotImplementedError()
@@ -54,7 +56,6 @@ class IRVI(object):
         return q0
 
     def inference(self, x, y, q0=None):
-
         model = self.model
         updates = theano.OrderedUpdates()
 
@@ -102,18 +103,20 @@ class IRVI(object):
         else:
             constants = [qs]
 
+        if not self.use_all_samples:
+            qk = qs
+        else:
+            qk = qs[-1]
+
         rval = OrderedDict(
-            qk=qs[-1],
+            qk=qk,
             qs=qs,
             i_costs=i_costs
         )
 
         return rval, constants, updates
 
-    def __call__(self, x, y,
-                 stride=1,
-                 **model_args):
-
+    def __call__(self, x, y, stride=1, **model_args):
         model = self.model
 
         inference_outs, _, updates = self.inference(x, y)
@@ -134,7 +137,7 @@ class IRVI(object):
         samples = OrderedDict()
         for i in steps:
             qk  = qs[i]
-            results_k, samples_k, _ = model(x, y, qk, **model_args)
+            results_k, samples_k, _, _ = model(x, y, qk, **model_args)
             samples_k['q'] = qk
             update_dict_of_lists(full_results, **results_k)
             full_results['i_cost'].append(i_costs[i])
@@ -144,7 +147,10 @@ class IRVI(object):
         for k, v in full_results.iteritems():
             results[k] = v[-1]
             results[k + '0'] = v[0]
-            results['d_' + k] = v[0] - v[-1]
+            try:
+                results['d_' + k] = v[0] - v[-1]
+            except:
+                print k, v[0], v[-1]
 
         return results, samples, full_results, updates
 
@@ -259,9 +265,7 @@ class DeepIRVI(object):
 
         return rval, constants, updates
 
-    def __call__(self, x, y,
-                 stride=10,
-                 **model_args):
+    def __call__(self, x, y, stride=10, **model_args):
 
         model = self.model
 
