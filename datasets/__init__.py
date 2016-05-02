@@ -76,7 +76,7 @@ def load_data(dataset=None,
     return train, valid, test
 
 
-def load_data_split(idx=None, dataset=None, **dataset_args):
+def load_data_split(C, idx=None, dataset=None, **dataset_args):
     '''Load dataset and split.
     Arguments:
         idx: (Optional) list of list of int. Indices for train/valid/test
@@ -86,10 +86,6 @@ def load_data_split(idx=None, dataset=None, **dataset_args):
         train, valid, test Dataset objects.
         idx: Indices for if split is created.
     '''
-    from snp import SNP
-    
-    if dataset == 'snp':
-        C = SNP
     train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
 
@@ -122,7 +118,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         dummy = C(batch_size=1, **dataset_args)
         N = dummy.n
         idx = range(N)
-        np.random.shuffle(idx)
+        random.shuffle(idx)
         split_idx = []
         accum = 0
         for s in split:

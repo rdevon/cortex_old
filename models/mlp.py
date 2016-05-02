@@ -116,9 +116,8 @@ class MLP(Layer):
         for l in layers:
             W = self.__dict__['W%d' % l]
             cost += gamma * (W ** 2).sum()
-        
-        rval = OrderedDict(cost = cost)
-        return rval
+
+        return cost
 
     def sample(self, p, n_samples=1):
         assert self.distribution is not None

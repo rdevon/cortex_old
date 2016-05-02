@@ -39,8 +39,8 @@ class SNP(BasicDataset):
             balance=True
             data[name] = data[name][idx]
             data['label'] = data['label'][idx]
-        
-        distributions = {name: 'gaussian', 'labels': 'multinomial'}
+
+        distributions = {name: 'gaussian', 'label': 'multinomial'}
         super(SNP, self).__init__(data, name=name, balance=balance, distributions=distributions,  mode=mode, **kwargs)
 
         self.mean_image = self.data[name].mean(axis=0)
@@ -61,7 +61,7 @@ class SNP(BasicDataset):
         data_path = get_paths()['$snp_data']
         print('Loading genetic data from %s' % data_path)
         X = loadmat(data_path + '/' + source['snp'])
-        Y = loadmat(data_path + '/' + source['labels'])
+        Y = loadmat(data_path + '/' + source['label'])
         X = np.float32(X[X.keys()[2]])
         Y = np.float32(Y[Y.keys()[0]])
         Y.resize(max(Y.shape,))
