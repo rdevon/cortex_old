@@ -57,7 +57,7 @@ def test_feed_forward(mlp=None, X=T.matrix('X', dtype=floatX), x=None, distribut
     if distribution == 'binomial':
         activ = sigmoid
     elif distribution == 'centered_binomial':
-        activ = tanh
+        activ = sigmoid
     elif distribution == 'gaussian':
         activ = 'lambda x: x'
     else:

@@ -16,6 +16,7 @@ from distributions import (
     Binomial,
     Distribution,
     Gaussian,
+    Laplace,
     Logistic,
     resolve as resolve_prior
 )
@@ -96,6 +97,8 @@ class Helmholtz(Layer):
                 name = 'gbn'
             elif isinstance(prior, Logistic):
                 name = 'lbn'
+            elif isinstance(prior, Laplace):
+                name = 'labn'
             else:
                 raise ValueError('Prior type %r not supported' % type(prior))
 

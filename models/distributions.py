@@ -27,7 +27,8 @@ def resolve(c, conditional=False):
         centered_binomial=CenteredBinomial,
         multinomial=Multinomial,
         gaussian=Gaussian,
-        logistic=Logistic
+        logistic=Logistic,
+        laplace=Laplace
     )
 
     C = resolve_dict.get(c, None)
@@ -207,14 +208,34 @@ class Binomial(Distribution):
 
 class CenteredBinomial(Binomial):
     '''Centered binomial.'''
+    def get_prob(self, z):
+        return T.nnet.sigmoid(2.0 * z) * 0.9999 + 0.000005
+
     def __call__(self, z):
-        return T.tanh(z)
+        return T.nnet.sigmoid(2.0 * z) * 0.9999 + 0.000005
+
+    def step_sample(self, epsilon, p):
+        return (2.0 * (epsilon <= p).astype(floatX) - 1.0)
+
+    def sample(self, n_samples, p=None):
+        '''Samples from distribution.'''
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        if p.ndim == 1:
+            size = (n_samples, p.shape[0] // self.scale)
+        elif p.ndim == 2:
+            size = (n_samples, p.shape[0], p.shape[1] // self.scale)
+        elif p.ndim == 3:
+            size = (n_samples, p.shape[0], p.shape[2], p.shape[3] // self.scale)
+        elif p.ndim == 4:
+            raise NotImplementedError('%d dim sampling not supported yet' % p.ndim)
+
+        return (2.0 * self.f_sample(self.trng, p, size=size) - 1), theano.OrderedUpdates()
 
     def neg_log_prob(self, x, p=None, sum_probs=True):
         if p is None:
             p = self.get_prob(*self.get_params())
-        x = 0.5 * (x + 1)
-        p = 0.5 * (p + 1)
+        x = 0.5 * (x + 1.0)
         return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
 
 
@@ -441,6 +462,88 @@ class Logistic(Distribution):
         py = (y_mu - y0_mu) / T.exp(y0_logs)
         return py
 
+
+class Laplace(Distribution):
+    '''Laplace distribution.
+    '''
+    is_continuous = True
+
+    def __init__(self, dim, name='laplace', **kwargs):
+        self.f_sample = _laplace
+        self.f_neg_log_prob = _neg_laplace_log_prob
+        self.f_entropy = _laplace_entropy
+        super(Laplace, self).__init__(dim, name=name, scale=2, **kwargs)
+
+    def set_params(self):
+        mu = np.zeros((self.dim,)).astype(floatX)
+        log_b = np.zeros((self.dim,)).astype(floatX)
+
+        self.params = OrderedDict(
+            mu=mu, log_b=log_b)
+
+    def get_params(self):
+        return [self.mu, self.log_b]
+
+    def get_prob(self, mu, log_b):
+        return concatenate([mu, log_b], axis=mu.ndim-1)
+
+    def __call__(self, z):
+        return z
+
+    def get_center(self, p):
+        mu = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
+        return mu
+
+    def split_prob(self, p):
+        mu    = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
+        log_s = _slice(p, 1, p.shape[p.ndim-1] // self.scale)
+        return mu, log_s
+
+    def step_sample(self, epsilon, p):
+        dim = p.shape[p.ndim-1] // self.scale
+        mu = _slice(p, 0, dim)
+        log_b = _slice(p, 1, dim)
+        return mu + T.exp(log_b) * T.sgn(epsilon) * T.log(1.0 - 2 * abs(epsilon))
+
+    def prototype_samples(self, size):
+        return self.trng.uniform(size=size, dtype=floatX) - 0.5
+
+    def step_neg_log_prob(self, x, *params):
+        p = self.get_prob(*params)
+        return self.f_neg_log_prob(x, p=p)
+
+    def neg_log_prob(self, x, p=None, sum_probs=True):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
+
+    def standard_prob(self, x, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return T.exp(-self.neg_log_prob(x, p))
+
+    def entropy(self, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+        return self.f_entropy(p)
+
+    def generate_latent_pair(self):
+        h0 = self.mu
+        b = T.nlinalg.AllocDiag()(T.exp(self.log_b)).astype(floatX)
+        h = 2 * b + h0[None, :]
+        return h0, h
+
+    def visualize(self, p0, p=None):
+        if p is None:
+            p = self.get_prob(*self.get_params())
+
+        outs0 = self.split_prob(p0)
+        outs = self.split_prob(p)
+        y0_mu, y0_logs = outs0
+        y_mu, y_logs = outs
+        py = (y_mu - y0_mu) / T.exp(y0_logs)
+        return py
+
 # Various functions for distributions.
 # BERNOULLI --------------------------------------------------------------------
 
@@ -552,5 +655,32 @@ def _neg_logistic_log_prob(x, p, sum_probs=True):
 def _logistic_entropy(p):
     dim = p.shape[p.ndim-1] // 2
     log_s = _slice(p, 1, dim)
-    entropy = log_s + 2
+    entropy = log_s + 2.0
+    return entropy.sum(axis=entropy.ndim-1)
+
+# Laplace ---------------------------------------------------------------------
+
+def _laplace(trng, p, size=None):
+    dim = p.shape[p.ndim-1] // 2
+    mu = _slice(p, 0, dim)
+    log_b = _slice(p, 1, dim)
+    if size is None:
+        size = mu.shape
+    epsilon = trng.uniform(size=size, dtype=floatX) - 0.5
+    return mu + T.exp(log_b) * T.sgn(epsilon) * T.log(1.0 - 2 * abs(epsilon))
+
+def _neg_laplace_log_prob(x, p, sum_probs=True):
+    dim = p.shape[p.ndim-1] // 2
+    mu = _slice(p, 0, dim)
+    log_b = _slice(p, 1, dim)
+    energy = T.log(2.0) + log_b + abs(x - mu) / T.exp(log_b)
+    if sum_probs:
+        return energy.sum(axis=energy.ndim-1)
+    else:
+        return energy
+
+def _laplace_entropy(p):
+    dim = p.shape[p.ndim-1] // 2
+    log_b = _slice(p, 1, dim)
+    entropy = log_b + T.log(2.) + 1.0
     return entropy.sum(axis=entropy.ndim-1)
