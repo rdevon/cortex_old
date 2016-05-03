@@ -545,8 +545,9 @@ class MultiModalMLP(Layer):
         for k in layers:
             W = self.__dict__['W_%s' % k]
             cost += gamma * (W ** 2).sum()
-
-        return cost
+        
+        rval = OrderedDict(cost = cost)
+        return rval
 
     def split(self, p):
         start = 0
