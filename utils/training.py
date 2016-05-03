@@ -304,7 +304,6 @@ def validate(tparams, results, best_valid, e, best_epoch,
         best_valid: float
         best_epoch: int
     '''
-
     warn_kwargs(None, **kwargs)
 
     valid_value = results[valid_key]
@@ -432,7 +431,6 @@ def main_loop(train, valid, tparams,
                         monitor.display()
                         if out_path is not None:
                             monitor.save(path.join(out_path, 'monitor.png'))
-
                 if save_images is not None and out_path is not None:
                     save_images()
 

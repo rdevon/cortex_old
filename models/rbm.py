@@ -75,6 +75,11 @@ class RBM(Layer):
         self.mean_image = theano.shared(np.clip(mean_image, 1e-7, 1 - 1e-7),
                                         name='mean_image')
 
+        if mean_image is None:
+            mean_image = np.zeros(self.dim_v,).astype(floatX) + 0.5
+        self.mean_image = theano.shared(np.clip(mean_image, 1e-7, 1 - 1e-7),
+                                        name='mean_image')
+
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
         super(RBM, self).__init__(name=name, excludes=['log_Z', 'std_log_Z'],

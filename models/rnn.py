@@ -127,6 +127,7 @@ class RNN(Layer):
 
         Returns:
             RNN: RNN object
+
         '''
 
         if dim_in is None:
@@ -137,7 +138,6 @@ class RNN(Layer):
         if o_net is None: o_net = dict()
 
         mlps = {}
-
         i_net['distribution'] = 'centered_binomial'
         input_net = MLP.factory(dim_in=dim_in, dim_out=dim_hs[0],
                                 name='input_net', **i_net)
