@@ -8,7 +8,6 @@ from theano import tensor as T
 
 from datasets.mnist import MNIST
 from inference.gdir import MomentumGDIR
-from models.gbn import GBN
 from models.tests import test_vae
 from utils import floatX
 from utils.tools import resolve_path
