@@ -41,6 +41,10 @@ class MNIST(BasicDataset):
 
         X, Y = self.get_data(source, mode)
 
+        if restrict_digits is not None:
+            X = np.array([x for i, x in enumerate(X) if Y[i] in restrict_digits])
+            Y = np.array([y for i, y in enumerate(Y) if Y[i] in restrict_digits])
+
         data = {name: X, 'label': Y}
         distributions = {name: 'binomial', 'label': 'multinomial'}
 

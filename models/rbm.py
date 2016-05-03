@@ -53,7 +53,7 @@ class RBM(Layer):
         mean_image: T.tensor, used for marginal approximation.
     '''
     def __init__(self, dim_v, dim_h, mean_image=None, name='rbm',
-                 v_dist='binomial', **kwargs):
+                 v_dist='binomial', h_dist='binomial', **kwargs):
         '''Init method for RBM class.
 
         Args:
@@ -65,7 +65,7 @@ class RBM(Layer):
 
         if v_dist is None:
             v_dist = 'binomial'
-        self.h_dist = Binomial(dim_h, name='rbm_hidden')
+        self.h_dist = resolve_dist(h_dist)(dim_h, name='rbm_hidden')
         self.dim_h = self.h_dist.dim
         self.v_dist = resolve_dist(v_dist)(dim_v, name='rbm_visible')
         self.dim_v = self.v_dist.dim
@@ -177,6 +177,12 @@ class RBM(Layer):
         results = OrderedDict(vs=vs, hs=hs, pvs=pvs, phs=phs)
 
         return results, updates
+
+    def l2_decay(self, gamma):
+        return gamma * (self.W ** 2).sum()
+
+    def l1_decay(self, gamma):
+        return gamma * abs(self.W).sum()
 
     def reconstruct(self, x):
         '''Reconstruction error (cross entropy).

@@ -7,6 +7,25 @@ import numpy as np
 import random
 
 
+def resolve(c):
+    from mnist import MNIST
+    from caltech import CALTECH
+    from uci import UCI
+    from cifar import CIFAR
+
+    r_dict = {
+        'mnist': MNIST,
+        'cifar': CIFAR,
+        'caltech': CALTECH,
+        'uci': UCI
+    }
+
+    C = r_dict.get(c, None)
+    if C is None:
+        raise ValueError('Dataset %s not supported' %c)
+
+    return C
+
 def make_one_hot(Y):
     class_list = np.unique(Y).tolist()
     n_classes = len(class_list)
@@ -21,6 +40,7 @@ def load_data(dataset=None,
               train_batch_size=None,
               valid_batch_size=None,
               test_batch_size=None,
+              resolve_dataset=None,
               **dataset_args):
     '''Load dataset with a predefined split.
 
@@ -38,19 +58,13 @@ def load_data(dataset=None,
         train, valid, test Dataset objects.
     '''
 
-    from caltech import CALTECH
-    from cifar import CIFAR
-    from mnist import MNIST
-    from uci import UCI
+    if resolve_dataset is None:
+        resolve_dataset = resolve
 
-    if dataset == 'mnist':
-        C = MNIST
-    elif dataset == 'cifar':
-        C = CIFAR
-    elif dataset == 'caltech':
-        C = CALTECH
-    elif dataset == 'uci':
-        C = UCI
+    if isinstance(dataset, str):
+        C = resolve_dataset(dataset)
+    else:
+        C = dataset
 
     if train_batch_size is not None:
         train = C(batch_size=train_batch_size,
@@ -214,6 +228,8 @@ class BasicDataset(Dataset):
         for k, v in self.data.iteritems():
             if k == labels and len(v.shape) == 1:
                 v = make_one_hot(v)
+            elif len(v.shape) == 1:
+                v = v[:, None]
             if self.stop is not None:
                 v = v[:self.stop]
             self.data[k] = v
