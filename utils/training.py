@@ -430,6 +430,8 @@ def main_loop(train, valid, tparams,
                                        training_time=training_time)
                         monitor.update_valid(**results_valid)
                         monitor.display()
+                        if out_path is not None:
+                            monitor.save(path.join(out_path, 'monitor.png'))
 
                 if save_images is not None and out_path is not None:
                     save_images()
