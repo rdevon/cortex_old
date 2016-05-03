@@ -11,17 +11,19 @@ from inference.gdir import MomentumGDIR
 from models.gbn import GBN
 from models.tests import test_vae
 from utils import floatX
+from utils.tools import resolve_path
 
+source = resolve_path('$data/mnist.pkl.gz')
 
 def test_build_gdir(model=None, **inference_args):
     if model is None:
-        data_iter = MNIST(source='/Users/devon/Data/mnist.pkl.gz', batch_size=27)
+        data_iter = MNIST(source=source, batch_size=27)
         model = test_vae.test_build_GBN(dim_in=data_iter.dims[data_iter.name])
     gdir = MomentumGDIR(model, **inference_args)
     return gdir
 
 def test_infer():
-    data_iter = MNIST(source='/Users/devon/Data/mnist.pkl.gz', batch_size=27)
+    data_iter = MNIST(source=source, batch_size=27)
     gbn = test_vae.test_build_GBN(dim_in=data_iter.dims[data_iter.name])
 
     inference_args = dict(

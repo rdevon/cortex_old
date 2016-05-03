@@ -10,7 +10,7 @@ from datasets.mnist import MNIST
 from inference import gdir
 from models.helmholtz import Helmholtz
 from utils import floatX
-from utils.tools import print_profile
+from utils.tools import print_profile, resolve_path
 
 
 def test_build_GBN(dim_in=17, dim_h=13):
@@ -27,7 +27,8 @@ def test_build_GBN(dim_in=17, dim_h=13):
     return gbn
 
 def test_call():
-    data_iter = MNIST(source='/Users/devon/Data/mnist.pkl.gz', batch_size=27)
+    source = resolve_path('$data/mnist.pkl.gz')
+    data_iter = MNIST(source=source, batch_size=27)
     gbn = test_build_GBN(dim_in=data_iter.dims[data_iter.name])
 
     X = T.matrix('x', dtype=floatX)
