@@ -24,6 +24,7 @@ from mlp import MLP, MultiModalMLP, resolve as resolve_mlp
 from utils import floatX, tools
 from utils.tools import (
     concatenate,
+    get_w_tilde,
     init_rngs,
     init_weights,
     log_mean_exp,
@@ -311,7 +312,7 @@ class Helmholtz(Layer):
         return self.posterior.distribution.prototype_samples(size)
 
     def __call__(self, x, y, qk=None, n_posterior_samples=10,
-                 pass_gradients=False):
+                 pass_gradients=False, reweight=False):
         '''Call function.
 
         Calculates the lower bound, log marginal, and other useful quantities.
@@ -327,6 +328,7 @@ class Helmholtz(Layer):
                 and log marginal estimates.
             pass_gradients: bool, for priors with continuous distributions,
                 this can facilitate learning. Otherwise, q_k should be provided.
+            reweight: bool. If true, then reweight samples for estimates.
         Returns:
             results: OrderedDict, float results.
             samples: OrderedDict, array results
@@ -340,78 +342,71 @@ class Helmholtz(Layer):
         q0  = self.posterior.feed(x)
         if qk is None:
             qk = q0
-        elif qk.ndim == 3:
-            qk = T.zeros((n_posterior_samples,
-                          qk.shape[0],
-                          qk.shape[1],
-                          qk.shape[2])).astype(floatX) + qk[None, :, :, :]
-            qk = qk.reshape(
-                (n_posterior_samples *qk.shape[0], qk.shape[1], qk.shape[2]))
-            n_posterior_samples = qk.shape[0]
-        else:
-            qk = qk[None, :, :]
 
         r = self.init_inference_samples(
             (n_posterior_samples, y.shape[0], self.dim_h))
-        h = self.posterior.distribution.step_sample(r, qk)
+        h = self.posterior.distribution.step_sample(r, qk[None, :, :])
         py_h = self.conditional.feed(h)
 
         log_py_h = -self.conditional.neg_log_prob(y[None, :, :], py_h)
         log_ph = -self.prior.neg_log_prob(h)
         log_qh0 = -self.posterior.neg_log_prob(h, q0[None, :, :])
-        log_qkh = -self.posterior.neg_log_prob(h, qk)
+        log_qhk = -self.posterior.neg_log_prob(h, qk[None, :, :])
         prior_entropy = self.prior.entropy()
-
         q_entropy = self.posterior.entropy(qk)
-        if q_entropy.ndim == 2:
-            q_entropy = q_entropy.mean(0)
 
         # Log marginal
         log_p = log_sum_exp(
-            log_py_h + log_ph - log_qkh, axis=0) - T.log(n_posterior_samples)
-
-        y_energy = -log_py_h.mean(axis=0)
-        cost = y_energy
-        lower_bound = -y_energy
-
+            log_py_h + log_ph - log_qhk, axis=0) - T.log(n_posterior_samples)
+        
+        recon_term = -log_py_h
+        
         # Some prior distributions have a tractable KL divergence.
-        if self.prior.has_kl:
+        if self.prior.has_kl and not reweight:
             KL_qk_p = self.prior.kl_divergence(qk)
-            cost += KL_qk_p
-            results['KL(q_k||p)'] = KL_qk_p.mean(0)
-            lower_bound -= KL_qk_p
+            results['KL(q_k||p)'] = KL_qk_p
+            KL_term = KL_qk_p
         else:
             prior_energy = -log_ph.mean(axis=0)
-            cost += prior_energy - q_entropy
             results['-log p(h)'] = prior_energy.mean(0)
-            lower_bound -= (prior_energy - q_entropy)
-
+            KL_term = prior_energy - q_entropy
+            
         # If we pass the gradients we don't want to include the KL(q_k||q_0)
         if not pass_gradients:
-            if self.posterior.distribution.has_kl:
+            if self.posterior.distribution.has_kl and not reweight:
                 qk_c = qk.copy()
                 KL_qk_q0 = self.posterior.distribution.step_kl_divergence(
                     qk_c, *self.posterior.distribution.split_prob(q0))
-                cost += KL_qk_q0
-                results['KL(q_k||q_0)'] = KL_qk_q0.mean(0)
+                results['KL(q_k||q_0)'] = KL_qk_q0
+                posterior_term = KL_qk_q0
             else:
-                h_energy = -log_qkh.mean(axis=0)
-                h_energy_mean = h_energy.mean(axis=0)
-                cost += h_energy
-                results['-log q(h)'] = h_energy.mean(0)
-
+                results['-log q(h)'] = -log_qh0.mean()
+                posterior_term = -log_qhk
+        else:
+            posterior_term = T.zeros_like(log_qh0)
+                
+        lower_bound = -(recon_term + KL_term).mean()
+                
+        if reweight:
+            w_tilde = get_w_tilde(log_py_h + log_ph - log_qhk)
+            cost = (w_tilde * (conditional_term + KL_term + posterior_term)).sum((0, 1))
+            constants.append(w_tilde)
+            results['effective sample size'] = 1. / (w_tilde ** 2).sum(0).mean()
+        else:
+            cost = (recon_term + KL_term + posterior_term).sum(1).mean(0)
+            
         results.update(**{
-            '-log p(x|h)': y_energy.mean(0),
+            '-log p(x|h)': recon_term.mean(),
             '-log p(x)': -log_p.mean(0),
             'H(p)': prior_entropy,
             'H(q)': q_entropy.mean(0),
-            'lower_bound': lower_bound.mean(),
-            'cost': cost.sum(0)
+            'lower_bound': lower_bound,
+            'cost': cost
         })
 
         samples = OrderedDict(
             py=py_h,
-            batch_energies=y_energy
+            batch_energies=recon_term
         )
 
         return results, samples, theano.OrderedUpdates(), constants
