@@ -278,7 +278,12 @@ def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
             break
 
     for k, v in results.iteritems():
-        results[k] = np.mean(v)
+        try:
+            results[k] = np.mean(v)
+        except Exception as e:
+            print k
+            print v
+            raise e
 
     data_iter.reset()
 
@@ -431,6 +436,10 @@ def main_loop(train, valid, tparams,
                         monitor.display()
                         if out_path is not None:
                             monitor.save(path.join(out_path, 'monitor.png'))
+                            monitor.save_stats(
+                                path.join(out_path, 'stats_train.npz'))
+                            monitor.save_stats(
+                                path.join(out_path, 'stats_valid.npz'))
                 if save_images is not None and out_path is not None:
                     save_images()
 

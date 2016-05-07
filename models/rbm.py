@@ -462,7 +462,7 @@ class RBM(Layer):
             negative_cost=negative_cost.mean(),
             free_energy=fe.mean(),
             log_z=self.log_Z,
-            std_log_z=self.std_log_Z,
+            std_log_z=self.std_log_Z._as_TensorVariable(),
             recon_error=recon_error
         )
 

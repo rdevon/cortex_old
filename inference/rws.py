@@ -80,13 +80,15 @@ class RWS(object):
             'cost': cost
         })
 
-        samples = OrderedDict(
-            py=py
-        )
-
+        samples = OrderedDict(py=py)
         constants =  [w_tilde, q_c]
-        return results, samples, constants
+        return results, samples, constants, theano.OrderedUpdates()
+    
+    def test(self, x, y, n_posterior_samples=10, qk=None):
+        results, samples, constants, updates = self(
+            x, y, n_posterior_samples=n_posterior_samples, qk=qk)
 
+        return results, samples, None, updates
 
 class DeepRWS(object):
     def __init__(self,

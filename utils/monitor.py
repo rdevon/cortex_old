@@ -16,11 +16,11 @@ from tools import check_bad_nums
 from tools import update_dict_of_lists
 
 
-np.set_printoptions(precision=4)
-
-
 class SimpleMonitor(object):
     '''Simple monitor for displaying and saving results.
+
+    Basic template monitor. Should be interchangeable in training for
+    customized versions.
 
     Attributes:
         d: OrderedDict: dictionary of results.
@@ -49,6 +49,11 @@ class SimpleMonitor(object):
             print s
 
     def display(self):
+        '''Displays the stats.
+        
+        This uses some basic heuristics to get stats into rows with validation
+        (if exists) as well as difference from last step.
+        '''
         d = OrderedDict()
         for k in sorted(self.d):
             if not k.startswith('d_'):
@@ -74,12 +79,22 @@ class SimpleMonitor(object):
             print s
 
     def save(self, out_path):
+        '''Saves a figure for the monitor
+        
+        Args:
+            out_path: str
+        '''
+        
         plt.clf()
+        np.set_printoptions(precision=4)
+        font = {
+            'size': 7
+        }
+        matplotlib.rc('font', **font)
         y = 2
         x = ((len(self.d) - 1) // y) + 1
         fig, axes = plt.subplots(y, x)
         fig.set_size_inches(20, 8)
-        fig.patch.set_alpha(.1)
 
         for j, (k, v) in enumerate(self.d.iteritems()):
             ax = axes[j // x, j % x]
@@ -88,261 +103,24 @@ class SimpleMonitor(object):
                 ax.plot(self.d_valid[k], label=k + '(valid)')
             ax.set_title(k)
             ax.legend()
-            ax.patch.set_alpha(0.5)
 
         plt.tight_layout()
-        plt.savefig(out_path, facecolor=fig.get_facecolor(), edgecolor='none', transparent=True)
+        plt.savefig(out_path, facecolor=(1, 1, 1))
         plt.close()
 
     def save_stats(self, out_path):
+        '''Saves the monitor dictionary.
+        
+        Args:
+            out_path: str
+        '''
+        
         np.savez(out_path, **self.d)
 
     def save_stats_valid(self, out_path):
+        '''Saves the valid monitor dictionary.
+        
+        Args:
+            out_path: str
+        '''
         np.savez(out_path, **self.d_valid)
-
-
-class Monitor(object):
-    '''Training monitor.
-
-    (TODO) Out of date. Use at your own risk.
-
-    Early stopping is done for each err_keys variable on validation set
-    separately and following files are saved:
-        - model_<err_key>_<timestamp>.npz : model parameters
-        - config_<timestamp>.pkl : model hyper parameters
-        - timing_<timestamp>.pkl : monitoring channel timings
-    '''
-    def __init__(self, tparams, data, cost_fn, err_fn, out_fn, name='model',
-                 sample_fn=None, first_order_stats=False, savefile='monitors.png',
-                 early_stopping=False, hyperparams=None):
-
-        self.__dict__.update(locals())
-        print self.sample_fn
-        del self.self
-
-        self.timestamp = int(time.time())
-
-        self.param_keys = [k for k in tparams]
-        self.params = dict((k, {'mean': [], 'max': [], 'min': [], 'std': []})
-                           for k in self.param_keys)
-
-        self.stats = OrderedDict(train=OrderedDict())
-        self.samples = OrderedDict(train=OrderedDict())
-        if data['valid'] is not None and data['valid'].dataset is not None:
-            self.stats['valid'] = OrderedDict()
-            self.samples['valid'] = OrderedDict()
-        if data['test'] is not None and data['test'].dataset is not None:
-            self.stats['test'] = OrderedDict()
-            self.samples['test'] = OrderedDict()
-        self.err_fn = err_fn
-
-        if self.early_stopping:
-            raise NotImplementedError('Need to fix this!')
-            assert self.hyperparams is not None, "Specify hyper parameters!"
-            assert 'valid' in data and data['valid'].dataset is not None,\
-                "Validation set is not provided!"
-            self.best_models = [OrderedDict() for _ in self.err_keys]
-            self.best_errs = [np.inf for _ in self.err_keys]
-
-    def append_stats(self, dataset, stats):
-        for k, v in stats.iteritems():
-            if k in self.stats[dataset]:
-                self.stats[dataset][k].append(v)
-            else:
-                self.stats[dataset][k] = [v]
-
-    def get_stats(self, *inps):
-        return self.cost_fn(*inps), self.err_fn(*inps), self.out_fn(*inps)
-
-    def update(self, *inps):
-        train_c, train_e, train_o = self.get_stats(*inps)
-
-        check_bad_nums(dict((k, v) for k, v in train_c.iteritems()),
-                       self.data['train'].count)
-
-        check_bad_nums(dict((k, v) for k, v in train_o.iteritems()),
-                       self.data['train'].count)
-        self.append_stats('train', train_c)
-        self.append_stats('train', train_e)
-
-        if self.sample_fn is not None:
-            self.samples['train'] = self.sample_fn(*inps)
-
-        if self.data['valid'] is not None and self.data['valid'].dataset is not None:
-            try:
-                inps = self.data['valid'].next()
-            except StopIteration:
-                return
-            valid_c, valid_e, valid_o = self.get_stats(*inps)
-            self.append_stats('valid', valid_c)
-            self.append_stats('valid', valid_e)
-
-            # Early stopping mechanism
-            if self.early_stopping:
-                raise NotImplementedError('Need to fix!')
-                self._track_current_model(valid_errs)
-
-            if self.sample_fn is not None:
-                self.samples['valid'] = self.sample_fn(*inps)
-
-        if self.data['test'] is not None and self.data['test'].dataset is not None:
-            try:
-                inps = self.data['test'].next()
-            except StopIteration:
-                return
-            test_c, test_e, test_o = self.get_stats(*inps)
-            #test_costs, test_outs, test_errs =\
-            #    self._validate(self.data['test'])
-            self.append_stats('test', test_c)
-            self.append_stats('test', test_e)
-            if self.sample_fn is not None:
-                self.samples['test'] = self.sample_fn(*inps)
-
-        # TODO: add grad norms and param norms here
-        if self.first_order_stats:
-            for p in self.params:
-                p_mean = self.tparams[p].mean().eval()
-                p_max = self.tparams[p].max().eval()
-                p_min = self.tparams[p].min().eval()
-                p_std = self.tparams[p].std().eval()
-                self.d[p]['mean'].append(p_mean)
-                self.d[p]['max'].append(p_max)
-                self.d[p]['min'].append(p_min)
-                self.d[p]['std'].append(p_std)
-        return train_c, train_e, train_o
-
-    def add_monitor(self, k, extra=False):
-        if extra:
-            self.d[k] = {'mean': [], 'max': [], 'min': [], 'std': []}
-        else:
-            self.s[k] = []
-
-    def append_s_stat(self, s_mean, s_max, s_min, s_std, stat):
-        assert stat in self.d.keys()
-        self.d[stat]['mean'].append(s_mean)
-        self.d[stat]['max'].append(s_max)
-        self.d[stat]['min'].append(s_min)
-        self.d[stat]['std'].append(s_std)
-
-    def save(self):
-        plt.clf()
-        x = 2
-        y = ((len(self.params) + len(self.s) - 1) // 2) + 1
-        fig, axes = plt.subplots(y, x)
-        fig.set_size_inches(18.5, 18.5)
-
-        for j, (k, v) in enumerate(self.s.iteritems()):
-            ax = axes[j // x, j % x]
-            ax.plot(v, label=k)
-            ax.set_title(k)
-            ax.legend()
-
-        j += 1
-
-        for i, (k, v) in enumerate(self.d.iteritems()):
-            ax = axes[(i+j) // x, (i+j) % x]
-            for stat_k, stat_v in v.iteritems():
-                if stat_k == 'std':
-                    stat_mean = v['mean']
-                    ax.fill_between(
-                        range(len(stat_mean)),
-                        [m - 2 * s for m, s in zip(stat_mean, stat_v)],
-                        [m + 2 * s for m, s in zip(stat_mean, stat_v)],
-                        alpha=0.3, facecolor='red')
-                else:
-                    ax.plot(stat_v, label=stat_k)
-            ax.set_title(k)
-            ax.legend()
-        plt.tight_layout()
-        plt.savefig(self.savefile)
-        plt.close()
-
-    def disp(self, epoch, num, update_time):
-        s = 'Epoch %d | sample %d | Update time: %.5f | ' % (epoch, num, update_time)
-        for dataset, stats in self.stats.iteritems():
-            if dataset == 'train':
-                tag = ''
-            else:
-                tag = dataset + '_'
-            for k, v in stats.iteritems():
-                s += '%s%s: %.5f | ' % (tag, k, v[-1])
-        print s
-        for dataset, samples in self.samples.iteritems():
-            print '%s-----------------' % dataset
-            for k, v in samples.iteritems():
-                if k in ['gt', 'es', 'xs']:
-                    v = self.data['train'].dataset.translate(v)
-                print '  %s: %s' % (k, v)
-
-    def report(self):
-        """Reports according to the best validation error score."""
-        for key in self.err_keys:
-            s = 'Best {} wrt validation: '.format(key)
-            min_idx = np.argmin(self.errs['valid'][key])
-            s += 'train: %.5f ' % self.errs['train'][key][min_idx]
-            s += 'valid: %.5f ' % self.errs['valid'][key][min_idx]
-            s += 'test: %.5f ' % self.errs['test'][key][min_idx]
-            self.hyperparams['best_train_%s_wrt_valid' % key] =\
-                self.errs['train'][key][min_idx]
-            self.hyperparams['best_valid_%s_wrt_valid' % key] =\
-                self.errs['valid'][key][min_idx]
-            self.hyperparams['best_test_%s_wrt_valid' % key] =\
-                self.errs['test'][key][min_idx]
-            print s
-
-    def save_best_model(self):
-        """Save best models to disk."""
-        s = signal.signal(signal.SIGINT, signal.SIG_IGN)
-        hparams = self.hyperparams
-        outdir = hparams['saveto']
-        timestamp = self.timestamp
-
-        if not os.path.isdir(outdir):
-            os.makedirs(outdir)
-
-        # save model parameters
-        if self.early_stopping:
-            for i in xrange(len(self.err_keys)):
-                outfile = os.path.join(
-                    outdir, 'model_{}_{}.npz'.format(
-                        self.err_keys[i], timestamp))
-                np.savez(outfile, **self.best_models[i])
-        else:
-            outfile = os.path.join(outdir,
-                                   '{name}_{t}.npz'.format(name=self.name,
-                                                           t=timestamp))
-            np.savez(outfile, **dict((k, v.get_value())
-                                  for k, v in self.tparams.items()))
-
-    def _track_current_model(self, errs):
-        """Keep track of best model and record it if necessary."""
-        best_idx = self._update_best(errs)
-        for i in xrange(len(best_idx)):
-            if best_idx[i]:
-                for k, v in self.tparams.items():
-                    self.best_models[i][k] = self.tparams[k].get_value()
-
-    def _validate(self, data_iter):
-        """Iterate over validation/test set and get average costs."""
-        costs_list = []
-        errs_list = []
-        while True:
-            try:
-                inps = data_iter.next()
-            except StopIteration:
-                break
-            costs, outs, errs = self.split_outs(self.f_outs(*inps))
-            costs_list.append(costs)
-            errs_list.append(errs)
-        costs = np.mean(np.asarray(costs_list), axis=0)
-        errs = np.mean(np.asarray(costs_list), axis=0)
-        return costs, outs, errs
-
-    def _update_best(self, errs):
-        """Update internal best list and return changed idx."""
-        best_idx = np.zeros_like(errs, dtype=bool)
-        for i in xrange(len(self.err_keys)):
-            if errs[i] < self.best_errs[i]:
-                self.best_errs[i] = errs[i]
-                best_idx[i] = True
-        return best_idx
