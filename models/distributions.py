@@ -199,6 +199,7 @@ class Binomial(Distribution):
     def visualize(self, p0, p=None):
         if p is None:
             p = self.get_prob(*self.get_params())
+        p0 = T.addbroadcast(p0, 0)
         return p - p0
 
     def get_energy_bias(self, x, z):

@@ -247,11 +247,15 @@ class DeepHelmholtz(Layer):
     
     def visualize_latents(self):
         h0, h = self.prior.generate_latent_pair()
+        
         for l in xrange(self.n_layers - 1, -1, -1):
             p0 = self.conditionals[l].feed(h0)
             p = self.conditionals[l].feed(h)
+            
             h0, _ = self.conditionals[l].sample(p0)
             h, _ = self.conditionals[l].sample(p)
+            h0 = h0[0]
+            h = h[0]
         py = self.conditionals[0].distribution.visualize(p0, p)
         return py
 
@@ -319,8 +323,8 @@ class DeepHelmholtz(Layer):
         posterior_term = T.zeros_like(log_py_h)
         for l in xrange(self.n_layers):            
             log_py_h -= self.conditionals[l].neg_log_prob(ys[l], py_hs[l])
-            log_qh0_t = self.posteriors[l].neg_log_prob(hs[l], q0s[l])
-            log_qh0 -= log_qh0_t
+            log_qh0_t = -self.posteriors[l].neg_log_prob(hs[l], q0s[l])
+            log_qh0 += log_qh0_t
             log_qhk -= self.posteriors[l].neg_log_prob(hs[l], qks[l])
             
             if not pass_gradients:
@@ -363,7 +367,7 @@ class DeepHelmholtz(Layer):
         else:
             prior_energy = -log_ph
             results['-log p(h)'] = prior_energy.mean()
-            KL_term = prior_energy - self.posteriors[l].entropy(qks[-1])            
+            KL_term = prior_energy - self.posteriors[-1].entropy(qks[-1])
 
         lower_bound = -(recon_term + KL_term).mean()
 
