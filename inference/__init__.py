@@ -16,6 +16,8 @@ def resolve(model, inference_method=None, deep=False, **inference_args):
             return DeepRWS(model, **inference_args)
         elif inference_method == 'air':
             return DeepAIR(model, **inference_args)
+        elif instance_method is None:
+            return None
         else:
             raise ValueError(inference_method)
     else:
@@ -25,5 +27,7 @@ def resolve(model, inference_method=None, deep=False, **inference_args):
             return RWS(model, **inference_args)
         elif inference_method == 'air':
             return AIR(model, **inference_args)
+        elif inference_method is None:
+            return None
         else:
             raise ValueError(inference_method)

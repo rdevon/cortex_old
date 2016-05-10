@@ -9,23 +9,47 @@ from theano import tensor as T
 from irvi import IRVI, DeepIRVI
 from utils import floatX
 from utils.tools import (
+    get_w_tilde,
     scan,
     warn_kwargs
 )
 
 
 class AIR(IRVI):
+    '''
+    Adaptive importance refinement (AIR).
+    
+    Inference procedure to refine the posterior using adaptive importance
+    sampling (AIS)
+    '''
     def __init__(self,
                  model,
                  name='AIR',
                  pass_gradients=False,
                  **kwargs):
+        '''Init function for AIR
+        
+        Args:
+            model: Helmholtz object.
+            name: str
+            pass_gradients: bool (optional)
+            kwargs: dict, remaining IRVI arguments.
+        '''
 
         super(AIR, self).__init__(model, name=name,
                                   pass_gradients=pass_gradients,
                                   **kwargs)
 
     def step_infer(self, r, q, y, *params):
+        '''Step inference function for IRVI.inference scan.
+        
+        Args:
+            r: theano randomstream variable
+            q: T.tensor. Current approximate posterior parameters
+            y: T.tensor. Data sample
+            params: list of shared variables
+        '''
+        
         model = self.model
         prior_params = model.get_prior_params(*params)
 
@@ -34,13 +58,9 @@ class AIR(IRVI):
         log_py_h = -model.conditional.neg_log_prob(y[None, :, :], py)
         log_ph   = -model.prior.step_neg_log_prob(h, *prior_params)
         log_qh   = -model.posterior.neg_log_prob(h, q[None, :, :])
-
         log_p     = log_py_h + log_ph - log_qh
-        log_p_max = T.max(log_p, axis=0, keepdims=True)
-
-        w       = T.exp(log_p - log_p_max)
-        w_tilde = w / w.sum(axis=0, keepdims=True)
-        cost    = log_p.mean()
+        w_tilde = get_w_tilde(log_p)
+        cost    = -log_p.mean()
         q_ = (w_tilde[:, :, None] * h).sum(axis=0)
         q  = self.inference_rate * q_ + (1 - self.inference_rate) * q
         return q, cost
@@ -93,12 +113,9 @@ class DeepAIR(DeepIRVI):
             log_py_h += -model.conditionals[l].neg_log_prob(ys[l], p_ys[l])
             log_qh += -model.posteriors[l].neg_log_prob(hs[l], qs[l][None, :, :])
 
-        log_p     = log_py_h + log_ph - log_qh
-        log_p_max = T.max(log_p, axis=0, keepdims=True)
-
-        w       = T.exp(log_p - log_p_max)
-        w_tilde = w / w.sum(axis=0, keepdims=True)
-        cost = w.mean()
+        log_p   = log_py_h + log_ph - log_qh
+        w_tilde = get_w_tilde(log_p)
+        cost = -log_p.mean()
 
         for q, h in zip(qs, hs):
             q_ = (w_tilde[:, :, None] * h).sum(axis=0)

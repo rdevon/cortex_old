@@ -23,6 +23,8 @@ from theano.tensor.shared_randomstreams import RandomStreams as SRandomStreams
 import warnings
 import yaml
 
+from utils import floatX
+
 
 random_seed = random.randint(0, 10000)
 rng_ = np.random.RandomState(random_seed)
@@ -317,7 +319,7 @@ def parzen_estimation(samples, tests, h=1.0):
 
 def get_w_tilde(log_factor):
     '''Gets normalized weights'''
-    log_factor = log_factor - T.log(log_factor.shape[0])
+    log_factor = log_factor - T.log(log_factor.shape[0]).astype(floatX)
     w_norm   = log_sum_exp(log_factor, axis=0)
     log_w    = log_factor - T.shape_padleft(w_norm)
     w_tilde  = T.exp(log_w)

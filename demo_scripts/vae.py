@@ -34,6 +34,7 @@ def init_learning_args(
     optimizer='rmsprop',
     optimizer_args=None,
     n_posterior_samples=20,
+    reweight=False,
     batch_size=100,
     valid_batch_size=100,
     epochs=100,
@@ -108,9 +109,10 @@ def train(
     constants = []
     updates = theano.OrderedUpdates()
     n_posterior_samples = learning_args.pop('n_posterior_samples')
-    results, samples, updates, constants = model(
+    reweight = learning_args.pop('reweight')
+    results, samples, constants, updates = model(
         X_i, X, qk=None, pass_gradients=True,
-        n_posterior_samples=n_posterior_samples)
+        n_posterior_samples=n_posterior_samples, reweight=reweight)
 
     cost = results['cost']
     extra_outs = []

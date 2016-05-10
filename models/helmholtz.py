@@ -159,7 +159,7 @@ class Helmholtz(Layer):
 
         # Forming the prior model.
         if prior is None:
-            if (rec_args is None) or (rec_args.get('distribution') is None):
+            if (rec_args is None) and (rec_args.get('distribution') is None):
                 prior = 'binomial'
             else:
                 prior = rec_args['distribution']
@@ -233,7 +233,7 @@ class Helmholtz(Layer):
         stop = start + self.posterior.n_params
         return params[start:stop]
 
-    # E ---------------------------------------------------------
+    # Extra functions ----------------------------------------------------------
     def sample_from_prior(self, n_samples=100):
         '''Samples from the prior distribution.'''
         h, updates = self.prior.sample(n_samples)
@@ -338,11 +338,12 @@ class Helmholtz(Layer):
         '''
         constants = []
         results = OrderedDict()
-
         q0  = self.posterior.feed(x)
         if qk is None:
             qk = q0
-
+        elif not pass_gradients:
+            constants.append(qk)
+            
         r = self.init_inference_samples(
             (n_posterior_samples, y.shape[0], self.dim_h))
         h = self.posterior.distribution.step_sample(r, qk[None, :, :])
@@ -367,31 +368,31 @@ class Helmholtz(Layer):
             results['KL(q_k||p)'] = KL_qk_p
             KL_term = KL_qk_p
         else:
-            prior_energy = -log_ph.mean(axis=0)
-            results['-log p(h)'] = prior_energy.mean(0)
+            prior_energy = -log_ph
+            results['-log p(h)'] = prior_energy.mean()
             KL_term = prior_energy - q_entropy
             
         # If we pass the gradients we don't want to include the KL(q_k||q_0)
         if not pass_gradients:
             if self.posterior.distribution.has_kl and not reweight:
-                qk_c = qk.copy()
                 KL_qk_q0 = self.posterior.distribution.step_kl_divergence(
-                    qk_c, *self.posterior.distribution.split_prob(q0))
+                    qk, *self.posterior.distribution.split_prob(q0))
                 results['KL(q_k||q_0)'] = KL_qk_q0
                 posterior_term = KL_qk_q0
             else:
                 results['-log q(h)'] = -log_qh0.mean()
-                posterior_term = -log_qhk
+                posterior_term = -log_qh0
         else:
             posterior_term = T.zeros_like(log_qh0)
                 
         lower_bound = -(recon_term + KL_term).mean()
-                
+            
+        w_tilde = get_w_tilde(log_py_h + log_ph - log_qhk)
+        results['log ESS'] = T.log(1. / (w_tilde ** 2).sum(0)).mean()                
         if reweight:
-            w_tilde = get_w_tilde(log_py_h + log_ph - log_qhk)
-            cost = (w_tilde * (conditional_term + KL_term + posterior_term)).sum((0, 1))
+            cost = n_posterior_samples * (
+                w_tilde * (recon_term - log_ph - log_qh0)).sum((0, 1))
             constants.append(w_tilde)
-            results['effective sample size'] = 1. / (w_tilde ** 2).sum(0).mean()
         else:
             cost = (recon_term + KL_term + posterior_term).sum(1).mean(0)
             
@@ -406,7 +407,8 @@ class Helmholtz(Layer):
 
         samples = OrderedDict(
             py=py_h,
-            batch_energies=recon_term
+            batch_energies=recon_term,
+            w_tilde=w_tilde
         )
 
-        return results, samples, theano.OrderedUpdates(), constants
+        return results, samples, constants, theano.OrderedUpdates()
