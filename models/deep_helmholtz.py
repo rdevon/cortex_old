@@ -380,7 +380,7 @@ class DeepHelmholtz(Layer):
         else:
             cost = (recon_term + KL_term + posterior_term).sum(1).mean()
 
-        results = OrderedDict({
+        results.update(**{
             '-log p(x|h)': recon_term.mean(),
             '-log p(x)': -log_p.mean(),
             'H(p)': prior_entropy,

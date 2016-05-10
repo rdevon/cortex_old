@@ -178,7 +178,7 @@ def load_experiment(experiment_yaml):
     print('Experiment hyperparams: %s' % pprint.pformat(exp_dict))
     return exp_dict
 
-def load_model(model_file, f_unpack=None, **extra_args):
+def load_model(model_file, f_unpack=None, strict=True, **extra_args):
     '''Loads pretrained model.'''
 
     print 'Loading model from %s' % model_file
@@ -224,9 +224,12 @@ def load_model(model_file, f_unpack=None, **extra_args):
                     print '{} not found'.format(k)
         model_dict[model.name] = model
 
-    if len(pretrained_kwargs) > 0:
+    if len(pretrained_kwargs) > 0 and strict:
         raise ValueError('ERROR: Leftover params: %s' %
                          pprint.pformat(pretrained_kwargs.keys()))
+    elif len(pretrained_kwargs) > 0:
+        warnings.warn('Leftover params: %s' %
+                      pprint.pformat(pretrained_kwargs.keys()))
 
     return model_dict, kwargs
 
