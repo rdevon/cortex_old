@@ -19,7 +19,7 @@ from distributions import (
     resolve as resolve_prior
 )
 from models.mlp import MLP, resolve as resolve_mlp
-    
+
 from utils import floatX, tools
 from utils.tools import (
     concatenate,
@@ -41,23 +41,23 @@ def unpack(dim_hs=None,
 
     '''
     Function to unpack pretrained model into DeepHelmholtz class.
-    
+
     See DeepHelmholtz.factory` for details.
     '''
 
     distributions = data_iter.distributions
     dims = data_iter.dims
     models = []
-    
+
     print 'Forming deep Helmholtz'
-    
+
     model = DeepHelmholtz.factory(
         dim_hs, dims, distributions,
         prior=prior,
         rec_args=rec_args,
         gen_args=gen_args
     )
-    
+
     models.append(model)
     models += model.conditionals + model.posteriors
     models.append(model.prior)
@@ -75,7 +75,7 @@ class DeepHelmholtz(Layer):
         self.conditionals = conditionals
         self.prior = prior
         self.dim_hs = [posterior.distribution.dim for posterior in self.posteriors]
-        
+
         if name is None:
             if isinstance(prior, Binomial):
                 name = 'sbn'
@@ -95,7 +95,7 @@ class DeepHelmholtz(Layer):
 
     @staticmethod
     def factory(dim_hs, data_iter=None, distributions=None, dims=None, **kwargs):
-        
+
         posteriors, conditionals, prior = DeepHelmholtz.mlp_factory(
             dim_hs, data_iter=data_iter, distributions=distributions, dims=dims,
             **kwargs)
@@ -104,7 +104,7 @@ class DeepHelmholtz(Layer):
     @staticmethod
     def mlp_factory(dim_hs, data_iter=None, distributions=None, dims=None,
                     prior=None, rec_args=None, gen_args=None):
-        
+
         if data_iter is not None:
             distributions = data_iter.distributions
             dims = data_iter.dims
@@ -114,7 +114,7 @@ class DeepHelmholtz(Layer):
             rec_args = dict(input_layer=data_iter.name)
         if gen_args is None:
             gen_args = dict(output=data_iter.name)
-            
+
         # Forming the prior model.
         if prior is None:
             if (rec_args is None) and (rec_args.get('distribution') is None):
@@ -126,25 +126,25 @@ class DeepHelmholtz(Layer):
         else:
             PC = resolve_prior(prior)
         prior_model = PC(dim_hs[-1])
-        
+
         posteriors = []
         conditionals = []
-        
+
         input_name = rec_args.get('input_layer')
         output_name = gen_args.get('output')
-        
+
         for l, _ in enumerate(dim_hs):
             if l == 0:
                 dim_in = dims[input_name]
             else:
                 dim_in = dim_hs[l - 1]
-                
+
             dim_out = dim_hs[l]
-            
+
             # Forming the generation network for this layer
             gen_args['dim_in'] = dim_out
             gen_args['dim_out'] = dim_in
-            
+
             t = gen_args.get('type', None)
             if t == 'darn':
                 GC = DARN
@@ -156,7 +156,7 @@ class DeepHelmholtz(Layer):
                 gen_args['distribution'] = rec_args['distribution']
             conditional = GC.factory(**gen_args)
             conditionals.append(conditional)
-            
+
             # Forming the recogntion network for this layer
             RC = resolve_mlp(rec_args.get('type', None))
             if rec_args.get('distribution', None) is None:
@@ -165,7 +165,7 @@ class DeepHelmholtz(Layer):
             rec_args['dim_out'] = dim_out
             posterior = RC.factory(**rec_args)
             posteriors.append(posterior)
-            
+
         return posteriors, conditionals, prior_model
 
     # Setup --------------------------------------------------------------------
@@ -211,7 +211,7 @@ class DeepHelmholtz(Layer):
             start += self.conditionals[l+1].n_params
         stop = start + self.posteriors[level].n_params
         return params[start:stop]
-    
+
     def get_conditional_params(self, level, *params):
         assert level < self.n_layers
         params = list(params)
@@ -221,7 +221,7 @@ class DeepHelmholtz(Layer):
             start += self.posteriors[l].n_params
         stop = start + self.conditionals[level].n_params
         return params[start:stop]
-    
+
     # Extra functions ----------------------------------------------------------
     def get_center(self, p):
         return self.conditionals[0].get_center(p)
@@ -234,7 +234,7 @@ class DeepHelmholtz(Layer):
             h = h[0]
 
         return p, updates
-    
+
     def generate_from_latent(self, h, level=None):
         if level is None:
             level = self.n_layers - 1
@@ -244,14 +244,14 @@ class DeepHelmholtz(Layer):
 
         center = self.get_center(p)
         return center
-    
+
     def visualize_latents(self):
         h0, h = self.prior.generate_latent_pair()
-        
+
         for l in xrange(self.n_layers - 1, -1, -1):
             p0 = self.conditionals[l].feed(h0)
             p = self.conditionals[l].feed(h)
-            
+
             h0, _ = self.conditionals[l].sample(p0)
             h, _ = self.conditionals[l].sample(p)
             h0 = h0[0]
@@ -279,15 +279,16 @@ class DeepHelmholtz(Layer):
     def p_y_given_h(self, h, level, *params):
         params = self.get_conditional_params(level, *params)
         return self.conditionals[level].step_feed(h, *params)
-    
+
     def init_inference_samples(self, level, size):
         return self.posteriors[level].distribution.prototype_samples(size)
 
     def __call__(self, x, y, qks, n_posterior_samples=10,
-                 pass_gradients=False, sample_posterior=False, reweight=False):
+                 pass_gradients=False, sample_posterior=False, reweight=False,
+                 reweight_gen_only=False, sleep_phase=False):
         constants = []
         results = OrderedDict()
-        
+
         # Infer from recogntion network
         q0s   = []
         state = x[None, :, :]
@@ -298,7 +299,7 @@ class DeepHelmholtz(Layer):
                 state, _ = self.posteriors[l].sample(qks[l], n_samples=n_samples)
             else:
                 state = q0[None, :, :]
-        
+
         if qks is None:
             qks = q0s
         elif not pass_gradients:
@@ -314,19 +315,19 @@ class DeepHelmholtz(Layer):
 
         # Get the conditional distributions
         py_hs = [conditional.feed(h) for h, conditional in zip(hs, self.conditionals)]
-        
+
         # Calculate posterior terms
         ys = [y[None, :, :]] + hs[:-1]
         log_py_h = T.zeros((n_posterior_samples, y.shape[0])).astype(floatX)
         log_qh0 = T.zeros_like(log_py_h)
         log_qhk = T.zeros_like(log_py_h)
         posterior_term = T.zeros_like(log_py_h)
-        for l in xrange(self.n_layers):            
+        for l in xrange(self.n_layers):
             log_py_h -= self.conditionals[l].neg_log_prob(ys[l], py_hs[l])
             log_qh0_t = -self.posteriors[l].neg_log_prob(hs[l], q0s[l])
             log_qh0 += log_qh0_t
             log_qhk -= self.posteriors[l].neg_log_prob(hs[l], qks[l])
-            
+
             if not pass_gradients:
                 if self.posteriors[l].distribution.has_kl and not reweight:
                     KL_qk_q0 = self.posteriors[l].distribution.step_kl_divergence(
@@ -342,7 +343,7 @@ class DeepHelmholtz(Layer):
                     else:
                         results['-log q(h)'] = -log_qh0_t.mean()
                     posterior_term += -log_qh0_t
-            
+
         log_ph = -self.prior.neg_log_prob(hs[-1])
 
         prior_entropy = self.prior.entropy()
@@ -373,9 +374,37 @@ class DeepHelmholtz(Layer):
 
         w_tilde = get_w_tilde(log_py_h + log_ph - log_qhk)
         results['log ESS'] = T.log(1. / (w_tilde ** 2).sum(0)).mean()
-        if reweight:
+        if sleep_phase:
+            r = self.init_inference_samples(
+                (n_posterior_samples, y.shape[0], self.dim_h))
+            h_s = self.prior.step_sample(
+                r, self.prior.get_prob(*self.prior.get_params()))
+
+            y_s = h_s
+            for l in xrange(self.n_layers-1, -1, -1):
+                py_h_s = self.conditionals[l].feed(y_s)
+                y_s, _ = self.conditional.sample(py_h_s)
+                y_s = y_s[0]
+            constants.append(y_s)
+
+            state = y_s
+            for l in xrange(self.n_layers):
+                q0_s = self.posteriors[l].feed(state).mean(axis=0)
+                if sample_posterior:
+                    state, _ = self.posteriors[l].sample(q0_s, n_samples=n_samples)
+                else:
+                    state = q0[None, :, :]
+            log_qh0 = -self.posterior.neg_log_prob(h_s, q0_s)
+            cost = -((w_tilde * (log_py_h + log_ph)).sum((0, 1))
+                    + log_qh0.sum(1).mean(0))
+            constants.append(w_tilde)
+        elif reweight:
             cost = n_posterior_samples * (
                 w_tilde * (recon_term - log_ph - log_qh0)).sum((0, 1))
+            constants.append(w_tilde)
+        elif reweight_gen_only:
+            cost = -((w_tilde * (log_py_h + log_ph)).sum((0, 1))
+                    + log_qh0.sum(1).mean(0))
             constants.append(w_tilde)
         else:
             cost = (recon_term + KL_term + posterior_term).sum(1).mean()
