@@ -161,12 +161,9 @@ def train(
 
     def save_images():
         p_samples = f_prior()
-        p_samples = p_samples.reshape(
-            (p_samples.shape[0] // 10, 10, p_samples.shape[1]))
         train.save_images(p_samples, path.join(out_path, 'prior_samples.png'))
 
         l_vis = f_latent()
-        l_vis = l_vis.reshape((l_vis.shape[0] // 10, 10, l_vis.shape[1]))
         train.save_images(l_vis, path.join(out_path, 'latent_vis.png'))
 
         py_h = f_py_h(train.X[:100])
