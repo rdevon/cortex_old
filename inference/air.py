@@ -48,6 +48,9 @@ class AIR(IRVI):
             q: T.tensor. Current approximate posterior parameters
             y: T.tensor. Data sample
             params: list of shared variables
+        Returns:
+            q: T.tensor. New approximate posterior parameters
+            cost: T.scalar float. Negative lower bound of current parameters
         '''
         
         model = self.model

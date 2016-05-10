@@ -45,14 +45,11 @@ def unpack(dim_h=None,
 
     See `Helmholtz.factory` for details.
     '''
-
-    distributions = data_iter.distributions
-    dims = data_iter.dims
     models = []
 
     print 'Forming Helmholtz machine'
     model = Helmholtz.factory(
-        dim_h, dims, distributions,
+        dim_h, data_iter=data_iter,
         prior=prior,
         rec_args=rec_args,
         gen_args=gen_args)
@@ -312,7 +309,7 @@ class Helmholtz(Layer):
         return self.posterior.distribution.prototype_samples(size)
 
     def __call__(self, x, y, qk=None, n_posterior_samples=10,
-                 pass_gradients=False, reweight=False):
+                 pass_gradients=False, reweight=False, reweight_gen_only=False):
         '''Call function.
 
         Calculates the lower bound, log marginal, and other useful quantities.
@@ -388,10 +385,13 @@ class Helmholtz(Layer):
         lower_bound = -(recon_term + KL_term).mean()
             
         w_tilde = get_w_tilde(log_py_h + log_ph - log_qhk)
-        results['log ESS'] = T.log(1. / (w_tilde ** 2).sum(0)).mean()                
+        results['log ESS'] = T.log(1. / (w_tilde ** 2).sum(0)).mean()
         if reweight:
-            cost = n_posterior_samples * (
-                w_tilde * (recon_term - log_ph - log_qh0)).sum((0, 1))
+            cost = -w_tilde * (log_py_h + log_ph + log_qh0).sum((0, 1))
+            constants.append(w_tilde)
+        if reweight_gen_only:
+            cost = -(w_tilde * (log_py_h + log_ph).sum((0, 1))
+                    - log_qh0.sum(1).mean(0))
             constants.append(w_tilde)
         else:
             cost = (recon_term + KL_term + posterior_term).sum(1).mean(0)
