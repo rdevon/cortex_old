@@ -387,10 +387,10 @@ class Helmholtz(Layer):
         w_tilde = get_w_tilde(log_py_h + log_ph - log_qhk)
         results['log ESS'] = T.log(1. / (w_tilde ** 2).sum(0)).mean()
         if reweight:
-            cost = -w_tilde * (log_py_h + log_ph + log_qh0).sum((0, 1))
+            cost = -(w_tilde * (log_py_h + log_ph + log_qh0)).sum((0, 1))
             constants.append(w_tilde)
         if reweight_gen_only:
-            cost = -(w_tilde * (log_py_h + log_ph).sum((0, 1))
+            cost = -((w_tilde * (log_py_h + log_ph)).sum((0, 1))
                     - log_qh0.sum(1).mean(0))
             constants.append(w_tilde)
         else:
