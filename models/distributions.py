@@ -106,7 +106,7 @@ class Distribution(Layer):
         elif p.ndim == 2:
             size = (n_samples, p.shape[0], p.shape[1] // self.scale)
         elif p.ndim == 3:
-            size = (n_samples, p.shape[0], p.shape[2], p.shape[3] // self.scale)
+            size = (n_samples, p.shape[0], p.shape[1], p.shape[2] // self.scale)
         elif p.ndim == 4:
             raise NotImplementedError('%d dim sampling not supported yet' % p.ndim)
 

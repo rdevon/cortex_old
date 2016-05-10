@@ -309,7 +309,8 @@ class Helmholtz(Layer):
         return self.posterior.distribution.prototype_samples(size)
 
     def __call__(self, x, y, qk=None, n_posterior_samples=10,
-                 pass_gradients=False, reweight=False, reweight_gen_only=False):
+                 pass_gradients=False, reweight=False, reweight_gen_only=False,
+                 sleep_phase=False):
         '''Call function.
 
         Calculates the lower bound, log marginal, and other useful quantities.
@@ -340,7 +341,7 @@ class Helmholtz(Layer):
             qk = q0
         elif not pass_gradients:
             constants.append(qk)
-            
+
         r = self.init_inference_samples(
             (n_posterior_samples, y.shape[0], self.dim_h))
         h = self.posterior.distribution.step_sample(r, qk[None, :, :])
@@ -356,9 +357,9 @@ class Helmholtz(Layer):
         # Log marginal
         log_p = log_sum_exp(
             log_py_h + log_ph - log_qhk, axis=0) - T.log(n_posterior_samples)
-        
+
         recon_term = -log_py_h
-        
+
         # Some prior distributions have a tractable KL divergence.
         if self.prior.has_kl and not reweight and not reweight_gen_only:
             KL_qk_p = self.prior.kl_divergence(qk)
@@ -368,7 +369,7 @@ class Helmholtz(Layer):
             prior_energy = -log_ph
             results['-log p(h)'] = prior_energy.mean()
             KL_term = prior_energy - q_entropy
-            
+
         # If we pass the gradients we don't want to include the KL(q_k||q_0)
         if not pass_gradients:
             if self.posterior.distribution.has_kl and not reweight and not reweight_gen_only:
@@ -381,12 +382,25 @@ class Helmholtz(Layer):
                 posterior_term = -log_qh0
         else:
             posterior_term = T.zeros_like(log_qh0)
-                
+
         lower_bound = -(recon_term + KL_term).mean()
-            
+
         w_tilde = get_w_tilde(log_py_h + log_ph - log_qhk)
         results['log ESS'] = T.log(1. / (w_tilde ** 2).sum(0)).mean()
-        if reweight:
+        if sleep_phase:
+            r = self.init_inference_samples(
+                (n_posterior_samples, 13, self.dim_h))
+            h_s = self.prior.step_sample(
+                r, self.prior.get_prob(*self.prior.get_params()))
+            py_h_s = self.conditional.feed(h_s)
+            y_s, _ = self.conditional.sample(py_h_s)
+            constants.append(y_s)
+            q0_s = self.posterior.feed(y_s[0])
+            log_qh0 = -self.posterior.neg_log_prob(h_s, q0_s)
+            cost = -((w_tilde * (log_py_h + log_ph)).sum((0, 1))
+                    + log_qh0.sum(1).mean(0))
+            constants.append(w_tilde)
+        elif reweight:
             cost = -(w_tilde * (log_py_h + log_ph + log_qh0)).sum((0, 1))
             constants.append(w_tilde)
         elif reweight_gen_only:
@@ -395,7 +409,7 @@ class Helmholtz(Layer):
             constants.append(w_tilde)
         else:
             cost = (recon_term + KL_term + posterior_term).sum(1).mean(0)
-            
+
         results.update(**{
             '-log p(x|h)': recon_term.mean(),
             '-log p(x)': -log_p.mean(0),
