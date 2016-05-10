@@ -15,10 +15,9 @@ from models.mlp import (
     MLP,
     MultiModalMLP
 )
-from utils import tools
+from utils import floatX, pi, tools
 from utils.tools import (
     concatenate,
-    floatX,
     init_rngs,
     init_weights,
     log_mean_exp,
@@ -26,7 +25,6 @@ from utils.tools import (
     logit,
     norm_weight,
     ortho_weight,
-    pi,
     update_dict_of_lists,
     _slice
 )
