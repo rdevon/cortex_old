@@ -438,7 +438,7 @@ def main_loop(train, valid, tparams,
                             monitor.save(path.join(out_path, 'monitor.png'))
                             monitor.save_stats(
                                 path.join(out_path, 'stats_train.npz'))
-                            monitor.save_stats(
+                            monitor.save_stats_valid(
                                 path.join(out_path, 'stats_valid.npz'))
                 if save_images is not None and out_path is not None:
                     save_images()
