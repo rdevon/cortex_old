@@ -360,7 +360,7 @@ class Helmholtz(Layer):
         recon_term = -log_py_h
         
         # Some prior distributions have a tractable KL divergence.
-        if self.prior.has_kl and not reweight:
+        if self.prior.has_kl and not reweight and not reweight_gen_only:
             KL_qk_p = self.prior.kl_divergence(qk)
             results['KL(q_k||p)'] = KL_qk_p
             KL_term = KL_qk_p
@@ -371,7 +371,7 @@ class Helmholtz(Layer):
             
         # If we pass the gradients we don't want to include the KL(q_k||q_0)
         if not pass_gradients:
-            if self.posterior.distribution.has_kl and not reweight:
+            if self.posterior.distribution.has_kl and not reweight and not reweight_gen_only:
                 KL_qk_q0 = self.posterior.distribution.step_kl_divergence(
                     qk, *self.posterior.distribution.split_prob(q0))
                 results['KL(q_k||q_0)'] = KL_qk_q0
@@ -389,9 +389,9 @@ class Helmholtz(Layer):
         if reweight:
             cost = -(w_tilde * (log_py_h + log_ph + log_qh0)).sum((0, 1))
             constants.append(w_tilde)
-        if reweight_gen_only:
+        elif reweight_gen_only:
             cost = -((w_tilde * (log_py_h + log_ph)).sum((0, 1))
-                    - log_qh0.sum(1).mean(0))
+                    + log_qh0.sum(1).mean(0))
             constants.append(w_tilde)
         else:
             cost = (recon_term + KL_term + posterior_term).sum(1).mean(0)
