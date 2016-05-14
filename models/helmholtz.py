@@ -389,7 +389,7 @@ class Helmholtz(Layer):
         results['log ESS'] = T.log(1. / (w_tilde ** 2).sum(0)).mean()
         if sleep_phase:
             r = self.init_inference_samples(
-                (n_posterior_samples, 13, self.dim_h))
+                (n_posterior_samples, y.shape[0], self.dim_h))
             h_s = self.prior.step_sample(
                 r, self.prior.get_prob(*self.prior.get_params()))
             py_h_s = self.conditional.feed(h_s)
