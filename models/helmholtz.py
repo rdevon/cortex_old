@@ -156,7 +156,7 @@ class Helmholtz(Layer):
 
         # Forming the prior model.
         if prior is None:
-            if (rec_args is None) and (rec_args.get('distribution') is None):
+            if (rec_args is None) or (rec_args.get('distribution', None) is None):
                 prior = 'binomial'
             else:
                 prior = rec_args['distribution']
