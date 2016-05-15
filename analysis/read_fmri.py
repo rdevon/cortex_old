@@ -1,5 +1,5 @@
 '''
-Utilities for handling nifti files.
+Utility for handling fMRI data
 '''
 
 import argparse
@@ -9,26 +9,18 @@ from nipy import save_image, load_image
 import numpy as np
 import os
 from os import path
-import pickle
 
-from random import shuffle
-import re
-from scipy import io
-from scipy.stats import kurtosis
-from scipy.stats import skew
-import sys
-from sys import stdout
+from load_mri import (
+    find_niftis,
+    load_niftis
+)
 
-
-def find_niftis(source):
-    return glob(path.join(source, '*.nii'))
 
 def read_niftis(file_list):
     data0 = load_image(file_list[0]).get_data()
 
-    x, y, z = data0.shape
+    x, y, z, t = data0.shape
     print 'Found %d files with data shape is %r' % (len(file_list), data0.shape)
-    n = len(file_list)
 
     data = []
 
@@ -38,11 +30,13 @@ def read_niftis(file_list):
 
         nifti = load_image(f)
         subject_data = nifti.get_data()
-        if subject_data.shape != (x, y, z):
+        if subject_data.shape != (x, y, z, t):
             raise ValueError('Shape mismatch')
+        subject_data -= subject_data.mean()
+        subject_data /= subject_data.std()
         data.append(subject_data)
         new_file_list.append(f)
-    data = np.array(data).astype('float32')
+    data = np.concatenate(data, axis=3).transpose(3, 0, 1, 2).astype('float32')
 
     return data, new_file_list
 
@@ -52,19 +46,7 @@ def save_mask(data, out_path):
     n, x, y, z = data.shape
     mask = np.zeros((x, y, z))
 
-    zero_freq = (data.reshape((n, x * y * z)) == 0).sum(1) * 1. / reduce(
-        lambda x_, y_: x_ * y_, data.shape[1:])
-
-    for freq in zero_freq:
-        assert isinstance(freq, float), freq
-        if abs(zero_freq.mean() - freq) > .05:
-            raise ValueError("Spurious datapoint, mean zeros frequency is"
-                             "%.2f, datapoint is %.2f"
-                             % (zero_freq.mean(), freq))
-
-    nonzero_avg = (data > 0).mean(axis=0)
-
-    mask[np.where(nonzero_avg > .99)] = 1
+    mask[np.where(data.mean(axis=0) > data.mean())] = 1
 
     print 'Masked out %d out of %d voxels' % ((mask == 0).sum(), reduce(
         lambda x_, y_: x_ * y_, mask.shape))
@@ -105,8 +87,8 @@ def make_argument_parser():
     parser.add_argument('source',
                         help='source directory for all subjects.')
     parser.add_argument('out_path',
-                        help='output directory under args.out_prefix')
-    parser.add_argument('-n', '--name', default='mri')
+                        help='output directory under args.name')
+    parser.add_argument('-n', '--name', default='fmri')
     parser.add_argument('-p', '--patterns', nargs='+', default=None)
 
     return parser

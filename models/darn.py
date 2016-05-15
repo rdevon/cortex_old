@@ -18,10 +18,10 @@ from distributions import (
     _normal_entropy,
     _normal_prob
 )
-from layers import Layer
+from . import Layer
+from utils import floatX
 from utils.tools import (
     concatenate,
-    floatX,
     init_rngs,
     init_weights,
     norm_weight,

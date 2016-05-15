@@ -3,6 +3,7 @@ Base Layer class
 '''
 
 from collections import OrderedDict
+import copy
 import theano
 
 from utils.tools import (
@@ -20,6 +21,9 @@ class Layer(object):
         self.set_params()
         self.n_params = len(self.params)
         warn_kwargs(kwargs)
+
+    def copy(self):
+        return copy.deepcopy(self)
 
     def set_params(self):
         raise NotImplementedError()

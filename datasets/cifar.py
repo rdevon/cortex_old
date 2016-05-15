@@ -2,6 +2,7 @@
 Module for cifar
 '''
 
+from collections import OrderedDict
 import cPickle
 import gzip
 import multiprocessing as mp
@@ -16,10 +17,11 @@ from theano import tensor as T
 import time
 import traceback
 
+from utils import floatX
 from utils.tools import (
     concatenate,
-    floatX,
     init_rngs,
+    resolve_path,
     rng_,
     scan
 )
@@ -33,6 +35,8 @@ class CIFAR(object):
     def __init__(self, batch_size=128, source=None,
                  restrict_digits=None, mode='train', shuffle=True, inf=False,
                  stop=None, out_path=None):
+        source = resolve_path(source)
+        self.name = 'cifar'
 
         X, Y = self.get_data(source, mode)
         self.mode = mode
@@ -69,7 +73,7 @@ class CIFAR(object):
         print 'Data shape: %d x %d' % X.shape
 
         self.dims = dict(cifar=X.shape[1], label=len(np.unique(Y)))
-        self.acts = dict(cifar='lambda x: x', label='T.nnet.softmax')
+        self.distributions = dict(cifar='gaussian', label='multinomial')
 
         self.shuffle = shuffle
         self.pos = 0
@@ -80,6 +84,8 @@ class CIFAR(object):
         self.O = O
 
         self.mean_image = self.X.mean(axis=0)
+        self.X -= self.mean_image
+        self.X /= self.X.std(axis=0)
 
         if self.shuffle:
             self.randomize()
@@ -162,7 +168,7 @@ class CIFAR(object):
         if self.pos + batch_size > self.n:
             self.pos = -1
 
-        return x, y
+        return OrderedDict(cifar=x, labels=y)
 
     def save_images(self, x, imgfile, transpose=False, x_limit=None):
         if len(x.shape) == 2:

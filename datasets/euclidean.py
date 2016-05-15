@@ -14,25 +14,19 @@ from progressbar import (
 import random
 import scipy
 
-from datasets import Dataset
+from . import Dataset
 from utils import floatX, intX, pi
-from utils.tools import init_rngs, resolve_path
-
-
-def test_euclidean():
-    from os import path
-    d_iter = Euclidean(batch_size=10)
-    d_iter.save_images(d_iter.X, path.join(resolve_path('$irvi_outs'), 'euclidean_test.png'))
+from utils.tools import init_rngs
 
 
 class Euclidean(Dataset):
-    def __init__(self, dims=2, n_samples=1000, **kwargs):
+    def __init__(self, dims=2, n_samples=10000, **kwargs):
         super(Euclidean, self).__init__(**kwargs)
         init_rngs(self, **kwargs)
 
         self.collection = None
         self.X = self.get_data(n_samples, dims)
-        self.make_spiral()
+        self.make_fibrous()
 
         self.n = self.X.shape[0]
 
@@ -66,8 +60,7 @@ class Euclidean(Dataset):
             self.X += f
             self.X = np.clip(self.X, 0, 1)
 
-    def make_spiral(self, r=.5, G=0.001):
-        '''
+    def make_spiral(self, r=0.25, G=0.0001):
         for k in range(10):
             x = self.X[:, 0] - 0.5
             y = self.X[:, 1] - 0.5
@@ -76,10 +69,9 @@ class Euclidean(Dataset):
             alphas = [np.sqrt(x ** 2 + y ** 2) / d for d in ds]
             for alpha in alphas:
                 d = np.concatenate([(x * (1 - alpha))[:, None], (y * (1 - alpha))[:, None]], axis=1)
-                f = -G * (d / (d ** 2)).sum(axis=1, keepdims=True)
+                f = -G * d / (d ** 2).sum(axis=1, keepdims=True)
                 self.X += f
-            #self.X = np.clip(self.X, 0, 1)
-        '''
+            self.X = np.clip(self.X, 0, 1)
 
         rs = np.arange(0, 0.7, 0.001)
         theta = 2 * np.pi * rs / r
@@ -87,14 +79,6 @@ class Euclidean(Dataset):
         x = -rs * np.cos(theta) + 0.5
         spiral = zip(x, y)
         self.collection = matplotlib.collections.LineCollection([spiral], colors='k')
-
-        dr = self.rng.uniform(0, 0.7, size=self.X.shape[0])
-        dtheta = 2 * np.pi * dr / r
-        dx = -dr * np.cos(dtheta)
-        dy = dr * np.sin(dtheta)
-        self.X = self.rng.normal(scale=0.05, size=self.X.shape).astype(floatX)
-        self.X += np.concatenate([dx[:, None], dy[:, None]], axis=1)
-        self.X += 0.5
 
     def make_ex(self):
         x = self.rng.normal(loc=0.5, scale=0.05, size=self.X.shape).astype(floatX)
@@ -148,30 +132,23 @@ class Euclidean(Dataset):
 
         x = self.X[self.pos:self.pos+batch_size]
 
-        outs = OrderedDict(pos=self.pos)
-        outs[self.name] = x
-
-        if self.pos + batch_size >= self.n:
+        self.pos += batch_size
+        if self.pos + batch_size > self.n:
             self.pos = -1
-        else:
-            self.pos += batch_size
+
+        outs = OrderedDict()
+        outs[self.name] = x
 
         return outs
 
-    def save_images(self, X, imgfile, mode=None):
+    def save_images(self, X, imgfile, density=False):
         ax = plt.axes()
         x = X[:, 0]
         y = X[:, 1]
-        if mode == 'density':
+        if density:
             xy = np.vstack([x,y])
             z = scipy.stats.gaussian_kde(xy)(xy)
             ax.scatter(x, y, c=z, marker='o', edgecolor='')
-        elif mode == 'vector':
-            u = 10 * (x[1:] - x[:-1])
-            u = np.append(u, [0])
-            v = 10 * (y[1:] - y[:-1])
-            v = np.append(v, [0])
-            ax.quiver(x, y, u, v, angles='xy', scale=1000, color='r')
         else:
             ax.scatter(x, y, marker='o', c=range(x.shape[0]),
                         cmap=plt.cm.coolwarm)
@@ -187,7 +164,3 @@ class Euclidean(Dataset):
 
         plt.savefig(imgfile)
         plt.close()
-
-
-if __name__ == '__main__':
-    test_euclidean()

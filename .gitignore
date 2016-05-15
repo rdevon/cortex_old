@@ -1,3 +1,5 @@
+*~
+.DS_Store
 *.pdf
 *.gz
 *.zip
@@ -6,6 +8,10 @@
 *.blg
 *.bbl
 *.out
+.DS_Store
+
+/.idea/
+.idea/workspace.xml
 
 mine_tweets.py
 # Byte-compiled / optimized / DLL files

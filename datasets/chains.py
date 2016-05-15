@@ -72,54 +72,6 @@ def load_data(dataset=None,
 
     return train, valid, test
 
-def load_data_dijkstras(
-    dim_hs,
-    dataset=None,
-    train_batch_size=None,
-    valid_batch_size=None,
-    test_batch_size=None,
-    **dataset_args):
-
-    from caltech import CALTECH
-    from cifar import CIFAR
-    from mnist import MNIST
-    from uci import UCI
-
-    if dataset == 'mnist':
-        C = MNIST
-    elif dataset == 'cifar':
-        C = CIFAR
-    elif dataset == 'caltech':
-        C = CALTECH
-    elif dataset == 'uci':
-        C = UCI
-    elif dataset == 'euclidean':
-        C = Euclidean
-
-    if train_batch_size is not None:
-        train = DChains(C, dim_hs, batch_size=train_batch_size,
-                  mode='train',
-                  inf=False,
-                  **dataset_args)
-    else:
-        train = None
-    if valid_batch_size is not None:
-        valid = DChains(C, dim_hs, batch_size=valid_batch_size,
-                  mode='valid',
-                  inf=False,
-                  **dataset_args)
-    else:
-        valid = None
-    if test_batch_size is not None:
-        test = DChains(C, dim_hs, batch_size=test_batch_size,
-                 mode='test',
-                 inf=False,
-                 **dataset_args)
-    else:
-        test = None
-
-    return train, valid, test
-
 
 def extend_dataset(base_class):
     '''Function to extend any dataset class to store RNN hiddens.
@@ -168,12 +120,10 @@ def extend_dataset(base_class):
                 if not self.inf:
                     raise StopIteration
 
-            idx = self.idx[self.pos:self.pos+batch_size]
             hs = [H.get_value()[self.idx][self.pos:self.pos+batch_size]
                   for H in self.Hs]
             rval = super(DatasetWithHiddens, self).next(batch_size=batch_size)
             rval['hs'] = hs
-            rval['idx'] = idx
             return rval
 
     return DatasetWithHiddens
@@ -185,9 +135,9 @@ class DChains(object):
     Special Chain Dataset for use with Dijkstra Chainer class.
 
     '''
-    def __init__(self, D, dim_hs, batch_size=10, data_batch_size=100, build_batch=100, out_path=None,
+    def __init__(self, D, dim_hs, batch_size=10, build_batch=100, out_path=None,
                  **dataset_args):
-        self.dataset = extend_dataset(D)(dim_hs, batch_size=data_batch_size, **dataset_args)
+        self.dataset = extend_dataset(D)(dim_hs, batch_size=batch_size, **dataset_args)
         self.chainer = None
         self.batch_size = batch_size
         self.build_batch = build_batch
@@ -196,9 +146,9 @@ class DChains(object):
         self.save_images = self.dataset.save_images
 
         self.pos = -1
-        self.X   = None
-        self.M   = None
-        self.Hs  = None
+        self.X    = None
+        self.M    = None
+        self.Hs   = None
 
     def set_chainer(self, chainer):
         self.chainer = chainer
@@ -224,13 +174,12 @@ class DChains(object):
 
         # Build the chain and set members.
         chain_dict = self.chainer.build_data_chain(
-            self.dataset, build_batch=self.build_batch)
+            self.dataset, self.batch_size, build_batch=self.build_batch)
 
         self.M = chain_dict['mask']
         self.X = chain_dict['x_chain']
         self.idx = chain_dict['i_chain']
         self.Hs = chain_dict['h_chains']
-        self.data_idx = chain_dict['data_idx']
 
         # Save images
         if self.out_path is not None:
@@ -265,7 +214,6 @@ class DChains(object):
         rval = OrderedDict(
             x=x,
             idx=idx,
-            data_idx=self.data_idx,
             mask=m,
             hs=hs
         )
@@ -361,7 +309,8 @@ class Chains(object):
 
         self.X = chain_dict['x_chain']
         self.P = chain_dict['p_chain']
-        self.Hs = chain_dict['h_chains']
+        self.Hs = chain_dict['h_chain']
+
 
         # Save images
         if self.out_path is not None:
@@ -433,18 +382,16 @@ class Chains(object):
 
         x, p, hs = self.get_batches(c)
 
-        rval = OrderedDict(
-            pos=pos,
-            data_idx=self.data_idx,
-            x=x,
-            p=p,
-            hs=hs
-        )
-
         if self.pos + 1 >= len(self.C):
             self.pos = -1
         else:
             self.pos += 1
+
+        rval = OrderedDict(
+            x=x,
+            p=p,
+            hs=hs
+        )
 
         return rval
 
