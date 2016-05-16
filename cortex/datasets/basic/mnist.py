@@ -17,15 +17,15 @@ from theano import tensor as T
 import time
 import traceback
 
-from . import BasicDataset, Dataset
-from utils.tools import (
+from .. import BasicDataset, Dataset
+from ...utils.tools import (
     concatenate,
     init_rngs,
     resolve_path,
     rng_,
     scan
 )
-from utils.vis_utils import tile_raster_images
+from ...utils.vis_utils import tile_raster_images
 
 
 class MNIST(BasicDataset):

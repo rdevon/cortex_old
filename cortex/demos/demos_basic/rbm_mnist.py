@@ -11,13 +11,13 @@ import pprint
 import theano
 from theano import tensor as T
 
-from datasets import load_data
-from models.rbm import RBM, unpack
-from utils import floatX
-from utils.monitor import SimpleMonitor
-from utils.preprocessor import Preprocessor
-from utils.tools import get_trng, print_profile, print_section
-from utils.training import (
+from cortex.datasets import load_data
+from cortex.models.rbm import RBM, unpack
+from cortex.utils import floatX
+from cortex.utils.monitor import SimpleMonitor
+from cortex.utils.preprocessor import Preprocessor
+from cortex.utils.tools import get_trng, print_profile, print_section
+from cortex.utils.training import (
     main_loop,
     make_argument_parser,
     set_experiment,

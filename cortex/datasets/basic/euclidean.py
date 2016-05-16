@@ -14,9 +14,9 @@ from progressbar import (
 import random
 import scipy
 
-from . import Dataset
-from utils import floatX, intX, pi
-from utils.tools import init_rngs
+from .. import Dataset
+from ...utils import floatX, intX, pi
+from ...utils.tools import init_rngs
 
 
 class Euclidean(Dataset):

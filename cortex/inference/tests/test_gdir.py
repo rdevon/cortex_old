@@ -6,23 +6,21 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from datasets.mnist import MNIST
-from inference.gdir import MomentumGDIR
-from models.tests import test_vae
-from utils import floatX
-from utils.tools import resolve_path
-
-source = resolve_path('$data/mnist.pkl.gz')
+from cortex.datasets.basic.euclidean import Euclidean
+from cortex.inference.gdir import MomentumGDIR
+from cortex.models.tests import test_vae
+from cortex.utils import floatX
+from cortex.utils.tools import resolve_path
 
 def test_build_gdir(model=None, **inference_args):
     if model is None:
-        data_iter = MNIST(source=source, batch_size=27)
+        data_iter = Euclidean(batch_size=27, dim_in=17)
         model = test_vae.test_build_GBN(dim_in=data_iter.dims[data_iter.name])
     gdir = MomentumGDIR(model, **inference_args)
     return gdir
 
 def test_infer():
-    data_iter = MNIST(source=source, batch_size=27)
+    data_iter = Euclidean(batch_size=27, dim_in=17)
     gbn = test_vae.test_build_GBN(dim_in=data_iter.dims[data_iter.name])
 
     inference_args = dict(

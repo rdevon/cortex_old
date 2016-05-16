@@ -6,11 +6,11 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from datasets.mnist import MNIST
-from inference import gdir
-from models.helmholtz import Helmholtz
-from utils import floatX
-from utils.tools import print_profile, resolve_path
+from cortex.datasets.basic.euclidean import Euclidean
+from cortex.inference import gdir
+from cortex.models.helmholtz import Helmholtz
+from cortex.utils import floatX
+from cortex.utils.tools import print_profile, resolve_path
 
 
 def test_build_GBN(dim_in=17, dim_h=13):
@@ -27,8 +27,7 @@ def test_build_GBN(dim_in=17, dim_h=13):
     return gbn
 
 def test_call():
-    source = resolve_path('$data/mnist.pkl.gz')
-    data_iter = MNIST(source=source, batch_size=27)
+    data_iter = Euclidean(batch_size=27, dim_in=17)
     gbn = test_build_GBN(dim_in=data_iter.dims[data_iter.name])
 
     X = T.matrix('x', dtype=floatX)

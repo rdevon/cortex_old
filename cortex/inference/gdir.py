@@ -6,9 +6,9 @@ from collections import OrderedDict
 import theano
 from theano import tensor as T
 
-from irvi import IRVI
-from utils import floatX
-from utils.tools import (
+from .irvi import IRVI
+from ..utils import floatX
+from ..utils.tools import (
     scan,
     update_dict_of_lists,
 )

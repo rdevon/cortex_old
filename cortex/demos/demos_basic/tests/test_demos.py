@@ -3,10 +3,10 @@
 
 from os import path
 
-from demo_scripts import classifier
-from demo_scripts import rbm_mnist
-from demo_scripts import vae
-from utils.tools import load_experiment
+from cortex.demos.demos_basic import classifier
+from cortex.demos.demos_basic import rbm_mnist
+from cortex.demos.demos_basic import vae
+from cortex.utils.tools import load_experiment
 
 d = path.abspath(path.dirname(path.realpath(__file__)) + '/..')
 

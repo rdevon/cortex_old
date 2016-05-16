@@ -2,9 +2,9 @@
 Inference methods.
 '''
 
-from air import AIR, DeepAIR
-from gdir import MomentumGDIR
-from rws import RWS, DeepRWS
+from .air import AIR, DeepAIR
+from .gdir import MomentumGDIR
+from .rws import RWS, DeepRWS
 
 
 def resolve(model, inference_method=None, deep=False, **inference_args):

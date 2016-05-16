@@ -23,7 +23,7 @@ from theano.tensor.shared_randomstreams import RandomStreams as SRandomStreams
 import warnings
 import yaml
 
-from utils import floatX
+from cortex.utils import floatX
 
 
 random_seed = random.randint(0, 10000)
@@ -40,7 +40,7 @@ def print_section(s):
 
 def get_paths():
     '''Pulls all paths from `paths.conf` file.'''
-    d = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + '/..')
+    d = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + '/../..')
     config_file = os.path.join(d, 'paths.conf')
     config = ConfigParser()
     config.read(config_file)

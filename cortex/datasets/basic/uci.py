@@ -5,8 +5,8 @@ Iterator for UCI dataset
 import h5py
 import numpy as np
 
-from utils import floatX
-from utils.tools import (
+from ...utils import floatX
+from ...utils.tools import (
     concatenate,
     init_rngs,
     rng_,

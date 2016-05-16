@@ -6,8 +6,8 @@ from collections import OrderedDict
 import theano
 from theano import tensor as T
 
-from utils import floatX
-from utils.tools import (
+from ..utils import floatX
+from ..utils.tools import (
     log_sum_exp,
     warn_kwargs
 )

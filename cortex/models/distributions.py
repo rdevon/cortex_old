@@ -7,9 +7,9 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from models.layers import Layer
-from utils import e, floatX, pi
-from utils.tools import (
+from . import Layer
+from ..utils import e, floatX, pi
+from ..utils.tools import (
     concatenate,
     init_rngs,
     init_weights,

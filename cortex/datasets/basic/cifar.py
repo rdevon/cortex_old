@@ -17,15 +17,15 @@ from theano import tensor as T
 import time
 import traceback
 
-from utils import floatX
-from utils.tools import (
+from ...utils import floatX
+from ...utils.tools import (
     concatenate,
     init_rngs,
     resolve_path,
     rng_,
     scan
 )
-from utils.vis_utils import tile_raster_images
+from ...utils.vis_utils import tile_raster_images
 
 
 def get_iter(inf=False, batch_size=128):

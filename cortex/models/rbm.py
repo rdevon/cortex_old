@@ -8,9 +8,9 @@ import theano
 from theano import tensor as T
 
 from . import Layer
-from distributions import Binomial, resolve as resolve_dist
-from utils import floatX
-from utils.tools import (
+from .distributions import Binomial, resolve as resolve_dist
+from ..utils import floatX
+from ..utils.tools import (
     concatenate,
     init_rngs,
     init_weights,

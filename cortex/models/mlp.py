@@ -8,11 +8,10 @@ import theano
 from theano import tensor as T
 import warnings
 
-import distributions
-from distributions import Distribution, resolve as resolve_distribution
+from .distributions import Distribution, resolve as resolve_distribution
 from . import Layer
-from utils import floatX
-from utils.tools import (
+from ..utils import floatX
+from ..utils.tools import (
     concatenate,
     init_rngs,
     init_weights,

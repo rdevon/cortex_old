@@ -11,8 +11,8 @@ import theano
 from theano import tensor as T
 
 from . import Layer
-from darn import AutoRegressor, DARN
-from distributions import (
+from .darn import AutoRegressor, DARN
+from .distributions import (
     Binomial,
     Distribution,
     Gaussian,
@@ -20,9 +20,9 @@ from distributions import (
     Logistic,
     resolve as resolve_prior
 )
-from mlp import MLP, MultiModalMLP, resolve as resolve_mlp
-from utils import floatX, tools
-from utils.tools import (
+from .mlp import MLP, MultiModalMLP, resolve as resolve_mlp
+from ..utils import floatX, tools
+from ..utils.tools import (
     concatenate,
     get_w_tilde,
     init_rngs,

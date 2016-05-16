@@ -10,11 +10,11 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from layers import Layer
-from models.mlp import MLP
-from rnn import RNN
-from utils import floatX
-from utils.tools import (
+from . import Layer
+from .mlp import MLP
+from .rnn import RNN
+from ..utils import floatX
+from ..utils.tools import (
     concatenate,
     init_weights,
     norm_weight,

@@ -6,7 +6,7 @@ Not meant to be general, but feel free to subclass if it's useful
 from collections import OrderedDict
 import theano
 
-from utils import floatX
+from cortex.utils import floatX
 
 
 class Preprocessor(object):

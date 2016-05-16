@@ -6,7 +6,7 @@ from collections import OrderedDict
 import copy
 import theano
 
-from utils.tools import (
+from cortex.utils.tools import (
     warn_kwargs,
     _p
 )

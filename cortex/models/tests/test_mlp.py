@@ -7,8 +7,8 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from models.mlp import MLP
-from utils import floatX
+from cortex.models.mlp import MLP
+from cortex.utils import floatX
 
 
 sigmoid = 'lambda x: 1.0 / (1.0 + np.exp(-x))'

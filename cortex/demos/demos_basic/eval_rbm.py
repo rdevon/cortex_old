@@ -5,14 +5,14 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from datasets import load_data
-from models.rbm import unpack
-from utils import floatX
-from utils.training import (
+from cortex.datasets import load_data
+from cortex.models.rbm import unpack
+from cortex.utils import floatX
+from cortex.utils.training import (
     make_argument_parser_test,
     reload_model
 )
-from utils.tools import (
+from cortex.utils.tools import (
     get_trng,
     load_model,
     print_profile,

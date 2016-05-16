@@ -7,7 +7,7 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from distributions import (
+from .distributions import (
     Distribution,
     _binomial,
     _cross_entropy,
@@ -19,8 +19,8 @@ from distributions import (
     _normal_prob
 )
 from . import Layer
-from utils import floatX
-from utils.tools import (
+from ..utils import floatX
+from ..utils.tools import (
     concatenate,
     init_rngs,
     init_weights,

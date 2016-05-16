@@ -12,8 +12,8 @@ import theano
 from theano import tensor as T
 import traceback
 
-from mnist import MNIST
-from utils.vis_utils import tile_raster_images
+from .mnist import MNIST
+from ...utils.vis_utils import tile_raster_images
 
 
 def reshape_image(img, shape, crop_image=True):

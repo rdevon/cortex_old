@@ -4,8 +4,8 @@ Caltech 101 Silhouettes dataset
 
 from scipy import io
 
-from mnist import MNIST
-from utils import floatX
+from .mnist import MNIST
+from ...utils import floatX
 
 
 class CALTECH(MNIST):

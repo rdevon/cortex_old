@@ -6,9 +6,9 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from models.mlp import LFMLP
-from utils import floatX
-from utils.tools import print_profile
+from cortex.models.mlp import LFMLP
+from cortex.utils import floatX
+from cortex.utils.tools import print_profile
 
 
 def test_build(dim_f=3, prototype_shape=(10, 10, 10), shape=(3, 4, 5), stride=2,

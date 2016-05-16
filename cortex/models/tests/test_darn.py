@@ -6,12 +6,12 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from models.darn import (
+from cortex.models.darn import (
     AutoRegressor,
     DARN
 )
-from models.helmholtz import Helmholtz
-from utils import floatX
+from cortex.models.helmholtz import Helmholtz
+from cortex.utils import floatX
 
 
 sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))

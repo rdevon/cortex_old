@@ -7,9 +7,9 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from datasets.euclidean import Euclidean
-from models.rnn import RNN
-from utils import floatX
+from cortex.datasets.basic.euclidean import Euclidean
+from cortex.models.rnn import RNN
+from cortex.utils import floatX
 
 
 sigmoid = lambda x: (1. / (1 + np.exp(-x))) * 0.9999 + 0.000005

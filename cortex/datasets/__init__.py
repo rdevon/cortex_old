@@ -8,10 +8,10 @@ import random
 
 
 def resolve(c):
-    from mnist import MNIST
-    from caltech import CALTECH
-    from uci import UCI
-    from cifar import CIFAR
+    from .basic.mnist import MNIST
+    from .basic.caltech import CALTECH
+    from .basic.uci import UCI
+    from .basic.cifar import CIFAR
 
     r_dict = {
         'mnist': MNIST,

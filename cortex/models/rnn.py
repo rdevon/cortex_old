@@ -9,9 +9,9 @@ import theano
 from theano import tensor as T
 
 from . import Layer
-from mlp import MLP
-from utils import floatX, pi, tools
-from utils.tools import (
+from .mlp import MLP
+from ..utils import floatX, pi, tools
+from ..utils.tools import (
     concatenate,
     init_rngs,
     init_weights,

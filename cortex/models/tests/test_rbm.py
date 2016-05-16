@@ -5,9 +5,9 @@ Module for RBM tests.
 import theano
 from theano import tensor as T
 
-from datasets import euclidean
-from models import rbm
-from utils import floatX
+from cortex.datasets.basic import euclidean
+from cortex.models import rbm
+from cortex.utils import floatX
 
 
 def test_build(dim_h=11, dim_v=13):

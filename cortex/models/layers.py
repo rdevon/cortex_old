@@ -10,8 +10,8 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as T
 
 from . import Layer
-from utils import tools
-from utils.tools import (
+from ..utils import tools
+from ..utils.tools import (
     concatenate,
     log_mean_exp,
     init_rngs,

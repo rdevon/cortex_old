@@ -9,8 +9,8 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from layers import Layer
-from distributions import (
+from . import Layer
+from .distributions import (
     Binomial,
     Distribution,
     Gaussian,
@@ -18,10 +18,10 @@ from distributions import (
     Logistic,
     resolve as resolve_prior
 )
-from models.mlp import MLP, resolve as resolve_mlp
+from .mlp import MLP, resolve as resolve_mlp
 
-from utils import floatX, tools
-from utils.tools import (
+from ..utils import floatX, tools
+from ..utils.tools import (
     concatenate,
     init_rngs,
     init_weights,
