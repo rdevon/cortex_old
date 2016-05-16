@@ -1,2 +1,2 @@
-# hippo
-Hippo(campus) - Deep learning tools for neuroimaging
+# cortex
+Cortex - Deep learning tools for neuroimaging
