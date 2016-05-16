@@ -1,7 +1,22 @@
+*~
+.DS_Store
+*.pdf
+*.gz
+*.zip
+*.aux
+*.log
+*.blg
+*.bbl
+*.out
+.DS_Store
+
+/.idea/
+.idea/workspace.xml
+
+mine_tweets.py
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*$py.class
 
 # C extensions
 *.so
@@ -14,7 +29,6 @@ develop-eggs/
 dist/
 downloads/
 eggs/
-.eggs/
 lib/
 lib64/
 parts/
@@ -23,6 +37,7 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+*.pyc
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -38,12 +53,9 @@ pip-delete-this-directory.txt
 htmlcov/
 .tox/
 .coverage
-.coverage.*
 .cache
 nosetests.xml
 coverage.xml
-*,cover
-.hypothesis/
 
 # Translations
 *.mo
@@ -58,5 +70,7 @@ docs/_build/
 # PyBuilder
 target/
 
-#Ipython Notebook
-.ipynb_checkpoints
+obj/all_status.pkl
+obj/all_status_500.pkl
+obj/users_500.pkl
+obj/all_status.pkl

@@ -1,0 +1,20 @@
+{
+  name: 'classifier_mnist',
+  learning_args: {
+    epochs: 1000,
+    optimizer: 'sgd',
+    learning_rate: 0.01
+  },
+  classifier: {
+    input_layer: 'mnist',
+    dim_hs: [200, 100],
+  },
+  preprocessing: [
+    'center'
+  ],
+  dataset_args: {
+    dataset: 'mnist',
+    keys: ['mnist', 'label'],
+    source: '$data/mnist.pkl.gz'
+  }
+}
