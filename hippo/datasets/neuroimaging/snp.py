@@ -11,7 +11,6 @@ from utils.tools import (
 )
 
 
-
 class SNP(BasicDataset):
     '''SNP dataset class.
 
@@ -33,6 +32,7 @@ class SNP(BasicDataset):
         # Fetch SNP data from "source"
         X, Y = self.get_data(source)
         data = {name: X, 'label': Y}
+
         # balance data for traning, valid, and test parts
         balance = False
         if idx is not None:
@@ -47,15 +47,16 @@ class SNP(BasicDataset):
 
     def get_data(self, source):
         '''Fetch the data from source.
-        Arguments:
-           source: dict. file names of genetic data and labels
-                  {'snp' key for genetic data
-                    'labels' key for diagnosis }
 
         Genetic data is in the matrix format with size Subjec*SNP
         SNP can be either preprocessed or notprocessed
         Labels is a vector with diagnosis info
         Patients are coded with 1 and health control coded with 2
+
+        Arguments:
+           source: dict. file names of genetic data and labels
+                  {'snp' key for genetic data
+                    'labels' key for diagnosis }
         '''
         from utils.tools import get_paths
         data_path = get_paths()['$snp_data']
@@ -72,4 +73,3 @@ class SNP(BasicDataset):
         self.pos = 0
         if self.shuffle:
             self.randomize()
-
