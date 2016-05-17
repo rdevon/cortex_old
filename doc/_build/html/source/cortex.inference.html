@@ -33,6 +33,9 @@
         <li class="right" style="margin-right: 10px">
           <a href="../genindex.html" title="General Index"
              accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
         <li class="nav-item nav-item-0"><a href="../index.html">cortex 0.1a documentation</a> &raquo;</li> 
       </ul>
     </div>  
@@ -47,20 +50,321 @@
 <div class="section" id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="cortex-inference-air-module">
-<h2>cortex.inference.air module<a class="headerlink" href="#cortex-inference-air-module" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-cortex.inference.air">
+<span id="cortex-inference-air-module"></span><h2>cortex.inference.air module<a class="headerlink" href="#module-cortex.inference.air" title="Permalink to this headline">¶</a></h2>
+<p>Adaptive importance sampling inference.</p>
+<dl class="class">
+<dt id="cortex.inference.air.AIR">
+<em class="property">class </em><code class="descclassname">cortex.inference.air.</code><code class="descname">AIR</code><span class="sig-paren">(</span><em>model</em>, <em>name='AIR'</em>, <em>pass_gradients=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.air.AIR" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#cortex.inference.irvi.IRVI" title="cortex.inference.irvi.IRVI"><code class="xref py py-class docutils literal"><span class="pre">cortex.inference.irvi.IRVI</span></code></a></p>
+<p>Adaptive importance refinement (AIR).</p>
+<p>Inference procedure to refine the posterior using adaptive importance
+sampling (AIS)</p>
+<dl class="method">
+<dt id="cortex.inference.air.AIR.init_infer">
+<code class="descname">init_infer</code><span class="sig-paren">(</span><em>q</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.air.AIR.init_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.air.AIR.params_infer">
+<code class="descname">params_infer</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.air.AIR.params_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.air.AIR.step_infer">
+<code class="descname">step_infer</code><span class="sig-paren">(</span><em>r</em>, <em>q</em>, <em>y</em>, <em>*params</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.air.AIR.step_infer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Step inference function for IRVI.inference scan.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>r</strong> &#8211; theano randomstream variable</li>
+<li><strong>q</strong> &#8211; T.tensor. Current approximate posterior parameters</li>
+<li><strong>y</strong> &#8211; T.tensor. Data sample</li>
+<li><strong>params</strong> &#8211; list of shared variables</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">T.tensor. New approximate posterior parameters
+cost: T.scalar float. Negative lower bound of current parameters</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">q</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.air.AIR.unpack_infer">
+<code class="descname">unpack_infer</code><span class="sig-paren">(</span><em>outs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.air.AIR.unpack_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="cortex.inference.air.DeepAIR">
+<em class="property">class </em><code class="descclassname">cortex.inference.air.</code><code class="descname">DeepAIR</code><span class="sig-paren">(</span><em>model</em>, <em>name='AIR'</em>, <em>pass_gradients=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.air.DeepAIR" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#cortex.inference.irvi.DeepIRVI" title="cortex.inference.irvi.DeepIRVI"><code class="xref py py-class docutils literal"><span class="pre">cortex.inference.irvi.DeepIRVI</span></code></a></p>
+<dl class="method">
+<dt id="cortex.inference.air.DeepAIR.init_infer">
+<code class="descname">init_infer</code><span class="sig-paren">(</span><em>qs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.air.DeepAIR.init_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.air.DeepAIR.params_infer">
+<code class="descname">params_infer</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.air.DeepAIR.params_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.air.DeepAIR.step_infer">
+<code class="descname">step_infer</code><span class="sig-paren">(</span><em>*params</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.air.DeepAIR.step_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.air.DeepAIR.unpack_infer">
+<code class="descname">unpack_infer</code><span class="sig-paren">(</span><em>outs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.air.DeepAIR.unpack_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
 </div>
-<div class="section" id="cortex-inference-gdir-module">
-<h2>cortex.inference.gdir module<a class="headerlink" href="#cortex-inference-gdir-module" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-cortex.inference.gdir">
+<span id="cortex-inference-gdir-module"></span><h2>cortex.inference.gdir module<a class="headerlink" href="#module-cortex.inference.gdir" title="Permalink to this headline">¶</a></h2>
+<p>Gradient-Descent Iterative Refinement</p>
+<dl class="class">
+<dt id="cortex.inference.gdir.GDIR">
+<em class="property">class </em><code class="descclassname">cortex.inference.gdir.</code><code class="descname">GDIR</code><span class="sig-paren">(</span><em>model</em>, <em>name='GDIR'</em>, <em>pass_gradients=True</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.gdir.GDIR" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#cortex.inference.irvi.IRVI" title="cortex.inference.irvi.IRVI"><code class="xref py py-class docutils literal"><span class="pre">cortex.inference.irvi.IRVI</span></code></a></p>
+<dl class="method">
+<dt id="cortex.inference.gdir.GDIR.e_step">
+<code class="descname">e_step</code><span class="sig-paren">(</span><em>epsilon</em>, <em>q</em>, <em>y</em>, <em>*params</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.gdir.GDIR.e_step" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="cortex.inference.gdir.MomentumGDIR">
+<em class="property">class </em><code class="descclassname">cortex.inference.gdir.</code><code class="descname">MomentumGDIR</code><span class="sig-paren">(</span><em>model</em>, <em>momentum=0.9</em>, <em>name='momentum_GDIR'</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.gdir.MomentumGDIR" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#cortex.inference.gdir.GDIR" title="cortex.inference.gdir.GDIR"><code class="xref py py-class docutils literal"><span class="pre">cortex.inference.gdir.GDIR</span></code></a></p>
+<dl class="method">
+<dt id="cortex.inference.gdir.MomentumGDIR.init_infer">
+<code class="descname">init_infer</code><span class="sig-paren">(</span><em>q</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.gdir.MomentumGDIR.init_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.gdir.MomentumGDIR.params_infer">
+<code class="descname">params_infer</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.gdir.MomentumGDIR.params_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.gdir.MomentumGDIR.step_infer">
+<code class="descname">step_infer</code><span class="sig-paren">(</span><em>epsilon</em>, <em>q</em>, <em>dq_</em>, <em>y</em>, <em>m</em>, <em>*params</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.gdir.MomentumGDIR.step_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.gdir.MomentumGDIR.unpack_infer">
+<code class="descname">unpack_infer</code><span class="sig-paren">(</span><em>outs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.gdir.MomentumGDIR.unpack_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
 </div>
-<div class="section" id="cortex-inference-irvi-module">
-<h2>cortex.inference.irvi module<a class="headerlink" href="#cortex-inference-irvi-module" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-cortex.inference.irvi">
+<span id="cortex-inference-irvi-module"></span><h2>cortex.inference.irvi module<a class="headerlink" href="#module-cortex.inference.irvi" title="Permalink to this headline">¶</a></h2>
+<p>Iterative refinement of the approximate posterior</p>
+<dl class="class">
+<dt id="cortex.inference.irvi.DeepIRVI">
+<em class="property">class </em><code class="descclassname">cortex.inference.irvi.</code><code class="descname">DeepIRVI</code><span class="sig-paren">(</span><em>model</em>, <em>name='IRVI'</em>, <em>inference_rate=0.1</em>, <em>n_inference_samples=20</em>, <em>n_inference_steps=20</em>, <em>pass_gradients=True</em>, <em>sample_posterior=False</em>, <em>init_inference='recognition_network'</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.DeepIRVI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="cortex.inference.irvi.DeepIRVI.inference">
+<code class="descname">inference</code><span class="sig-paren">(</span><em>x</em>, <em>y</em>, <em>q0s=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.DeepIRVI.inference" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.DeepIRVI.init_infer">
+<code class="descname">init_infer</code><span class="sig-paren">(</span><em>q0s</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.DeepIRVI.init_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.DeepIRVI.init_variational_inference">
+<code class="descname">init_variational_inference</code><span class="sig-paren">(</span><em>x</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.DeepIRVI.init_variational_inference" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.DeepIRVI.params_infer">
+<code class="descname">params_infer</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.DeepIRVI.params_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.DeepIRVI.step_infer">
+<code class="descname">step_infer</code><span class="sig-paren">(</span><em>*params</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.DeepIRVI.step_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.DeepIRVI.test">
+<code class="descname">test</code><span class="sig-paren">(</span><em>x</em>, <em>y</em>, <em>stride=10</em>, <em>**model_args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.DeepIRVI.test" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.DeepIRVI.unpack_infer">
+<code class="descname">unpack_infer</code><span class="sig-paren">(</span><em>outs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.DeepIRVI.unpack_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="cortex.inference.irvi.IRVI">
+<em class="property">class </em><code class="descclassname">cortex.inference.irvi.</code><code class="descname">IRVI</code><span class="sig-paren">(</span><em>model</em>, <em>name='IRVI'</em>, <em>inference_rate=0.1</em>, <em>n_inference_samples=20</em>, <em>n_inference_steps=20</em>, <em>pass_gradients=True</em>, <em>init_inference='recognition_network'</em>, <em>use_all_samples=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.IRVI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>Iterative refinement of the approximate posterior.</p>
+<p>Will take a variety of methods as the refinement step (see GDIR and AIR).
+NOTE: this class will <em>not</em> perform inference by itself, but needs to be
+instantiated from one of the child classes.</p>
+<dl class="docutils">
+<dt>Atrributes:</dt>
+<dd><p class="first">name: str. Name of inference method.
+model: Layer. Typically Helmholtz
+init_inference: str. Inference initialization option.
+inference_rate: float. Rate of inference steps.
+n_inference_steps: int. Number of inference steps.
+n_inference_samples: int. Number of samples to draw from the approximate</p>
+<blockquote>
+<div>posterior.</div></blockquote>
+<p class="last">pass_gradients: bool. Pass gradients during inference.
+use_all_samples: bool. Use all the samples rather than just last.</p>
+</dd>
+</dl>
+<dl class="method">
+<dt id="cortex.inference.irvi.IRVI.inference">
+<code class="descname">inference</code><span class="sig-paren">(</span><em>x</em>, <em>y</em>, <em>q0=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.IRVI.inference" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform inference</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>x</strong> &#8211; T.tensor. Input data sample for posterior, p(h|x)</li>
+<li><strong>y</strong> &#8211; T.tensor. Output data sample for conditional, p(x|h)</li>
+<li><strong>q0</strong> &#8211; T.tensor (optional). Initial posterior parameters.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">OrderedDict. Results from inference.
+constants: list
+updates: OrderedUpdates from scan.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">rval</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.IRVI.init_infer">
+<code class="descname">init_infer</code><span class="sig-paren">(</span><em>q</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.IRVI.init_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.IRVI.init_variational_inference">
+<code class="descname">init_variational_inference</code><span class="sig-paren">(</span><em>x</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.IRVI.init_variational_inference" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initialize variational inference.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>x</strong> &#8211; T.tensor. Data samples</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">T.tensor. Initial variational parameters.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">q0</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.IRVI.params_infer">
+<code class="descname">params_infer</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.IRVI.params_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.IRVI.step_infer">
+<code class="descname">step_infer</code><span class="sig-paren">(</span><em>*params</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.IRVI.step_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.IRVI.test">
+<code class="descname">test</code><span class="sig-paren">(</span><em>x</em>, <em>y</em>, <em>stride=1</em>, <em>**model_args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.IRVI.test" title="Permalink to this definition">¶</a></dt>
+<dd><p>Testing function for inference.</p>
+<p>Returns a larger summary across different number of inference steps.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>x</strong> &#8211; T.tensor. Input data sample for posterior, p(h|x)</li>
+<li><strong>y</strong> &#8211; T.tensor. Output data sample for conditional, p(x|h)</li>
+<li><strong>stride</strong> &#8211; int. Stride for result summary</li>
+<li><strong>model_args</strong> &#8211; dict. dictionary of arguments for model results.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">OrderedDict of results. Only first- and last-step results.
+samples: OrderedDict of tensors for visualization, etc.
+full_results: OrderedDict of complete result summary
+updates: OrderedUpdates from scan.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">results</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.inference.irvi.IRVI.unpack_infer">
+<code class="descname">unpack_infer</code><span class="sig-paren">(</span><em>outs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.irvi.IRVI.unpack_infer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
 </div>
-<div class="section" id="cortex-inference-rws-module">
-<h2>cortex.inference.rws module<a class="headerlink" href="#cortex-inference-rws-module" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-cortex.inference.rws">
+<span id="cortex-inference-rws-module"></span><h2>cortex.inference.rws module<a class="headerlink" href="#module-cortex.inference.rws" title="Permalink to this headline">¶</a></h2>
+<p>Reweighted wake-sleep inference</p>
+<dl class="class">
+<dt id="cortex.inference.rws.DeepRWS">
+<em class="property">class </em><code class="descclassname">cortex.inference.rws.</code><code class="descname">DeepRWS</code><span class="sig-paren">(</span><em>model</em>, <em>name='RWS'</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.rws.DeepRWS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+</dd></dl>
+
+<dl class="class">
+<dt id="cortex.inference.rws.RWS">
+<em class="property">class </em><code class="descclassname">cortex.inference.rws.</code><code class="descname">RWS</code><span class="sig-paren">(</span><em>model</em>, <em>name='RWS'</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.rws.RWS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="cortex.inference.rws.RWS.test">
+<code class="descname">test</code><span class="sig-paren">(</span><em>x</em>, <em>y</em>, <em>n_posterior_samples=10</em>, <em>qk=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.rws.RWS.test" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
 </div>
-<div class="section" id="module-contents">
-<h2>Module contents<a class="headerlink" href="#module-contents" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-cortex.inference">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-cortex.inference" title="Permalink to this headline">¶</a></h2>
+<p>Inference methods.</p>
+<dl class="function">
+<dt id="cortex.inference.resolve">
+<code class="descclassname">cortex.inference.</code><code class="descname">resolve</code><span class="sig-paren">(</span><em>model</em>, <em>inference_method=None</em>, <em>deep=False</em>, <em>**inference_args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.inference.resolve" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </div>
 </div>
 
@@ -74,11 +378,11 @@
   <ul>
 <li><a class="reference internal" href="#">cortex.inference package</a><ul>
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
-<li><a class="reference internal" href="#cortex-inference-air-module">cortex.inference.air module</a></li>
-<li><a class="reference internal" href="#cortex-inference-gdir-module">cortex.inference.gdir module</a></li>
-<li><a class="reference internal" href="#cortex-inference-irvi-module">cortex.inference.irvi module</a></li>
-<li><a class="reference internal" href="#cortex-inference-rws-module">cortex.inference.rws module</a></li>
-<li><a class="reference internal" href="#module-contents">Module contents</a></li>
+<li><a class="reference internal" href="#module-cortex.inference.air">cortex.inference.air module</a></li>
+<li><a class="reference internal" href="#module-cortex.inference.gdir">cortex.inference.gdir module</a></li>
+<li><a class="reference internal" href="#module-cortex.inference.irvi">cortex.inference.irvi module</a></li>
+<li><a class="reference internal" href="#module-cortex.inference.rws">cortex.inference.rws module</a></li>
+<li><a class="reference internal" href="#module-cortex.inference">Module contents</a></li>
 </ul>
 </li>
 </ul>
@@ -110,6 +414,9 @@
         <li class="right" style="margin-right: 10px">
           <a href="../genindex.html" title="General Index"
              >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
         <li class="nav-item nav-item-0"><a href="../index.html">cortex 0.1a documentation</a> &raquo;</li> 
       </ul>
     </div>
