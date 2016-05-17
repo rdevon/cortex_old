@@ -23,7 +23,7 @@ from theano.tensor.shared_randomstreams import RandomStreams as SRandomStreams
 import warnings
 import yaml
 
-from cortex.utils import floatX
+from . import floatX
 
 
 random_seed = random.randint(0, 10000)

@@ -24,9 +24,9 @@ import theano
 from theano import tensor as T
 import time
 
-import op
-from learning_scheduler import Scheduler
-from tools import (
+from . import op
+from .learning_scheduler import Scheduler
+from .tools import (
     check_bad_nums,
     itemlist,
     load_experiment,
