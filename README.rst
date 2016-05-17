@@ -30,11 +30,16 @@ Installation
 ------------
 
 You can install Cortex using the Python package manager ``pip``.
+
 .. code-block:: bash
+
    $ pip install cortex
+
 However, currently the demos give the best example of how to script using cortex.
 So it is recommended to clone from the github repository:
+
 .. code-block:: bash
+
    $ git clone https://github.com/rdevon/cortex.git
    $ cd cortex
    $ python setup.py install
@@ -45,8 +50,10 @@ update Cortex, simply repeat the first command with the ``--upgrade`` switch
 added to pull the latest version from GitHub.
 
 In either case, you need to run the setup script:
+
 .. code-block:: bash
-   cortex-setup
+
+   $ cortex-setup
 
 Follow the instructions; you will be asked to specify default data and out
 directories. These are necessary only for the demos, and can be customized in your
@@ -69,4 +76,5 @@ Documentation
 -------------
 
 Source documentation can be found `here`_.
+
 .. _here: http://cortex.readthedocs.io/
