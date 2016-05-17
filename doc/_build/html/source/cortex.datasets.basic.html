@@ -8,7 +8,7 @@
     
     <title>cortex.datasets.basic package &mdash; cortex 0.1a documentation</title>
     
-    <link rel="stylesheet" href="../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
     
     <script type="text/javascript">
@@ -24,15 +24,18 @@
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
     <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <link rel="top" title="cortex 0.1a documentation" href="../index.html" />
-   
-  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
-  
-  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
-
+    <link rel="top" title="cortex 0.1a documentation" href="../index.html" /> 
   </head>
   <body role="document">
-  
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="nav-item nav-item-0"><a href="../index.html">cortex 0.1a documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
 
     <div class="document">
       <div class="documentwrapper">
@@ -44,237 +47,26 @@
 <div class="section" id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-cortex.datasets.basic.caltech">
-<span id="cortex-datasets-basic-caltech-module"></span><h2>cortex.datasets.basic.caltech module<a class="headerlink" href="#module-cortex.datasets.basic.caltech" title="Permalink to this headline">¶</a></h2>
-<p>Caltech 101 Silhouettes dataset</p>
-<dl class="class">
-<dt id="cortex.datasets.basic.caltech.CALTECH">
-<em class="property">class </em><code class="descclassname">cortex.datasets.basic.caltech.</code><code class="descname">CALTECH</code><span class="sig-paren">(</span><em>name='caltech'</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.caltech.CALTECH" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#cortex.datasets.basic.mnist.MNIST" title="cortex.datasets.basic.mnist.MNIST"><code class="xref py py-class docutils literal"><span class="pre">cortex.datasets.basic.mnist.MNIST</span></code></a></p>
-<dl class="method">
-<dt id="cortex.datasets.basic.caltech.CALTECH.get_data">
-<code class="descname">get_data</code><span class="sig-paren">(</span><em>source</em>, <em>mode</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.caltech.CALTECH.get_data" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
+<div class="section" id="cortex-datasets-basic-caltech-module">
+<h2>cortex.datasets.basic.caltech module<a class="headerlink" href="#cortex-datasets-basic-caltech-module" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-cortex.datasets.basic.cifar">
-<span id="cortex-datasets-basic-cifar-module"></span><h2>cortex.datasets.basic.cifar module<a class="headerlink" href="#module-cortex.datasets.basic.cifar" title="Permalink to this headline">¶</a></h2>
-<p>Module for cifar</p>
-<dl class="class">
-<dt id="cortex.datasets.basic.cifar.CIFAR">
-<em class="property">class </em><code class="descclassname">cortex.datasets.basic.cifar.</code><code class="descname">CIFAR</code><span class="sig-paren">(</span><em>batch_size=128</em>, <em>source=None</em>, <em>restrict_digits=None</em>, <em>mode='train'</em>, <em>shuffle=True</em>, <em>inf=False</em>, <em>stop=None</em>, <em>out_path=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.cifar.CIFAR" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
-<dl class="method">
-<dt id="cortex.datasets.basic.cifar.CIFAR.get_data">
-<code class="descname">get_data</code><span class="sig-paren">(</span><em>source</em>, <em>mode</em>, <em>greyscale=True</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.cifar.CIFAR.get_data" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.cifar.CIFAR.next">
-<code class="descname">next</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.cifar.CIFAR.next" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.cifar.CIFAR.randomize">
-<code class="descname">randomize</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.cifar.CIFAR.randomize" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.cifar.CIFAR.reset">
-<code class="descname">reset</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.cifar.CIFAR.reset" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.cifar.CIFAR.save_images">
-<code class="descname">save_images</code><span class="sig-paren">(</span><em>x</em>, <em>imgfile</em>, <em>transpose=False</em>, <em>x_limit=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.cifar.CIFAR.save_images" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.cifar.CIFAR.show">
-<code class="descname">show</code><span class="sig-paren">(</span><em>image</em>, <em>tshape</em>, <em>transpose=False</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.cifar.CIFAR.show" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.cifar.CIFAR.translate">
-<code class="descname">translate</code><span class="sig-paren">(</span><em>x</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.cifar.CIFAR.translate" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="function">
-<dt id="cortex.datasets.basic.cifar.get_iter">
-<code class="descclassname">cortex.datasets.basic.cifar.</code><code class="descname">get_iter</code><span class="sig-paren">(</span><em>inf=False</em>, <em>batch_size=128</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.cifar.get_iter" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
+<div class="section" id="cortex-datasets-basic-cifar-module">
+<h2>cortex.datasets.basic.cifar module<a class="headerlink" href="#cortex-datasets-basic-cifar-module" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-cortex.datasets.basic.euclidean">
-<span id="cortex-datasets-basic-euclidean-module"></span><h2>cortex.datasets.basic.euclidean module<a class="headerlink" href="#module-cortex.datasets.basic.euclidean" title="Permalink to this headline">¶</a></h2>
-<p>Simple dataset with random points arrange in a space.</p>
-<dl class="class">
-<dt id="cortex.datasets.basic.euclidean.Euclidean">
-<em class="property">class </em><code class="descclassname">cortex.datasets.basic.euclidean.</code><code class="descname">Euclidean</code><span class="sig-paren">(</span><em>dims=2</em>, <em>n_samples=10000</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="cortex.datasets.html#cortex.datasets.Dataset" title="cortex.datasets.Dataset"><code class="xref py py-class docutils literal"><span class="pre">cortex.datasets.Dataset</span></code></a></p>
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.get_data">
-<code class="descname">get_data</code><span class="sig-paren">(</span><em>n_points</em>, <em>dims</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.get_data" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.gravity">
-<code class="descname">gravity</code><span class="sig-paren">(</span><em>x</em>, <em>y</em>, <em>r=0.1</em>, <em>G=0.0001</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.gravity" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.make_bullseye">
-<code class="descname">make_bullseye</code><span class="sig-paren">(</span><em>r=0.3</em>, <em>G=0.08</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.make_bullseye" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.make_circle">
-<code class="descname">make_circle</code><span class="sig-paren">(</span><em>r=0.3</em>, <em>G=0.05</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.make_circle" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.make_ex">
-<code class="descname">make_ex</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.make_ex" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.make_fibrous">
-<code class="descname">make_fibrous</code><span class="sig-paren">(</span><em>n_points=40</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.make_fibrous" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.make_modes">
-<code class="descname">make_modes</code><span class="sig-paren">(</span><em>r=0.3</em>, <em>N=5</em>, <em>G=0.01</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.make_modes" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.make_spiral">
-<code class="descname">make_spiral</code><span class="sig-paren">(</span><em>r=0.25</em>, <em>G=0.0001</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.make_spiral" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.next">
-<code class="descname">next</code><span class="sig-paren">(</span><em>batch_size=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.next" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.randomize">
-<code class="descname">randomize</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.randomize" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.euclidean.Euclidean.save_images">
-<code class="descname">save_images</code><span class="sig-paren">(</span><em>X</em>, <em>imgfile</em>, <em>density=False</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.euclidean.Euclidean.save_images" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
+<div class="section" id="cortex-datasets-basic-euclidean-module">
+<h2>cortex.datasets.basic.euclidean module<a class="headerlink" href="#cortex-datasets-basic-euclidean-module" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-cortex.datasets.basic.horses">
-<span id="cortex-datasets-basic-horses-module"></span><h2>cortex.datasets.basic.horses module<a class="headerlink" href="#module-cortex.datasets.basic.horses" title="Permalink to this headline">¶</a></h2>
-<dl class="class">
-<dt id="cortex.datasets.basic.horses.Horses">
-<em class="property">class </em><code class="descclassname">cortex.datasets.basic.horses.</code><code class="descname">Horses</code><span class="sig-paren">(</span><em>batch_size=10</em>, <em>mode='train'</em>, <em>source=None</em>, <em>inf=False</em>, <em>stop=None</em>, <em>shuffle=True</em>, <em>image_shape=None</em>, <em>out_path=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.horses.Horses" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
-<dl class="method">
-<dt id="cortex.datasets.basic.horses.Horses.next">
-<code class="descname">next</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.horses.Horses.next" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.horses.Horses.randomize">
-<code class="descname">randomize</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.horses.Horses.randomize" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.horses.Horses.save_images">
-<code class="descname">save_images</code><span class="sig-paren">(</span><em>x</em>, <em>imgfile</em>, <em>transpose=False</em>, <em>x_limit=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.horses.Horses.save_images" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.horses.Horses.show">
-<code class="descname">show</code><span class="sig-paren">(</span><em>image</em>, <em>tshape</em>, <em>transpose=False</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.horses.Horses.show" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="function">
-<dt id="cortex.datasets.basic.horses.reshape_image">
-<code class="descclassname">cortex.datasets.basic.horses.</code><code class="descname">reshape_image</code><span class="sig-paren">(</span><em>img</em>, <em>shape</em>, <em>crop_image=True</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.horses.reshape_image" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
+<div class="section" id="cortex-datasets-basic-horses-module">
+<h2>cortex.datasets.basic.horses module<a class="headerlink" href="#cortex-datasets-basic-horses-module" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-cortex.datasets.basic.mnist">
-<span id="cortex-datasets-basic-mnist-module"></span><h2>cortex.datasets.basic.mnist module<a class="headerlink" href="#module-cortex.datasets.basic.mnist" title="Permalink to this headline">¶</a></h2>
-<p>MNIST dataset</p>
-<dl class="class">
-<dt id="cortex.datasets.basic.mnist.MNIST">
-<em class="property">class </em><code class="descclassname">cortex.datasets.basic.mnist.</code><code class="descname">MNIST</code><span class="sig-paren">(</span><em>source=None</em>, <em>restrict_digits=None</em>, <em>mode='train'</em>, <em>binarize=False</em>, <em>name='mnist'</em>, <em>out_path=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.mnist.MNIST" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="cortex.datasets.html#cortex.datasets.BasicDataset" title="cortex.datasets.BasicDataset"><code class="xref py py-class docutils literal"><span class="pre">cortex.datasets.BasicDataset</span></code></a></p>
-<dl class="method">
-<dt id="cortex.datasets.basic.mnist.MNIST.get_data">
-<code class="descname">get_data</code><span class="sig-paren">(</span><em>source</em>, <em>mode</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.mnist.MNIST.get_data" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.mnist.MNIST.save_images">
-<code class="descname">save_images</code><span class="sig-paren">(</span><em>x</em>, <em>imgfile</em>, <em>transpose=False</em>, <em>x_limit=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.mnist.MNIST.save_images" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.mnist.MNIST.show">
-<code class="descname">show</code><span class="sig-paren">(</span><em>image</em>, <em>tshape</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.mnist.MNIST.show" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.mnist.MNIST.translate">
-<code class="descname">translate</code><span class="sig-paren">(</span><em>x</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.mnist.MNIST.translate" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
+<div class="section" id="cortex-datasets-basic-mnist-module">
+<h2>cortex.datasets.basic.mnist module<a class="headerlink" href="#cortex-datasets-basic-mnist-module" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-cortex.datasets.basic.uci">
-<span id="cortex-datasets-basic-uci-module"></span><h2>cortex.datasets.basic.uci module<a class="headerlink" href="#module-cortex.datasets.basic.uci" title="Permalink to this headline">¶</a></h2>
-<p>Iterator for UCI dataset</p>
-<dl class="class">
-<dt id="cortex.datasets.basic.uci.UCI">
-<em class="property">class </em><code class="descclassname">cortex.datasets.basic.uci.</code><code class="descname">UCI</code><span class="sig-paren">(</span><em>batch_size=100</em>, <em>source=None</em>, <em>mode='train'</em>, <em>shuffle=True</em>, <em>inf=False</em>, <em>name='uci'</em>, <em>stop=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.uci.UCI" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
-<dl class="method">
-<dt id="cortex.datasets.basic.uci.UCI.get_data">
-<code class="descname">get_data</code><span class="sig-paren">(</span><em>source</em>, <em>mode</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.uci.UCI.get_data" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.uci.UCI.next">
-<code class="descname">next</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.uci.UCI.next" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.uci.UCI.randomize">
-<code class="descname">randomize</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.uci.UCI.randomize" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.uci.UCI.reset">
-<code class="descname">reset</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.uci.UCI.reset" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="method">
-<dt id="cortex.datasets.basic.uci.UCI.save_images">
-<code class="descname">save_images</code><span class="sig-paren">(</span><em>x</em>, <em>imgfile</em>, <em>transpose=False</em>, <em>x_limit=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.basic.uci.UCI.save_images" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
+<div class="section" id="cortex-datasets-basic-uci-module">
+<h2>cortex.datasets.basic.uci module<a class="headerlink" href="#cortex-datasets-basic-uci-module" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-cortex.datasets.basic">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-cortex.datasets.basic" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-contents">
+<h2>Module contents<a class="headerlink" href="#module-contents" title="Permalink to this headline">¶</a></h2>
 </div>
 </div>
 
@@ -288,23 +80,17 @@
   <ul>
 <li><a class="reference internal" href="#">cortex.datasets.basic package</a><ul>
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
-<li><a class="reference internal" href="#module-cortex.datasets.basic.caltech">cortex.datasets.basic.caltech module</a></li>
-<li><a class="reference internal" href="#module-cortex.datasets.basic.cifar">cortex.datasets.basic.cifar module</a></li>
-<li><a class="reference internal" href="#module-cortex.datasets.basic.euclidean">cortex.datasets.basic.euclidean module</a></li>
-<li><a class="reference internal" href="#module-cortex.datasets.basic.horses">cortex.datasets.basic.horses module</a></li>
-<li><a class="reference internal" href="#module-cortex.datasets.basic.mnist">cortex.datasets.basic.mnist module</a></li>
-<li><a class="reference internal" href="#module-cortex.datasets.basic.uci">cortex.datasets.basic.uci module</a></li>
-<li><a class="reference internal" href="#module-cortex.datasets.basic">Module contents</a></li>
+<li><a class="reference internal" href="#cortex-datasets-basic-caltech-module">cortex.datasets.basic.caltech module</a></li>
+<li><a class="reference internal" href="#cortex-datasets-basic-cifar-module">cortex.datasets.basic.cifar module</a></li>
+<li><a class="reference internal" href="#cortex-datasets-basic-euclidean-module">cortex.datasets.basic.euclidean module</a></li>
+<li><a class="reference internal" href="#cortex-datasets-basic-horses-module">cortex.datasets.basic.horses module</a></li>
+<li><a class="reference internal" href="#cortex-datasets-basic-mnist-module">cortex.datasets.basic.mnist module</a></li>
+<li><a class="reference internal" href="#cortex-datasets-basic-uci-module">cortex.datasets.basic.uci module</a></li>
+<li><a class="reference internal" href="#module-contents">Module contents</a></li>
 </ul>
 </li>
 </ul>
-<div class="relations">
-<h3>Related Topics</h3>
-<ul>
-  <li><a href="../index.html">Documentation overview</a><ul>
-  </ul></li>
-</ul>
-</div>
+
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
@@ -326,20 +112,18 @@
       </div>
       <div class="clearer"></div>
     </div>
-    <div class="footer">
-      &copy;2016, Devon Hjelm.
-      
-      |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.4.1</a>
-      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.8</a>
-      
-      |
-      <a href="../_sources/source/cortex.datasets.basic.txt"
-          rel="nofollow">Page source</a>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="nav-item nav-item-0"><a href="../index.html">cortex 0.1a documentation</a> &raquo;</li> 
+      </ul>
     </div>
-
-    
-
-    
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
   </body>
 </html>

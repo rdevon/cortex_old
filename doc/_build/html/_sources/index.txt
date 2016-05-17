@@ -1,22 +1,40 @@
-.. cortex documentation master file, created by
-   sphinx-quickstart on Tue May 17 12:50:20 2016.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+Cortex documentation
+=================================
+Cortex is a framework for training and evaluating neural networks using Theano.
+Cortex is not specific to, but includes tools for neuroimaging. Cortex is not
+meant to replace Theano, but is intended to be used as a compliment to scripting
+in python. It is very customizable, as all methods and classes are suggested
+templates, and pure Theano can be used when needed.
 
-Welcome to cortex's documentation!
-==================================
+.. warning::
+   Cortex is a brand-new project and is under rapid development. If you encounter
+   any bugs or have any feature requests, please `email`_ or
+   `create a GitHub issue`_.
 
-Contents:
+.. _email: erroneus@gmail.com
+.. _create a GitHub issue: https://github.com/dhjelm/cortex/issues/new
 
+.. _tutorials:
+
+Tutorials
+---------
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
+   setup
 
+Features
+--------
+
+Currently Cortex supports the following models:
+
+* Feed forward networks
+* RNNs, GRUs, and LSTMs
+* Helmholtz machines as well as variational inference methods
+* Common datasets, such as MNIST and Caltech silhoettes
+* Neuroimaging datasets, such as MRI
 
 Indices and tables
 ==================
-
 * :ref:`genindex`
 * :ref:`modindex`
-* :ref:`search`
-
