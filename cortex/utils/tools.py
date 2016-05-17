@@ -40,8 +40,8 @@ def print_section(s):
 
 def get_paths():
     '''Pulls all paths from `paths.conf` file.'''
-    d = os.path.abspath(os.path.dirname(os.path.realpath(__file__)) + '/../..')
-    config_file = os.path.join(d, 'paths.conf')
+    d = os.path.expanduser('~')
+    config_file = os.path.join(d, '.cortexrc')
     config = ConfigParser()
     config.read(config_file)
     path_dict = config._sections['PATHS']
