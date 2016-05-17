@@ -1,0 +1,218 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.demos.demos_basic package &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../index.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="cortex-demos-demos-basic-package">
+<h1>cortex.demos.demos_basic package<a class="headerlink" href="#cortex-demos-demos-basic-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-cortex.demos.demos_basic.classifier">
+<span id="cortex-demos-demos-basic-classifier-module"></span><h2>cortex.demos.demos_basic.classifier module<a class="headerlink" href="#module-cortex.demos.demos_basic.classifier" title="Permalink to this headline">¶</a></h2>
+<p>Demo for training a classifier.</p>
+<p>Try with <cite>python classifier.py classifier_mnist.yaml</cite></p>
+<dl class="function">
+<dt id="cortex.demos.demos_basic.classifier.init_learning_args">
+<code class="descclassname">cortex.demos.demos_basic.classifier.</code><code class="descname">init_learning_args</code><span class="sig-paren">(</span><em>learning_rate=0.01</em>, <em>l2_decay=0.0</em>, <em>dropout=0.0</em>, <em>optimizer='rmsprop'</em>, <em>optimizer_args={}</em>, <em>learning_rate_schedule=None</em>, <em>batch_size=100</em>, <em>valid_batch_size=100</em>, <em>epochs=100</em>, <em>valid_key='error'</em>, <em>valid_sign='+'</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.demos.demos_basic.classifier.init_learning_args" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default learning args.</p>
+<p>This method acts as a filter for kwargs.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>learning_rate</strong> &#8211; float.</li>
+<li><strong>l2_decay</strong> &#8211; float, L2 decay rate.</li>
+<li><strong>dropout</strong> &#8211; float, dropout_rate.</li>
+<li><strong>optimizer</strong> &#8211; str, see utils.op</li>
+<li><strong>optimizer_args</strong> &#8211; dict, extra kwargs for op.</li>
+<li><strong>learning_rate_schedule</strong> &#8211; OrderedDict, schedule for learning rate.</li>
+<li><strong>batch_size</strong> &#8211; int</li>
+<li><strong>valid_batch_size</strong> &#8211; int</li>
+<li><strong>epochs</strong> &#8211; int</li>
+<li><strong>valid_key</strong> &#8211; str, key from results to validate model on.</li>
+<li><strong>valid_sign</strong> &#8211; str, + or -. If -, then sign is switched at validation.
+Good for upperbounds.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">locals().</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.demos.demos_basic.classifier.train">
+<code class="descclassname">cortex.demos.demos_basic.classifier.</code><code class="descname">train</code><span class="sig-paren">(</span><em>out_path=None</em>, <em>name=''</em>, <em>model_to_load=None</em>, <em>test_every=None</em>, <em>classifier=None</em>, <em>preprocessing=None</em>, <em>learning_args=None</em>, <em>dataset_args=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.demos.demos_basic.classifier.train" title="Permalink to this definition">¶</a></dt>
+<dd><p>Basic training script.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>out_path</strong> &#8211; str, path for output directory.</li>
+<li><strong>name</strong> &#8211; str, name of experiment.</li>
+<li><strong>test_every</strong> &#8211; int (optional), if not None, test every n epochs instead of
+every 1 epoch.</li>
+<li><strong>classifier</strong> &#8211; dict, kwargs for MLP factory.</li>
+<li><strong>learning_args</strong> &#8211; dict or None, see <cite>init_learning_args</cite> above for options.</li>
+<li><strong>dataset_args</strong> &#8211; dict, arguments for Dataset class.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<div class="section" id="module-cortex.demos.demos_basic.eval_rbm">
+<span id="cortex-demos-demos-basic-eval-rbm-module"></span><h2>cortex.demos.demos_basic.eval_rbm module<a class="headerlink" href="#module-cortex.demos.demos_basic.eval_rbm" title="Permalink to this headline">¶</a></h2>
+<p>Eval script for pretrained RBMs.</p>
+<dl class="function">
+<dt id="cortex.demos.demos_basic.eval_rbm.evaluate">
+<code class="descclassname">cortex.demos.demos_basic.eval_rbm.</code><code class="descname">evaluate</code><span class="sig-paren">(</span><em>model_to_load=None</em>, <em>center_input=False</em>, <em>dataset_args={}</em>, <em>out_path=None</em>, <em>mode='test'</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.demos.demos_basic.eval_rbm.evaluate" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-cortex.demos.demos_basic.rbm_mnist">
+<span id="cortex-demos-demos-basic-rbm-mnist-module"></span><h2>cortex.demos.demos_basic.rbm_mnist module<a class="headerlink" href="#module-cortex.demos.demos_basic.rbm_mnist" title="Permalink to this headline">¶</a></h2>
+<p>Demo for training RBM with MNIST dataset.</p>
+<p>Try with <cite>python rbm_mnist.py rbm_mnist.yaml</cite>.</p>
+<dl class="function">
+<dt id="cortex.demos.demos_basic.rbm_mnist.init_inference_args">
+<code class="descclassname">cortex.demos.demos_basic.rbm_mnist.</code><code class="descname">init_inference_args</code><span class="sig-paren">(</span><em>n_chains=10</em>, <em>persistent=False</em>, <em>n_steps=1</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.demos.demos_basic.rbm_mnist.init_inference_args" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.demos.demos_basic.rbm_mnist.init_learning_args">
+<code class="descclassname">cortex.demos.demos_basic.rbm_mnist.</code><code class="descname">init_learning_args</code><span class="sig-paren">(</span><em>learning_rate=0.0001</em>, <em>optimizer='sgd'</em>, <em>optimizer_args=None</em>, <em>learning_rate_schedule=None</em>, <em>batch_size=100</em>, <em>valid_batch_size=100</em>, <em>epochs=100</em>, <em>valid_key='nll'</em>, <em>valid_sign='+'</em>, <em>excludes=[]</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.demos.demos_basic.rbm_mnist.init_learning_args" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.demos.demos_basic.rbm_mnist.train">
+<code class="descclassname">cortex.demos.demos_basic.rbm_mnist.</code><code class="descname">train</code><span class="sig-paren">(</span><em>out_path=None</em>, <em>name=''</em>, <em>model_to_load=None</em>, <em>save_images=True</em>, <em>test_every=None</em>, <em>dim_h=None</em>, <em>preprocessing=None</em>, <em>learning_args=None</em>, <em>inference_args=None</em>, <em>dataset_args=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.demos.demos_basic.rbm_mnist.train" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-cortex.demos.demos_basic.vae">
+<span id="cortex-demos-demos-basic-vae-module"></span><h2>cortex.demos.demos_basic.vae module<a class="headerlink" href="#module-cortex.demos.demos_basic.vae" title="Permalink to this headline">¶</a></h2>
+<p>Demo for training VAE.</p>
+<p>Try with <cite>python vae.py vae_mnist.yaml</cite>.</p>
+<dl class="function">
+<dt id="cortex.demos.demos_basic.vae.init_learning_args">
+<code class="descclassname">cortex.demos.demos_basic.vae.</code><code class="descname">init_learning_args</code><span class="sig-paren">(</span><em>learning_rate=0.0001, learning_rate_schedule=None, l2_decay=0.0, optimizer='rmsprop', optimizer_args=None, n_posterior_samples=20, reweight=False, batch_size=100, valid_batch_size=100, epochs=100, valid_key='-log p(x)', valid_sign='+', excludes=['gaussian_log_sigma', 'gaussian_mu']</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.demos.demos_basic.vae.init_learning_args" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.demos.demos_basic.vae.train">
+<code class="descclassname">cortex.demos.demos_basic.vae.</code><code class="descname">train</code><span class="sig-paren">(</span><em>out_path=None</em>, <em>name=''</em>, <em>model_to_load=None</em>, <em>save_images=True</em>, <em>test_every=None</em>, <em>dim_h=None</em>, <em>rec_args=None</em>, <em>gen_args=None</em>, <em>prior='gaussian'</em>, <em>preprocessing=None</em>, <em>learning_args=None</em>, <em>dataset_args=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.demos.demos_basic.vae.train" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-cortex.demos.demos_basic">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-cortex.demos.demos_basic" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">cortex.demos.demos_basic package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-cortex.demos.demos_basic.classifier">cortex.demos.demos_basic.classifier module</a></li>
+<li><a class="reference internal" href="#module-cortex.demos.demos_basic.eval_rbm">cortex.demos.demos_basic.eval_rbm module</a></li>
+<li><a class="reference internal" href="#module-cortex.demos.demos_basic.rbm_mnist">cortex.demos.demos_basic.rbm_mnist module</a></li>
+<li><a class="reference internal" href="#module-cortex.demos.demos_basic.vae">cortex.demos.demos_basic.vae module</a></li>
+<li><a class="reference internal" href="#module-cortex.demos.demos_basic">Module contents</a></li>
+</ul>
+</li>
+</ul>
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/source/cortex.demos.demos_basic.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2016, Devon Hjelm.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.4.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.8</a>
+      
+      |
+      <a href="../_sources/source/cortex.demos.demos_basic.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

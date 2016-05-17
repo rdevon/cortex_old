@@ -1,3 +1,8 @@
+"""
+Init for utils.
+
+"""
+
 import numpy as np
 import theano
 

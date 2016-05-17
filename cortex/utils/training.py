@@ -1,9 +1,10 @@
-'''
+"""
 Generic training scripts.
 
 These scripts are meant as a basic example for building scripts for training,
 not as a basis for all training.
-'''
+
+"""
 
 import argparse
 from collections import OrderedDict
@@ -38,7 +39,7 @@ from .tools import (
 
 
 def make_argument_parser():
-    '''Generic experiment parser.
+    """Generic experiment parser.
 
     Generic parser takes the experiment yaml as the main argument, but has some
     options for reloading, etc. This parser can be easily extended using a
@@ -46,7 +47,8 @@ def make_argument_parser():
 
     Returns:
         parser
-    '''
+
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('experiment', default=None)
     parser.add_argument('-o', '--out_path', default=None,
@@ -57,13 +59,14 @@ def make_argument_parser():
     return parser
 
 def make_argument_parser_test():
-    '''Generic experiment parser for testing.
+    """Generic experiment parser for testing.
 
     Takes the experiment directory as the argument in command line.
 
     Returns:
         parser
-    '''
+
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('experiment_dir', default=None)
     parser.add_argument('-m', '--mode', default='valid',
@@ -73,16 +76,18 @@ def make_argument_parser_test():
     return parser
 
 def set_experiment(args):
-    '''Generic experiment setup method.
+    """Generic experiment setup method.
 
     Extracts args from a parser like from `make_argument_parser`. These are
     extracted into a dictionary for kwargs.
 
     Args:
         args: argparse args.
+
     Returns:
         exp_dict: dict, dictionary of experiment arguments.
-    '''
+
+    """
     args = vars(args)
     load_model = args.pop('load_model')
     load_last = args.pop('load_last')
@@ -116,16 +121,18 @@ def set_experiment(args):
     return exp_dict
 
 def reload_model(args):
-    '''Reloads a model from argparse args.
+    """Reloads a model from argparse args.
 
     Extracts model into a dictionary from argparse args like from
     `make_argument_parser_test`.
 
     Args:
         args: argparse args.
+
     Returns:
         exp_dict: dict, dictionary of experiment arguments.
-    '''
+
+    """
     exp_dir = path.abspath(args.experiment_dir)
     out_path = path.join(exp_dir, 'results')
     if not path.isdir(out_path):
@@ -157,7 +164,7 @@ def reload_model(args):
     return exp_dict
 
 def set_model(create_model, model_to_load, unpack):
-    '''Convenience method for creating new or loading old model.
+    """Convenience method for creating new or loading old model.
 
     Object creation often can be reduced to 3 things: a creation method,
     a saved model, and a means of unpacking the saved model. This method
@@ -175,9 +182,11 @@ def set_model(create_model, model_to_load, unpack):
         model_to_load: str, path the npz file.
         unpack, python function name, Takes model_to_load.
             See `utils.tools.load_model` for details.
+
     Returns:
         models: Dict of Layer subclass objects
-    '''
+
+    """
     if model_to_load is not None:
         models, _ = load_model(model_to_load, unpack)
     else:
@@ -185,14 +194,16 @@ def set_model(create_model, model_to_load, unpack):
     return models
 
 def set_tparams(model_dict):
-    '''Generic tparams setter.'''
+    """Generic tparams setter.
+
+    """
     tparams = OrderedDict()
     for model in model_dict.values():
         tparams.update(**model.set_tparams())
     return tparams
 
 def set_params(tparams, updates, excludes=[]):
-    '''Sets params, removing updates from tparams.
+    """Sets params, removing updates from tparams.
 
     Convenience function to extract the theano parameters that will have
     gradients calculated.
@@ -203,11 +214,13 @@ def set_params(tparams, updates, excludes=[]):
             calculated.
         excludes: list of str. List of keys to exclude from gradients or
             learning.
+
     Returns:
         tparams: OrderedDict of Theano shared variables that will have gradients
             calculated.
         all_params: OrderedDict of Theano shared variables that will be saved.
-    '''
+
+    """
     all_params = OrderedDict((k, v) for k, v in tparams.iteritems())
 
     tparams = OrderedDict((k, v)
@@ -222,7 +235,9 @@ def set_params(tparams, updates, excludes=[]):
 def set_optimizer(inputs, cost, tparams, constants, updates, extra_outs,
                   optimizer=None, optimizer_args=None,
                   **learning_args):
-    '''Sets the parameter update functions with optimizer.'''
+    """Sets the parameter update functions with optimizer.
+
+    """
 
     if optimizer_args is None:
         optimizer_args = dict()
@@ -237,7 +252,7 @@ def set_optimizer(inputs, cost, tparams, constants, updates, extra_outs,
     return f_grad_shared, f_grad_updates, learning_args
 
 def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
-    '''Tests the model using a data iterator.
+    """Tests the model using a data iterator.
 
     Args:
         data_iter: Dataset object.
@@ -248,9 +263,11 @@ def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
             for `f_test`.
         n_samples: int (optional). If not None, use only this number of samples
             as input to `f_test`.
+
     Returns:
         results: OrderedDict of np.array.
-    '''
+
+    """
     data_iter.reset()
     maxvalid = data_iter.n
 
@@ -292,7 +309,7 @@ def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
 def validate(tparams, results, best_valid, e, best_epoch,
              save=None, valid_key=None, valid_sign=None, bestfile=None,
              **kwargs):
-    '''Generic validation method.
+    """Generic validation method.
 
     Compares the validation result against previous best.
 
@@ -305,10 +322,12 @@ def validate(tparams, results, best_valid, e, best_epoch,
         save: function. Method for saving params.
         valid_key: str. Key from results to test against best_valid.
         bestfile: str. Path to best file.
+
     Returns:
         best_valid: float
         best_epoch: int
-    '''
+
+    """
     warn_kwargs(None, **kwargs)
 
     valid_value = results[valid_key]
@@ -343,7 +362,7 @@ def main_loop(train, valid, tparams,
               extra_outs_keys=None,
               output_every=None,
               **validation_args):
-    '''Generic main loop.
+    """Generic main loop.
 
     Typical main loop. For special applications, a different loop is better.
 
@@ -366,14 +385,15 @@ def main_loop(train, valid, tparams,
         save_images: function (optional). Function to save images.
         epochs: int. Number of training epochs.
         learning_rate: float.
-        learning_rate_scheduler: Schedule object. For scheduling learning rate.
+        learning_rate_scheduler: Scheduler object. For scheduling learning rate.
         monitor: utils.monitor.Monitor.
         out_path: str. Director path for output files.
         extra_outs_keys: list of str. Keys for extra outs of `f_grad_shared`.
         output_every: int (optional). If not None, print rvals from
             `f_grad_shared`.
         validation_args: kwargs. Arguments for test.
-    '''
+
+    """
 
     best_valid = float('inf')
     best_epoch = 0
