@@ -3,7 +3,6 @@ Optimization routines.
 
 Based (and copied) on Kyunghyun Cho's arctic repo.
 '''
-import ipdb
 import numpy as np
 import theano
 from theano import tensor as T
