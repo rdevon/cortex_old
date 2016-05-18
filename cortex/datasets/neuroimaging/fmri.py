@@ -16,11 +16,11 @@ from sklearn.decomposition import PCA
 import theano
 import yaml
 
-from analysis.mri import rois
-from . import Dataset
-import nifti_viewer
-from utils import floatX
-from utils.tools import resolve_path
+from ...analysis.mri import rois
+from .. import Dataset
+from . import nifti_viewer
+from ...utils import floatX
+from ...utils.tools import resolve_path
 
 
 class MRI(Dataset):

@@ -163,7 +163,7 @@ def reload_model(args):
     exp_dict.update(**args)
     return exp_dict
 
-def set_model(create_model, model_to_load, unpack):
+def set_model(create_model, model_to_load, unpack, **kwargs):
     """Convenience method for creating new or loading old model.
 
     Object creation often can be reduced to 3 things: a creation method,
@@ -188,7 +188,7 @@ def set_model(create_model, model_to_load, unpack):
 
     """
     if model_to_load is not None:
-        models, _ = load_model(model_to_load, unpack)
+        models, _ = load_model(model_to_load, unpack, **kwargs)
     else:
         models = create_model()
     return models
