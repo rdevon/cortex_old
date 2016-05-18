@@ -6,13 +6,10 @@ import numpy as np
 
 
 def resolve(dataset):
-    from mri import MRI
     from fmri import FMRI, FMRI_IID
     from snp import SNP
 
-    if dataset == 'mri':
-        C = MRI
-    elif dataset == 'fmri':
+    if dataset == 'fmri':
         C = FMRI
     elif dataset == 'fmri_iid':
         C = FMRI_IID

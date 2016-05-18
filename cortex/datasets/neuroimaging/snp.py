@@ -5,8 +5,8 @@ SNP dataset class.
 from collections import OrderedDict
 import numpy as np
 from scipy.io import loadmat
-from . import BasicDataset, Dataset
-from utils.tools import (
+from .. import BasicDataset, Dataset
+from ...utils.tools import (
     warn_kwargs
 )
 
