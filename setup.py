@@ -1,5 +1,5 @@
 '''
-Setup for hippo
+Setup for Cortex
 '''
 
 import readline, glob
@@ -16,7 +16,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     
 setup(
     name='cortex',
-    version='0.1a',
+    version='0.11a',
     description='cortex: a deep learning toolbox for neuroimaging',
     long_description=long_description,
     url='https://github.com/rdevon/cortex',

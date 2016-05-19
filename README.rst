@@ -13,7 +13,7 @@ templates, and pure Theano can be used when needed.
    `create a GitHub issue`_.
 
 .. _email: erroneus@gmail.com
-.. _create a GitHub issue: https://github.com/dhjelm/cortex/issues/new
+.. _create a GitHub issue: https://github.com/rdevon/cortex/issues/new
 
 Features
 --------
@@ -35,8 +35,14 @@ You can install Cortex using the Python package manager ``pip``.
 
    $ pip install cortex
 
+To get the most up-to-date version, you can install from the ``git`` repository:
+
+.. code-block:: bash
+
+    $ pip install git+git://github.com/rdevon/cortex.git
+
 However, currently the demos give the best example of how to script using cortex.
-So it is recommended to clone from the github repository:
+So, if this is your first time using cortex, it is recommended to clone from the github repository:
 
 .. code-block:: bash
 
