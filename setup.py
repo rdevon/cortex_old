@@ -13,7 +13,7 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-    
+
 setup(
     name='cortex',
     version='0.11a',
@@ -31,7 +31,17 @@ setup(
     ],
     keywords='deep learning neuroimaging',
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-    entry_points = {
-        'console_scripts': ['cortex-setup=cortex:main']
+    package_data={'': [
+        'cortex/demos/demos_basic/classifier_mnist.yaml',
+        'cortex/demos/demos_basic/rbm_mnist.yaml',
+        'cortex/demos/demos_basic/vae_mnist.yaml'
+    ]},
+    entry_points={
+        'console_scripts': [
+            'cortex-setup=cortex:main',
+            'cortex-classifier-demo=cortex.demos:run_classifier_demo',
+            'cortex-rbm-demo=cortex.demos:run_rbm_demo',
+            'cortex-vae-demo=cortex.demos:run_vae_demo'
+        ]
     }
 )
