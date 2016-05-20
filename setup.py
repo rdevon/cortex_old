@@ -1,5 +1,5 @@
 '''
-Setup for hippo
+Setup for Cortex
 '''
 
 import readline, glob
