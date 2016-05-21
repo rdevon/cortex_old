@@ -31,11 +31,6 @@ setup(
     ],
     keywords='deep learning neuroimaging',
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-    package_data={'': [
-        'cortex/demos/demos_basic/classifier_mnist.yaml',
-        'cortex/demos/demos_basic/rbm_mnist.yaml',
-        'cortex/demos/demos_basic/vae_mnist.yaml'
-    ]},
     entry_points={
         'console_scripts': [
             'cortex-setup=cortex:main',
@@ -43,5 +38,10 @@ setup(
             'cortex-rbm-demo=cortex.demos:run_rbm_demo',
             'cortex-vae-demo=cortex.demos:run_vae_demo'
         ]
-    }
+    },
+    data_files=[
+        'cortex/demos/demos_basic/classifier_mnist.yaml',
+        'cortex/demos/demos_basic/rbm_mnist.yaml',
+        'cortex/demos/demos_basic/vae_mnist.yaml'
+    ]
 )

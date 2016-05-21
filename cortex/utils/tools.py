@@ -1,6 +1,6 @@
-"""
+'''
 Helper module for learning.
-"""
+'''
 
 from collections import OrderedDict
 from ConfigParser import ConfigParser
@@ -44,24 +44,43 @@ def get_paths():
     config_file = os.path.join(d, '.cortexrc')
     config = ConfigParser()
     config.read(config_file)
-    path_dict = config._sections['PATHS']
+
+    try:
+        path_dict = config._sections['PATHS']
+    except KeyError as e:
+        raise ValueError('There is a problem with the .cortexrc file. Either '
+                         'create this file in your $HOME directory, or run '
+                         '`cortex-setup`. If this file already exists, please '
+                         'make sure that the `[PATHS]` field exists.')
+
     path_dict.pop('__name__')
     return path_dict
 
 def resolve_path(p):
-    '''Resolves a path using the `paths.conf` file.'''
+    '''Resolves a path using the `.cortexrc` file.
+
+    '''
     path_dict = get_paths()
     for k, v in path_dict.iteritems():
         p = p.replace(k, v)
+    pieces = p.split('/')
+    for piece in pieces:
+        if piece.startswith('$'):
+            raise ValueError('Field in .cortexrc file is missing and may need '
+                             'to be filled: %s' % piece)
     return p
 
 def get_srng():
-    '''Shared Randomstream'''
+    '''Shared Randomstream.
+
+    '''
     srng = SRandomStreams(random.randint(0, 1000000))
     return srng
 
 def get_trng():
-    '''Normal Randomstream'''
+    '''Normal Randomstream.
+
+    '''
     trng = RandomStreams(random.randint(0, 1000000))
     return trng
 
@@ -71,7 +90,9 @@ def warn_kwargs(c, **kwargs):
                        % (type(c), kwargs), RuntimeWarning)
 
 def update_dict_of_lists(d_to_update, **d):
-    '''Updates a dict of list with kwargs.'''
+    '''Updates a dict of list with kwargs.
+
+    '''
     for k, v in d.iteritems():
         if k in d_to_update.keys():
             d_to_update[k].append(v)
@@ -79,14 +100,18 @@ def update_dict_of_lists(d_to_update, **d):
             d_to_update[k] = [v]
 
 def debug_shape(X, x, t_out, updates=None):
-    '''Debug function that returns the shape then raises assert error.'''
+    '''Debug function that returns the shape then raises assert error.
+
+    '''
     f = theano.function([X], t_out, updates=updates)
     out = f(x)
     print out.shape
     assert False
 
 def print_profile(tparams):
-    '''Prints shapes of the shared variables.'''
+    '''Prints shapes of the shared variables.
+
+    '''
     print 'Print profile for tparams (name, shape)'
     for (k, v) in tparams.iteritems():
         print '\t', k, v.get_value().shape
@@ -104,7 +129,9 @@ def shuffle_columns(x, srng):
 
 def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan',
          strict=False):
-    '''Convenience function for scan.'''
+    '''Convenience function for scan.
+
+    '''
     return theano.scan(
         f_scan,
         sequences=seqs,
@@ -118,14 +145,18 @@ def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan',
 
 def init_weights(model, weight_noise=False, weight_scale=0.001, dropout=False,
                  **kwargs):
-    '''Inialization function for weights.'''
+    '''Inialization function for weights.
+
+    '''
     model.weight_noise = weight_noise
     model.weight_scale = weight_scale
     model.dropout = dropout
     return kwargs
 
 def init_rngs(model, rng=None, trng=None, **kwargs):
-    '''Initialization function for RNGs.'''
+    '''Initialization function for RNGs.
+
+    '''
     if rng is None:
         rng = rng_
     model.rng = rng
@@ -144,6 +175,7 @@ def _slice(_x, n, dim):
     '''Slice a tensor into 2 along last axis.
 
     Extended from Cho's arctic repo.
+
     '''
     if _x.ndim == 1:
         return _x[n*dim:(n+1)*dim]
@@ -158,7 +190,9 @@ def _slice(_x, n, dim):
                          ' (but can add easily here)' % _x.ndim)
 
 def _slice2(_x, start, end):
-    '''Slightly different slice function than above.'''
+    '''Slightly different slice function than above.
+
+    '''
     if _x.ndim == 1:
         return _x[start:end]
     elif _x.ndim == 2:
@@ -172,14 +206,18 @@ def _slice2(_x, start, end):
                          ' (but can add easily here)' % _x.ndim)
 
 def load_experiment(experiment_yaml):
-    '''Load an experiment from a yaml.'''
+    '''Load an experiment from a yaml.
+
+    '''
     print('Loading experiment from %s' % experiment_yaml)
     exp_dict = yaml.load(open(experiment_yaml))
     print('Experiment hyperparams: %s' % pprint.pformat(exp_dict))
     return exp_dict
 
 def load_model(model_file, f_unpack=None, strict=True, **extra_args):
-    '''Loads pretrained model.'''
+    '''Loads pretrained model.
+
+    '''
 
     print 'Loading model from %s' % model_file
     params = np.load(model_file)
@@ -234,7 +272,9 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
     return model_dict, kwargs
 
 def check_bad_nums(rvals, names):
-    '''Checks for nans and infs.'''
+    '''Checks for nans and infs.
+
+    '''
     found = False
     for k, out in zip(names, rvals):
         if np.any(np.isnan(out)):
@@ -246,7 +286,9 @@ def check_bad_nums(rvals, names):
     return found
 
 def flatten_dict(d):
-    '''Flattens a dictionary of dictionaries.'''
+    '''Flattens a dictionary of dictionaries.
+
+    '''
     rval = OrderedDict()
     for k, v in d.iteritems():
         if isinstance(v, OrderedDict):
@@ -261,6 +303,7 @@ def zipp(params, tparams):
     '''Push parameters to Theano shared variables.
 
     From Cho's arctic repo.
+
     '''
     for kk, vv in params.iteritems():
         tparams[kk].set_value(vv)
@@ -269,6 +312,7 @@ def unzip(zipped):
     '''Pull parameters from Theano shared variables.
 
     From Cho's arctic repo.
+
     '''
     new_params = OrderedDict()
     for kk, vv in zipped.iteritems():
@@ -279,6 +323,7 @@ def itemlist(tparams):
     '''Get the list of parameters: Note that tparams must be OrderedDict.
 
     From Cho's arctic repo.
+
     '''
     return tparams.values()
 
@@ -290,7 +335,9 @@ def _p(pp, name):
     return '%s_%s'%(pp, name)
 
 def ortho_weight(ndim, rng=None):
-    '''Make ortho weight tensor.'''
+    '''Make ortho weight tensor.
+
+    '''
     if not rng:
         rng = rng_
     W = rng.randn(ndim, ndim)
@@ -298,7 +345,9 @@ def ortho_weight(ndim, rng=None):
     return u.astype('float32')
 
 def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
-    '''Make normal weight tensor.'''
+    '''Make normal weight tensor.
+
+    '''
     if not rng:
         rng = rng_
     if nout is None:
@@ -310,7 +359,9 @@ def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
     return W.astype('float32')
 
 def parzen_estimation(samples, tests, h=1.0):
-    '''Estimate parzen window.'''
+    '''Estimate parzen window.
+
+    '''
     log_p = 0.
     d = samples.shape[-1]
     z = d * np.log(h * np.sqrt(2 * np.pi))
@@ -321,7 +372,9 @@ def parzen_estimation(samples, tests, h=1.0):
     return log_p / float(tests.shape[0])
 
 def get_w_tilde(log_factor):
-    '''Gets normalized weights'''
+    '''Gets normalized weights.
+
+    '''
     log_factor = log_factor - T.log(log_factor.shape[0]).astype(floatX)
     w_norm   = log_sum_exp(log_factor, axis=0)
     log_w    = log_factor - T.shape_padleft(w_norm)
@@ -329,7 +382,9 @@ def get_w_tilde(log_factor):
     return w_tilde
 
 def log_mean_exp(x, axis=None, as_numpy=False):
-    '''Numerically stable log(exp(x).mean())'''
+    '''Numerically stable log(exp(x).mean()).
+
+    '''
     if as_numpy:
         Te = np
     else:
@@ -338,31 +393,36 @@ def log_mean_exp(x, axis=None, as_numpy=False):
     return Te.log(Te.mean(Te.exp(x - x_max), axis=axis, keepdims=True)) + x_max
 
 def log_sum_exp(x, axis=None):
-    '''Numerically stable log( sum( exp(A) ) ).'''
+    '''Numerically stable log( sum( exp(A) ) ).
+
+    '''
     x_max = T.max(x, axis=axis, keepdims=True)
     y = T.log(T.sum(T.exp(x - x_max), axis=axis, keepdims=True)) + x_max
     y = T.sum(y, axis=axis)
     return y
 
 def concatenate(tensor_list, axis=0):
-    '''
-    Alternative implementation of `theano.T.concatenate`.
+    '''Alternative implementation of `theano.T.concatenate`.
+
     This function does exactly the same thing, but contrary to Theano's own
     implementation, the gradient is implemented on the GPU.
     Backpropagating through `theano.tensor.concatenate` yields slowdowns
     because the inverse operation (splitting) needs to be done on the CPU.
     This implementation does not have that problem.
 
-    Usage:
+    Examples:
         >>> x, y = theano.tensor.matrices('x', 'y')
         >>> c = concatenate([x, y], axis=1)
-    Args:
+
+    Argsuments:
         tensor_list: list, list of Theano tensor expressions that should be concatenated.
         axis: int, the tensors will be joined along this axis.
+
     Returns:
         out: tensor, the concatenated tensor expression.
 
     From Cho's arctic repo.
+
     '''
     concat_size = sum(tt.shape[axis] for tt in tensor_list)
 
