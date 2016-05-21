@@ -8,10 +8,8 @@ import sys
 
 from datasets import fetch_basic_data
 from utils.tools import get_paths
+from utils.extra import complete_path
 
-
-def complete(text, state):
-    return (glob.glob(text + '*') + [None])[state]
 
 def write_path_conf(data_path, out_path):
     d = path.expanduser('~')
@@ -57,7 +55,7 @@ def query_yes_no(question, default='yes'):
 def main():
     readline.set_completer_delims(' \t\n;')
     readline.parse_and_bind('tab: complete')
-    readline.set_completer(complete)
+    readline.set_completer(complete_path)
     print ('Welcome to Cortex: a deep learning toolbox for '
             'neuroimaging')
     print ('Cortex requires that you enter some paths for '

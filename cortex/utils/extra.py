@@ -2,7 +2,7 @@
 
 '''
 
-import urllib2
+import glob
 import os
 from os import path
 from progressbar import (
@@ -11,15 +11,23 @@ from progressbar import (
     ProgressBar,
     Timer
 )
+import urllib2
 import zipfile
+
+
+def complete_path(text, state):
+    '''Completes a path for readline.
+
+    '''
+    return (glob.glob(text + '*') + [None])[state]
 
 
 def download_data(url, out_path):
     '''Downloads the data from a url.
 
-    Arguments:
-        url: str. url of the data.
-        out_path: str. Output directory or full file path.
+    Args:
+        url (str): url of the data.
+        out_path (str): Output directory or full file path.
 
     '''
 
@@ -53,24 +61,20 @@ def download_data(url, out_path):
     print
 
 def unzip(source, out_path):
-    '''Safe portable unzip function.
+    '''Unzip function.
 
     Arguments:
-        source: str. path to zip file
-        out_path: str. path to out_file
+        source (str): path to zip file
+        out_path (str): path to out_file
 
     '''
+    print 'Unzipping %s to %s' % (source, out_path)
+
+    if not zipfile.is_zipfile(source):
+        raise ValueError('%s is not a zipfile' % source)
+
+    if not path.isdir(out_path):
+        raise ValueError('%s is not a directory' % out_path)
 
     with zipfile.ZipFile(source) as zf:
-        for member in zf.infolist():
-            # Path traversal defense copied from
-            # http://hg.python.org/cpython/file/tip/Lib/http/server.py#l789
-            words = member.filename.split('/')
-            d = out_path
-            for word in words[:-1]:
-                drive, word = path.splitdrive(word)
-                head, word = path.split(word)
-                if word in (os.curdir, os.pardir, ''):
-                    continue
-                d = os.path.join(d, word)
-            zf.extract(member, d)
+        zf.extractall(out_path)

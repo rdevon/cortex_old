@@ -35,11 +35,15 @@ _, _columns = os.popen('stty size', 'r').read().split()
 _columns = int(_columns)
 
 def print_section(s):
-    '''For printing sections to scripts nicely.'''
+    '''For printing sections to scripts nicely.
+
+    '''
     print ('-' * 3) + s + ('-' * (_columns - 3 - len(s)))
 
 def get_paths():
-    '''Pulls all paths from `paths.conf` file.'''
+    '''Pulls all paths from `paths.conf` file.
+
+    '''
     d = os.path.expanduser('~')
     config_file = os.path.join(d, '.cortexrc')
     config = ConfigParser()

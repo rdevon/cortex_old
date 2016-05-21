@@ -1,5 +1,5 @@
 {
-  name: 'rbm_olin',
+  name: 'rbm_vbm',
   learning_args: {
     epochs: 1000,
     optimizer: 'sgd',
@@ -14,7 +14,7 @@
   dim_h: 60,
   test_every: 10,
   dataset_args: {
-    dataset: 'fmri_iid',
-    source: '$data/neuroimaging/AOD/data.yaml'
+    dataset: 'mri',
+    source: '$data/VBM_test/VBM.yaml'
   }
 }

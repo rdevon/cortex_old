@@ -25,6 +25,6 @@
   dataset_args: {
     dataset: 'mri',
     distribution: 'gaussian',
-    source: '$data/VBM/data.yaml',
+    source: '$data/neuroimaging/VBM/data.yaml',
   }
 }

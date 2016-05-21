@@ -12,7 +12,6 @@ import os
 from os import path
 import pprint
 import random
-from sklearn.decomposition import PCA
 import theano
 import yaml
 

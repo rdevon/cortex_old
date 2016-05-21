@@ -1,7 +1,7 @@
 '''
-Demo for training RBM with Olin fMRI dataset.
+Demo for training RBM with MRI or fMRI dataset.
 
-Try with `python rbm_mnist.py rbm_mnist.yaml`.
+Try with `python rbm_ni.py rbm_olin.yaml`.
 '''
 
 from collections import OrderedDict
@@ -11,14 +11,14 @@ import pprint
 import theano
 from theano import tensor as T
 
-from datasets import load_data_split
-from datasets.fmri import resolve as resolve_dataset
-from models.rbm import RBM, unpack
-from utils import floatX
-from utils.monitor import SimpleMonitor
-from utils.preprocessor import Preprocessor
-from utils.tools import get_trng, print_profile, print_section
-from utils.training import (
+from ...datasets import load_data_split
+from ...datasets.neuroimaging import resolve as resolve_dataset
+from ...models.rbm import RBM, unpack
+from ...utils import floatX
+from ...utils.monitor import SimpleMonitor
+from ...utils.preprocessor import Preprocessor
+from ...utils.tools import get_trng, print_profile, print_section
+from ...utils.training import (
     main_loop,
     make_argument_parser,
     set_experiment,
@@ -98,7 +98,7 @@ def train(
 
     # ========================================================================
     print_section('Loading model and forming graph')
-
+    
     def create_model():
         model = RBM(dim_in, dim_h, v_dist=train.distributions[train.name],
                     h_dist='binomial', mean_image=train.mean_image)

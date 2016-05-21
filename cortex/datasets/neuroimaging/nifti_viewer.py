@@ -50,8 +50,8 @@ cmap = matplotlib.colors.LinearSegmentedColormap('my_colormap', cdict, 256)
 
 def save_image(nifti, anat, cluster_dict, out_path, f, image_threshold=2,
                texcol=1, bgcol=0, iscale=2, text=None, **kwargs):
-    '''
-    Saves a single nifti image.
+    '''Saves a single nifti image.
+
     '''
     if isinstance(nifti, str):
         nifti = load_image(nifti)
@@ -100,8 +100,8 @@ def save_helper(args):
     save_image(*args)
 
 def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
-    '''
-    Saves multiple nifti images using multiprocessing
+    '''Saves multiple nifti images using multiprocessing.
+
     '''
     p = mp.Pool(30)
     idx = [int(f.split('/')[-1].split('.')[0]) for f in nifti_files]
@@ -118,8 +118,8 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
 def montage(nifti, anat, roi_dict, thr=2,
             fig=None, out_file=None,
             order=None, stats=dict()):
-    '''
-    Saves a montage of nifti images.
+    '''Saves a montage of nifti images.
+
     '''
     if isinstance(anat, str):
         anat = load_image(anat)

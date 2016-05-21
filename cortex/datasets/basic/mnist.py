@@ -29,9 +29,25 @@ from ...utils.vis_utils import tile_raster_images
 
 
 class MNIST(BasicDataset):
+    '''MNIST dataset iterator.
+
+    '''
     def __init__(self, source=None, restrict_digits=None, mode='train',
                  binarize=False, name='mnist',
                  out_path=None, **kwargs):
+        '''Init function for MNIST.
+
+        Args:
+            source (str): Path to source gzip file.
+            restrict_digits (Optional[list]): list of digits to restrict
+                iterator to.
+            mode (str): `train`, `test`, or `valid`.
+            out_path (Optional[str]): path for saving visualization output.
+            name (str): name of dataset.
+            **kwargs: extra keyword arguments passed to BasicDataset
+
+        '''
+
         source = resolve_path(source)
 
         if source is None:
@@ -58,12 +74,17 @@ class MNIST(BasicDataset):
             self.data[name] = rng_.binomial(
                 p=self.data[name], size=self.data[name].shape, n=1).astype('float32')
 
-        self.mean_image = self.data[name].mean(axis=0)
-
         if self.shuffle:
             self.randomize()
 
     def get_data(self, source, mode):
+        '''Fetch data from gzip pickle.
+
+        Args:
+            source (str): path to source.
+            mode (str): `train`, `test`, or `valid`.
+
+        '''
         with gzip.open(source, 'rb') as f:
             x = cPickle.load(f)
 
@@ -82,6 +103,15 @@ class MNIST(BasicDataset):
         return X, Y
 
     def save_images(self, x, imgfile, transpose=False, x_limit=None):
+        '''Saves visualization.
+
+        Args:
+            x (numpy.array): array to be visualized.
+            imgfile (str): output file.
+            transpose (bool): if True, then transpose images.
+            x_limit (bool): limit montage to x samples in the x direction.
+
+        '''
         if len(x.shape) == 2:
             x = x.reshape((x.shape[0], 1, x.shape[1]))
 
@@ -103,6 +133,16 @@ class MNIST(BasicDataset):
         image.save(imgfile)
 
     def show(self, image, tshape):
+        '''Convers to PIL.image.
+
+        Args:
+            image (numpy.array)
+            tshape (tuple).
+
+        Returns:
+            PIL.Image: image to visualize.
+
+        '''
         fshape = self.image_shape
         X = image.T
 
