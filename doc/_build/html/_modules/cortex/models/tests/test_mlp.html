@@ -1,0 +1,172 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.models.tests.test_mlp &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../../index.html" />
+    <link rel="up" title="cortex.models" href="../../models.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../../models.html" accesskey="U">cortex.models</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.models.tests.test_mlp</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Module for testing MLPs.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+
+<span class="kn">from</span> <span class="nn">cortex.models.mlp</span> <span class="kn">import</span> <span class="n">MLP</span>
+<span class="kn">from</span> <span class="nn">cortex.utils</span> <span class="kn">import</span> <span class="n">floatX</span>
+
+
+<span class="n">sigmoid</span> <span class="o">=</span> <span class="s1">&#39;lambda x: 1.0 / (1.0 + np.exp(-x))&#39;</span>
+<span class="n">tanh</span> <span class="o">=</span> <span class="s1">&#39;lambda x: np.tanh(x)&#39;</span>
+<span class="n">softplus</span> <span class="o">=</span> <span class="s1">&#39;lambda x: np.log(1.0 + np.exp(x))&#39;</span>
+
+
+<div class="viewcode-block" id="test_make_mlp"><a class="viewcode-back" href="../../../../source/cortex.models.tests.html#cortex.models.tests.test_mlp.test_make_mlp">[docs]</a><span class="k">def</span> <span class="nf">test_make_mlp</span><span class="p">(</span><span class="n">dim_in</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span> <span class="n">dim_h</span><span class="o">=</span><span class="mi">17</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="mi">19</span><span class="p">,</span> <span class="n">n_layers</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                  <span class="n">h_act</span><span class="o">=</span><span class="s1">&#39;T.nnet.softplus&#39;</span><span class="p">,</span> <span class="n">distribution</span><span class="o">=</span><span class="s1">&#39;binomial&#39;</span><span class="p">):</span>
+    <span class="n">mlp</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_h</span><span class="p">,</span> <span class="n">dim_out</span><span class="p">,</span> <span class="n">n_layers</span><span class="p">,</span> <span class="n">h_act</span><span class="o">=</span><span class="n">h_act</span><span class="p">,</span>
+              <span class="n">distribution</span><span class="o">=</span><span class="n">distribution</span><span class="p">)</span>
+    <span class="n">mlp</span><span class="o">.</span><span class="n">set_tparams</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">mlp</span></div>
+
+<div class="viewcode-block" id="test_feed_forward"><a class="viewcode-back" href="../../../../source/cortex.models.tests.html#cortex.models.tests.test_mlp.test_feed_forward">[docs]</a><span class="k">def</span> <span class="nf">test_feed_forward</span><span class="p">(</span><span class="n">mlp</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">X</span><span class="o">=</span><span class="n">T</span><span class="o">.</span><span class="n">matrix</span><span class="p">(</span><span class="s1">&#39;X&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">),</span> <span class="n">x</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">distribution</span><span class="o">=</span><span class="s1">&#39;binomial&#39;</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">mlp</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">mlp</span> <span class="o">=</span> <span class="n">test_make_mlp</span><span class="p">()</span>
+    <span class="n">Z</span> <span class="o">=</span> <span class="n">mlp</span><span class="o">.</span><span class="n">preact</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+    <span class="n">Y</span> <span class="o">=</span> <span class="n">mlp</span><span class="o">.</span><span class="n">feed</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="mi">23</span>
+    <span class="k">if</span> <span class="n">x</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">mlp</span><span class="o">.</span><span class="n">dim_in</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+
+    <span class="n">z</span> <span class="o">=</span> <span class="n">x</span>
+    <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">mlp</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+        <span class="n">W</span> <span class="o">=</span> <span class="n">mlp</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;W</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">l</span><span class="p">]</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">mlp</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;b</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">l</span><span class="p">]</span>
+
+        <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="n">W</span><span class="p">)</span> <span class="o">+</span> <span class="n">b</span>
+        <span class="k">if</span> <span class="n">l</span> <span class="o">!=</span> <span class="n">mlp</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">activ</span> <span class="o">=</span> <span class="n">mlp</span><span class="o">.</span><span class="n">h_act</span>
+            <span class="k">if</span> <span class="n">activ</span> <span class="o">==</span> <span class="s1">&#39;T.nnet.sigmoid&#39;</span><span class="p">:</span>
+                <span class="n">activ</span> <span class="o">=</span> <span class="n">sigmoid</span>
+            <span class="k">elif</span> <span class="n">activ</span> <span class="o">==</span> <span class="s1">&#39;T.tanh&#39;</span><span class="p">:</span>
+                <span class="n">activ</span> <span class="o">=</span> <span class="n">tanh</span>
+            <span class="k">elif</span> <span class="n">activ</span> <span class="o">==</span> <span class="s1">&#39;T.nnet.softplus&#39;</span><span class="p">:</span>
+                <span class="n">activ</span> <span class="o">=</span> <span class="n">softplus</span>
+            <span class="k">elif</span> <span class="n">activ</span> <span class="o">==</span> <span class="s1">&#39;lambda x: x&#39;</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">activ</span><span class="p">)</span>
+            <span class="n">z</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="n">activ</span><span class="p">)(</span><span class="n">z</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">z</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">distribution</span> <span class="o">==</span> <span class="s1">&#39;binomial&#39;</span><span class="p">:</span>
+        <span class="n">activ</span> <span class="o">=</span> <span class="n">sigmoid</span>
+    <span class="k">elif</span> <span class="n">distribution</span> <span class="o">==</span> <span class="s1">&#39;centered_binomial&#39;</span><span class="p">:</span>
+        <span class="n">activ</span> <span class="o">=</span> <span class="n">sigmoid</span>
+    <span class="k">elif</span> <span class="n">distribution</span> <span class="o">==</span> <span class="s1">&#39;gaussian&#39;</span><span class="p">:</span>
+        <span class="n">activ</span> <span class="o">=</span> <span class="s1">&#39;lambda x: x&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">distribution</span><span class="p">)</span>
+    <span class="k">print</span> <span class="n">distribution</span><span class="p">,</span> <span class="n">activ</span>
+    <span class="k">print</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="n">activ</span><span class="p">)(</span><span class="n">z</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">y</span><span class="p">))</span>
+
+    <span class="n">f</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">([</span><span class="n">X</span><span class="p">],</span> <span class="n">Y</span><span class="p">)</span>
+    <span class="n">y_test</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">y_test</span><span class="p">)),</span> <span class="n">y_test</span>
+
+    <span class="k">assert</span> <span class="n">y</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">y_test</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">y_test</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">y_test</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">),</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">y</span> <span class="o">-</span> <span class="n">y_test</span><span class="p">)))</span>
+
+    <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">preact</span><span class="o">=</span><span class="n">z</span><span class="p">,</span> <span class="n">Y</span><span class="o">=</span><span class="n">Y</span><span class="p">,</span> <span class="n">Preact</span><span class="o">=</span><span class="n">Z</span><span class="p">)</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../../models.html" >cortex.models</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

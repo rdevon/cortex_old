@@ -1,0 +1,217 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.utils.vis_utils &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex" href="../../cortex.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" accesskey="U">cortex</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.utils.vis_utils</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39; This file contains different utility functions that are not connected</span>
+<span class="sd">in anyway to the networks presented in the tutorials, but rather help in</span>
+<span class="sd">processing the outputs into a more understandable way.</span>
+<span class="sd">For example ``tile_raster_images`` helps in generating a easy to grasp</span>
+<span class="sd">image from a set of samples or weights.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+
+<span class="kn">import</span> <span class="nn">numpy</span>
+
+
+<div class="viewcode-block" id="scale_to_unit_interval"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.vis_utils.scale_to_unit_interval">[docs]</a><span class="k">def</span> <span class="nf">scale_to_unit_interval</span><span class="p">(</span><span class="n">ndar</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39; Scales all values in the ndarray ndar to be between 0 and 1 &#39;&#39;&#39;</span>
+    <span class="n">ndar</span> <span class="o">=</span> <span class="n">ndar</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">ndar</span> <span class="o">-=</span> <span class="n">ndar</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+    <span class="n">ndar</span> <span class="o">*=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">ndar</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ndar</span></div>
+
+
+<div class="viewcode-block" id="tile_raster_images"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.vis_utils.tile_raster_images">[docs]</a><span class="k">def</span> <span class="nf">tile_raster_images</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">img_shape</span><span class="p">,</span> <span class="n">tile_shape</span><span class="p">,</span> <span class="n">tile_spacing</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                       <span class="n">scale_rows_to_unit_interval</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                       <span class="n">output_pixel_vals</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Transform an array with one flattened image per row, into an array in</span>
+<span class="sd">    which images are reshaped and layed out like tiles on a floor.</span>
+<span class="sd">    This function is useful for visualizing datasets whose rows are images,</span>
+<span class="sd">    and also columns of matrices for transforming those rows</span>
+<span class="sd">    (such as the first layer of a neural net).</span>
+<span class="sd">    :type X: a 2-D ndarray or a tuple of 4 channels, elements of which can</span>
+<span class="sd">    be 2-D ndarrays or None;</span>
+<span class="sd">    :param X: a 2-D array in which every row is a flattened image.</span>
+<span class="sd">    :type img_shape: tuple; (height, width)</span>
+<span class="sd">    :param img_shape: the original shape of each image</span>
+<span class="sd">    :type tile_shape: tuple; (rows, cols)</span>
+<span class="sd">    :param tile_shape: the number of images to tile (rows, cols)</span>
+<span class="sd">    :param output_pixel_vals: if output should be pixel values (i.e. int8</span>
+<span class="sd">    values) or floats</span>
+<span class="sd">    :param scale_rows_to_unit_interval: if the values need to be scaled before</span>
+<span class="sd">    being plotted to [0,1] or not</span>
+<span class="sd">    :returns: array suitable for viewing as an image.</span>
+<span class="sd">    (See:`PIL.Image.fromarray`.)</span>
+<span class="sd">    :rtype: a 2-d array with same dtype as X.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">img_shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">tile_shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">tile_spacing</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+
+    <span class="c1"># The expression below can be re-written in a more C style as</span>
+    <span class="c1"># follows :</span>
+    <span class="c1">#</span>
+    <span class="c1"># out_shape    = [0,0]</span>
+    <span class="c1"># out_shape[0] = (img_shape[0]+tile_spacing[0])*tile_shape[0] -</span>
+    <span class="c1">#                tile_spacing[0]</span>
+    <span class="c1"># out_shape[1] = (img_shape[1]+tile_spacing[1])*tile_shape[1] -</span>
+    <span class="c1">#                tile_spacing[1]</span>
+    <span class="n">out_shape</span> <span class="o">=</span> <span class="p">[(</span><span class="n">ishp</span> <span class="o">+</span> <span class="n">tsp</span><span class="p">)</span> <span class="o">*</span> <span class="n">tshp</span> <span class="o">-</span> <span class="n">tsp</span> <span class="k">for</span> <span class="n">ishp</span><span class="p">,</span> <span class="n">tshp</span><span class="p">,</span> <span class="n">tsp</span>
+                        <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">img_shape</span><span class="p">,</span> <span class="n">tile_shape</span><span class="p">,</span> <span class="n">tile_spacing</span><span class="p">)]</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">X</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>
+        <span class="c1"># Create an output numpy ndarray to store the image</span>
+        <span class="k">if</span> <span class="n">output_pixel_vals</span><span class="p">:</span>
+            <span class="n">out_array</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">out_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">out_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">4</span><span class="p">),</span>
+                                    <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;uint8&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">out_array</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">out_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">out_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">4</span><span class="p">),</span>
+                                    <span class="n">dtype</span><span class="o">=</span><span class="n">X</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+        <span class="c1">#colors default to 0, alpha defaults to 1 (opaque)</span>
+        <span class="k">if</span> <span class="n">output_pixel_vals</span><span class="p">:</span>
+            <span class="n">channel_defaults</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">channel_defaults</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">1.</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">X</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="c1"># if channel is None, fill it with zeros of the correct</span>
+                <span class="c1"># dtype</span>
+                <span class="n">dt</span> <span class="o">=</span> <span class="n">out_array</span><span class="o">.</span><span class="n">dtype</span>
+                <span class="k">if</span> <span class="n">output_pixel_vals</span><span class="p">:</span>
+                    <span class="n">dt</span> <span class="o">=</span> <span class="s1">&#39;uint8&#39;</span>
+                <span class="n">out_array</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">out_shape</span><span class="p">,</span>
+                        <span class="n">dtype</span><span class="o">=</span><span class="n">dt</span><span class="p">)</span> <span class="o">+</span> <span class="n">channel_defaults</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># use a recurrent call to compute the channel and store it</span>
+                <span class="c1"># in the output</span>
+                <span class="n">out_array</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">tile_raster_images</span><span class="p">(</span>
+                    <span class="n">X</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">img_shape</span><span class="p">,</span> <span class="n">tile_shape</span><span class="p">,</span> <span class="n">tile_spacing</span><span class="p">,</span>
+                    <span class="n">scale_rows_to_unit_interval</span><span class="p">,</span> <span class="n">output_pixel_vals</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out_array</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># if we are dealing with only one channel</span>
+        <span class="n">H</span><span class="p">,</span> <span class="n">W</span> <span class="o">=</span> <span class="n">img_shape</span>
+        <span class="n">Hs</span><span class="p">,</span> <span class="n">Ws</span> <span class="o">=</span> <span class="n">tile_spacing</span>
+
+        <span class="c1"># generate a matrix to store the output</span>
+        <span class="n">dt</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="k">if</span> <span class="n">output_pixel_vals</span><span class="p">:</span>
+            <span class="n">dt</span> <span class="o">=</span> <span class="s1">&#39;uint8&#39;</span>
+        <span class="n">out_array</span> <span class="o">=</span> <span class="n">numpy</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">out_shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dt</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">tile_row</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">tile_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="k">for</span> <span class="n">tile_col</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">tile_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+                <span class="k">if</span> <span class="n">tile_row</span> <span class="o">*</span> <span class="n">tile_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">tile_col</span> <span class="o">&lt;</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                    <span class="n">this_x</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">tile_row</span> <span class="o">*</span> <span class="n">tile_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">tile_col</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">scale_rows_to_unit_interval</span><span class="p">:</span>
+                        <span class="c1"># if we should scale values to be between 0 and 1</span>
+                        <span class="c1"># do this by calling the `scale_to_unit_interval`</span>
+                        <span class="c1"># function</span>
+                        <span class="n">this_img</span> <span class="o">=</span> <span class="n">scale_to_unit_interval</span><span class="p">(</span>
+                            <span class="n">this_x</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">img_shape</span><span class="p">))</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">this_img</span> <span class="o">=</span> <span class="n">this_x</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">img_shape</span><span class="p">)</span>
+                    <span class="c1"># add the slice to the corresponding position in the</span>
+                    <span class="c1"># output array</span>
+                    <span class="n">c</span> <span class="o">=</span> <span class="mi">1</span>
+                    <span class="k">if</span> <span class="n">output_pixel_vals</span><span class="p">:</span>
+                        <span class="n">c</span> <span class="o">=</span> <span class="mi">255</span>
+                    <span class="n">out_array</span><span class="p">[</span>
+                        <span class="n">tile_row</span> <span class="o">*</span> <span class="p">(</span><span class="n">H</span> <span class="o">+</span> <span class="n">Hs</span><span class="p">):</span> <span class="n">tile_row</span> <span class="o">*</span> <span class="p">(</span><span class="n">H</span> <span class="o">+</span> <span class="n">Hs</span><span class="p">)</span> <span class="o">+</span> <span class="n">H</span><span class="p">,</span>
+                        <span class="n">tile_col</span> <span class="o">*</span> <span class="p">(</span><span class="n">W</span> <span class="o">+</span> <span class="n">Ws</span><span class="p">):</span> <span class="n">tile_col</span> <span class="o">*</span> <span class="p">(</span><span class="n">W</span> <span class="o">+</span> <span class="n">Ws</span><span class="p">)</span> <span class="o">+</span> <span class="n">W</span>
+                        <span class="p">]</span> <span class="o">=</span> <span class="n">this_img</span> <span class="o">*</span> <span class="n">c</span>
+        <span class="k">return</span> <span class="n">out_array</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

@@ -1,14 +1,12 @@
-'''
-SNP dataset class.
+'''SNP dataset class.
+
 '''
 
 from collections import OrderedDict
 import numpy as np
 from scipy.io import loadmat
 from .. import BasicDataset, Dataset
-from ...utils.tools import (
-    warn_kwargs
-)
+from ...utils.tools import warn_kwargs
 
 
 class SNP(BasicDataset):
@@ -16,15 +14,17 @@ class SNP(BasicDataset):
 
     Currently only handled continuous preprocessed data.
     Discrete data TODO
+
     '''
     def __init__(self, source=None, name='snp', mode='train', convert_one_hot=True, idx=None, **kwargs):
         '''Initialize the SNP dataset.
 
-        Arguments:
-            source: str. Path to source file.
-            name: str. ID of dataset.
-            idx: (Optional) list. List of indices for train/test/validation
+        Args:
+            source: (str): Path to source file.
+            name: (str): ID of dataset.
+            idx: (Optional[list]): List of indices for train/test/validation
                 split.
+
         '''
         if source is None:
             raise ValueError('No source provided')
@@ -53,10 +53,11 @@ class SNP(BasicDataset):
         Labels is a vector with diagnosis info
         Patients are coded with 1 and health control coded with 2
 
-        Arguments:
-           source: dict. file names of genetic data and labels
-                  {'snp' key for genetic data
-                    'labels' key for diagnosis }
+        Args:
+            source (dict): file names of genetic data and labels
+                {'snp' key for genetic data
+                'labels' key for diagnosis }
+
         '''
         from utils.tools import get_paths
         data_path = get_paths()['$snp_data']
@@ -67,9 +68,3 @@ class SNP(BasicDataset):
         Y = np.float32(Y[Y.keys()[0]])
         Y.resize(max(Y.shape,))
         return X, Y
-
-    def reset(self):
-        '''Reset the iterator'''
-        self.pos = 0
-        if self.shuffle:
-            self.randomize()

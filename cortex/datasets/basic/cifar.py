@@ -32,6 +32,9 @@ def get_iter(inf=False, batch_size=128):
     return mnist_iterator(inf=inf, batch_size=batch_size)
 
 class CIFAR(object):
+    '''CIFAR dataset.
+
+    '''
     def __init__(self, batch_size=128, source=None,
                  restrict_digits=None, mode='train', shuffle=True, inf=False,
                  stop=None, out_path=None):

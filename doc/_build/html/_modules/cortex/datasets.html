@@ -1,0 +1,523 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.datasets &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../index.html" />
+    <link rel="up" title="cortex" href="../cortex.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../cortex.html" accesskey="U">cortex</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.datasets</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Generic dataset class</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
+<span class="kn">import</span> <span class="nn">random</span>
+
+<span class="kn">from</span> <span class="nn">..utils.tools</span> <span class="kn">import</span> <span class="n">resolve_path</span>
+<span class="kn">from</span> <span class="nn">..utils.extra</span> <span class="kn">import</span> <span class="n">download_data</span><span class="p">,</span> <span class="n">unzip</span>
+
+
+<div class="viewcode-block" id="fetch_basic_data"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.fetch_basic_data">[docs]</a><span class="k">def</span> <span class="nf">fetch_basic_data</span><span class="p">():</span>
+    <span class="sd">&#39;&#39;&#39;Fetch the basic dataset for demos.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">url</span> <span class="o">=</span> <span class="s1">&#39;http://mialab.mrn.org/data/cortex/basic.zip&#39;</span>
+    <span class="n">out_dir</span> <span class="o">=</span> <span class="n">resolve_path</span><span class="p">(</span><span class="s1">&#39;$data&#39;</span><span class="p">)</span>
+    <span class="n">download_data</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">out_dir</span><span class="p">)</span>
+    <span class="n">unzip</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="s1">&#39;basic.zip&#39;</span><span class="p">),</span> <span class="n">out_dir</span><span class="p">)</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="s1">&#39;basic.zip&#39;</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="resolve"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.resolve">[docs]</a><span class="k">def</span> <span class="nf">resolve</span><span class="p">(</span><span class="n">c</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Resolves the dataset class from string.</span>
+
+<span class="sd">    This method only includes basic datasets, such as MNIST. For neuroimaging</span>
+<span class="sd">    datasets, see `cortex.datasets.neuroimaging`</span>
+
+
+<span class="sd">    Args:</span>
+<span class="sd">        c (str): string to resolve.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dataset: dataset object resolved.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="kn">from</span> <span class="nn">.basic.mnist</span> <span class="kn">import</span> <span class="n">MNIST</span>
+    <span class="kn">from</span> <span class="nn">.basic.caltech</span> <span class="kn">import</span> <span class="n">CALTECH</span>
+    <span class="kn">from</span> <span class="nn">.basic.uci</span> <span class="kn">import</span> <span class="n">UCI</span>
+    <span class="kn">from</span> <span class="nn">.basic.cifar</span> <span class="kn">import</span> <span class="n">CIFAR</span>
+
+    <span class="n">r_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;mnist&#39;</span><span class="p">:</span> <span class="n">MNIST</span><span class="p">,</span>
+        <span class="s1">&#39;cifar&#39;</span><span class="p">:</span> <span class="n">CIFAR</span><span class="p">,</span>
+        <span class="s1">&#39;caltech&#39;</span><span class="p">:</span> <span class="n">CALTECH</span><span class="p">,</span>
+        <span class="s1">&#39;uci&#39;</span><span class="p">:</span> <span class="n">UCI</span>
+    <span class="p">}</span>
+
+    <span class="n">C</span> <span class="o">=</span> <span class="n">r_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">C</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Dataset </span><span class="si">%s</span><span class="s1"> not supported&#39;</span> <span class="o">%</span><span class="n">c</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">C</span></div>
+
+<div class="viewcode-block" id="make_one_hot"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.make_one_hot">[docs]</a><span class="k">def</span> <span class="nf">make_one_hot</span><span class="p">(</span><span class="n">Y</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Makes integer label data into one-hot.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        Y (numpy.array): N x 1 array of integers.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        numpy.array: N x n_labels array of ones and zeros.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">class_list</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">Y</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">n_classes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">class_list</span><span class="p">)</span>
+
+    <span class="n">O</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">n_classes</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">Y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="n">class_list</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">Y</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+        <span class="n">O</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.</span><span class="p">;</span>
+    <span class="k">return</span> <span class="n">O</span></div>
+
+<div class="viewcode-block" id="load_data"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.load_data">[docs]</a><span class="k">def</span> <span class="nf">load_data</span><span class="p">(</span><span class="n">dataset</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">train_batch_size</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">valid_batch_size</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">test_batch_size</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">resolve_dataset</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="o">**</span><span class="n">dataset_args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Load dataset with a predefined split.</span>
+
+<span class="sd">    For these datasets, train/valid/test split has already been made.</span>
+<span class="sd">    For the batch sizes, if any are None, the corresponding dataset</span>
+<span class="sd">    will also be None.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        dataset (str): name of the dataset</span>
+<span class="sd">        train_batch_size (Optional[int])</span>
+<span class="sd">        valid_batch_size (Optional[int])</span>
+<span class="sd">        test_batch_size (Optional[int])</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dataset: train dataset</span>
+<span class="sd">        Dataset: valid dataset</span>
+<span class="sd">        Dataset: test dataset</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">if</span> <span class="n">resolve_dataset</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">resolve_dataset</span> <span class="o">=</span> <span class="n">resolve</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">C</span> <span class="o">=</span> <span class="n">resolve_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">C</span> <span class="o">=</span> <span class="n">dataset</span>
+
+    <span class="k">if</span> <span class="n">train_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">train</span> <span class="o">=</span> <span class="n">C</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">train_batch_size</span><span class="p">,</span>
+                  <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;train&#39;</span><span class="p">,</span>
+                  <span class="n">inf</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                  <span class="o">**</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">train</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="k">if</span> <span class="n">valid_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="n">C</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">valid_batch_size</span><span class="p">,</span>
+                  <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;valid&#39;</span><span class="p">,</span>
+                  <span class="n">inf</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                  <span class="o">**</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="k">if</span> <span class="n">test_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">test</span> <span class="o">=</span> <span class="n">C</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="n">test_batch_size</span><span class="p">,</span>
+                 <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;test&#39;</span><span class="p">,</span>
+                 <span class="n">inf</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">test</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="k">return</span> <span class="n">train</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">test</span></div>
+
+
+<div class="viewcode-block" id="load_data_split"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.load_data_split">[docs]</a><span class="k">def</span> <span class="nf">load_data_split</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">idx</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dataset</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">dataset_args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Load dataset and split.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        idx: (Optional[list]): Indices for train/valid/test datasets.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dataset: train dataset</span>
+<span class="sd">        Dataset: valid dataset</span>
+<span class="sd">        Dataset: test dataset</span>
+<span class="sd">        list: Indices for if split is created.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">train</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">test</span><span class="p">,</span> <span class="n">idx</span> <span class="o">=</span> <span class="n">make_datasets</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="o">**</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">train</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">test</span><span class="p">,</span> <span class="n">idx</span></div>
+
+<div class="viewcode-block" id="make_datasets"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.make_datasets">[docs]</a><span class="k">def</span> <span class="nf">make_datasets</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">split</span><span class="o">=</span><span class="p">[</span><span class="mf">0.7</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span> <span class="n">idx</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                  <span class="n">train_batch_size</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                  <span class="n">valid_batch_size</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                  <span class="n">test_batch_size</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                  <span class="o">**</span><span class="n">dataset_args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Constructs train/valid/test datasets with idx or split.</span>
+
+<span class="sd">    If idx is None, use split ratios to create indices.</span>
+
+<span class="sd">    Arguments:</span>
+<span class="sd">        C (Dataset).</span>
+<span class="sd">        split (Optional[list]: Split ratios over total.</span>
+<span class="sd">        idx (Optional[list]: Indices for train/valid/test datasets.</span>
+<span class="sd">        train_batch_size (Optional[int])</span>
+<span class="sd">        valid_batch_size (Optional[int])</span>
+<span class="sd">        test_batch_size (Optional[int])</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dataset: train dataset</span>
+<span class="sd">        Dataset: valid dataset</span>
+<span class="sd">        Dataset: test dataset</span>
+<span class="sd">        list: Indices for if split is created.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">idx</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">split</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span>
+        <span class="k">if</span> <span class="nb">round</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">split</span><span class="p">),</span> <span class="mi">5</span><span class="p">)</span> <span class="o">!=</span> <span class="mf">1.</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">split</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">split</span><span class="p">)</span>
+        <span class="n">dummy</span> <span class="o">=</span> <span class="n">C</span><span class="p">(</span><span class="n">batch_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">dataset_args</span><span class="p">)</span>
+        <span class="n">N</span> <span class="o">=</span> <span class="n">dummy</span><span class="o">.</span><span class="n">n</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">)</span>
+        <span class="n">random</span><span class="o">.</span><span class="n">shuffle</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+        <span class="n">split_idx</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">accum</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">split</span><span class="p">:</span>
+            <span class="n">s_i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span> <span class="o">*</span> <span class="n">N</span> <span class="o">+</span> <span class="n">accum</span><span class="p">)</span>
+            <span class="n">split_idx</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">s_i</span><span class="p">)</span>
+            <span class="n">accum</span> <span class="o">+=</span> <span class="n">s_i</span>
+
+        <span class="n">train_idx</span> <span class="o">=</span> <span class="n">idx</span><span class="p">[:</span><span class="n">split_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="n">valid_idx</span> <span class="o">=</span> <span class="n">idx</span><span class="p">[</span><span class="n">split_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span><span class="n">split_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+        <span class="n">test_idx</span> <span class="o">=</span> <span class="n">idx</span><span class="p">[</span><span class="n">split_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]:]</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="p">[</span><span class="n">train_idx</span><span class="p">,</span> <span class="n">valid_idx</span><span class="p">,</span> <span class="n">test_idx</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">train_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">train_idx</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">train</span> <span class="o">=</span> <span class="n">C</span><span class="p">(</span><span class="n">idx</span><span class="o">=</span><span class="n">idx</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">train_batch_size</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;train&#39;</span><span class="p">,</span>
+                  <span class="o">**</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">train</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="k">if</span> <span class="n">valid_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">valid_idx</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="n">C</span><span class="p">(</span><span class="n">idx</span><span class="o">=</span><span class="n">idx</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">valid_batch_size</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;valid&#39;</span><span class="p">,</span>
+                  <span class="o">**</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="k">if</span> <span class="n">test_batch_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">test_idx</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">test</span> <span class="o">=</span> <span class="n">C</span><span class="p">(</span><span class="n">idx</span><span class="o">=</span><span class="n">idx</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">test_batch_size</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;test&#39;</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">test</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="k">return</span> <span class="n">train</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">test</span><span class="p">,</span> <span class="n">idx</span></div>
+
+
+<div class="viewcode-block" id="Dataset"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.Dataset">[docs]</a><span class="k">class</span> <span class="nc">Dataset</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Base dataset iterator class.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        batch_size (int): batch size for the iterator.</span>
+<span class="sd">        shuffle (bool): shuffle the dataset after each epoch.</span>
+<span class="sd">        inf (bool): reset the dataset after iterating through who set.</span>
+<span class="sd">        name (str): name of the dataset.</span>
+<span class="sd">        pos (int): current position of the iterator.</span>
+<span class="sd">        stop (int): stop the dataset at this index when loading.</span>
+<span class="sd">        mode (str): usually train, test, valid.</span>
+<span class="sd">        balance (bool): replicate samples to balance the dataset.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">shuffle</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">inf</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;dataset&#39;</span><span class="p">,</span>
+                 <span class="n">mode</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">balance</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Init function for Dataset</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            batch_size (int): batch size for the iterator.</span>
+<span class="sd">            shuffle (bool): shuffle the dataset after each epoch.</span>
+<span class="sd">            inf (bool): reset the dataset after iterating through who set.</span>
+<span class="sd">            name (str): name of the dataset.</span>
+<span class="sd">            pos (int): current position of the iterator.</span>
+<span class="sd">            stop (int): stop the dataset at this index when loading.</span>
+<span class="sd">            mode (str): usually train, test, valid.</span>
+<span class="sd">            balance (bool): replicate samples to balance the dataset.</span>
+<span class="sd">            **kwargs: keyword arguments not used</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict: leftover keyword arguments.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Batch size argument must be given&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span> <span class="o">=</span> <span class="n">shuffle</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inf</span> <span class="o">=</span> <span class="n">inf</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stop</span> <span class="o">=</span> <span class="n">stop</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">balance</span> <span class="o">=</span> <span class="n">balance</span>
+
+        <span class="k">return</span> <span class="n">kwargs</span>
+
+<div class="viewcode-block" id="Dataset.randomize"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.Dataset.randomize">[docs]</a>    <span class="k">def</span> <span class="nf">randomize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Randomize the dataset.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span></div>
+
+<div class="viewcode-block" id="Dataset.reset"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.Dataset.reset">[docs]</a>    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Reset the dataset post-epoch.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shuffle</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">randomize</span><span class="p">()</span></div>
+
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Iterator.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+<div class="viewcode-block" id="Dataset.save_images"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.Dataset.save_images">[docs]</a>    <span class="k">def</span> <span class="nf">save_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Save images.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">pass</span></div></div>
+
+<div class="viewcode-block" id="BasicDataset"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.BasicDataset">[docs]</a><span class="k">class</span> <span class="nc">BasicDataset</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Dataset with numpy arrays as inputs. No visualization available.</span>
+
+<span class="sd">    Arrays must be a dictionary of name/numpy array key/value pairs.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        data (dict): dictionary of numpy.array.</span>
+<span class="sd">        n (int): number of data samples.</span>
+<span class="sd">        dims (dict): dictionary of data dimensions.</span>
+<span class="sd">        distributions (dict): dictionary of strings. See `models.distributions`</span>
+<span class="sd">            for details.</span>
+<span class="sd">        X (numpy.array): MRI data.</span>
+<span class="sd">        Y (Optional[numpy.array]): If not None, lables.</span>
+<span class="sd">        mean_image (numpy.array): mean image of primary data.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">distributions</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="s1">&#39;label&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Init function for BasicDataset.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            data (dict): Dictionary of np.array. Keys are data name, value is</span>
+<span class="sd">                the actual data.</span>
+<span class="sd">            distributions (dict): See `models.distributions` for more details.</span>
+<span class="sd">            labels (str): key for the labels.</span>
+<span class="sd">            name: (Optional[str]): Name of the dataset. Should be one of the</span>
+<span class="sd">                keys in data.</span>
+<span class="sd">            **kwargs: extra arguments to pass to Dataset constructor.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;array argument must be a dict.&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="nb">super</span><span class="p">(</span><span class="n">BasicDataset</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dims</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">distributions</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">distributions</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">distributions</span> <span class="o">=</span> <span class="n">distributions</span>
+
+        <span class="k">if</span> <span class="n">labels</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">labels</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="n">labels</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">make_one_hot</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">v</span><span class="p">[:,</span> <span class="bp">None</span><span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">stop</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="n">v</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;All input arrays must have the same&#39;</span>
+                                    <span class="s1">&#39;number of samples (shape[0]), &#39;</span>
+                                    <span class="s1">&#39;(</span><span class="si">%d</span><span class="s1"> vs </span><span class="si">%d</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">distributions</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">distributions</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;binomial&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_nums</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">labels</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_props</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_nums</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">labels</span> <span class="o">=</span> <span class="n">labels</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">balance</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">balance_labels</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">X</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mean_image</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">labels</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">labels</span><span class="p">]</span>
+
+<div class="viewcode-block" id="BasicDataset.balance_labels"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.BasicDataset.balance_labels">[docs]</a>    <span class="k">def</span> <span class="nf">balance_labels</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Balanced the dataset.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">label_nums</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">max_num</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">label_nums</span><span class="p">))</span>
+
+        <span class="n">dup_idx</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="p">):</span>
+            <span class="n">l_sum</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">l_sum</span> <span class="o">==</span> <span class="n">max_num</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">label</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+            <span class="n">dup_idx</span> <span class="o">=</span> <span class="p">[</span><span class="n">idx</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_num</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">idx</span><span class="p">))]</span>
+            <span class="k">print</span> <span class="s1">&#39;Balancing label </span><span class="si">%d</span><span class="s1"> by duplicating </span><span class="si">%d</span><span class="s1"> samples&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">dup_idx</span><span class="p">))</span>
+
+        <span class="n">dup_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">dup_idx</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dup_idx</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="n">dup_idx</span><span class="p">]])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dup_idx</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_nums</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_props</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_nums</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="BasicDataset.randomize"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.BasicDataset.randomize">[docs]</a>    <span class="k">def</span> <span class="nf">randomize</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Randomizes the dataset</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">rnd_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">permutation</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="n">rnd_idx</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="BasicDataset.next"><a class="viewcode-back" href="../../source/cortex.datasets.html#cortex.datasets.BasicDataset.next">[docs]</a>    <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Draws the next batch of data samples.</span>
+
+<span class="sd">        Arguments:</span>
+<span class="sd">            batch_size (int).</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict: Dictionary of data.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+
+        <span class="k">if</span> <span class="n">batch_size</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">batch_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pos</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">inf</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">StopIteration</span>
+
+        <span class="n">rval</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="n">rval</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">pos</span><span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">pos</span><span class="o">+</span><span class="n">batch_size</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">pos</span> <span class="o">+=</span> <span class="n">batch_size</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pos</span> <span class="o">+</span> <span class="n">batch_size</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pos</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+        <span class="k">return</span> <span class="n">rval</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../cortex.html" >cortex</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

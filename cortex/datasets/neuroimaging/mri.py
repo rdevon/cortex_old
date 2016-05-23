@@ -94,22 +94,18 @@ class MRI(BasicDataset):
         '''Fetch the MRI dataset.
 
         MRI dataset source is a yaml file.
+        An example format of said yaml is::
 
-        Example:
-            {
-                name: 'aod',
-                data: [
-                  '/Users/devon/Data/AOD/AOD_0.npy',
-                  '/Users/devon/Data/AOD/AOD_1.npy'
-                ],
-                mask: '/Users/devon/Data/AOD/AOD_mask.npy',
-                nifti: '//Users/devon/Data/VBM/H000A.nii',
-                tmp_path: '/Users/devon/Data/mri_tmp/',
-                anat_file: '/Users/devon/Data/ch2better_whitebg_aligned2EPI_V4.nii',
-                sites: '/Users/devon/Data/AOD/AOD_sites.npy',
-                targets: '/Users/devon/Data/AOD/targets.npy',
-                novels: '/Users/devon/Data/AOD/novels.npy'
-            }
+            name: 'aod',
+            data: [
+                '/Users/devon/Data/AOD/AOD_0.npy',
+                '/Users/devon/Data/AOD/AOD_1.npy'
+            ],
+            mask: '/Users/devon/Data/AOD/AOD_mask.npy',
+            nifti: '//Users/devon/Data/VBM/H000A.nii',
+            tmp_path: '/Users/devon/Data/mri_tmp/',
+            anat_file: '/Users/devon/Data/ch2better_whitebg_aligned2EPI_V4.nii',
+            sites: '/Users/devon/Data/AOD/AOD_sites.npy'
 
         '''
         print('Loading file locations from %s' % source)

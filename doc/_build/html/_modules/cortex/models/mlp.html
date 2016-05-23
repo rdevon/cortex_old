@@ -1,0 +1,458 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.models.mlp &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex.models" href="../models.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../models.html" accesskey="U">cortex.models</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.models.mlp</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;Module for MLP model.</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+
+<span class="kn">from</span> <span class="nn">.distributions</span> <span class="kn">import</span> <span class="n">Distribution</span><span class="p">,</span> <span class="n">resolve</span> <span class="k">as</span> <span class="n">resolve_distribution</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">Layer</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">floatX</span>
+<span class="kn">from</span> <span class="nn">..utils.tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">concatenate</span><span class="p">,</span>
+    <span class="n">init_rngs</span><span class="p">,</span>
+    <span class="n">init_weights</span><span class="p">,</span>
+    <span class="n">norm_weight</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="resolve"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.resolve">[docs]</a><span class="k">def</span> <span class="nf">resolve</span><span class="p">(</span><span class="n">c</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Resolves the MLP subclass from str.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        Currently, only one MLP supported. More in the future.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">c</span> <span class="o">==</span> <span class="s1">&#39;mlp&#39;</span> <span class="ow">or</span> <span class="n">c</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">MLP</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">c</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MLP"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP">[docs]</a><span class="k">class</span> <span class="nc">MLP</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Multilayer perceptron model.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        dim_in (int): input dimension.</span>
+<span class="sd">        dim_out (int): output dimension.</span>
+<span class="sd">        distribution (Optional[Distribution]): distribution of output. Used for</span>
+<span class="sd">            sampling, density calculations, etc.</span>
+<span class="sd">        dim_h (Optional[int]): dimension of hidden layer.</span>
+<span class="sd">        dim_hs (Optional[list]): for multiple hidden layers.</span>
+<span class="sd">        n_layers (int): number of output and hidden layers.</span>
+<span class="sd">        h_act (str): hidden activation string.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">must_sample</span> <span class="o">=</span> <span class="bp">False</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_out</span><span class="p">,</span> <span class="n">dim_h</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">n_layers</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_hs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                 <span class="n">h_act</span><span class="o">=</span><span class="s1">&#39;T.nnet.sigmoid&#39;</span><span class="p">,</span> <span class="n">distribution</span><span class="o">=</span><span class="s1">&#39;binomial&#39;</span><span class="p">,</span>
+                 <span class="n">distribution_args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;MLP&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Init function for MLP.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dim_in (int): input dimension.</span>
+<span class="sd">            dim_out (int): output dimension.</span>
+<span class="sd">            dim_h (Optional[int]): dimension of hidden layer.</span>
+<span class="sd">            n_layers (int): number of output and hidden layers.</span>
+<span class="sd">            dim_hs (Optional[list]): for multiple hidden layers.</span>
+<span class="sd">            h_act (str): hidden activation string.</span>
+<span class="sd">            distribution (Optional[Distribution]): distribution of output. Used for</span>
+<span class="sd">                sampling, density calculations, etc.</span>
+<span class="sd">            distribution_args (Optional[dict]): optional arguments for</span>
+<span class="sd">                distribution.</span>
+<span class="sd">            name (str): name of model.</span>
+<span class="sd">            **kwargs: optional keyword arguments.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+
+        <span class="k">if</span> <span class="n">distribution_args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">distribution_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim_in</span> <span class="o">=</span> <span class="n">dim_in</span>
+
+        <span class="k">if</span> <span class="n">out_act</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;out_act option going away. Use `distribution`.&#39;</span><span class="p">,</span> <span class="ne">FutureWarning</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">out_act</span> <span class="o">==</span> <span class="s1">&#39;T.nnet.sigmoid&#39;</span><span class="p">:</span>
+                <span class="n">distribution</span> <span class="o">=</span> <span class="s1">&#39;binomial&#39;</span>
+            <span class="k">elif</span> <span class="n">out_act</span> <span class="o">==</span> <span class="s1">&#39;T.tanh&#39;</span><span class="p">:</span>
+                <span class="n">distribution</span> <span class="o">=</span> <span class="s1">&#39;centered_binomial&#39;</span>
+            <span class="k">elif</span> <span class="n">out_act</span> <span class="o">==</span> <span class="s1">&#39;T.nnet.softmax&#39;</span><span class="p">:</span>
+                <span class="n">distribution</span> <span class="o">=</span> <span class="s1">&#39;multimnomial&#39;</span>
+            <span class="k">elif</span> <span class="n">out_act</span> <span class="o">==</span> <span class="s1">&#39;lambda x: x&#39;</span><span class="p">:</span>
+                <span class="n">distribution</span> <span class="o">=</span> <span class="s1">&#39;gaussian&#39;</span>
+            <span class="k">elif</span> <span class="n">out_act</span> <span class="o">==</span> <span class="s1">&#39;T.tanh&#39;</span><span class="p">:</span>
+                <span class="n">distribution</span> <span class="o">=</span> <span class="s1">&#39;centered binomial&#39;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">out_act</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">distribution</span><span class="p">,</span> <span class="n">Distribution</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="o">=</span> <span class="n">distribution</span>
+        <span class="k">elif</span> <span class="n">distribution</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="o">=</span> <span class="n">resolve_distribution</span><span class="p">(</span>
+                <span class="n">distribution</span><span class="p">,</span> <span class="n">conditional</span><span class="o">=</span><span class="bp">True</span><span class="p">)(</span>
+                <span class="n">dim_out</span><span class="p">,</span> <span class="o">**</span><span class="n">distribution_args</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dim_out</span> <span class="o">=</span> <span class="n">dim_out</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">scale</span>
+
+        <span class="k">if</span> <span class="n">dim_h</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">dim_hs</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">dim_hs</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">dim_hs</span> <span class="o">=</span> <span class="p">[</span><span class="n">dim_h</span> <span class="k">for</span> <span class="n">dim_h</span> <span class="ow">in</span> <span class="n">dim_hs</span><span class="p">]</span>
+            <span class="k">assert</span> <span class="n">n_layers</span> <span class="ow">is</span> <span class="bp">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">dim_hs</span> <span class="ow">is</span> <span class="bp">None</span>
+            <span class="n">dim_hs</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">n_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+                <span class="n">dim_hs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dim_h</span><span class="p">)</span>
+        <span class="n">dim_hs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim_out</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span> <span class="o">=</span> <span class="n">dim_hs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dim_hs</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">h_act</span> <span class="o">=</span> <span class="n">h_act</span>
+
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">init_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">init_rngs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">MLP</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="MLP.factory"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.factory">[docs]</a>    <span class="k">def</span> <span class="nf">factory</span><span class="p">(</span><span class="n">dim_in</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;MLP factory.</span>
+
+<span class="sd">        Convenience function for building MLPs.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dim_in (int): input dimension.</span>
+<span class="sd">            dim_out (int): output dimension.</span>
+<span class="sd">            **kwargs: construction keyword arguments.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">MLP</span><span class="p">(</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_out</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MLP.l2_decay"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.l2_decay">[docs]</a>    <span class="k">def</span> <span class="nf">l2_decay</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gamma</span><span class="p">,</span> <span class="n">layers</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;L2 decay cost.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            gamma (float): l2 decay rate.</span>
+<span class="sd">            layers (Optional[list]): layer numbers to do l2 decay on.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: L2 cost.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">layers</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">layers</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">)</span>
+
+        <span class="n">cost</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">layers</span><span class="p">:</span>
+            <span class="n">W</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__dict__</span><span class="p">[</span><span class="s1">&#39;W</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">l</span><span class="p">]</span>
+            <span class="n">cost</span> <span class="o">+=</span> <span class="n">gamma</span> <span class="o">*</span> <span class="p">(</span><span class="n">W</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">cost</span></div>
+
+<div class="viewcode-block" id="MLP.sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.sample">[docs]</a>    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Sample from the conditional distribution.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            p (T.tensor): probability.</span>
+<span class="sd">            n_samples (int): number of samples.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: (samples).</span>
+<span class="sd">            theano.OrderedUpdates: updates.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MLP.neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Negative log probability.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): sample.</span>
+<span class="sd">            p (T.tensor): probability.</span>
+<span class="sd">            sum_probs (bool): whether to sum the last axis in neg log prob.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: negative log probabilities.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="n">sum_probs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MLP.entropy"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.entropy">[docs]</a>    <span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Entropy function.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            p (T.tensor): probability.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: entropies.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">entropy</span><span class="p">(</span><span class="n">p</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MLP.get_center"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.get_center">[docs]</a>    <span class="k">def</span> <span class="nf">get_center</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            p (T.tensor): distribution tensor.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: center of distribution.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">get_center</span><span class="p">(</span><span class="n">p</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MLP.split_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.split_prob">[docs]</a>    <span class="k">def</span> <span class="nf">split_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            p (T.tensor): distribution tensor.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tuple: split distribution.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">split_prob</span><span class="p">(</span><span class="n">p</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="MLP.set_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.set_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">l</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">dim_in</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_in</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">dim_in</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="n">l</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">dim_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="n">l</span><span class="p">]</span>
+
+            <span class="n">W</span> <span class="o">=</span> <span class="n">norm_weight</span><span class="p">(</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_out</span><span class="p">,</span>
+                            <span class="n">scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">weight_scale</span><span class="p">,</span> <span class="n">ortho</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">dim_out</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;W</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="n">W</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;b</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="n">b</span></div>
+
+<div class="viewcode-block" id="MLP.get_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.get_params">[docs]</a>    <span class="k">def</span> <span class="nf">get_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+            <span class="n">W</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__dict__</span><span class="p">[</span><span class="s1">&#39;W</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">l</span><span class="p">]</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__dict__</span><span class="p">[</span><span class="s1">&#39;b</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">l</span><span class="p">]</span>
+            <span class="n">params</span> <span class="o">+=</span> <span class="p">[</span><span class="n">W</span><span class="p">,</span> <span class="n">b</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">params</span></div>
+
+<div class="viewcode-block" id="MLP.step_call"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.step_call">[docs]</a>    <span class="k">def</span> <span class="nf">step_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Step feed forward MLP.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+<span class="sd">            *params: theano shared variables.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: results at every layer.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">outs</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+            <span class="n">W</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">weight_noise</span><span class="p">:</span>
+                <span class="k">print</span> <span class="s1">&#39;Using weight noise in layer </span><span class="si">%d</span><span class="s1"> for MLP </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">l</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="n">W</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">avg</span><span class="o">=</span><span class="mf">0.</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">weight_noise</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">W</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+            <span class="n">preact</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">W</span><span class="p">)</span> <span class="o">+</span> <span class="n">b</span>
+
+            <span class="k">if</span> <span class="n">l</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">x</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h_act</span><span class="p">)(</span><span class="n">preact</span><span class="p">)</span>
+                <span class="n">outs</span><span class="p">[</span><span class="s1">&#39;preact_</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="n">preact</span>
+                <span class="n">outs</span><span class="p">[</span><span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span><span class="p">(</span><span class="n">preact</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">x</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h_act</span><span class="p">)(</span><span class="n">preact</span><span class="p">)</span>
+                <span class="n">outs</span><span class="p">[</span><span class="s1">&#39;z&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">preact</span>
+                <span class="n">outs</span><span class="p">[</span><span class="s1">&#39;p&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout</span> <span class="ow">and</span> <span class="n">l</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">print</span> <span class="s1">&#39;Adding dropout to layer {layer} for MLP &quot;{name}&quot;&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">layer</span><span class="o">=</span><span class="n">l</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">h_act</span> <span class="o">==</span> <span class="s1">&#39;T.tanh&#39;</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;dropout for tanh units not implemented yet&#39;</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">h_act</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;T.nnet.sigmoid&#39;</span><span class="p">,</span> <span class="s1">&#39;T.nnet.softplus&#39;</span><span class="p">,</span> <span class="s1">&#39;lambda x: x&#39;</span><span class="p">]:</span>
+                    <span class="n">x_d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mi">1</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">dropout</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                                             <span class="n">dtype</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+                    <span class="n">x</span> <span class="o">=</span> <span class="n">x</span> <span class="o">*</span> <span class="n">x_d</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;No dropout for </span><span class="si">%s</span><span class="s1"> yet&#39;</span> <span class="o">%</span> <span class="n">activ</span><span class="p">)</span>
+
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">params</span>
+        <span class="k">return</span> <span class="n">outs</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Call function.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: results at every layer.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">()</span>
+        <span class="n">outs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_call</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">outs</span>
+
+<div class="viewcode-block" id="MLP.feed"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.feed">[docs]</a>    <span class="k">def</span> <span class="nf">feed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Simple feed function.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: output</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="n">x</span><span class="p">)[</span><span class="s1">&#39;p&#39;</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="MLP.step_feed"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.step_feed">[docs]</a>    <span class="k">def</span> <span class="nf">step_feed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Step feed function.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+<span class="sd">            *params: theano shared variables.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: output</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_call</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">)[</span><span class="s1">&#39;p&#39;</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="MLP.preact"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.preact">[docs]</a>    <span class="k">def</span> <span class="nf">preact</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Simple feed preactivation function.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: preactivation</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="n">x</span><span class="p">)[</span><span class="s1">&#39;z&#39;</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="MLP.step_preact"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.mlp.MLP.step_preact">[docs]</a>    <span class="k">def</span> <span class="nf">step_preact</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Step feed preactivation function.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+<span class="sd">            *params: theano shared variables.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: preactivation</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_call</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">)[</span><span class="s1">&#39;z&#39;</span><span class="p">]</span></div></div>
+
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../models.html" >cortex.models</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

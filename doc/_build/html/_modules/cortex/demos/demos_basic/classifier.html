@@ -1,0 +1,307 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.demos.demos_basic.classifier &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../../index.html" />
+    <link rel="up" title="cortex.demos.demos_basic" href="../demos_basic.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../../demos.html" >cortex.demos</a> &raquo;</li>
+          <li class="nav-item nav-item-4"><a href="../demos_basic.html" accesskey="U">cortex.demos.demos_basic</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.demos.demos_basic.classifier</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Demo for training a classifier.</span>
+
+<span class="sd">Try with `python classifier.py classifier_mnist.yaml`</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
+<span class="kn">import</span> <span class="nn">pprint</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+<span class="kn">import</span> <span class="nn">time</span>
+
+<span class="kn">from</span> <span class="nn">cortex.datasets</span> <span class="kn">import</span> <span class="n">load_data</span>
+<span class="kn">from</span> <span class="nn">cortex.models.mlp</span> <span class="kn">import</span> <span class="n">MLP</span>
+<span class="kn">from</span> <span class="nn">cortex.utils</span> <span class="kn">import</span> <span class="n">floatX</span>
+<span class="kn">from</span> <span class="nn">cortex.utils.monitor</span> <span class="kn">import</span> <span class="n">SimpleMonitor</span>
+<span class="kn">from</span> <span class="nn">cortex.utils.preprocessor</span> <span class="kn">import</span> <span class="n">Preprocessor</span>
+<span class="kn">from</span> <span class="nn">cortex.utils.tools</span> <span class="kn">import</span> <span class="n">get_trng</span><span class="p">,</span> <span class="n">print_profile</span><span class="p">,</span> <span class="n">print_section</span>
+<span class="kn">from</span> <span class="nn">cortex.utils.training</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">main_loop</span><span class="p">,</span>
+    <span class="n">make_argument_parser</span><span class="p">,</span>
+    <span class="n">set_experiment</span><span class="p">,</span>
+    <span class="n">set_model</span><span class="p">,</span>
+    <span class="n">set_optimizer</span><span class="p">,</span>
+    <span class="n">set_params</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="init_learning_args"><a class="viewcode-back" href="../../../../source/cortex.demos.demos_basic.html#cortex.demos.demos_basic.classifier.init_learning_args">[docs]</a><span class="k">def</span> <span class="nf">init_learning_args</span><span class="p">(</span>
+    <span class="n">learning_rate</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span>
+    <span class="n">l2_decay</span><span class="o">=</span><span class="mf">0.</span><span class="p">,</span>
+    <span class="n">dropout</span><span class="o">=</span><span class="mf">0.</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="o">=</span><span class="s1">&#39;rmsprop&#39;</span><span class="p">,</span>
+    <span class="n">optimizer_args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span>
+    <span class="n">learning_rate_schedule</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">valid_batch_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">epochs</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">valid_key</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span>
+    <span class="n">valid_sign</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Default learning args.</span>
+
+<span class="sd">    This method acts as a filter for kwargs.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        learning_rate: float.</span>
+<span class="sd">        l2_decay: float, L2 decay rate.</span>
+<span class="sd">        dropout: float, dropout_rate.</span>
+<span class="sd">        optimizer: str, see utils.op</span>
+<span class="sd">        optimizer_args: dict, extra kwargs for op.</span>
+<span class="sd">        learning_rate_schedule: OrderedDict, schedule for learning rate.</span>
+<span class="sd">        batch_size: int</span>
+<span class="sd">        valid_batch_size: int</span>
+<span class="sd">        epochs: int</span>
+<span class="sd">        valid_key: str, key from results to validate model on.</span>
+<span class="sd">        valid_sign: str, + or -. If -, then sign is switched at validation.</span>
+<span class="sd">            Good for upperbounds.</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        locals().</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">return</span> <span class="nb">locals</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="train"><a class="viewcode-back" href="../../../../source/cortex.demos.demos_basic.html#cortex.demos.demos_basic.classifier.train">[docs]</a><span class="k">def</span> <span class="nf">train</span><span class="p">(</span>
+    <span class="n">out_path</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">model_to_load</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">test_every</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">classifier</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">preprocessing</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">learning_args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">dataset_args</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Basic training script.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        out_path: str, path for output directory.</span>
+<span class="sd">        name: str, name of experiment.</span>
+<span class="sd">        test_every: int (optional), if not None, test every n epochs instead of</span>
+<span class="sd">            every 1 epoch.</span>
+<span class="sd">        classifier: dict, kwargs for MLP factory.</span>
+<span class="sd">        learning_args: dict or None, see `init_learning_args` above for options.</span>
+<span class="sd">        dataset_args: dict, arguments for Dataset class.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="k">if</span> <span class="n">preprocessing</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">preprocessing</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">learning_args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">learning_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">dataset_args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Dataset args must be provided&#39;</span><span class="p">)</span>
+
+    <span class="n">learning_args</span> <span class="o">=</span> <span class="n">init_learning_args</span><span class="p">(</span><span class="o">**</span><span class="n">learning_args</span><span class="p">)</span>
+    <span class="k">print</span> <span class="s1">&#39;Dataset args: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="k">print</span> <span class="s1">&#39;Learning args: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">learning_args</span><span class="p">)</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Setting up data&#39;</span><span class="p">)</span>
+    <span class="n">input_keys</span> <span class="o">=</span> <span class="n">dataset_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;keys&#39;</span><span class="p">)</span>
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="n">learning_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;batch_size&#39;</span><span class="p">)</span>
+    <span class="n">valid_batch_size</span> <span class="o">=</span> <span class="n">learning_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;valid_batch_size&#39;</span><span class="p">)</span>
+    <span class="n">train</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">test</span> <span class="o">=</span> <span class="n">load_data</span><span class="p">(</span>
+        <span class="n">train_batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+        <span class="n">valid_batch_size</span><span class="o">=</span><span class="n">valid_batch_size</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">dataset_args</span><span class="p">)</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Setting model and variables&#39;</span><span class="p">)</span>
+    <span class="n">dim_in</span> <span class="o">=</span> <span class="n">train</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="n">input_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+    <span class="n">dim_out</span> <span class="o">=</span> <span class="n">train</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="n">input_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+
+    <span class="n">X</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">matrix</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span> <span class="c1"># Input data</span>
+    <span class="n">Y</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">matrix</span><span class="p">(</span><span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span> <span class="c1"># Lables</span>
+    <span class="n">X</span><span class="o">.</span><span class="n">tag</span><span class="o">.</span><span class="n">test_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">dim_in</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">X</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">Y</span><span class="o">.</span><span class="n">tag</span><span class="o">.</span><span class="n">test_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">dim_out</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">X</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">trng</span> <span class="o">=</span> <span class="n">get_trng</span><span class="p">()</span>
+
+    <span class="n">preproc</span> <span class="o">=</span> <span class="n">Preprocessor</span><span class="p">(</span><span class="n">preprocessing</span><span class="p">)</span>
+    <span class="n">X_i</span> <span class="o">=</span> <span class="n">preproc</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">data_iter</span><span class="o">=</span><span class="n">train</span><span class="p">)</span>
+    <span class="n">inps</span> <span class="o">=</span> <span class="p">[</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">]</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Loading model and forming graph&#39;</span><span class="p">)</span>
+    <span class="n">dropout</span> <span class="o">=</span> <span class="n">learning_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;dropout&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">create_model</span><span class="p">():</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">MLP</span><span class="o">.</span><span class="n">factory</span><span class="p">(</span><span class="n">dim_in</span><span class="o">=</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="n">dim_out</span><span class="p">,</span>
+                            <span class="n">distribution</span><span class="o">=</span><span class="n">train</span><span class="o">.</span><span class="n">distributions</span><span class="p">[</span><span class="n">input_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span>
+                            <span class="n">dropout</span><span class="o">=</span><span class="n">dropout</span><span class="p">,</span>
+                            <span class="o">**</span><span class="n">classifier</span><span class="p">)</span>
+        <span class="n">models</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="n">models</span><span class="p">[</span><span class="n">model</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="k">return</span> <span class="n">models</span>
+
+    <span class="k">def</span> <span class="nf">unpack</span><span class="p">(</span><span class="n">dim_in</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">mlp</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">):</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">MLP</span><span class="o">.</span><span class="n">factory</span><span class="p">(</span><span class="n">dim_in</span><span class="o">=</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="n">dim_out</span><span class="p">,</span> <span class="o">**</span><span class="n">mlp</span><span class="p">)</span>
+        <span class="n">models</span> <span class="o">=</span> <span class="p">[</span><span class="n">model</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">models</span><span class="p">,</span> <span class="n">model_args</span><span class="p">,</span> <span class="bp">None</span>
+
+    <span class="n">models</span> <span class="o">=</span> <span class="n">set_model</span><span class="p">(</span><span class="n">create_model</span><span class="p">,</span> <span class="n">model_to_load</span><span class="p">,</span> <span class="n">unpack</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">models</span><span class="p">[</span><span class="s1">&#39;MLP&#39;</span><span class="p">]</span>
+    <span class="n">tparams</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">set_tparams</span><span class="p">()</span>
+    <span class="n">print_profile</span><span class="p">(</span><span class="n">tparams</span><span class="p">)</span>
+
+    <span class="c1"># ==========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Getting cost&#39;</span><span class="p">)</span>
+    <span class="n">outs</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">X_i</span><span class="p">)</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">outs</span><span class="p">[</span><span class="s1">&#39;p&#39;</span><span class="p">]</span>
+    <span class="n">base_cost</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">cost</span> <span class="o">=</span> <span class="n">base_cost</span>
+
+    <span class="n">updates</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">()</span>
+
+    <span class="n">l2_decay</span> <span class="o">=</span> <span class="n">learning_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;l2_decay&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">l2_decay</span> <span class="o">&gt;</span> <span class="mf">0.</span><span class="p">:</span>
+        <span class="k">print</span> <span class="s1">&#39;Adding </span><span class="si">%.5f</span><span class="s1"> L2 weight decay&#39;</span> <span class="o">%</span> <span class="n">l2_decay</span>
+        <span class="n">l2_rval</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">l2_decay</span><span class="p">(</span><span class="n">l2_decay</span><span class="p">)</span>
+        <span class="n">l2_cost</span> <span class="o">=</span> <span class="n">l2_rval</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;cost&#39;</span><span class="p">)</span>
+        <span class="n">cost</span> <span class="o">+=</span> <span class="n">l2_cost</span>
+
+    <span class="n">constants</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">extra_outs</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">extra_outs_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;cost&#39;</span><span class="p">]</span>
+
+    <span class="c1"># ==========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Test functions&#39;</span><span class="p">)</span>
+    <span class="n">error</span> <span class="o">=</span> <span class="p">(</span><span class="n">Y</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">p</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+
+    <span class="n">f_test_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="s1">&#39;cost&#39;</span><span class="p">]</span>
+    <span class="n">f_test_vals</span> <span class="o">=</span> <span class="p">[</span><span class="n">error</span><span class="p">,</span> <span class="n">base_cost</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">l2_decay</span> <span class="o">&gt;</span> <span class="mf">0.</span><span class="p">:</span>
+        <span class="n">f_test_keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;L2 cost&#39;</span><span class="p">)</span>
+        <span class="n">f_test_vals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">l2_cost</span><span class="p">)</span>
+    <span class="n">f_test</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">([</span><span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">],</span> <span class="n">f_test_vals</span><span class="p">)</span>
+
+     <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Setting final tparams and save function&#39;</span><span class="p">)</span>
+    <span class="n">tparams</span><span class="p">,</span> <span class="n">all_params</span> <span class="o">=</span> <span class="n">set_params</span><span class="p">(</span><span class="n">tparams</span><span class="p">,</span> <span class="n">updates</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="n">tparams</span><span class="p">,</span> <span class="n">outfile</span><span class="p">):</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">get_value</span><span class="p">())</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">all_params</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="n">d</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">dim_in</span><span class="o">=</span><span class="n">dim_in</span><span class="p">,</span>
+            <span class="n">dim_out</span><span class="o">=</span><span class="n">dim_out</span><span class="p">,</span>
+            <span class="n">mlp</span><span class="o">=</span><span class="n">classifier</span>
+        <span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">savez</span><span class="p">(</span><span class="n">outfile</span><span class="p">,</span> <span class="o">**</span><span class="n">d</span><span class="p">)</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Getting gradients and building optimizer.&#39;</span><span class="p">)</span>
+    <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_grad_updates</span><span class="p">,</span> <span class="n">learning_args</span> <span class="o">=</span> <span class="n">set_optimizer</span><span class="p">(</span>
+        <span class="n">inps</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">updates</span><span class="p">,</span> <span class="n">extra_outs</span><span class="p">,</span> <span class="o">**</span><span class="n">learning_args</span><span class="p">)</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Actually running (main loop)&#39;</span><span class="p">)</span>
+    <span class="n">monitor</span> <span class="o">=</span> <span class="n">SimpleMonitor</span><span class="p">()</span>
+
+    <span class="n">main_loop</span><span class="p">(</span>
+        <span class="n">train</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span>
+        <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_grad_updates</span><span class="p">,</span> <span class="n">f_test</span><span class="p">,</span> <span class="n">f_test_keys</span><span class="p">,</span>
+        <span class="n">input_keys</span><span class="o">=</span><span class="n">input_keys</span><span class="p">,</span>
+        <span class="n">test_every</span><span class="o">=</span><span class="n">test_every</span><span class="p">,</span>
+        <span class="n">save</span><span class="o">=</span><span class="n">save</span><span class="p">,</span>
+        <span class="n">monitor</span><span class="o">=</span><span class="n">monitor</span><span class="p">,</span>
+        <span class="n">out_path</span><span class="o">=</span><span class="n">out_path</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">extra_outs_keys</span><span class="o">=</span><span class="n">extra_outs_keys</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">learning_args</span><span class="p">)</span></div>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">make_argument_parser</span><span class="p">()</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+    <span class="n">exp_dict</span> <span class="o">=</span> <span class="n">set_experiment</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+
+    <span class="n">train</span><span class="p">(</span><span class="o">**</span><span class="n">exp_dict</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../../demos.html" >cortex.demos</a> &raquo;</li>
+          <li class="nav-item nav-item-4"><a href="../demos_basic.html" >cortex.demos.demos_basic</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

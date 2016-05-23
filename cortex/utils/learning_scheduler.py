@@ -12,10 +12,22 @@ class Scheduler(object):
     '''Scheduler for learning rates.
 
     Attributes:
-        d: OrderedDict, dictionary of learning rates and decays, schedules.
+        d (OrderedDict): dictionary of learning rates and decays, schedules.
+
     '''
     def __init__(self, verbose=True, **kwargs):
-        '''Init function of Scheduler.'''
+        '''Init function of Scheduler.
+
+        kwargs correspond to the model name and their respective schedules.
+        Currently, each key is the name of a model while each value is the
+        schedule dictionary. The schedule dictionary should include a learning
+        rate and can have either a decay rate or a schedule.
+
+        Args:
+            verbose (bool): sets verbosity.
+            **kwargs: keyword args of the scheduled learning rates
+
+        '''
         self.d = OrderedDict()
         self.verbose = verbose
         for k, v in kwargs.iteritems():
@@ -42,7 +54,15 @@ class Scheduler(object):
         return self.d[k]
 
     def __call__(self, e):
-        '''Update the learning rates and return list.'''
+        '''Update the learning rates and return list.
+
+        Args:
+            e (int): the epoch.
+
+        Returns:
+            list: list of current learning rates.
+
+        '''
 
         for k, v in self.d.iteritems():
             learning_rate, decay_rate, schedule = unpack(**v)

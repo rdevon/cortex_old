@@ -12,14 +12,6 @@ cortex.models.tests.test_darn module
     :undoc-members:
     :show-inheritance:
 
-cortex.models.tests.test_lfmlp module
--------------------------------------
-
-.. automodule:: cortex.models.tests.test_lfmlp
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 cortex.models.tests.test_mlp module
 -----------------------------------
 

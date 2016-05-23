@@ -1,0 +1,124 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.demos.demos_neuroimaging &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex.demos" href="../demos.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../demos.html" accesskey="U">cortex.demos</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.demos.demos_neuroimaging</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;For command-line scripts of demos</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">from</span> <span class="nn">...utils.training</span> <span class="kn">import</span> <span class="n">set_experiment</span>
+
+
+<span class="n">packagedir</span> <span class="o">=</span> <span class="n">__path__</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">d</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">packagedir</span><span class="p">),</span> <span class="s1">&#39;../..&#39;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="run_demo"><a class="viewcode-back" href="../../../source/cortex.demos.demos_neuroimaging.html#cortex.demos.demos_neuroimaging.run_demo">[docs]</a><span class="k">def</span> <span class="nf">run_demo</span><span class="p">(</span><span class="n">yaml_file</span><span class="p">,</span> <span class="n">train</span><span class="p">):</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">experiment</span><span class="o">=</span><span class="n">yaml_file</span><span class="p">)</span>
+
+    <span class="n">exp_dict</span> <span class="o">=</span> <span class="n">set_experiment</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+    <span class="n">train</span><span class="p">(</span><span class="o">**</span><span class="n">exp_dict</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="run_rbm_vbm_demo"><a class="viewcode-back" href="../../../source/cortex.demos.demos_neuroimaging.html#cortex.demos.demos_neuroimaging.run_rbm_vbm_demo">[docs]</a><span class="k">def</span> <span class="nf">run_rbm_vbm_demo</span><span class="p">():</span>
+    <span class="kn">from</span> <span class="nn">.rbm_ni</span> <span class="kn">import</span> <span class="n">train</span>
+
+    <span class="n">yaml_file</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="s1">&#39;rbm_vbm.yaml&#39;</span><span class="p">)</span>
+    <span class="n">run_demo</span><span class="p">(</span><span class="n">yaml_file</span><span class="p">,</span> <span class="n">train</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="run_rbm_olin_demo"><a class="viewcode-back" href="../../../source/cortex.demos.demos_neuroimaging.html#cortex.demos.demos_neuroimaging.run_rbm_olin_demo">[docs]</a><span class="k">def</span> <span class="nf">run_rbm_olin_demo</span><span class="p">():</span>
+    <span class="kn">from</span> <span class="nn">.rbm_ni</span> <span class="kn">import</span> <span class="n">train</span>
+
+    <span class="n">yaml_file</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="s1">&#39;rbm_olin.yaml&#39;</span><span class="p">)</span>
+    <span class="n">run_demo</span><span class="p">(</span><span class="n">yaml_file</span><span class="p">,</span> <span class="n">train</span><span class="p">)</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../demos.html" >cortex.demos</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

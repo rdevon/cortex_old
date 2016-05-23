@@ -185,12 +185,12 @@ def set_model(create_model, model_to_load, unpack, **kwargs):
 
     Args:
         create_model (function): method for creating model.
-            No arguments. Methods should be defined out-of-method, e.g.:
-            `
-            dim = 100
-            def create_model():
-                return ModelClass(dim)
-            `
+            No arguments. Methods should be defined out-of-method, e.g.::
+
+                dim = 100
+                def create_model():
+                    return ModelClass(dim)
+
             and then passed into `set_model`
         model_to_load (str): path the npz file.
         unpack (function): Takes model_to_load.
@@ -224,16 +224,15 @@ def set_params(tparams, updates, excludes=[]):
     Convenience function to extract the theano parameters that will have
     gradients calculated.
 
-    Arg:
+    Args:
         tparams (dict): dictionary of Theano shared variables.
-        updates (theano.OrderedUpdates): Used to exclude variables that have
+        updates (theano.OrderedUpdates): used to exclude variables that have
             gradients calculated.
-        excludes (list): List of keys to exclude from gradients or learning.
+        excludes (list): list of keys to exclude from gradients or learning.
 
     Returns:
-        OrderedDict: dictionary of Theano shared variables that will have
-            gradients calculated.
-        OrderedDict: dictionary of Theano shared variables that will be saved.
+        OrderedDict: dict of variables that will have gradients calculated.
+        OrderedDict: dict of variables that will be saved.
 
     '''
     all_params = OrderedDict((k, v) for k, v in tparams.iteritems())
@@ -428,7 +427,7 @@ def main_loop(train, valid, tparams,
         monitor (utils.monitor.Monitor).
         out_path (str): Director path for output files.
         extra_outs_keys (list): Keys for extra outs of `f_grad_shared`.
-        **validation_args: kwargs. Arguments for test.
+        **validation_args: Arguments for test.
 
     '''
 

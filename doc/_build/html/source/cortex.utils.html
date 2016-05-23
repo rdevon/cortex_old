@@ -50,34 +50,89 @@
 <div class="section" id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="module-cortex.utils.costs">
-<span id="cortex-utils-costs-module"></span><h2>cortex.utils.costs module<a class="headerlink" href="#module-cortex.utils.costs" title="Permalink to this headline">¶</a></h2>
-<p>Cost functions</p>
+<div class="section" id="module-cortex.utils.extra">
+<span id="cortex-utils-extra-module"></span><h2>cortex.utils.extra module<a class="headerlink" href="#module-cortex.utils.extra" title="Permalink to this headline">¶</a></h2>
+<p>Extra functions not used for learning.</p>
 <dl class="function">
-<dt id="cortex.utils.costs.binary_cross_entropy">
-<code class="descclassname">cortex.utils.costs.</code><code class="descname">binary_cross_entropy</code><span class="sig-paren">(</span><em>y_hat</em>, <em>y</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.costs.binary_cross_entropy" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="function">
-<dt id="cortex.utils.costs.categorical_cross_entropy">
-<code class="descclassname">cortex.utils.costs.</code><code class="descname">categorical_cross_entropy</code><span class="sig-paren">(</span><em>y_hat</em>, <em>y</em>, <em>mask=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.costs.categorical_cross_entropy" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="docutils">
-<dt>Inputs:</dt>
-<dd><dl class="first docutils">
-<dt>y - 2D tensor (each row is a distribution) or vector of ints</dt>
-<dd>indicating the position in one-hot</dd>
-</dl>
-<p class="last">y_hat - 2D tensor (each row is a distribution)</p>
-</dd>
-<dt>Outputs:</dt>
-<dd>cost - tensor of rank one less than y</dd>
-</dl>
+<dt id="cortex.utils.extra.complete_path">
+<code class="descclassname">cortex.utils.extra.</code><code class="descname">complete_path</code><span class="sig-paren">(</span><em>text</em>, <em>state</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/extra.html#complete_path"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.extra.complete_path" title="Permalink to this definition">¶</a></dt>
+<dd><p>Completes a path for readline.</p>
 </dd></dl>
 
 <dl class="function">
-<dt id="cortex.utils.costs.hinge_loss">
-<code class="descclassname">cortex.utils.costs.</code><code class="descname">hinge_loss</code><span class="sig-paren">(</span><em>y_hat</em>, <em>y</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.costs.hinge_loss" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dt id="cortex.utils.extra.download_data">
+<code class="descclassname">cortex.utils.extra.</code><code class="descname">download_data</code><span class="sig-paren">(</span><em>url</em>, <em>out_path</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/extra.html#download_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.extra.download_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Downloads the data from a url.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>url</strong> (<em>str</em>) &#8211; url of the data.</li>
+<li><strong>out_path</strong> (<em>str</em>) &#8211; Output directory or full file path.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.utils.extra.query_yes_no">
+<code class="descclassname">cortex.utils.extra.</code><code class="descname">query_yes_no</code><span class="sig-paren">(</span><em>question</em>, <em>default='yes'</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/extra.html#query_yes_no"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.extra.query_yes_no" title="Permalink to this definition">¶</a></dt>
+<dd><p>Ask a yes/no question via raw_input() and return their answer.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>question</strong> (<em>str</em>) &#8211; </li>
+<li><strong>default</strong> (<em>Optional[str]</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">str</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.utils.extra.unzip">
+<code class="descclassname">cortex.utils.extra.</code><code class="descname">unzip</code><span class="sig-paren">(</span><em>source</em>, <em>out_path</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/extra.html#unzip"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.extra.unzip" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unzip function.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>source</strong> (<em>str</em>) &#8211; path to zip file</li>
+<li><strong>out_path</strong> (<em>str</em>) &#8211; path to out_file</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.utils.extra.write_path_conf">
+<code class="descclassname">cortex.utils.extra.</code><code class="descname">write_path_conf</code><span class="sig-paren">(</span><em>data_path</em>, <em>out_path</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/extra.html#write_path_conf"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.extra.write_path_conf" title="Permalink to this definition">¶</a></dt>
+<dd><p>Writes basic configure file.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>data_path</strong> (<em>str</em>) &#8211; path to data.</li>
+<li><strong>out_path</strong> (<em>str</em>) &#8211; path to outputs.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
 
 </div>
 <div class="section" id="module-cortex.utils.learning_scheduler">
@@ -85,20 +140,20 @@
 <p>Scheduler for learning rates.</p>
 <dl class="class">
 <dt id="cortex.utils.learning_scheduler.Scheduler">
-<em class="property">class </em><code class="descclassname">cortex.utils.learning_scheduler.</code><code class="descname">Scheduler</code><span class="sig-paren">(</span><em>verbose=True</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.learning_scheduler.Scheduler" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">cortex.utils.learning_scheduler.</code><code class="descname">Scheduler</code><span class="sig-paren">(</span><em>verbose=True</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/learning_scheduler.html#Scheduler"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.learning_scheduler.Scheduler" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
 <p>Scheduler for learning rates.</p>
 <dl class="attribute">
 <dt id="cortex.utils.learning_scheduler.Scheduler.d">
 <code class="descname">d</code><a class="headerlink" href="#cortex.utils.learning_scheduler.Scheduler.d" title="Permalink to this definition">¶</a></dt>
-<dd><p>OrderedDict, dictionary of learning rates and decays, schedules.</p>
+<dd><p><em>OrderedDict</em> &#8211; dictionary of learning rates and decays, schedules.</p>
 </dd></dl>
 
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.learning_scheduler.unpack">
-<code class="descclassname">cortex.utils.learning_scheduler.</code><code class="descname">unpack</code><span class="sig-paren">(</span><em>learning_rate=None</em>, <em>decay_rate=None</em>, <em>schedule=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.learning_scheduler.unpack" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.learning_scheduler.</code><code class="descname">unpack</code><span class="sig-paren">(</span><em>learning_rate=None</em>, <em>decay_rate=None</em>, <em>schedule=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/learning_scheduler.html#unpack"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.learning_scheduler.unpack" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </div>
@@ -107,7 +162,7 @@
 <p>Module for general logger.</p>
 <dl class="function">
 <dt id="cortex.utils.logger.setup_custom_logger">
-<code class="descclassname">cortex.utils.logger.</code><code class="descname">setup_custom_logger</code><span class="sig-paren">(</span><em>name</em>, <em>level</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.logger.setup_custom_logger" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.logger.</code><code class="descname">setup_custom_logger</code><span class="sig-paren">(</span><em>name</em>, <em>level</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/logger.html#setup_custom_logger"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.logger.setup_custom_logger" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </div>
@@ -116,7 +171,7 @@
 <p>Module for monitor class.</p>
 <dl class="class">
 <dt id="cortex.utils.monitor.SimpleMonitor">
-<em class="property">class </em><code class="descclassname">cortex.utils.monitor.</code><code class="descname">SimpleMonitor</code><span class="sig-paren">(</span><em>*args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">cortex.utils.monitor.</code><code class="descname">SimpleMonitor</code><span class="sig-paren">(</span><em>*args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/monitor.html#SimpleMonitor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
 <p>Simple monitor for displaying and saving results.</p>
 <p>Basic template monitor. Should be interchangeable in training for
@@ -135,12 +190,12 @@ customized versions.</p>
 
 <dl class="method">
 <dt id="cortex.utils.monitor.SimpleMonitor.add">
-<code class="descname">add</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.add" title="Permalink to this definition">¶</a></dt>
+<code class="descname">add</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/monitor.html#SimpleMonitor.add"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.add" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="method">
 <dt id="cortex.utils.monitor.SimpleMonitor.display">
-<code class="descname">display</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.display" title="Permalink to this definition">¶</a></dt>
+<code class="descname">display</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/monitor.html#SimpleMonitor.display"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.display" title="Permalink to this definition">¶</a></dt>
 <dd><p>Displays the stats.</p>
 <p>This uses some basic heuristics to get stats into rows with validation
 (if exists) as well as difference from last step.</p>
@@ -148,7 +203,7 @@ customized versions.</p>
 
 <dl class="method">
 <dt id="cortex.utils.monitor.SimpleMonitor.save">
-<code class="descname">save</code><span class="sig-paren">(</span><em>out_path</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.save" title="Permalink to this definition">¶</a></dt>
+<code class="descname">save</code><span class="sig-paren">(</span><em>out_path</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/monitor.html#SimpleMonitor.save"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.save" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves a figure for the monitor</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -162,7 +217,7 @@ customized versions.</p>
 
 <dl class="method">
 <dt id="cortex.utils.monitor.SimpleMonitor.save_stats">
-<code class="descname">save_stats</code><span class="sig-paren">(</span><em>out_path</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.save_stats" title="Permalink to this definition">¶</a></dt>
+<code class="descname">save_stats</code><span class="sig-paren">(</span><em>out_path</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/monitor.html#SimpleMonitor.save_stats"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.save_stats" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the monitor dictionary.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -176,7 +231,7 @@ customized versions.</p>
 
 <dl class="method">
 <dt id="cortex.utils.monitor.SimpleMonitor.save_stats_valid">
-<code class="descname">save_stats_valid</code><span class="sig-paren">(</span><em>out_path</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.save_stats_valid" title="Permalink to this definition">¶</a></dt>
+<code class="descname">save_stats_valid</code><span class="sig-paren">(</span><em>out_path</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/monitor.html#SimpleMonitor.save_stats_valid"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.save_stats_valid" title="Permalink to this definition">¶</a></dt>
 <dd><p>Saves the valid monitor dictionary.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -190,17 +245,17 @@ customized versions.</p>
 
 <dl class="method">
 <dt id="cortex.utils.monitor.SimpleMonitor.simple_display">
-<code class="descname">simple_display</code><span class="sig-paren">(</span><em>d</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.simple_display" title="Permalink to this definition">¶</a></dt>
+<code class="descname">simple_display</code><span class="sig-paren">(</span><em>d</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/monitor.html#SimpleMonitor.simple_display"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.simple_display" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="method">
 <dt id="cortex.utils.monitor.SimpleMonitor.update">
-<code class="descname">update</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.update" title="Permalink to this definition">¶</a></dt>
+<code class="descname">update</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/monitor.html#SimpleMonitor.update"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.update" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="method">
 <dt id="cortex.utils.monitor.SimpleMonitor.update_valid">
-<code class="descname">update_valid</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.update_valid" title="Permalink to this definition">¶</a></dt>
+<code class="descname">update_valid</code><span class="sig-paren">(</span><em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/monitor.html#SimpleMonitor.update_valid"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.monitor.SimpleMonitor.update_valid" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -212,40 +267,40 @@ customized versions.</p>
 <p>Based (and copied) on Kyunghyun Cho&#8217;s arctic repo.</p>
 <dl class="function">
 <dt id="cortex.utils.op.adadelta">
-<code class="descclassname">cortex.utils.op.</code><code class="descname">adadelta</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.op.adadelta" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.op.</code><code class="descname">adadelta</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/op.html#adadelta"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.op.adadelta" title="Permalink to this definition">¶</a></dt>
 <dd><p>Adadelta</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.op.adam">
-<code class="descclassname">cortex.utils.op.</code><code class="descname">adam</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.op.adam" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.op.</code><code class="descname">adam</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/op.html#adam"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.op.adam" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.op.adam2">
-<code class="descclassname">cortex.utils.op.</code><code class="descname">adam2</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.op.adam2" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.op.</code><code class="descname">adam2</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/op.html#adam2"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.op.adam2" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.op.adam3">
-<code class="descclassname">cortex.utils.op.</code><code class="descname">adam3</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.op.adam3" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.op.</code><code class="descname">adam3</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/op.html#adam3"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.op.adam3" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.op.rmsprop">
-<code class="descclassname">cortex.utils.op.</code><code class="descname">rmsprop</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em>, <em>relaxation=0.0001</em>, <em>momentum=0.9</em>, <em>coefficient=0.95</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.op.rmsprop" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.op.</code><code class="descname">rmsprop</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em>, <em>relaxation=0.0001</em>, <em>momentum=0.9</em>, <em>coefficient=0.95</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/op.html#rmsprop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.op.rmsprop" title="Permalink to this definition">¶</a></dt>
 <dd><p>RMSProp</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.op.rmsprop2">
-<code class="descclassname">cortex.utils.op.</code><code class="descname">rmsprop2</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em>, <em>relaxation=0.0001</em>, <em>momentum=0.9</em>, <em>coefficient=0.95</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.op.rmsprop2" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.op.</code><code class="descname">rmsprop2</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em>, <em>relaxation=0.0001</em>, <em>momentum=0.9</em>, <em>coefficient=0.95</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/op.html#rmsprop2"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.op.rmsprop2" title="Permalink to this definition">¶</a></dt>
 <dd><p>An alternative RMSProp</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.op.sgd">
-<code class="descclassname">cortex.utils.op.</code><code class="descname">sgd</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.op.sgd" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.op.</code><code class="descname">sgd</code><span class="sig-paren">(</span><em>lr</em>, <em>tparams</em>, <em>grads</em>, <em>inp</em>, <em>cost</em>, <em>extra_ups=[]</em>, <em>extra_outs=[]</em>, <em>exclude_params=set([])</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/op.html#sgd"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.op.sgd" title="Permalink to this definition">¶</a></dt>
 <dd><p>Stochastic gradient descent</p>
 </dd></dl>
 
@@ -256,7 +311,7 @@ customized versions.</p>
 <p>Not meant to be general, but feel free to subclass if it&#8217;s useful</p>
 <dl class="class">
 <dt id="cortex.utils.preprocessor.Preprocessor">
-<em class="property">class </em><code class="descclassname">cortex.utils.preprocessor.</code><code class="descname">Preprocessor</code><span class="sig-paren">(</span><em>proc_list</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.preprocessor.Preprocessor" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">cortex.utils.preprocessor.</code><code class="descname">Preprocessor</code><span class="sig-paren">(</span><em>proc_list</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/preprocessor.html#Preprocessor"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.preprocessor.Preprocessor" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
 <p>Preprocessor class.</p>
 <dl class="attribute">
@@ -267,7 +322,7 @@ customized versions.</p>
 
 <dl class="method">
 <dt id="cortex.utils.preprocessor.Preprocessor.center">
-<code class="descname">center</code><span class="sig-paren">(</span><em>X</em>, <em>data_iter=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.preprocessor.Preprocessor.center" title="Permalink to this definition">¶</a></dt>
+<code class="descname">center</code><span class="sig-paren">(</span><em>X</em>, <em>data_iter=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/preprocessor.html#Preprocessor.center"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.preprocessor.Preprocessor.center" title="Permalink to this definition">¶</a></dt>
 <dd><p>Center input.</p>
 </dd></dl>
 
@@ -289,42 +344,36 @@ customized versions.</p>
 <p>Helper module for learning.</p>
 <dl class="function">
 <dt id="cortex.utils.tools.check_bad_nums">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">check_bad_nums</code><span class="sig-paren">(</span><em>rvals</em>, <em>names</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.check_bad_nums" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">check_bad_nums</code><span class="sig-paren">(</span><em>rvals</em>, <em>names</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#check_bad_nums"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.check_bad_nums" title="Permalink to this definition">¶</a></dt>
 <dd><p>Checks for nans and infs.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.concatenate">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">concatenate</code><span class="sig-paren">(</span><em>tensor_list</em>, <em>axis=0</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.concatenate" title="Permalink to this definition">¶</a></dt>
-<dd><p>Alternative implementation of <cite>theano.T.concatenate</cite>.
-This function does exactly the same thing, but contrary to Theano&#8217;s own
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">concatenate</code><span class="sig-paren">(</span><em>tensor_list</em>, <em>axis=0</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#concatenate"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.concatenate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Alternative implementation of <cite>theano.T.concatenate</cite>.</p>
+<p>This function does exactly the same thing, but contrary to Theano&#8217;s own
 implementation, the gradient is implemented on the GPU.
 Backpropagating through <cite>theano.tensor.concatenate</cite> yields slowdowns
 because the inverse operation (splitting) needs to be done on the CPU.
 This implementation does not have that problem.</p>
-<dl class="docutils">
-<dt>Usage:</dt>
-<dd><div class="first last highlight-default"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">tensor</span><span class="o">.</span><span class="n">matrices</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">)</span>
+<p class="rubric">Examples</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">tensor</span><span class="o">.</span><span class="n">matrices</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="s1">&#39;y&#39;</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">c</span> <span class="o">=</span> <span class="n">concatenate</span><span class="p">([</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 </pre></div>
 </div>
-</dd>
+<dl class="docutils">
+<dt>Argsuments:</dt>
+<dd>tensor_list: list, list of Theano tensor expressions that should be concatenated.
+axis: int, the tensors will be joined along this axis.</dd>
 </dl>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>tensor_list</strong> &#8211; list, list of Theano tensor expressions that should be concatenated.</li>
-<li><strong>axis</strong> &#8211; int, the tensors will be joined along this axis.</li>
-</ul>
-</td>
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">tensor, the concatenated tensor expression.</td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">tensor, the concatenated tensor expression.</p>
-</td>
-</tr>
-<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">out</p>
-</td>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">out</td>
 </tr>
 </tbody>
 </table>
@@ -333,158 +382,158 @@ This implementation does not have that problem.</p>
 
 <dl class="function">
 <dt id="cortex.utils.tools.debug_shape">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">debug_shape</code><span class="sig-paren">(</span><em>X</em>, <em>x</em>, <em>t_out</em>, <em>updates=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.debug_shape" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">debug_shape</code><span class="sig-paren">(</span><em>X</em>, <em>x</em>, <em>t_out</em>, <em>updates=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#debug_shape"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.debug_shape" title="Permalink to this definition">¶</a></dt>
 <dd><p>Debug function that returns the shape then raises assert error.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.flatten_dict">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">flatten_dict</code><span class="sig-paren">(</span><em>d</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.flatten_dict" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">flatten_dict</code><span class="sig-paren">(</span><em>d</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#flatten_dict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.flatten_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Flattens a dictionary of dictionaries.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.get_paths">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">get_paths</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.get_paths" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">get_paths</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#get_paths"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.get_paths" title="Permalink to this definition">¶</a></dt>
 <dd><p>Pulls all paths from <cite>paths.conf</cite> file.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.get_srng">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">get_srng</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.get_srng" title="Permalink to this definition">¶</a></dt>
-<dd><p>Shared Randomstream</p>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">get_srng</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#get_srng"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.get_srng" title="Permalink to this definition">¶</a></dt>
+<dd><p>Shared Randomstream.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.get_trng">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">get_trng</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.get_trng" title="Permalink to this definition">¶</a></dt>
-<dd><p>Normal Randomstream</p>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">get_trng</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#get_trng"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.get_trng" title="Permalink to this definition">¶</a></dt>
+<dd><p>Normal Randomstream.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.get_w_tilde">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">get_w_tilde</code><span class="sig-paren">(</span><em>log_factor</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.get_w_tilde" title="Permalink to this definition">¶</a></dt>
-<dd><p>Gets normalized weights</p>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">get_w_tilde</code><span class="sig-paren">(</span><em>log_factor</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#get_w_tilde"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.get_w_tilde" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gets normalized weights.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.init_rngs">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">init_rngs</code><span class="sig-paren">(</span><em>model</em>, <em>rng=None</em>, <em>trng=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.init_rngs" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">init_rngs</code><span class="sig-paren">(</span><em>model</em>, <em>rng=None</em>, <em>trng=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#init_rngs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.init_rngs" title="Permalink to this definition">¶</a></dt>
 <dd><p>Initialization function for RNGs.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.init_weights">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">init_weights</code><span class="sig-paren">(</span><em>model</em>, <em>weight_noise=False</em>, <em>weight_scale=0.001</em>, <em>dropout=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.init_weights" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">init_weights</code><span class="sig-paren">(</span><em>model</em>, <em>weight_noise=False</em>, <em>weight_scale=0.001</em>, <em>dropout=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#init_weights"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.init_weights" title="Permalink to this definition">¶</a></dt>
 <dd><p>Inialization function for weights.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.itemlist">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">itemlist</code><span class="sig-paren">(</span><em>tparams</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.itemlist" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">itemlist</code><span class="sig-paren">(</span><em>tparams</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#itemlist"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.itemlist" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get the list of parameters: Note that tparams must be OrderedDict.</p>
 <p>From Cho&#8217;s arctic repo.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.load_experiment">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">load_experiment</code><span class="sig-paren">(</span><em>experiment_yaml</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.load_experiment" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">load_experiment</code><span class="sig-paren">(</span><em>experiment_yaml</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#load_experiment"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.load_experiment" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load an experiment from a yaml.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.load_model">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">load_model</code><span class="sig-paren">(</span><em>model_file</em>, <em>f_unpack=None</em>, <em>strict=True</em>, <em>**extra_args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.load_model" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">load_model</code><span class="sig-paren">(</span><em>model_file</em>, <em>f_unpack=None</em>, <em>strict=True</em>, <em>**extra_args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#load_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.load_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads pretrained model.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.log_mean_exp">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">log_mean_exp</code><span class="sig-paren">(</span><em>x</em>, <em>axis=None</em>, <em>as_numpy=False</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.log_mean_exp" title="Permalink to this definition">¶</a></dt>
-<dd><p>Numerically stable log(exp(x).mean())</p>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">log_mean_exp</code><span class="sig-paren">(</span><em>x</em>, <em>axis=None</em>, <em>as_numpy=False</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#log_mean_exp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.log_mean_exp" title="Permalink to this definition">¶</a></dt>
+<dd><p>Numerically stable log(exp(x).mean()).</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.log_sum_exp">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">log_sum_exp</code><span class="sig-paren">(</span><em>x</em>, <em>axis=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.log_sum_exp" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">log_sum_exp</code><span class="sig-paren">(</span><em>x</em>, <em>axis=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#log_sum_exp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.log_sum_exp" title="Permalink to this definition">¶</a></dt>
 <dd><p>Numerically stable log( sum( exp(A) ) ).</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.logit">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">logit</code><span class="sig-paren">(</span><em>z</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.logit" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">logit</code><span class="sig-paren">(</span><em>z</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#logit"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.logit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Logit function.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.norm_weight">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">norm_weight</code><span class="sig-paren">(</span><em>nin</em>, <em>nout=None</em>, <em>scale=0.01</em>, <em>ortho=True</em>, <em>rng=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.norm_weight" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">norm_weight</code><span class="sig-paren">(</span><em>nin</em>, <em>nout=None</em>, <em>scale=0.01</em>, <em>ortho=True</em>, <em>rng=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#norm_weight"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.norm_weight" title="Permalink to this definition">¶</a></dt>
 <dd><p>Make normal weight tensor.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.ortho_weight">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">ortho_weight</code><span class="sig-paren">(</span><em>ndim</em>, <em>rng=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.ortho_weight" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">ortho_weight</code><span class="sig-paren">(</span><em>ndim</em>, <em>rng=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#ortho_weight"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.ortho_weight" title="Permalink to this definition">¶</a></dt>
 <dd><p>Make ortho weight tensor.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.parzen_estimation">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">parzen_estimation</code><span class="sig-paren">(</span><em>samples</em>, <em>tests</em>, <em>h=1.0</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.parzen_estimation" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">parzen_estimation</code><span class="sig-paren">(</span><em>samples</em>, <em>tests</em>, <em>h=1.0</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#parzen_estimation"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.parzen_estimation" title="Permalink to this definition">¶</a></dt>
 <dd><p>Estimate parzen window.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.print_profile">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">print_profile</code><span class="sig-paren">(</span><em>tparams</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.print_profile" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">print_profile</code><span class="sig-paren">(</span><em>tparams</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#print_profile"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.print_profile" title="Permalink to this definition">¶</a></dt>
 <dd><p>Prints shapes of the shared variables.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.print_section">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">print_section</code><span class="sig-paren">(</span><em>s</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.print_section" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">print_section</code><span class="sig-paren">(</span><em>s</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#print_section"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.print_section" title="Permalink to this definition">¶</a></dt>
 <dd><p>For printing sections to scripts nicely.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.resolve_path">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">resolve_path</code><span class="sig-paren">(</span><em>p</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.resolve_path" title="Permalink to this definition">¶</a></dt>
-<dd><p>Resolves a path using the <cite>paths.conf</cite> file.</p>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">resolve_path</code><span class="sig-paren">(</span><em>p</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#resolve_path"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.resolve_path" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resolves a path using the <cite>.cortexrc</cite> file.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.scan">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">scan</code><span class="sig-paren">(</span><em>f_scan</em>, <em>seqs</em>, <em>outputs_info</em>, <em>non_seqs</em>, <em>n_steps</em>, <em>name='scan'</em>, <em>strict=False</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.scan" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">scan</code><span class="sig-paren">(</span><em>f_scan</em>, <em>seqs</em>, <em>outputs_info</em>, <em>non_seqs</em>, <em>n_steps</em>, <em>name='scan'</em>, <em>strict=False</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#scan"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.scan" title="Permalink to this definition">¶</a></dt>
 <dd><p>Convenience function for scan.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.shuffle_columns">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">shuffle_columns</code><span class="sig-paren">(</span><em>x</em>, <em>srng</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.shuffle_columns" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">shuffle_columns</code><span class="sig-paren">(</span><em>x</em>, <em>srng</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#shuffle_columns"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.shuffle_columns" title="Permalink to this definition">¶</a></dt>
 <dd><p>Shuffles a tensor along the second index.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.unzip">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">unzip</code><span class="sig-paren">(</span><em>zipped</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.unzip" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">unzip</code><span class="sig-paren">(</span><em>zipped</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#unzip"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.unzip" title="Permalink to this definition">¶</a></dt>
 <dd><p>Pull parameters from Theano shared variables.</p>
 <p>From Cho&#8217;s arctic repo.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.update_dict_of_lists">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">update_dict_of_lists</code><span class="sig-paren">(</span><em>d_to_update</em>, <em>**d</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.update_dict_of_lists" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">update_dict_of_lists</code><span class="sig-paren">(</span><em>d_to_update</em>, <em>**d</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#update_dict_of_lists"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.update_dict_of_lists" title="Permalink to this definition">¶</a></dt>
 <dd><p>Updates a dict of list with kwargs.</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.warn_kwargs">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">warn_kwargs</code><span class="sig-paren">(</span><em>c</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.warn_kwargs" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">warn_kwargs</code><span class="sig-paren">(</span><em>c</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#warn_kwargs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.warn_kwargs" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.tools.zipp">
-<code class="descclassname">cortex.utils.tools.</code><code class="descname">zipp</code><span class="sig-paren">(</span><em>params</em>, <em>tparams</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.tools.zipp" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.tools.</code><code class="descname">zipp</code><span class="sig-paren">(</span><em>params</em>, <em>tparams</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/tools.html#zipp"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.tools.zipp" title="Permalink to this definition">¶</a></dt>
 <dd><p>Push parameters to Theano shared variables.</p>
 <p>From Cho&#8217;s arctic repo.</p>
 </dd></dl>
@@ -497,7 +546,7 @@ This implementation does not have that problem.</p>
 not as a basis for all training.</p>
 <dl class="function">
 <dt id="cortex.utils.training.main_loop">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">main_loop</code><span class="sig-paren">(</span><em>train</em>, <em>valid</em>, <em>tparams</em>, <em>f_grad_shared</em>, <em>f_grad_updates</em>, <em>f_test</em>, <em>f_test_keys</em>, <em>input_keys=None</em>, <em>f_extra=None</em>, <em>test_every=None</em>, <em>name=None</em>, <em>save=None</em>, <em>save_images=None</em>, <em>epochs=None</em>, <em>learning_rate=None</em>, <em>learning_rate_scheduler=None</em>, <em>monitor=None</em>, <em>out_path=None</em>, <em>extra_outs_keys=None</em>, <em>output_every=None</em>, <em>**validation_args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.main_loop" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.training.</code><code class="descname">main_loop</code><span class="sig-paren">(</span><em>train</em>, <em>valid</em>, <em>tparams</em>, <em>f_grad_shared</em>, <em>f_grad_updates</em>, <em>f_test</em>, <em>f_test_keys</em>, <em>input_keys=None</em>, <em>f_extra=None</em>, <em>test_every=None</em>, <em>show_every=None</em>, <em>output_every=None</em>, <em>name=None</em>, <em>save=None</em>, <em>save_images=None</em>, <em>epochs=None</em>, <em>learning_rate=None</em>, <em>learning_rate_scheduler=None</em>, <em>monitor=None</em>, <em>out_path=None</em>, <em>extra_outs_keys=None</em>, <em>**validation_args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#main_loop"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.main_loop" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generic main loop.</p>
 <p>Typical main loop. For special applications, a different loop is better.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -505,31 +554,34 @@ not as a basis for all training.</p>
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
-<li><strong>train</strong> &#8211; Dataset object. Training dataset.</li>
-<li><strong>valid</strong> &#8211; Dataset object. Validation dataset.</li>
-<li><strong>tparams</strong> &#8211; OrderedDict of Theano.shared. Parameters of the model.</li>
-<li><strong>f_grad_shared</strong> &#8211; Theano function. Computes gradients.</li>
-<li><strong>f_grad_updates</strong> &#8211; Theano function. Updates parameters.</li>
-<li><strong>f_test</strong> &#8211; Theano function. Tests model are returns results.</li>
-<li><strong>f_test_keys</strong> &#8211; list of str. List of keys that go with <cite>f_test</cite>.</li>
-<li><strong>input_keys</strong> &#8211; list of str (optional). If not None, used to extract
+<li><strong>train</strong> (<a class="reference internal" href="cortex.datasets.html#cortex.datasets.Dataset" title="cortex.datasets.Dataset"><em>Dataset</em></a>) &#8211; Training dataset.</li>
+<li><strong>valid</strong> (<a class="reference internal" href="cortex.datasets.html#cortex.datasets.Dataset" title="cortex.datasets.Dataset"><em>Dataset</em></a>) &#8211; Validation dataset.</li>
+<li><strong>tparams</strong> (<em>OrderedDict</em>) &#8211; dictionary of Theano.shared.
+Parameters of the model.</li>
+<li><strong>f_grad_shared</strong> (<em>theano.function</em>) &#8211; Computes gradients.</li>
+<li><strong>f_grad_updates</strong> (<em>theano.function</em>) &#8211; Updates parameters.</li>
+<li><strong>f_test</strong> (<em>theano.function</em>) &#8211; Tests model are returns results.</li>
+<li><strong>f_test_keys</strong> (<em>list</em>) &#8211; List of keys that go with <cite>f_test</cite>.</li>
+<li><strong>input_keys</strong> (<em>Optional[list]</em>) &#8211; If not None, used to extract
 multiple modes from dataset for <cite>f_grad_shared</cite>.</li>
-<li><strong>f_extra</strong> &#8211; Theano or python function. Function that is run just prior to
-testing.</li>
-<li><strong>test_every</strong> &#8211; int (optional). If not None, then controls how many epochs
+<li><strong>f_extra</strong> (<em>theano.function</em>) &#8211; Function that is run just prior to testing.</li>
+<li><strong>test_every</strong> (<em>Optional[int]</em>) &#8211; If not None, then controls how many epochs
 before test.</li>
-<li><strong>name</strong> &#8211; str. Name of experiment.</li>
-<li><strong>save</strong> &#8211; function. Saving function for parameters.</li>
-<li><strong>save_images</strong> &#8211; function (optional). Function to save images.</li>
-<li><strong>epochs</strong> &#8211; int. Number of training epochs.</li>
-<li><strong>learning_rate</strong> &#8211; float.</li>
-<li><strong>learning_rate_scheduler</strong> &#8211; Schedule object. For scheduling learning rate.</li>
-<li><strong>monitor</strong> &#8211; utils.monitor.Monitor.</li>
-<li><strong>out_path</strong> &#8211; str. Director path for output files.</li>
-<li><strong>extra_outs_keys</strong> &#8211; list of str. Keys for extra outs of <cite>f_grad_shared</cite>.</li>
-<li><strong>output_every</strong> &#8211; int (optional). If not None, print rvals from
-<cite>f_grad_shared</cite>.</li>
-<li><strong>validation_args</strong> &#8211; kwargs. Arguments for test.</li>
+<li><strong>show_every</strong> (<em>Optional[int]</em>) &#8211; If not None, then controls how many epochs
+before saving images.</li>
+<li><strong>output_every</strong> (<em>Optional[int]</em>) &#8211; If not None, print rvals from
+<cite>f_grad_shared</cite> and save images.</li>
+<li><strong>name</strong> (<em>str</em>) &#8211; Name of experiment.</li>
+<li><strong>save</strong> (<em>function</em>) &#8211; Saving function for parameters.</li>
+<li><strong>save_images</strong> (<em>Optional[function]</em>) &#8211; Function to save images.</li>
+<li><strong>epochs</strong> (<em>int</em>) &#8211; Number of training epochs.</li>
+<li><strong>learning_rate</strong> (<em>float</em>) &#8211; </li>
+<li><strong>learning_rate_scheduler</strong> (<em>Optional[Scheduler]</em>) &#8211; For scheduling learning
+rate.</li>
+<li><strong>monitor</strong> (<em>utils.monitor.Monitor</em>) &#8211; </li>
+<li><strong>out_path</strong> (<em>str</em>) &#8211; Director path for output files.</li>
+<li><strong>extra_outs_keys</strong> (<em>list</em>) &#8211; Keys for extra outs of <cite>f_grad_shared</cite>.</li>
+<li><strong>**validation_args</strong> &#8211; Arguments for test.</li>
 </ul>
 </td>
 </tr>
@@ -539,7 +591,7 @@ before test.</li>
 
 <dl class="function">
 <dt id="cortex.utils.training.make_argument_parser">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">make_argument_parser</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.make_argument_parser" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.training.</code><code class="descname">make_argument_parser</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#make_argument_parser"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.make_argument_parser" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generic experiment parser.</p>
 <p>Generic parser takes the experiment yaml as the main argument, but has some
 options for reloading, etc. This parser can be easily extended using a
@@ -548,7 +600,7 @@ wrapper method.</p>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">parser</td>
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">argparse.parser</td>
 </tr>
 </tbody>
 </table>
@@ -556,14 +608,14 @@ wrapper method.</p>
 
 <dl class="function">
 <dt id="cortex.utils.training.make_argument_parser_test">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">make_argument_parser_test</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.make_argument_parser_test" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.training.</code><code class="descname">make_argument_parser_test</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#make_argument_parser_test"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.make_argument_parser_test" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generic experiment parser for testing.</p>
 <p>Takes the experiment directory as the argument in command line.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">parser</td>
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">argparse.parser</td>
 </tr>
 </tbody>
 </table>
@@ -571,7 +623,7 @@ wrapper method.</p>
 
 <dl class="function">
 <dt id="cortex.utils.training.reload_model">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">reload_model</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.reload_model" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.training.</code><code class="descname">reload_model</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#reload_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.reload_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Reloads a model from argparse args.</p>
 <p>Extracts model into a dictionary from argparse args like from
 <cite>make_argument_parser_test</cite>.</p>
@@ -579,11 +631,11 @@ wrapper method.</p>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>args</strong> &#8211; argparse args.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>args</strong> (<em>argparse.args</em>) &#8211; </td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">dict, dictionary of experiment arguments.</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">dictionary of experiment arguments.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">exp_dict</td>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
 </tr>
 </tbody>
 </table>
@@ -591,7 +643,7 @@ wrapper method.</p>
 
 <dl class="function">
 <dt id="cortex.utils.training.set_experiment">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">set_experiment</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.set_experiment" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.training.</code><code class="descname">set_experiment</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#set_experiment"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.set_experiment" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generic experiment setup method.</p>
 <p>Extracts args from a parser like from <cite>make_argument_parser</cite>. These are
 extracted into a dictionary for kwargs.</p>
@@ -599,11 +651,11 @@ extracted into a dictionary for kwargs.</p>
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>args</strong> &#8211; argparse args.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>args</strong> (<em>dict or argparse.args</em>) &#8211; </td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">dict, dictionary of experiment arguments.</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">dictionary of experiment arguments.</td>
 </tr>
-<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">exp_dict</td>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
 </tr>
 </tbody>
 </table>
@@ -611,7 +663,7 @@ extracted into a dictionary for kwargs.</p>
 
 <dl class="function">
 <dt id="cortex.utils.training.set_model">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">set_model</code><span class="sig-paren">(</span><em>create_model</em>, <em>model_to_load</em>, <em>unpack</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.set_model" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.training.</code><code class="descname">set_model</code><span class="sig-paren">(</span><em>create_model</em>, <em>model_to_load</em>, <em>unpack</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#set_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.set_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Convenience method for creating new or loading old model.</p>
 <p>Object creation often can be reduced to 3 things: a creation method,
 a saved model, and a means of unpacking the saved model. This method
@@ -621,25 +673,25 @@ attempts to summarize these into one method.</p>
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>create_model</strong> &#8211; <p>python functional, method for creating model.
-No arguments. Methods should be defined out-of-method, e.g.:
-`
-dim = 100
-def create_model():</p>
-<blockquote>
-<div>return ModelClass(dim)</div></blockquote>
-<p>`
-and then passed into <cite>set_model</cite></p>
+<li><strong>create_model</strong> (<em>function</em>) &#8211; <p>method for creating model.
+No arguments. Methods should be defined out-of-method, e.g.:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">dim</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="k">def</span> <span class="nf">create_model</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">ModelClass</span><span class="p">(</span><span class="n">dim</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>and then passed into <cite>set_model</cite></p>
 </li>
-<li><strong>model_to_load</strong> &#8211; str, path the npz file.</li>
-<li><strong>python function name, Takes model_to_load.</strong> (<em>unpack,</em>) &#8211; See <cite>utils.tools.load_model</cite> for details.</li>
+<li><strong>model_to_load</strong> (<em>str</em>) &#8211; path the npz file.</li>
+<li><strong>unpack</strong> (<em>function</em>) &#8211; Takes model_to_load.
+See <cite>utils.tools.load_model</cite> for details.</li>
 </ul>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">Dict of Layer subclass objects</p>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">dictionary of Layer subclass objects</p>
 </td>
 </tr>
-<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last"><a class="reference internal" href="cortex.models.html#module-cortex.models" title="cortex.models">models</a></p>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">dict</p>
 </td>
 </tr>
 </tbody>
@@ -648,40 +700,62 @@ and then passed into <cite>set_model</cite></p>
 
 <dl class="function">
 <dt id="cortex.utils.training.set_optimizer">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">set_optimizer</code><span class="sig-paren">(</span><em>inputs</em>, <em>cost</em>, <em>tparams</em>, <em>constants</em>, <em>updates</em>, <em>extra_outs</em>, <em>optimizer=None</em>, <em>optimizer_args=None</em>, <em>**learning_args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.set_optimizer" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.training.</code><code class="descname">set_optimizer</code><span class="sig-paren">(</span><em>inputs</em>, <em>cost</em>, <em>tparams</em>, <em>constants</em>, <em>updates</em>, <em>extra_outs</em>, <em>optimizer='sgd'</em>, <em>optimizer_args=None</em>, <em>**learning_args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#set_optimizer"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.set_optimizer" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sets the parameter update functions with optimizer.</p>
-</dd></dl>
-
-<dl class="function">
-<dt id="cortex.utils.training.set_params">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">set_params</code><span class="sig-paren">(</span><em>tparams</em>, <em>updates</em>, <em>excludes=[]</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.set_params" title="Permalink to this definition">¶</a></dt>
-<dd><p>Sets params, removing updates from tparams.</p>
-<p>Convenience function to extract the theano parameters that will have
-gradients calculated.</p>
-<dl class="docutils">
-<dt>Arg:</dt>
-<dd><p class="first">tparams: OrderedDict of Theano shared variables.
-updates: OrderedUpdates. Used to exclude variables that have gradients</p>
-<blockquote>
-<div>calculated.</div></blockquote>
-<dl class="last docutils">
-<dt>excludes: list of str. List of keys to exclude from gradients or</dt>
-<dd>learning.</dd>
-</dl>
-</dd>
-</dl>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body"><dl class="docutils">
-<dt>OrderedDict of Theano shared variables that will have gradients</dt>
-<dd>calculated.</dd>
-</dl>
-<p>all_params: OrderedDict of Theano shared variables that will be saved.</p>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>inputs</strong> (<em>T.tensor</em>) &#8211; input variables.</li>
+<li><strong>cost</strong> (<em>T.scalar</em>) &#8211; cost</li>
+<li><strong>tparams</strong> (<em>OrderedDict</em>) &#8211; directionary of tensor parameters</li>
+<li><strong>constants</strong> (<em>list</em>) &#8211; list of constant tensors.</li>
+<li><strong>updates</strong> (<em>theano.OrderedUpdates</em>) &#8211; updates.</li>
+<li><strong>extra_outs</strong> (<em>list</em>) &#8211; list of extra output tensors.</li>
+<li><strong>optimizer</strong> (<em>Optional[str]</em>) &#8211; optimizer string. See <cite>utils.op</cite> for details.
+Defaults to <cite>sgd</cite>.</li>
+<li><strong>optimizer_args</strong> (<em>Optional[dict]</em>) &#8211; optional arguments for optimizer.</li>
+<li><strong>**learning_args</strong> &#8211; extra kwargs for learning not used.</li>
+</ul>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">tparams</td>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">gradient function.
+theano.function: update function.
+dict: extra learning keyword arguments.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">theano.function</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.utils.training.set_params">
+<code class="descclassname">cortex.utils.training.</code><code class="descname">set_params</code><span class="sig-paren">(</span><em>tparams</em>, <em>updates</em>, <em>excludes=[]</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#set_params"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.set_params" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets params, removing updates from tparams.</p>
+<p>Convenience function to extract the theano parameters that will have
+gradients calculated.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>tparams</strong> (<em>dict</em>) &#8211; dictionary of Theano shared variables.</li>
+<li><strong>updates</strong> (<em>theano.OrderedUpdates</em>) &#8211; used to exclude variables that have
+gradients calculated.</li>
+<li><strong>excludes</strong> (<em>list</em>) &#8211; list of keys to exclude from gradients or learning.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">dict of variables that will have gradients calculated.
+OrderedDict: dict of variables that will be saved.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">OrderedDict</p>
+</td>
 </tr>
 </tbody>
 </table>
@@ -689,34 +763,41 @@ updates: OrderedUpdates. Used to exclude variables that have gradients</p>
 
 <dl class="function">
 <dt id="cortex.utils.training.set_tparams">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">set_tparams</code><span class="sig-paren">(</span><em>model_dict</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.set_tparams" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.training.</code><code class="descname">set_tparams</code><span class="sig-paren">(</span><em>model_dict</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#set_tparams"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.set_tparams" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generic tparams setter.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>model_dict</strong> (<em>dict</em>) &#8211; </td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.training.test">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">test</code><span class="sig-paren">(</span><em>data_iter</em>, <em>f_test</em>, <em>f_test_keys</em>, <em>input_keys</em>, <em>n_samples=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.test" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.training.</code><code class="descname">test</code><span class="sig-paren">(</span><em>data_iter</em>, <em>f_test</em>, <em>f_test_keys</em>, <em>input_keys</em>, <em>n_samples=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#test"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.test" title="Permalink to this definition">¶</a></dt>
 <dd><p>Tests the model using a data iterator.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>data_iter</strong> &#8211; Dataset object.</li>
-<li><strong>f_test</strong> &#8211; Theano funciton.</li>
-<li><strong>f_test_keys</strong> &#8211; list of str. The keys that go with the corresponding list
+<li><strong>data_iter</strong> (<a class="reference internal" href="cortex.datasets.html#cortex.datasets.Dataset" title="cortex.datasets.Dataset"><em>Dataset</em></a>) &#8211; dataset iterator.</li>
+<li><strong>f_test</strong> (<em>theano.function</em>) &#8211; </li>
+<li><strong>f_test_keys</strong> (<em>list</em>) &#8211; The keys that go with the corresponding list
 of outputs from <cite>f_test</cite>.</li>
-<li><strong>input_keys</strong> &#8211; list of str. Used to extract multiple modes from dataset
+<li><strong>input_keys</strong> (<em>list</em>) &#8211; Used to extract multiple modes from dataset
 for <cite>f_test</cite>.</li>
-<li><strong>n_samples</strong> &#8211; int (optional). If not None, use only this number of samples
-as input to <cite>f_test</cite>.</li>
+<li><strong>n_samples</strong> (<em>Optional[int]</em>) &#8211; as input to <cite>f_test</cite>.</li>
 </ul>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">OrderedDict of np.array.</p>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">dictionary of np.array results.</p>
 </td>
 </tr>
-<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">results</p>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">OrderedDict</p>
 </td>
 </tr>
 </tbody>
@@ -725,7 +806,7 @@ as input to <cite>f_test</cite>.</li>
 
 <dl class="function">
 <dt id="cortex.utils.training.validate">
-<code class="descclassname">cortex.utils.training.</code><code class="descname">validate</code><span class="sig-paren">(</span><em>tparams</em>, <em>results</em>, <em>best_valid</em>, <em>e</em>, <em>best_epoch</em>, <em>save=None</em>, <em>valid_key=None</em>, <em>valid_sign=None</em>, <em>bestfile=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.training.validate" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.training.</code><code class="descname">validate</code><span class="sig-paren">(</span><em>tparams</em>, <em>results</em>, <em>best_valid</em>, <em>e</em>, <em>best_epoch</em>, <em>save=None</em>, <em>valid_key=None</em>, <em>valid_sign=None</em>, <em>bestfile=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/training.html#validate"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.training.validate" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generic validation method.</p>
 <p>Compares the validation result against previous best.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -733,22 +814,23 @@ as input to <cite>f_test</cite>.</li>
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>tparams</strong> &#8211; OrderedDict of Theano shared variables. For saving params.</li>
-<li><strong>results</strong> &#8211; OrderedDict of np.array.</li>
-<li><strong>best_valid</strong> &#8211; float. Best pervious value.</li>
-<li><strong>e</strong> &#8211; int. Epoch</li>
-<li><strong>best_epoch</strong> &#8211; int. Epoch for best_valid.</li>
-<li><strong>save</strong> &#8211; function. Method for saving params.</li>
-<li><strong>valid_key</strong> &#8211; str. Key from results to test against best_valid.</li>
-<li><strong>bestfile</strong> &#8211; str. Path to best file.</li>
+<li><strong>tparams</strong> (<em>OrderedDict</em>) &#8211; dictionary of Theano shared variables.
+For saving params.</li>
+<li><strong>results</strong> (<em>OrderedDict</em>) &#8211; dictionary of np.array results.</li>
+<li><strong>best_valid</strong> (<em>float</em>) &#8211; Best pervious value.</li>
+<li><strong>e</strong> (<em>int</em>) &#8211; Epoch</li>
+<li><strong>best_epoch</strong> (<em>int</em>) &#8211; Epoch for best_valid.</li>
+<li><strong>save</strong> (<em>function</em>) &#8211; Method for saving params.</li>
+<li><strong>valid_key</strong> (<em>str</em>) &#8211; Key from results to test against best_valid.</li>
+<li><strong>bestfile</strong> (<em>str</em>) &#8211; Path to best file.</li>
 </ul>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">float
-best_epoch: int</p>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">best valid
+int: best epoch</p>
 </td>
 </tr>
-<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">best_valid</p>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">float</p>
 </td>
 </tr>
 </tbody>
@@ -765,13 +847,13 @@ For example <code class="docutils literal"><span class="pre">tile_raster_images<
 image from a set of samples or weights.</p>
 <dl class="function">
 <dt id="cortex.utils.vis_utils.scale_to_unit_interval">
-<code class="descclassname">cortex.utils.vis_utils.</code><code class="descname">scale_to_unit_interval</code><span class="sig-paren">(</span><em>ndar</em>, <em>eps=1e-08</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.vis_utils.scale_to_unit_interval" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.vis_utils.</code><code class="descname">scale_to_unit_interval</code><span class="sig-paren">(</span><em>ndar</em>, <em>eps=1e-08</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/vis_utils.html#scale_to_unit_interval"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.vis_utils.scale_to_unit_interval" title="Permalink to this definition">¶</a></dt>
 <dd><p>Scales all values in the ndarray ndar to be between 0 and 1</p>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.utils.vis_utils.tile_raster_images">
-<code class="descclassname">cortex.utils.vis_utils.</code><code class="descname">tile_raster_images</code><span class="sig-paren">(</span><em>X</em>, <em>img_shape</em>, <em>tile_shape</em>, <em>tile_spacing=(0</em>, <em>0)</em>, <em>scale_rows_to_unit_interval=True</em>, <em>output_pixel_vals=True</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.utils.vis_utils.tile_raster_images" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.utils.vis_utils.</code><code class="descname">tile_raster_images</code><span class="sig-paren">(</span><em>X</em>, <em>img_shape</em>, <em>tile_shape</em>, <em>tile_spacing=(0</em>, <em>0)</em>, <em>scale_rows_to_unit_interval=True</em>, <em>output_pixel_vals=True</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/utils/vis_utils.html#tile_raster_images"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.utils.vis_utils.tile_raster_images" title="Permalink to this definition">¶</a></dt>
 <dd><p>Transform an array with one flattened image per row, into an array in
 which images are reshaped and layed out like tiles on a floor.
 This function is useful for visualizing datasets whose rows are images,
@@ -796,6 +878,7 @@ being plotted to [0,1] or not
 </div>
 <div class="section" id="module-cortex.utils">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-cortex.utils" title="Permalink to this headline">¶</a></h2>
+<p>Init for utils.</p>
 </div>
 </div>
 
@@ -809,7 +892,7 @@ being plotted to [0,1] or not
   <ul>
 <li><a class="reference internal" href="#">cortex.utils package</a><ul>
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
-<li><a class="reference internal" href="#module-cortex.utils.costs">cortex.utils.costs module</a></li>
+<li><a class="reference internal" href="#module-cortex.utils.extra">cortex.utils.extra module</a></li>
 <li><a class="reference internal" href="#module-cortex.utils.learning_scheduler">cortex.utils.learning_scheduler module</a></li>
 <li><a class="reference internal" href="#module-cortex.utils.logger">cortex.utils.logger module</a></li>
 <li><a class="reference internal" href="#module-cortex.utils.monitor">cortex.utils.monitor module</a></li>

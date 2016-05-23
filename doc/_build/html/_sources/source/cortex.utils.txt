@@ -4,10 +4,10 @@ cortex.utils package
 Submodules
 ----------
 
-cortex.utils.costs module
+cortex.utils.extra module
 -------------------------
 
-.. automodule:: cortex.utils.costs
+.. automodule:: cortex.utils.extra
     :members:
     :undoc-members:
     :show-inheritance:

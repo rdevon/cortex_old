@@ -64,10 +64,11 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cortex.datasets.neuroimaging.html">cortex.datasets.neuroimaging package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#submodules">Submodules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#cortex-datasets-neuroimaging-fmri-module">cortex.datasets.neuroimaging.fmri module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#cortex-datasets-neuroimaging-nifti-viewer-module">cortex.datasets.neuroimaging.nifti_viewer module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#cortex-datasets-neuroimaging-simtb-module">cortex.datasets.neuroimaging.simTB module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#cortex-datasets-neuroimaging-snp-module">cortex.datasets.neuroimaging.snp module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#module-cortex.datasets.neuroimaging.fmri">cortex.datasets.neuroimaging.fmri module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#module-cortex.datasets.neuroimaging.mri">cortex.datasets.neuroimaging.mri module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#module-cortex.datasets.neuroimaging.nifti_viewer">cortex.datasets.neuroimaging.nifti_viewer module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#module-cortex.datasets.neuroimaging.simTB">cortex.datasets.neuroimaging.simTB module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#module-cortex.datasets.neuroimaging.snp">cortex.datasets.neuroimaging.snp module</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cortex.datasets.neuroimaging.html#module-cortex.datasets.neuroimaging">Module contents</a></li>
 </ul>
 </li>
@@ -79,51 +80,167 @@
 <p>Generic dataset class</p>
 <dl class="class">
 <dt id="cortex.datasets.BasicDataset">
-<em class="property">class </em><code class="descclassname">cortex.datasets.</code><code class="descname">BasicDataset</code><span class="sig-paren">(</span><em>data</em>, <em>distributions=None</em>, <em>labels='label'</em>, <em>name=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.BasicDataset" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">cortex.datasets.</code><code class="descname">BasicDataset</code><span class="sig-paren">(</span><em>data</em>, <em>distributions=None</em>, <em>labels='label'</em>, <em>name=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#BasicDataset"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.BasicDataset" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#cortex.datasets.Dataset" title="cortex.datasets.Dataset"><code class="xref py py-class docutils literal"><span class="pre">cortex.datasets.Dataset</span></code></a></p>
 <p>Dataset with numpy arrays as inputs. No visualization available.</p>
 <p>Arrays must be a dictionary of name/numpy array key/value pairs.</p>
+<dl class="attribute">
+<dt id="cortex.datasets.BasicDataset.data">
+<code class="descname">data</code><a class="headerlink" href="#cortex.datasets.BasicDataset.data" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>dict</em> &#8211; dictionary of numpy.array.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.BasicDataset.n">
+<code class="descname">n</code><a class="headerlink" href="#cortex.datasets.BasicDataset.n" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>int</em> &#8211; number of data samples.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.BasicDataset.dims">
+<code class="descname">dims</code><a class="headerlink" href="#cortex.datasets.BasicDataset.dims" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>dict</em> &#8211; dictionary of data dimensions.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.BasicDataset.distributions">
+<code class="descname">distributions</code><a class="headerlink" href="#cortex.datasets.BasicDataset.distributions" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>dict</em> &#8211; dictionary of strings. See <cite>models.distributions</cite>
+for details.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.BasicDataset.X">
+<code class="descname">X</code><a class="headerlink" href="#cortex.datasets.BasicDataset.X" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>numpy.array</em> &#8211; MRI data.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.BasicDataset.Y">
+<code class="descname">Y</code><a class="headerlink" href="#cortex.datasets.BasicDataset.Y" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>Optional[numpy.array]</em> &#8211; If not None, lables.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.BasicDataset.mean_image">
+<code class="descname">mean_image</code><a class="headerlink" href="#cortex.datasets.BasicDataset.mean_image" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>numpy.array</em> &#8211; mean image of primary data.</p>
+</dd></dl>
+
 <dl class="method">
 <dt id="cortex.datasets.BasicDataset.balance_labels">
-<code class="descname">balance_labels</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.BasicDataset.balance_labels" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<code class="descname">balance_labels</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#BasicDataset.balance_labels"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.BasicDataset.balance_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Balanced the dataset.</p>
+</dd></dl>
 
 <dl class="method">
 <dt id="cortex.datasets.BasicDataset.next">
-<code class="descname">next</code><span class="sig-paren">(</span><em>batch_size=None</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.BasicDataset.next" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<code class="descname">next</code><span class="sig-paren">(</span><em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#BasicDataset.next"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.BasicDataset.next" title="Permalink to this definition">¶</a></dt>
+<dd><p>Draws the next batch of data samples.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>batch_size</strong> (<em>int</em>) &#8211; </td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">Dictionary of data.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
 
 <dl class="method">
 <dt id="cortex.datasets.BasicDataset.randomize">
-<code class="descname">randomize</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.BasicDataset.randomize" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<code class="descname">randomize</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#BasicDataset.randomize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.BasicDataset.randomize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Randomizes the dataset</p>
+</dd></dl>
 
 </dd></dl>
 
 <dl class="class">
 <dt id="cortex.datasets.Dataset">
-<em class="property">class </em><code class="descclassname">cortex.datasets.</code><code class="descname">Dataset</code><span class="sig-paren">(</span><em>batch_size=None</em>, <em>shuffle=True</em>, <em>inf=False</em>, <em>name='dataset'</em>, <em>mode=None</em>, <em>stop=None</em>, <em>balance=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.Dataset" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="descclassname">cortex.datasets.</code><code class="descname">Dataset</code><span class="sig-paren">(</span><em>batch_size=None</em>, <em>shuffle=True</em>, <em>inf=False</em>, <em>name='dataset'</em>, <em>mode=None</em>, <em>stop=None</em>, <em>balance=False</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#Dataset"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.Dataset" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>Base dataset iterator class.</p>
+<dl class="attribute">
+<dt id="cortex.datasets.Dataset.batch_size">
+<code class="descname">batch_size</code><a class="headerlink" href="#cortex.datasets.Dataset.batch_size" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>int</em> &#8211; batch size for the iterator.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.Dataset.shuffle">
+<code class="descname">shuffle</code><a class="headerlink" href="#cortex.datasets.Dataset.shuffle" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>bool</em> &#8211; shuffle the dataset after each epoch.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.Dataset.inf">
+<code class="descname">inf</code><a class="headerlink" href="#cortex.datasets.Dataset.inf" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>bool</em> &#8211; reset the dataset after iterating through who set.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.Dataset.name">
+<code class="descname">name</code><a class="headerlink" href="#cortex.datasets.Dataset.name" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>str</em> &#8211; name of the dataset.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.Dataset.pos">
+<code class="descname">pos</code><a class="headerlink" href="#cortex.datasets.Dataset.pos" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>int</em> &#8211; current position of the iterator.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.Dataset.stop">
+<code class="descname">stop</code><a class="headerlink" href="#cortex.datasets.Dataset.stop" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>int</em> &#8211; stop the dataset at this index when loading.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.Dataset.mode">
+<code class="descname">mode</code><a class="headerlink" href="#cortex.datasets.Dataset.mode" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>str</em> &#8211; usually train, test, valid.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.Dataset.balance">
+<code class="descname">balance</code><a class="headerlink" href="#cortex.datasets.Dataset.balance" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>bool</em> &#8211; replicate samples to balance the dataset.</p>
+</dd></dl>
+
 <dl class="method">
 <dt id="cortex.datasets.Dataset.randomize">
-<code class="descname">randomize</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.Dataset.randomize" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<code class="descname">randomize</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#Dataset.randomize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.Dataset.randomize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Randomize the dataset.</p>
+</dd></dl>
 
 <dl class="method">
 <dt id="cortex.datasets.Dataset.reset">
-<code class="descname">reset</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.Dataset.reset" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<code class="descname">reset</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#Dataset.reset"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.Dataset.reset" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reset the dataset post-epoch.</p>
+</dd></dl>
 
 <dl class="method">
 <dt id="cortex.datasets.Dataset.save_images">
-<code class="descname">save_images</code><span class="sig-paren">(</span><em>*args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.Dataset.save_images" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<code class="descname">save_images</code><span class="sig-paren">(</span><em>*args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#Dataset.save_images"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.Dataset.save_images" title="Permalink to this definition">¶</a></dt>
+<dd><p>Save images.</p>
+</dd></dl>
 
 </dd></dl>
 
 <dl class="function">
+<dt id="cortex.datasets.fetch_basic_data">
+<code class="descclassname">cortex.datasets.</code><code class="descname">fetch_basic_data</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#fetch_basic_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.fetch_basic_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fetch the basic dataset for demos.</p>
+</dd></dl>
+
+<dl class="function">
 <dt id="cortex.datasets.load_data">
-<code class="descclassname">cortex.datasets.</code><code class="descname">load_data</code><span class="sig-paren">(</span><em>dataset=None</em>, <em>train_batch_size=None</em>, <em>valid_batch_size=None</em>, <em>test_batch_size=None</em>, <em>resolve_dataset=None</em>, <em>**dataset_args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.load_data" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.datasets.</code><code class="descname">load_data</code><span class="sig-paren">(</span><em>dataset=None</em>, <em>train_batch_size=None</em>, <em>valid_batch_size=None</em>, <em>test_batch_size=None</em>, <em>resolve_dataset=None</em>, <em>**dataset_args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#load_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.load_data" title="Permalink to this definition">¶</a></dt>
 <dd><p>Load dataset with a predefined split.</p>
 <p>For these datasets, train/valid/test split has already been made.
 For the batch sizes, if any are None, the corresponding dataset
@@ -133,14 +250,19 @@ will also be None.</p>
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>dataset</strong> &#8211; str</li>
-<li><strong>train_batch_size</strong> (<em>Optional</em>) &#8211; </li>
-<li><strong>valid_batch_size</strong> (<em>Optional</em>) &#8211; </li>
-<li><strong>test_batch_size</strong> (<em>Optional</em>) &#8211; </li>
+<li><strong>dataset</strong> (<em>str</em>) &#8211; name of the dataset</li>
+<li><strong>train_batch_size</strong> (<em>Optional[int]</em>) &#8211; </li>
+<li><strong>valid_batch_size</strong> (<em>Optional[int]</em>) &#8211; </li>
+<li><strong>test_batch_size</strong> (<em>Optional[int]</em>) &#8211; </li>
 </ul>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">train, valid, test Dataset objects.</p>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">train dataset
+Dataset: valid dataset
+Dataset: test dataset</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last"><a class="reference internal" href="#cortex.datasets.Dataset" title="cortex.datasets.Dataset">Dataset</a></p>
 </td>
 </tr>
 </tbody>
@@ -149,17 +271,20 @@ will also be None.</p>
 
 <dl class="function">
 <dt id="cortex.datasets.load_data_split">
-<code class="descclassname">cortex.datasets.</code><code class="descname">load_data_split</code><span class="sig-paren">(</span><em>C</em>, <em>idx=None</em>, <em>dataset=None</em>, <em>**dataset_args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.load_data_split" title="Permalink to this definition">¶</a></dt>
-<dd><p>Load dataset and split.
-:param idx: (Optional) list of list of int. Indices for train/valid/test</p>
-<blockquote>
-<div>datasets.</div></blockquote>
+<code class="descclassname">cortex.datasets.</code><code class="descname">load_data_split</code><span class="sig-paren">(</span><em>C</em>, <em>idx=None</em>, <em>dataset=None</em>, <em>**dataset_args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#load_data_split"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.load_data_split" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load dataset and split.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
 <col class="field-body" />
 <tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">train, valid, test Dataset objects.
-idx: Indices for if split is created.</td>
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>idx</strong> &#8211; (Optional[list]): Indices for train/valid/test datasets.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">train dataset
+Dataset: valid dataset
+Dataset: test dataset
+list: Indices for if split is created.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><a class="reference internal" href="#cortex.datasets.Dataset" title="cortex.datasets.Dataset">Dataset</a></td>
 </tr>
 </tbody>
 </table>
@@ -167,7 +292,7 @@ idx: Indices for if split is created.</td>
 
 <dl class="function">
 <dt id="cortex.datasets.make_datasets">
-<code class="descclassname">cortex.datasets.</code><code class="descname">make_datasets</code><span class="sig-paren">(</span><em>C, split=[0.7, 0.2, 0.1], idx=None, train_batch_size=None, valid_batch_size=None, test_batch_size=None, **dataset_args</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.make_datasets" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.datasets.</code><code class="descname">make_datasets</code><span class="sig-paren">(</span><em>C, split=[0.7, 0.2, 0.1], idx=None, train_batch_size=None, valid_batch_size=None, test_batch_size=None, **dataset_args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#make_datasets"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.make_datasets" title="Permalink to this definition">¶</a></dt>
 <dd><p>Constructs train/valid/test datasets with idx or split.</p>
 <p>If idx is None, use split ratios to create indices.</p>
 <table class="docutils field-list" frame="void" rules="none">
@@ -175,18 +300,22 @@ idx: Indices for if split is created.</td>
 <col class="field-body" />
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>C</strong> &#8211; Dataset class.</li>
-<li><strong>split</strong> &#8211; (Optional) list of float. Split ratios over total.</li>
-<li><strong>idx</strong> &#8211; (Optional) list of list of int. Indices for train/valid/test
-datasets.</li>
-<li><strong>train_batch_size</strong> (<em>Optional</em>) &#8211; </li>
-<li><strong>valid_batch_size</strong> (<em>Optional</em>) &#8211; </li>
-<li><strong>test_batch_size</strong> (<em>Optional</em>) &#8211; </li>
+<li><strong>C</strong> (<a class="reference internal" href="#cortex.datasets.Dataset" title="cortex.datasets.Dataset"><em>Dataset</em></a>) &#8211; </li>
+<li><strong>(Optional[list]</strong> (<a class="reference internal" href="cortex.datasets.neuroimaging.html#cortex.datasets.neuroimaging.fmri.FMRI.idx" title="cortex.datasets.neuroimaging.fmri.FMRI.idx"><em>idx</em></a>) &#8211; Split ratios over total.</li>
+<li><strong>(Optional[list]</strong> &#8211; Indices for train/valid/test datasets.</li>
+<li><strong>train_batch_size</strong> (<em>Optional[int]</em>) &#8211; </li>
+<li><strong>valid_batch_size</strong> (<em>Optional[int]</em>) &#8211; </li>
+<li><strong>test_batch_size</strong> (<em>Optional[int]</em>) &#8211; </li>
 </ul>
 </td>
 </tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">train, valid, test Dataset objects.
-idx: Indices for if split is created.</p>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">train dataset
+Dataset: valid dataset
+Dataset: test dataset
+list: Indices for if split is created.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last"><a class="reference internal" href="#cortex.datasets.Dataset" title="cortex.datasets.Dataset">Dataset</a></p>
 </td>
 </tr>
 </tbody>
@@ -195,13 +324,41 @@ idx: Indices for if split is created.</p>
 
 <dl class="function">
 <dt id="cortex.datasets.make_one_hot">
-<code class="descclassname">cortex.datasets.</code><code class="descname">make_one_hot</code><span class="sig-paren">(</span><em>Y</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.make_one_hot" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<code class="descclassname">cortex.datasets.</code><code class="descname">make_one_hot</code><span class="sig-paren">(</span><em>Y</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#make_one_hot"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.make_one_hot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Makes integer label data into one-hot.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>Y</strong> (<em>numpy.array</em>) &#8211; N x 1 array of integers.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">N x n_labels array of ones and zeros.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">numpy.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
 
 <dl class="function">
 <dt id="cortex.datasets.resolve">
-<code class="descclassname">cortex.datasets.</code><code class="descname">resolve</code><span class="sig-paren">(</span><em>c</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.resolve" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<code class="descclassname">cortex.datasets.</code><code class="descname">resolve</code><span class="sig-paren">(</span><em>c</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets.html#resolve"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.resolve" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resolves the dataset class from string.</p>
+<p>This method only includes basic datasets, such as MNIST. For neuroimaging
+datasets, see <cite>cortex.datasets.neuroimaging</cite></p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>c</strong> (<em>str</em>) &#8211; string to resolve.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">dataset object resolved.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><a class="reference internal" href="#cortex.datasets.Dataset" title="cortex.datasets.Dataset">Dataset</a></td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
 
 </div>
 </div>

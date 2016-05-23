@@ -1,0 +1,872 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.models.distributions &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex.models" href="../models.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../models.html" accesskey="U">cortex.models</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.models.distributions</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Module for Theano probabilistic distributions.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">Layer</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">e</span><span class="p">,</span> <span class="n">floatX</span><span class="p">,</span> <span class="n">pi</span>
+<span class="kn">from</span> <span class="nn">..utils.tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">concatenate</span><span class="p">,</span>
+    <span class="n">init_rngs</span><span class="p">,</span>
+    <span class="n">init_weights</span><span class="p">,</span>
+    <span class="n">_slice</span>
+<span class="p">)</span>
+
+
+<span class="n">_clip</span> <span class="o">=</span> <span class="mf">1e-7</span> <span class="c1"># clipping for Guassian distributions.</span>
+
+<div class="viewcode-block" id="resolve"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.resolve">[docs]</a><span class="k">def</span> <span class="nf">resolve</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">conditional</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Resolves Distribution subclass from str.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        c (str): distribution string.</span>
+<span class="sd">        conditional (Optional[bool]): if True, then use `Conditional` class.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Distribution.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">resolve_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="n">binomial</span><span class="o">=</span><span class="n">Binomial</span><span class="p">,</span>
+        <span class="n">continuous_binomial</span><span class="o">=</span><span class="n">ContinuousBinomial</span><span class="p">,</span>
+        <span class="n">centered_binomial</span><span class="o">=</span><span class="n">CenteredBinomial</span><span class="p">,</span>
+        <span class="n">multinomial</span><span class="o">=</span><span class="n">Multinomial</span><span class="p">,</span>
+        <span class="n">gaussian</span><span class="o">=</span><span class="n">Gaussian</span><span class="p">,</span>
+        <span class="n">logistic</span><span class="o">=</span><span class="n">Logistic</span><span class="p">,</span>
+        <span class="n">laplace</span><span class="o">=</span><span class="n">Laplace</span>
+    <span class="p">)</span>
+
+    <span class="n">C</span> <span class="o">=</span> <span class="n">resolve_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">C</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">C</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">conditional</span><span class="p">:</span>
+        <span class="n">C</span> <span class="o">=</span> <span class="n">make_conditional</span><span class="p">(</span><span class="n">C</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">C</span></div>
+
+
+<div class="viewcode-block" id="Distribution"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution">[docs]</a><span class="k">class</span> <span class="nc">Distribution</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Distribution parent class.</span>
+
+<span class="sd">    Not meant to be used alone, use subclass.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        has_kl (bool): convenience for if distribution subclass has exact KL.</span>
+<span class="sd">        is_continuous (bool): whether distribution is continuous (as opposed to</span>
+<span class="sd">            discrete).</span>
+<span class="sd">        dim (int): dimension of distribution.</span>
+<span class="sd">        must_sample (bool): whether sampling is required for calculating</span>
+<span class="sd">            density.</span>
+<span class="sd">        scale (int): scaling for distributions whose probs are higher order,</span>
+<span class="sd">            such as Gaussian, which has mu and sigma.</span>
+<span class="sd">        f_sample (Optional[function]): sampling function.</span>
+<span class="sd">        f_neg_log_prob (Optional[function]): negative log probability funciton.</span>
+<span class="sd">        f_entropy (Optional[function]): entropy function.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">has_kl</span> <span class="o">=</span> <span class="bp">False</span>
+    <span class="n">is_continuous</span> <span class="o">=</span> <span class="bp">False</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;distribution&#39;</span><span class="p">,</span> <span class="n">must_sample</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Init function for Distribution class.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dim (int): dimension of distribution.</span>
+<span class="sd">            must_sample (bool).</span>
+<span class="sd">            scale (int): scale for distribution tensor.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim</span> <span class="o">=</span> <span class="n">dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">must_sample</span> <span class="o">=</span> <span class="n">must_sample</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span>
+
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">init_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">init_rngs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">(</span><span class="n">Distribution</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Distribution.set_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.set_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Distribution.get_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.get_params">[docs]</a>    <span class="k">def</span> <span class="nf">get_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Fetches distribution parameters.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Distribution.get_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.get_prob">[docs]</a>    <span class="k">def</span> <span class="nf">get_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns single tensory from params.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Distribution.kl_divergence"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.kl_divergence">[docs]</a>    <span class="k">def</span> <span class="nf">kl_divergence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;KL divergence function.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Call function.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+<div class="viewcode-block" id="Distribution.sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.sample">[docs]</a>    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Samples from distribution.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">p</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">p</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">p</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%d</span><span class="s1"> dim sampling not supported yet&#39;</span> <span class="o">%</span> <span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_sample</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">),</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Distribution.step_neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.step_neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">step_neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Step negative log probability for scan.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+<span class="sd">            *params: theano shared variables.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: :math:`-\log p(x)`.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Distribution.neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Negative log probability.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+<span class="sd">            p (Optional[T.tensor]): probability.</span>
+<span class="sd">            sum_probs (bool): whether to sum the last axis.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: :math:`-\log p(x)`.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="n">sum_probs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Distribution.entropy"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.entropy">[docs]</a>    <span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Entropy function.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            p (T.tensor): probability.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: entropy.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_entropy</span><span class="p">(</span><span class="n">p</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Distribution.get_center"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.get_center">[docs]</a>    <span class="k">def</span> <span class="nf">get_center</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Center of the distribution.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            p (T.tensor): probability.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: center of distribution.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">p</span></div>
+
+<div class="viewcode-block" id="Distribution.get_energy_bias"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.get_energy_bias">[docs]</a>    <span class="k">def</span> <span class="nf">get_energy_bias</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;For use in RBMs and other energy based models.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+<span class="sd">            z (T.tensor): distribution tensor.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Distribution.scale_for_energy_model"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Distribution.scale_for_energy_model">[docs]</a>    <span class="k">def</span> <span class="nf">scale_for_energy_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Scales input for energy based models.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">x</span></div></div>
+
+
+<div class="viewcode-block" id="make_conditional"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.make_conditional">[docs]</a><span class="k">def</span> <span class="nf">make_conditional</span><span class="p">(</span><span class="n">C</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Conditional distribution.</span>
+
+<span class="sd">    Conditional distributions do not own their parameters, they are given,</span>
+<span class="sd">    such as from an MLP.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        C (Distribution).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Conditional.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">class</span> <span class="nc">Conditional</span><span class="p">(</span><span class="n">C</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">def</span> <span class="nf">get_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">Conditional</span><span class="o">.</span><span class="n">__name__</span> <span class="o">=</span> <span class="n">Conditional</span><span class="o">.</span><span class="n">__name__</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="n">C</span><span class="o">.</span><span class="n">__name__</span>
+
+    <span class="k">return</span> <span class="n">Conditional</span></div>
+
+
+<div class="viewcode-block" id="Binomial"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Binomial">[docs]</a><span class="k">class</span> <span class="nc">Binomial</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Binomial distribution.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;binomial&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_sample</span> <span class="o">=</span> <span class="n">_binomial</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span> <span class="o">=</span> <span class="n">_cross_entropy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_entropy</span> <span class="o">=</span> <span class="n">_binary_entropy</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Binomial</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Binomial.set_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Binomial.set_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">z</span><span class="o">=</span><span class="n">z</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Binomial.get_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Binomial.get_params">[docs]</a>    <span class="k">def</span> <span class="nf">get_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">z</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="Binomial.get_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Binomial.get_prob">[docs]</a>    <span class="k">def</span> <span class="nf">get_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">nnet</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.9999</span> <span class="o">+</span> <span class="mf">0.000005</span></div>
+
+<div class="viewcode-block" id="Binomial.split_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Binomial.split_prob">[docs]</a>    <span class="k">def</span> <span class="nf">split_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">p</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">nnet</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.9999</span> <span class="o">+</span> <span class="mf">0.000005</span>
+
+<div class="viewcode-block" id="Binomial.step_sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Binomial.step_sample">[docs]</a>    <span class="k">def</span> <span class="nf">step_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epsilon</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">epsilon</span> <span class="o">&lt;=</span> <span class="n">p</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Binomial.prototype_samples"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Binomial.prototype_samples">[docs]</a>    <span class="k">def</span> <span class="nf">prototype_samples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Binomial.generate_latent_pair"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Binomial.generate_latent_pair">[docs]</a>    <span class="k">def</span> <span class="nf">generate_latent_pair</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">h0</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">h0</span><span class="p">,</span> <span class="n">h</span></div>
+
+<div class="viewcode-block" id="Binomial.visualize"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Binomial.visualize">[docs]</a>    <span class="k">def</span> <span class="nf">visualize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p0</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="n">p0</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">addbroadcast</span><span class="p">(</span><span class="n">p0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">p</span> <span class="o">-</span> <span class="n">p0</span></div>
+
+<div class="viewcode-block" id="Binomial.get_energy_bias"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Binomial.get_energy_bias">[docs]</a>    <span class="k">def</span> <span class="nf">get_energy_bias</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">z</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="CenteredBinomial"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.CenteredBinomial">[docs]</a><span class="k">class</span> <span class="nc">CenteredBinomial</span><span class="p">(</span><span class="n">Binomial</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Centered binomial.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+<div class="viewcode-block" id="CenteredBinomial.get_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.CenteredBinomial.get_prob">[docs]</a>    <span class="k">def</span> <span class="nf">get_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">nnet</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">z</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.9999</span> <span class="o">+</span> <span class="mf">0.000005</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">nnet</span><span class="o">.</span><span class="n">sigmoid</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">z</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.9999</span> <span class="o">+</span> <span class="mf">0.000005</span>
+
+<div class="viewcode-block" id="CenteredBinomial.step_sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.CenteredBinomial.step_sample">[docs]</a>    <span class="k">def</span> <span class="nf">step_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epsilon</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="p">(</span><span class="n">epsilon</span> <span class="o">&lt;=</span> <span class="n">p</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="CenteredBinomial.sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.CenteredBinomial.sample">[docs]</a>    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Samples from distribution.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">p</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">p</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">p</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%d</span><span class="s1"> dim sampling not supported yet&#39;</span> <span class="o">%</span> <span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_sample</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="CenteredBinomial.neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.CenteredBinomial.neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">x</span> <span class="o">+</span> <span class="mf">1.0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="n">sum_probs</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="ContinuousBinomial"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.ContinuousBinomial">[docs]</a><span class="k">class</span> <span class="nc">ContinuousBinomial</span><span class="p">(</span><span class="n">Binomial</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Continuous binomial.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        Doesn&#39;t sample.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+<div class="viewcode-block" id="ContinuousBinomial.sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.ContinuousBinomial.sample">[docs]</a>    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">shape_padleft</span><span class="p">(</span><span class="n">p</span><span class="p">),</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">()</span></div></div>
+
+
+<div class="viewcode-block" id="Multinomial"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Multinomial">[docs]</a><span class="k">class</span> <span class="nc">Multinomial</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Multinomial distribuion.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;multinomial&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_sample</span> <span class="o">=</span> <span class="n">_sample_multinomial</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span> <span class="o">=</span> <span class="n">_categorical_cross_entropy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_entropy</span> <span class="o">=</span> <span class="n">_categorical_entropy</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Multinomial</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Multinomial.set_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Multinomial.set_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">z</span><span class="o">=</span><span class="n">z</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Multinomial.get_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Multinomial.get_prob">[docs]</a>    <span class="k">def</span> <span class="nf">get_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_softmax</span><span class="p">(</span><span class="n">z</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_softmax</span><span class="p">(</span><span class="n">z</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Gaussian"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian">[docs]</a><span class="k">class</span> <span class="nc">Gaussian</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Gaussian distribution.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">has_kl</span> <span class="o">=</span> <span class="bp">True</span>
+    <span class="n">is_continuous</span> <span class="o">=</span> <span class="bp">True</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;gaussian&#39;</span><span class="p">,</span> <span class="n">clip</span><span class="o">=-</span><span class="mi">10</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_sample</span> <span class="o">=</span> <span class="n">_normal</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span> <span class="o">=</span> <span class="n">_neg_normal_log_prob</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_entropy</span> <span class="o">=</span> <span class="n">_normal_entropy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">clip</span> <span class="o">=</span> <span class="n">clip</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Gaussian</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Gaussian.set_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.set_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">log_sigma</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span>
+            <span class="n">mu</span><span class="o">=</span><span class="n">mu</span><span class="p">,</span> <span class="n">log_sigma</span><span class="o">=</span><span class="n">log_sigma</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Gaussian.get_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.get_params">[docs]</a>    <span class="k">def</span> <span class="nf">get_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">mu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_sigma</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="Gaussian.get_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.get_prob">[docs]</a>    <span class="k">def</span> <span class="nf">get_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">log_sigma</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">concatenate</span><span class="p">([</span><span class="n">mu</span><span class="p">,</span> <span class="n">log_sigma</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="n">mu</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">z</span>
+
+<div class="viewcode-block" id="Gaussian.get_center"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.get_center">[docs]</a>    <span class="k">def</span> <span class="nf">get_center</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mu</span></div>
+
+<div class="viewcode-block" id="Gaussian.split_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.split_prob">[docs]</a>    <span class="k">def</span> <span class="nf">split_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="n">mu</span>        <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="n">log_sigma</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mu</span><span class="p">,</span> <span class="n">log_sigma</span></div>
+
+<div class="viewcode-block" id="Gaussian.step_kl_divergence"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.step_kl_divergence">[docs]</a>    <span class="k">def</span> <span class="nf">step_kl_divergence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">log_sigma</span><span class="p">):</span>
+        <span class="n">mu_q</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
+        <span class="n">log_sigma_q</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">)</span>
+        <span class="n">log_sigma_q</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">log_sigma_q</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip</span><span class="p">)</span>
+        <span class="n">log_sigma</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">log_sigma</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip</span><span class="p">)</span>
+
+        <span class="n">kl</span> <span class="o">=</span> <span class="n">log_sigma</span> <span class="o">-</span> <span class="n">log_sigma_q</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span>
+            <span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">log_sigma_q</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">mu</span> <span class="o">-</span> <span class="n">mu_q</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span> <span class="o">/</span>
+            <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">log_sigma</span><span class="p">)</span>
+            <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">kl</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">kl</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Gaussian.kl_divergence"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.kl_divergence">[docs]</a>    <span class="k">def</span> <span class="nf">kl_divergence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_kl_divergence</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span></div>
+
+<div class="viewcode-block" id="Gaussian.step_sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.step_sample">[docs]</a>    <span class="k">def</span> <span class="nf">step_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epsilon</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+        <span class="n">log_sigma</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mu</span> <span class="o">+</span> <span class="n">epsilon</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_sigma</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Gaussian.prototype_samples"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.prototype_samples">[docs]</a>    <span class="k">def</span> <span class="nf">prototype_samples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span>
+            <span class="n">avg</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="Gaussian.step_neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.step_neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">step_neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">clip</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">clip</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Gaussian.neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">clip</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">clip</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="n">sum_probs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Gaussian.standard_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.standard_prob">[docs]</a>    <span class="k">def</span> <span class="nf">standard_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="Gaussian.entropy"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.entropy">[docs]</a>    <span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_entropy</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">clip</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">clip</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Gaussian.generate_latent_pair"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.generate_latent_pair">[docs]</a>    <span class="k">def</span> <span class="nf">generate_latent_pair</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">h0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mu</span>
+        <span class="n">sigma</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">nlinalg</span><span class="o">.</span><span class="n">AllocDiag</span><span class="p">()(</span><span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_sigma</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">sigma</span> <span class="o">+</span> <span class="n">h0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="k">return</span> <span class="n">h0</span><span class="p">,</span> <span class="n">h</span></div>
+
+<div class="viewcode-block" id="Gaussian.visualize"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.visualize">[docs]</a>    <span class="k">def</span> <span class="nf">visualize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p0</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+
+        <span class="n">outs0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_prob</span><span class="p">(</span><span class="n">p0</span><span class="p">)</span>
+        <span class="n">outs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_prob</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+        <span class="n">y0_mu</span><span class="p">,</span> <span class="n">y0_logsigma</span> <span class="o">=</span> <span class="n">outs0</span>
+        <span class="n">y_mu</span><span class="p">,</span> <span class="n">y_logsigma</span> <span class="o">=</span> <span class="n">outs</span>
+        <span class="n">py</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_mu</span> <span class="o">-</span> <span class="n">y0_mu</span><span class="p">)</span> <span class="o">/</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">y0_logsigma</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">py</span></div>
+
+<div class="viewcode-block" id="Gaussian.scale_for_energy_model"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.scale_for_energy_model">[docs]</a>    <span class="k">def</span> <span class="nf">scale_for_energy_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">log_sigma</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Scales input for energy based models.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">x</span> <span class="o">/</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">log_sigma</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Gaussian.get_energy_bias"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Gaussian.get_energy_bias">[docs]</a>    <span class="k">def</span> <span class="nf">get_energy_bias</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">log_sigma</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;For use in RBMs and other energy based models.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="o">-</span><span class="p">((</span><span class="n">x</span> <span class="o">-</span> <span class="n">mu</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">/</span> <span class="p">(</span><span class="mf">2.</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_sigma</span><span class="p">))</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="Logistic"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic">[docs]</a><span class="k">class</span> <span class="nc">Logistic</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Logistic distribution.</span>
+
+<span class="sd">    :math:`p(x)=\\frac{e^{\\frac{x - \mu}{s}}}{s(1+e^{\\frac{x - \mu}{s}})^2}`</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        Not to be confused with logistic function.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">is_continuous</span> <span class="o">=</span> <span class="bp">True</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;logistic&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_sample</span> <span class="o">=</span> <span class="n">_logistic</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span> <span class="o">=</span> <span class="n">_neg_logistic_log_prob</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_entropy</span> <span class="o">=</span> <span class="n">_logistic_entropy</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Logistic</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Logistic.set_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.set_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">log_s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span>
+            <span class="n">mu</span><span class="o">=</span><span class="n">mu</span><span class="p">,</span> <span class="n">log_s</span><span class="o">=</span><span class="n">log_s</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Logistic.get_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.get_params">[docs]</a>    <span class="k">def</span> <span class="nf">get_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">mu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_s</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="Logistic.get_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.get_prob">[docs]</a>    <span class="k">def</span> <span class="nf">get_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">log_s</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">concatenate</span><span class="p">([</span><span class="n">mu</span><span class="p">,</span> <span class="n">log_s</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="n">mu</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">z</span>
+
+<div class="viewcode-block" id="Logistic.get_center"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.get_center">[docs]</a>    <span class="k">def</span> <span class="nf">get_center</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mu</span></div>
+
+<div class="viewcode-block" id="Logistic.split_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.split_prob">[docs]</a>    <span class="k">def</span> <span class="nf">split_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="n">mu</span>    <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="n">log_s</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mu</span><span class="p">,</span> <span class="n">log_s</span></div>
+
+<div class="viewcode-block" id="Logistic.step_sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.step_sample">[docs]</a>    <span class="k">def</span> <span class="nf">step_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epsilon</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+        <span class="n">log_s</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mu</span> <span class="o">+</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">epsilon</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">epsilon</span><span class="p">))</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_s</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Logistic.prototype_samples"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.prototype_samples">[docs]</a>    <span class="k">def</span> <span class="nf">prototype_samples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Logistic.step_neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.step_neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">step_neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">p</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Logistic.neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="n">sum_probs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Logistic.standard_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.standard_prob">[docs]</a>    <span class="k">def</span> <span class="nf">standard_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="Logistic.entropy"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.entropy">[docs]</a>    <span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_entropy</span><span class="p">(</span><span class="n">p</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Logistic.generate_latent_pair"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.generate_latent_pair">[docs]</a>    <span class="k">def</span> <span class="nf">generate_latent_pair</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">h0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mu</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">nlinalg</span><span class="o">.</span><span class="n">AllocDiag</span><span class="p">()(</span><span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_s</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">s</span> <span class="o">+</span> <span class="n">h0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="k">return</span> <span class="n">h0</span><span class="p">,</span> <span class="n">h</span></div>
+
+<div class="viewcode-block" id="Logistic.visualize"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Logistic.visualize">[docs]</a>    <span class="k">def</span> <span class="nf">visualize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p0</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+
+        <span class="n">outs0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_prob</span><span class="p">(</span><span class="n">p0</span><span class="p">)</span>
+        <span class="n">outs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_prob</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+        <span class="n">y0_mu</span><span class="p">,</span> <span class="n">y0_logs</span> <span class="o">=</span> <span class="n">outs0</span>
+        <span class="n">y_mu</span><span class="p">,</span> <span class="n">y_logs</span> <span class="o">=</span> <span class="n">outs</span>
+        <span class="n">py</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_mu</span> <span class="o">-</span> <span class="n">y0_mu</span><span class="p">)</span> <span class="o">/</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">y0_logs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">py</span></div></div>
+
+
+<div class="viewcode-block" id="Laplace"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace">[docs]</a><span class="k">class</span> <span class="nc">Laplace</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Laplace distribution.</span>
+
+<span class="sd">    :math:`p(x) = \\frac{1}{2 b} e^{-\\frac{|x - \mu|}{b}}`.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">is_continuous</span> <span class="o">=</span> <span class="bp">True</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;laplace&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_sample</span> <span class="o">=</span> <span class="n">_laplace</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span> <span class="o">=</span> <span class="n">_neg_laplace_log_prob</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_entropy</span> <span class="o">=</span> <span class="n">_laplace_entropy</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Laplace</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Laplace.set_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.set_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">log_b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">dim</span><span class="p">,))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span>
+            <span class="n">mu</span><span class="o">=</span><span class="n">mu</span><span class="p">,</span> <span class="n">log_b</span><span class="o">=</span><span class="n">log_b</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Laplace.get_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.get_params">[docs]</a>    <span class="k">def</span> <span class="nf">get_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">mu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">log_b</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="Laplace.get_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.get_prob">[docs]</a>    <span class="k">def</span> <span class="nf">get_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">log_b</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">concatenate</span><span class="p">([</span><span class="n">mu</span><span class="p">,</span> <span class="n">log_b</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="n">mu</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">z</span>
+
+<div class="viewcode-block" id="Laplace.get_center"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.get_center">[docs]</a>    <span class="k">def</span> <span class="nf">get_center</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mu</span></div>
+
+<div class="viewcode-block" id="Laplace.split_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.split_prob">[docs]</a>    <span class="k">def</span> <span class="nf">split_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="n">mu</span>    <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="n">log_s</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mu</span><span class="p">,</span> <span class="n">log_s</span></div>
+
+<div class="viewcode-block" id="Laplace.step_sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.step_sample">[docs]</a>    <span class="k">def</span> <span class="nf">step_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">epsilon</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span>
+        <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+        <span class="n">log_b</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">mu</span> <span class="o">+</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_b</span><span class="p">)</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">sgn</span><span class="p">(</span><span class="n">epsilon</span><span class="p">)</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">*</span> <span class="nb">abs</span><span class="p">(</span><span class="n">epsilon</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="Laplace.prototype_samples"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.prototype_samples">[docs]</a>    <span class="k">def</span> <span class="nf">prototype_samples</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.5</span></div>
+
+<div class="viewcode-block" id="Laplace.step_neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.step_neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">step_neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">p</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Laplace.neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="n">sum_probs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Laplace.standard_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.standard_prob">[docs]</a>    <span class="k">def</span> <span class="nf">standard_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="Laplace.entropy"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.entropy">[docs]</a>    <span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_entropy</span><span class="p">(</span><span class="n">p</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Laplace.generate_latent_pair"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.generate_latent_pair">[docs]</a>    <span class="k">def</span> <span class="nf">generate_latent_pair</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">h0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mu</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">nlinalg</span><span class="o">.</span><span class="n">AllocDiag</span><span class="p">()(</span><span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_b</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">h</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">b</span> <span class="o">+</span> <span class="n">h0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:]</span>
+        <span class="k">return</span> <span class="n">h0</span><span class="p">,</span> <span class="n">h</span></div>
+
+<div class="viewcode-block" id="Laplace.visualize"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.distributions.Laplace.visualize">[docs]</a>    <span class="k">def</span> <span class="nf">visualize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p0</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_prob</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+
+        <span class="n">outs0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_prob</span><span class="p">(</span><span class="n">p0</span><span class="p">)</span>
+        <span class="n">outs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_prob</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+        <span class="n">y0_mu</span><span class="p">,</span> <span class="n">y0_logs</span> <span class="o">=</span> <span class="n">outs0</span>
+        <span class="n">y_mu</span><span class="p">,</span> <span class="n">y_logs</span> <span class="o">=</span> <span class="n">outs</span>
+        <span class="n">py</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_mu</span> <span class="o">-</span> <span class="n">y0_mu</span><span class="p">)</span> <span class="o">/</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">y0_logs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">py</span></div></div>
+
+<span class="c1"># Various functions for distributions.</span>
+<span class="c1"># BERNOULLI --------------------------------------------------------------------</span>
+
+<span class="k">def</span> <span class="nf">_binomial</span><span class="p">(</span><span class="n">trng</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">size</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">return</span> <span class="n">trng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">p</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_centered_binomial</span><span class="p">(</span><span class="n">trng</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">size</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">return</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">trng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="o">*</span><span class="p">(</span><span class="n">p</span><span class="o">+</span><span class="mi">1</span><span class="p">),</span> <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">p</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">-</span> <span class="mf">1.</span>
+
+<span class="k">def</span> <span class="nf">_cross_entropy</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="o">-</span><span class="n">x</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">x</span><span class="p">)</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">p</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sum_probs</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">energy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">energy</span>
+
+<span class="k">def</span> <span class="nf">_binary_entropy</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+    <span class="n">entropy</span> <span class="o">=</span> <span class="o">-</span><span class="n">p</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">p</span><span class="p">)</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">p</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">entropy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">entropy</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># SOFTMAX ----------------------------------------------------------------------</span>
+
+<span class="k">def</span> <span class="nf">_softmax</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="n">axis</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="n">e_x</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">x</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">))</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">e_x</span> <span class="o">/</span> <span class="n">e_x</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+<span class="k">def</span> <span class="nf">_sample_multinomial</span><span class="p">(</span><span class="n">trng</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">size</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">return</span> <span class="n">trng</span><span class="o">.</span><span class="n">multinomial</span><span class="p">(</span><span class="n">pvals</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_categorical_cross_entropy</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">_clip</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">_clip</span><span class="p">)</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">nnet</span><span class="o">.</span><span class="n">binary_crossentropy</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sum_probs</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">energy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">energy</span>
+
+<span class="k">def</span> <span class="nf">_categorical_entropy</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+    <span class="n">p_c</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">_clip</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">_clip</span><span class="p">)</span>
+    <span class="n">entropy</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">nnet</span><span class="o">.</span><span class="n">categorical_crossentropy</span><span class="p">(</span><span class="n">p_c</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">entropy</span>
+
+<span class="c1"># GAUSSIAN ---------------------------------------------------------------------</span>
+
+<span class="k">def</span> <span class="nf">_normal</span><span class="p">(</span><span class="n">trng</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="n">log_sigma</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">size</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">return</span> <span class="n">trng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">avg</span><span class="o">=</span><span class="n">mu</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_sigma</span><span class="p">),</span> <span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_normal_prob</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mu</span>
+
+<span class="k">def</span> <span class="nf">_neg_normal_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">clip</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="n">log_sigma</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">clip</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">log_sigma</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">log_sigma</span><span class="p">,</span> <span class="n">clip</span><span class="p">)</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span>
+        <span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">mu</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">log_sigma</span><span class="p">))</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">log_sigma</span> <span class="o">+</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">pi</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">sum_probs</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">energy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">energy</span>
+
+<span class="k">def</span> <span class="nf">_normal_entropy</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">clip</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">log_sigma</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">clip</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">log_sigma</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">log_sigma</span><span class="p">,</span> <span class="n">clip</span><span class="p">)</span>
+    <span class="n">entropy</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">pi</span> <span class="o">*</span> <span class="n">e</span><span class="p">)</span> <span class="o">+</span> <span class="n">log_sigma</span>
+    <span class="k">return</span> <span class="n">entropy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">entropy</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># LOGISTIC ---------------------------------------------------------------------</span>
+
+<span class="k">def</span> <span class="nf">_logistic</span><span class="p">(</span><span class="n">trng</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="n">log_s</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">size</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span>
+    <span class="n">epsilon</span> <span class="o">=</span> <span class="n">trng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mu</span> <span class="o">+</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">epsilon</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">epsilon</span><span class="p">))</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_s</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_neg_logistic_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="n">log_s</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">mu</span><span class="p">)</span> <span class="o">/</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_s</span><span class="p">)</span> <span class="o">+</span> <span class="n">log_s</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">((</span><span class="n">x</span> <span class="o">-</span> <span class="n">mu</span><span class="p">)</span> <span class="o">/</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_s</span><span class="p">)))</span>
+    <span class="k">if</span> <span class="n">sum_probs</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">energy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">energy</span>
+
+<span class="k">def</span> <span class="nf">_logistic_entropy</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">log_s</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="n">entropy</span> <span class="o">=</span> <span class="n">log_s</span> <span class="o">+</span> <span class="mf">2.0</span>
+    <span class="k">return</span> <span class="n">entropy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">entropy</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Laplace ---------------------------------------------------------------------</span>
+
+<span class="k">def</span> <span class="nf">_laplace</span><span class="p">(</span><span class="n">trng</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="n">log_b</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">size</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">size</span> <span class="o">=</span> <span class="n">mu</span><span class="o">.</span><span class="n">shape</span>
+    <span class="n">epsilon</span> <span class="o">=</span> <span class="n">trng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span> <span class="o">-</span> <span class="mf">0.5</span>
+    <span class="k">return</span> <span class="n">mu</span> <span class="o">+</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_b</span><span class="p">)</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">sgn</span><span class="p">(</span><span class="n">epsilon</span><span class="p">)</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">*</span> <span class="nb">abs</span><span class="p">(</span><span class="n">epsilon</span><span class="p">))</span>
+
+<span class="k">def</span> <span class="nf">_neg_laplace_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">sum_probs</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">mu</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="n">log_b</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">2.0</span><span class="p">)</span> <span class="o">+</span> <span class="n">log_b</span> <span class="o">+</span> <span class="nb">abs</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">mu</span><span class="p">)</span> <span class="o">/</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_b</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sum_probs</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">energy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">energy</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">energy</span>
+
+<span class="k">def</span> <span class="nf">_laplace_entropy</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">log_b</span> <span class="o">=</span> <span class="n">_slice</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">)</span>
+    <span class="n">entropy</span> <span class="o">=</span> <span class="n">log_b</span> <span class="o">+</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mf">2.</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1.0</span>
+    <span class="k">return</span> <span class="n">entropy</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="n">entropy</span><span class="o">.</span><span class="n">ndim</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../models.html" >cortex.models</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

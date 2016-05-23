@@ -1,0 +1,641 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.inference.irvi &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex.inference" href="../inference.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../inference.html" accesskey="U">cortex.inference</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.inference.irvi</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Iterative refinement of the approximate posterior</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">floatX</span>
+<span class="kn">from</span> <span class="nn">..utils.tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">scan</span><span class="p">,</span>
+    <span class="n">update_dict_of_lists</span><span class="p">,</span>
+    <span class="n">warn_kwargs</span>
+<span class="p">)</span>
+
+<div class="viewcode-block" id="IRVI"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.IRVI">[docs]</a><span class="k">class</span> <span class="nc">IRVI</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Iterative refinement of the approximate posterior.</span>
+
+<span class="sd">    Will take a variety of methods as the refinement step (see GDIR and AIR).</span>
+
+<span class="sd">    NOTE: this class will *not* perform inference by itself, but needs to be</span>
+<span class="sd">    instantiated from one of the child classes.</span>
+
+<span class="sd">    Atrributes:</span>
+<span class="sd">        name (str): Name of inference method.</span>
+<span class="sd">        model (Layer) Typically Helmholtz</span>
+<span class="sd">        init_inference (str): Inference initialization option.</span>
+<span class="sd">        inference_rate (float): Rate of inference steps.</span>
+<span class="sd">        n_inference_steps (int): Number of inference steps.</span>
+<span class="sd">        n_inference_samples (int): Number of samples to draw from the approximate posterior.</span>
+<span class="sd">        pass_gradients (bool): Pass gradients during inference.</span>
+<span class="sd">        use_all_samples (bool): Use all the samples rather than just last.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">model</span><span class="p">,</span>
+                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;IRVI&#39;</span><span class="p">,</span>
+                 <span class="n">inference_rate</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+                 <span class="n">n_inference_samples</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+                 <span class="n">n_inference_steps</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+                 <span class="n">pass_gradients</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                 <span class="n">init_inference</span><span class="o">=</span><span class="s1">&#39;recognition_network&#39;</span><span class="p">,</span>
+                 <span class="n">use_all_samples</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Initialization function for IRVI.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model (Layer): Typically Helmholtz.</span>
+<span class="sd">            init_inference (str): Inference initialization option.</span>
+<span class="sd">            inference_rate (float): Rate of inference steps.</span>
+<span class="sd">            n_inference_steps (int): Number of inference steps.</span>
+<span class="sd">            n_inference_samples (int): Number of samples to draw from the approximate</span>
+<span class="sd">                posterior.</span>
+<span class="sd">            pass_gradients (bool): Pass gradients during inference.</span>
+<span class="sd">            use_all_samples (bool): Use all the samples rather than just last.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">init_inference</span> <span class="o">=</span> <span class="n">init_inference</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inference_rate</span> <span class="o">=</span> <span class="n">inference_rate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">=</span> <span class="n">n_inference_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_samples</span> <span class="o">=</span> <span class="n">n_inference_samples</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pass_gradients</span> <span class="o">=</span> <span class="n">pass_gradients</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_all_samples</span> <span class="o">=</span> <span class="n">use_all_samples</span>
+
+        <span class="n">warn_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="c1"># Child-specific methods. These must be defined in child class.</span>
+<div class="viewcode-block" id="IRVI.step_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.IRVI.step_infer">[docs]</a>    <span class="k">def</span> <span class="nf">step_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Step inference for `scan`.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            *params: shared parameters.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="IRVI.init_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.IRVI.init_infer">[docs]</a>    <span class="k">def</span> <span class="nf">init_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Initialize inference.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            q (T.tensor)</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="IRVI.unpack_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.IRVI.unpack_infer">[docs]</a>    <span class="k">def</span> <span class="nf">unpack_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Unpack inference.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            outs (list)</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="IRVI.params_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.IRVI.params_infer">[docs]</a>    <span class="k">def</span> <span class="nf">params_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Parameters for inference.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="IRVI.init_variational_inference"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.IRVI.init_variational_inference">[docs]</a>    <span class="k">def</span> <span class="nf">init_variational_inference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Initialize variational inference.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): Data samples</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: Initial variational parameters.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_inference</span> <span class="o">==</span> <span class="s1">&#39;recognition_network&#39;</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Initializing </span><span class="si">%s</span><span class="s1"> inference with recognition network&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
+            <span class="n">q0</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">posterior</span><span class="o">.</span><span class="n">feed</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_inference</span> <span class="o">==</span> <span class="s1">&#39;from_prior&#39;</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Initializing </span><span class="si">%s</span><span class="s1"> inference with prior parameters&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
+            <span class="n">q0</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">prior</span><span class="o">.</span><span class="n">get_center</span><span class="p">(</span><span class="o">**</span><span class="n">model</span><span class="o">.</span><span class="n">prior</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">init_inference</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">q0</span></div>
+
+<div class="viewcode-block" id="IRVI.inference"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.IRVI.inference">[docs]</a>    <span class="k">def</span> <span class="nf">inference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">q0</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Perform inference</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): Input data sample for posterior, p(h|x)</span>
+<span class="sd">            y (T.tensor): Output data sample for conditional, p(x|h)</span>
+<span class="sd">            q0 (Optional[T.tensor]): Initial posterior parameters.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: Results from inference.</span>
+<span class="sd">            list: constants in learning.</span>
+<span class="sd">            theano.OrderedUpdates: updates.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="n">updates</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">()</span>
+
+        <span class="c1"># Initialize inference.</span>
+        <span class="k">if</span> <span class="n">q0</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">q0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_variational_inference</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+        <span class="c1"># Set random variables.</span>
+        <span class="n">epsilons</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">init_inference_samples</span><span class="p">(</span>
+            <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_samples</span><span class="p">,</span>
+                  <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">model</span><span class="o">.</span><span class="n">dim_h</span><span class="p">))</span>
+
+        <span class="c1"># Set `scan` arguments.</span>
+        <span class="n">seqs</span> <span class="o">=</span> <span class="p">[</span><span class="n">epsilons</span><span class="p">]</span>
+        <span class="n">outputs_info</span> <span class="o">=</span> <span class="p">[</span><span class="n">q0</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_infer</span><span class="p">(</span><span class="n">q0</span><span class="p">)</span> <span class="o">+</span> <span class="p">[</span><span class="bp">None</span><span class="p">]</span>
+        <span class="n">non_seqs</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">params_infer</span><span class="p">()</span> <span class="o">+</span> <span class="n">model</span><span class="o">.</span><span class="n">get_params</span><span class="p">()</span>
+
+        <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;Doing </span><span class="si">%d</span><span class="s1"> inference steps of </span><span class="si">%s</span><span class="s1"> and a rate of </span><span class="si">%.5f</span><span class="s1"> with </span><span class="si">%d</span><span class="s1"> &#39;</span>
+               <span class="s1">&#39;inference samples&#39;</span>
+               <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                  <span class="bp">self</span><span class="o">.</span><span class="n">inference_rate</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_samples</span><span class="p">))</span>
+
+        <span class="c1"># Perform inference.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Multiple inference steps. Using `scan`&#39;</span>
+            <span class="n">outs</span><span class="p">,</span> <span class="n">updates_i</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">step_infer</span><span class="p">,</span> <span class="n">seqs</span><span class="p">,</span> <span class="n">outputs_info</span><span class="p">,</span> <span class="n">non_seqs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_infer&#39;</span>
+            <span class="p">)</span>
+            <span class="n">updates</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">updates_i</span><span class="p">)</span>
+            <span class="n">qs</span><span class="p">,</span> <span class="n">i_costs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">unpack_infer</span><span class="p">(</span><span class="n">outs</span><span class="p">)</span>
+            <span class="n">qs</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">q0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:],</span> <span class="n">qs</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Single inference step&#39;</span>
+            <span class="n">inps</span> <span class="o">=</span> <span class="p">[</span><span class="n">epsilons</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">+</span> <span class="n">outputs_info</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">non_seqs</span>
+            <span class="n">outs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_infer</span><span class="p">(</span><span class="o">*</span><span class="n">inps</span><span class="p">)</span>
+            <span class="n">q</span><span class="p">,</span> <span class="n">i_cost</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">unpack_infer</span><span class="p">(</span><span class="n">outs</span><span class="p">)</span>
+            <span class="n">qs</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">q0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:],</span> <span class="n">q</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">i_costs</span> <span class="o">=</span> <span class="p">[</span><span class="n">i_cost</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;No inference steps&#39;</span>
+            <span class="n">qs</span> <span class="o">=</span> <span class="n">q0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+            <span class="n">i_costs</span> <span class="o">=</span> <span class="p">[</span><span class="n">T</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pass_gradients</span><span class="p">:</span>
+            <span class="n">constants</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">constants</span> <span class="o">=</span> <span class="p">[</span><span class="n">qs</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_all_samples</span><span class="p">:</span>
+            <span class="n">qk</span> <span class="o">=</span> <span class="n">qs</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">qk</span> <span class="o">=</span> <span class="n">qs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">rval</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span>
+            <span class="n">qk</span><span class="o">=</span><span class="n">qk</span><span class="p">,</span>
+            <span class="n">qs</span><span class="o">=</span><span class="n">qs</span><span class="p">,</span>
+            <span class="n">i_costs</span><span class="o">=</span><span class="n">i_costs</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">rval</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">updates</span></div>
+
+<div class="viewcode-block" id="IRVI.test"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.IRVI.test">[docs]</a>    <span class="k">def</span> <span class="nf">test</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Testing function for inference.</span>
+
+<span class="sd">        Returns a larger summary across different number of inference steps.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): Input data sample for posterior, p(h|x)</span>
+<span class="sd">            y (T.tensor): Output data sample for conditional, p(x|h)</span>
+<span class="sd">            stride (int): Stride for result summary</span>
+<span class="sd">            model_args (dict): dictionary of arguments for model results.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: Only first- and last-step results.</span>
+<span class="sd">            OrderedDict: tensors for visualization, etc.</span>
+<span class="sd">            OrderedDict: complete result summary</span>
+<span class="sd">            theano.OrderedUpdates: updates.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+
+        <span class="c1"># Perform inference</span>
+        <span class="n">inference_outs</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">updates</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="n">i_costs</span> <span class="o">=</span> <span class="n">inference_outs</span><span class="p">[</span><span class="s1">&#39;i_costs&#39;</span><span class="p">]</span>
+
+        <span class="n">qs</span> <span class="o">=</span> <span class="n">inference_outs</span><span class="p">[</span><span class="s1">&#39;qs&#39;</span><span class="p">]</span>
+
+        <span class="c1"># Set up summary steps.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">&gt;</span> <span class="n">stride</span> <span class="ow">and</span> <span class="n">stride</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">range</span><span class="p">(</span><span class="n">stride</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span><span class="p">,</span> <span class="n">stride</span><span class="p">)</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="n">steps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># Extract results from model</span>
+        <span class="n">full_results</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="n">full_results</span><span class="p">[</span><span class="s1">&#39;i_cost&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">steps</span><span class="p">:</span>
+            <span class="n">qk</span>  <span class="o">=</span> <span class="n">qs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">results_k</span><span class="p">,</span> <span class="n">samples_k</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">qk</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">)</span>
+            <span class="n">samples_k</span><span class="p">[</span><span class="s1">&#39;q&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">qk</span>
+            <span class="n">update_dict_of_lists</span><span class="p">(</span><span class="n">full_results</span><span class="p">,</span> <span class="o">**</span><span class="n">results_k</span><span class="p">)</span>
+            <span class="n">full_results</span><span class="p">[</span><span class="s1">&#39;i_cost&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i_costs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="n">update_dict_of_lists</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="o">**</span><span class="n">samples_k</span><span class="p">)</span>
+
+        <span class="c1"># Final results are from first and last steps</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">full_results</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="n">results</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">results</span><span class="p">[</span><span class="n">k</span> <span class="o">+</span> <span class="s1">&#39;0&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">results</span><span class="p">[</span><span class="s1">&#39;d_&#39;</span> <span class="o">+</span> <span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">v</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="k">print</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">v</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">full_results</span><span class="p">,</span> <span class="n">updates</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Call function for performing inference.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): Input data sample for posterior, p(h|x)</span>
+<span class="sd">            y (T.tensor): Output data sample for conditional, p(x|h)</span>
+<span class="sd">            model_args (dict): dictionary of arguments for model results.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: results.</span>
+<span class="sd">            OrderedDict: tensors for visualization, etc.</span>
+<span class="sd">            list: constants in learning</span>
+<span class="sd">            theano.OrderedUpdates: updates.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="n">inference_outs</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">updates</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="n">qk</span> <span class="o">=</span> <span class="n">inference_outs</span><span class="p">[</span><span class="s1">&#39;qk&#39;</span><span class="p">]</span>
+        <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">constants_m</span><span class="p">,</span> <span class="n">updates_m</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">qk</span><span class="o">=</span><span class="n">qk</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">)</span>
+        <span class="n">constants</span> <span class="o">+=</span> <span class="n">constants_m</span>
+        <span class="n">updates</span> <span class="o">+=</span> <span class="n">updates_m</span>
+        <span class="k">return</span> <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">updates</span></div>
+
+
+<div class="viewcode-block" id="DeepIRVI"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.DeepIRVI">[docs]</a><span class="k">class</span> <span class="nc">DeepIRVI</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Deep iterative refinement of the approximate posterior.</span>
+
+<span class="sd">    Will take a variety of methods as the refinement step (see DeepGDIR and DeepAIR).</span>
+<span class="sd">    NOTE: this class will *not* perform inference by itself, but needs to be</span>
+<span class="sd">    instantiated from one of the child classes.</span>
+
+<span class="sd">    Atrributes:</span>
+<span class="sd">        name (str): Name of inference method.</span>
+<span class="sd">        model (Layer) Typically Helmholtz</span>
+<span class="sd">        init_inference (str): Inference initialization option.</span>
+<span class="sd">        inference_rate (float): Rate of inference steps.</span>
+<span class="sd">        n_inference_steps (int): Number of inference steps.</span>
+<span class="sd">        n_inference_samples (int): Number of samples to draw from the \</span>
+<span class="sd">            approximate posterior.</span>
+<span class="sd">        pass_gradients (bool): Pass gradients during inference.</span>
+<span class="sd">        use_all_samples (bool): Use all the samples rather than just last.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">model</span><span class="p">,</span>
+                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;IRVI&#39;</span><span class="p">,</span>
+                 <span class="n">inference_rate</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+                 <span class="n">n_inference_samples</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+                 <span class="n">n_inference_steps</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+                 <span class="n">pass_gradients</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                 <span class="n">sample_posterior</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                 <span class="n">init_inference</span><span class="o">=</span><span class="s1">&#39;recognition_network&#39;</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Initialization function for DeepIRVI.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model (Layer): Typically Helmholtz.</span>
+<span class="sd">            init_inference (str): Inference initialization option.</span>
+<span class="sd">            inference_rate (float): Rate of inference steps.</span>
+<span class="sd">            n_inference_steps (int): Number of inference steps.</span>
+<span class="sd">            n_inference_samples (int): Number of samples to draw from the</span>
+<span class="sd">                approximate posterior.</span>
+<span class="sd">            pass_gradients (bool): Pass gradients during inference.</span>
+<span class="sd">            use_all_samples (bool): Use all the samples rather than just last.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">init_inference</span> <span class="o">=</span> <span class="n">init_inference</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inference_rate</span> <span class="o">=</span> <span class="n">inference_rate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">=</span> <span class="n">n_inference_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_samples</span> <span class="o">=</span> <span class="n">n_inference_samples</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pass_gradients</span> <span class="o">=</span> <span class="n">pass_gradients</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sample_posterior</span> <span class="o">=</span> <span class="n">sample_posterior</span>
+        <span class="n">warn_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="DeepIRVI.step_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.DeepIRVI.step_infer">[docs]</a>    <span class="k">def</span> <span class="nf">step_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Step inference for `scan`.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            *params: shared parameters.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="DeepIRVI.init_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.DeepIRVI.init_infer">[docs]</a>    <span class="k">def</span> <span class="nf">init_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Initialize inference.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            q (T.tensor)</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="DeepIRVI.unpack_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.DeepIRVI.unpack_infer">[docs]</a>    <span class="k">def</span> <span class="nf">unpack_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Unpack inference.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            outs (list)</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="DeepIRVI.params_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.DeepIRVI.params_infer">[docs]</a>    <span class="k">def</span> <span class="nf">params_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Parameters for inference.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="DeepIRVI.init_variational_inference"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.DeepIRVI.init_variational_inference">[docs]</a>    <span class="k">def</span> <span class="nf">init_variational_inference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Initialize variational inference.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): Data samples</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: Initial variational parameters.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_inference</span> <span class="o">==</span> <span class="s1">&#39;recognition_network&#39;</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Initializing </span><span class="si">%s</span><span class="s1"> inference with recognition network&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span>
+            <span class="n">q0s</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">state</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+
+            <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+                <span class="n">q0</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">posteriors</span><span class="p">[</span><span class="n">l</span><span class="p">]</span><span class="o">.</span><span class="n">feed</span><span class="p">(</span><span class="n">state</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="n">q0s</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">q0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_posterior</span><span class="p">:</span>
+                    <span class="n">state</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">posteriors</span><span class="p">[</span><span class="n">l</span><span class="p">]</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">q0</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_samples</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">state</span> <span class="o">=</span> <span class="n">q0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">init_inference</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">q0s</span></div>
+
+<div class="viewcode-block" id="DeepIRVI.inference"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.DeepIRVI.inference">[docs]</a>    <span class="k">def</span> <span class="nf">inference</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">q0s</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Perform inference</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): Input data sample for posterior, p(h|x)</span>
+<span class="sd">            y (T.tensor): Output data sample for conditional, p(x|h)</span>
+<span class="sd">            q0s (Optional[list]): Initial posterior parameters.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: Results from inference.</span>
+<span class="sd">            list: constants in learning.</span>
+<span class="sd">            theano.OrderedUpdates: updates.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="n">updates</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">q0s</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">q0s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_variational_inference</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+        <span class="n">epsilons</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">epsilons</span> <span class="o">=</span> <span class="p">[</span><span class="n">model</span><span class="o">.</span><span class="n">init_inference_samples</span><span class="p">(</span>
+            <span class="n">l</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_samples</span><span class="p">,</span>
+                     <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">model</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="n">l</span><span class="p">]))</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">n_layers</span><span class="p">)]</span>
+
+        <span class="n">seqs</span> <span class="o">=</span> <span class="n">epsilons</span>
+        <span class="n">outputs_info</span> <span class="o">=</span> <span class="n">q0s</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_infer</span><span class="p">(</span><span class="n">q0s</span><span class="p">)</span> <span class="o">+</span> <span class="p">[</span><span class="bp">None</span><span class="p">]</span>
+        <span class="n">non_seqs</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">params_infer</span><span class="p">()</span> <span class="o">+</span> <span class="n">model</span><span class="o">.</span><span class="n">get_params</span><span class="p">()</span>
+
+        <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;Doing </span><span class="si">%d</span><span class="s1"> inference steps of </span><span class="si">%s</span><span class="s1"> and a rate of </span><span class="si">%.5f</span><span class="s1"> with </span><span class="si">%d</span><span class="s1"> &#39;</span>
+               <span class="s1">&#39;inference samples&#39;</span>
+               <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                  <span class="bp">self</span><span class="o">.</span><span class="n">inference_rate</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_samples</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Multiple inference steps. Using `scan`&#39;</span>
+            <span class="n">outs</span><span class="p">,</span> <span class="n">updates_i</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">step_infer</span><span class="p">,</span> <span class="n">seqs</span><span class="p">,</span> <span class="n">outputs_info</span><span class="p">,</span> <span class="n">non_seqs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_infer&#39;</span>
+            <span class="p">)</span>
+            <span class="n">updates</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">updates_i</span><span class="p">)</span>
+            <span class="n">qss</span><span class="p">,</span> <span class="n">i_costs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">unpack_infer</span><span class="p">(</span><span class="n">outs</span><span class="p">)</span>
+            <span class="n">qss</span> <span class="o">=</span> <span class="p">[</span><span class="n">T</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">q0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:],</span> <span class="n">qs</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                   <span class="k">for</span> <span class="n">q0</span><span class="p">,</span> <span class="n">qs</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">q0s</span><span class="p">,</span> <span class="n">qss</span><span class="p">)]</span>
+
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Single inference step&#39;</span>
+            <span class="n">inps</span> <span class="o">=</span> <span class="p">[</span><span class="n">epsilon</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">epsilon</span> <span class="ow">in</span> <span class="n">epsilons</span><span class="p">]</span> <span class="o">+</span> <span class="n">outputs_info</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">non_seqs</span>
+            <span class="n">outs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_infer</span><span class="p">(</span><span class="o">*</span><span class="n">inps</span><span class="p">)</span>
+            <span class="n">qs</span><span class="p">,</span> <span class="n">i_cost</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">unpack_infer</span><span class="p">(</span><span class="n">outs</span><span class="p">)</span>
+            <span class="n">qss</span> <span class="o">=</span> <span class="p">[</span><span class="n">T</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">q0s</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:],</span> <span class="n">qs</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)]</span>
+            <span class="n">i_costs</span> <span class="o">=</span> <span class="p">[</span><span class="n">i_cost</span><span class="p">]</span>
+
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;No inference steps&#39;</span>
+            <span class="n">qss</span> <span class="o">=</span> <span class="p">[</span><span class="n">q0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="k">for</span> <span class="n">q0</span> <span class="ow">in</span> <span class="n">q0s</span><span class="p">]</span>
+            <span class="n">i_costs</span> <span class="o">=</span> <span class="p">[</span><span class="n">T</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pass_gradients</span><span class="p">:</span>
+            <span class="n">constants</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">constants</span> <span class="o">=</span> <span class="n">qss</span>
+
+        <span class="n">rval</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span>
+            <span class="n">qks</span><span class="o">=</span><span class="p">[</span><span class="n">qs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">qs</span> <span class="ow">in</span> <span class="n">qss</span><span class="p">],</span>
+            <span class="n">qss</span><span class="o">=</span><span class="n">qss</span><span class="p">,</span>
+            <span class="n">i_costs</span><span class="o">=</span><span class="n">i_costs</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">rval</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">updates</span></div>
+
+<div class="viewcode-block" id="DeepIRVI.test"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.irvi.DeepIRVI.test">[docs]</a>    <span class="k">def</span> <span class="nf">test</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Testing function for inference.</span>
+
+<span class="sd">        Returns a larger summary across different number of inference steps.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): Input data sample for posterior, p(h|x)</span>
+<span class="sd">            y (T.tensor): Output data sample for conditional, p(x|h)</span>
+<span class="sd">            stride (int): Stride for result summary</span>
+<span class="sd">            model_args (dict): dictionary of arguments for model results.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: Only first- and last-step results.</span>
+<span class="sd">            OrderedDict: tensors for visualization, etc.</span>
+<span class="sd">            OrderedDict: complete result summary</span>
+<span class="sd">            theano.OrderedUpdates: updates.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+
+        <span class="n">inference_outs</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">updates</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="n">i_costs</span> <span class="o">=</span> <span class="n">inference_outs</span><span class="p">[</span><span class="s1">&#39;i_costs&#39;</span><span class="p">]</span>
+
+        <span class="n">qss</span> <span class="o">=</span> <span class="n">inference_outs</span><span class="p">[</span><span class="s1">&#39;qss&#39;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">&gt;</span> <span class="n">stride</span> <span class="ow">and</span> <span class="n">stride</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="nb">range</span><span class="p">(</span><span class="n">stride</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span><span class="p">,</span> <span class="n">stride</span><span class="p">)</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="n">steps</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_inference_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">full_results</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="n">full_results</span><span class="p">[</span><span class="s1">&#39;i_cost&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">steps</span><span class="p">:</span>
+            <span class="n">qks</span>  <span class="o">=</span> <span class="p">[</span><span class="n">qs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">qs</span> <span class="ow">in</span> <span class="n">qss</span><span class="p">]</span>
+            <span class="n">results_k</span><span class="p">,</span> <span class="n">samples_k</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">qks</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">)</span>
+            <span class="n">samples_k</span><span class="p">[</span><span class="s1">&#39;qs&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">qks</span>
+            <span class="n">update_dict_of_lists</span><span class="p">(</span><span class="n">full_results</span><span class="p">,</span> <span class="o">**</span><span class="n">results_k</span><span class="p">)</span>
+            <span class="n">full_results</span><span class="p">[</span><span class="s1">&#39;i_cost&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i_costs</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="n">update_dict_of_lists</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="o">**</span><span class="n">samples_k</span><span class="p">)</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">full_results</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="n">results</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">results</span><span class="p">[</span><span class="n">k</span> <span class="o">+</span> <span class="s1">&#39;0&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">results</span><span class="p">[</span><span class="s1">&#39;d_&#39;</span> <span class="o">+</span> <span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">v</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">full_results</span><span class="p">,</span> <span class="n">updates</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Call function for performing inference.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): Input data sample for posterior, p(h|x)</span>
+<span class="sd">            y (T.tensor): Output data sample for conditional, p(x|h)</span>
+<span class="sd">            model_args (dict): dictionary of arguments for model results.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: results.</span>
+<span class="sd">            OrderedDict: tensors for visualization, etc.</span>
+<span class="sd">            list: constants in learning</span>
+<span class="sd">            theano.OrderedUpdates: updates.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="n">inference_outs</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">updates</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="n">qks</span> <span class="o">=</span> <span class="n">inference_outs</span><span class="p">[</span><span class="s1">&#39;qks&#39;</span><span class="p">]</span>
+        <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">constants_m</span><span class="p">,</span> <span class="n">updates_m</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">qks</span><span class="o">=</span><span class="n">qks</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">)</span>
+        <span class="n">constants</span> <span class="o">+=</span> <span class="n">constants_m</span>
+        <span class="n">updates</span> <span class="o">+=</span> <span class="n">updates_m</span>
+        <span class="k">return</span> <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">updates</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../inference.html" >cortex.inference</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

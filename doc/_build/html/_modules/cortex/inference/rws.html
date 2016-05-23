@@ -1,0 +1,272 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.inference.rws &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex.inference" href="../inference.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../inference.html" accesskey="U">cortex.inference</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.inference.rws</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Reweighted wake-sleep inference</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">floatX</span>
+<span class="kn">from</span> <span class="nn">..utils.tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">log_sum_exp</span><span class="p">,</span>
+    <span class="n">warn_kwargs</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="RWS"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.rws.RWS">[docs]</a><span class="k">class</span> <span class="nc">RWS</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">model</span><span class="p">,</span>
+                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;RWS&#39;</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="n">warn_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">n_posterior_samples</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">qk</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+
+        <span class="k">print</span> <span class="s1">&#39;Doing RWS, </span><span class="si">%d</span><span class="s1"> samples&#39;</span> <span class="o">%</span> <span class="n">n_posterior_samples</span>
+        <span class="n">q</span>   <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">posterior</span><span class="o">.</span><span class="n">feed</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">qk</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">q_c</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">q_c</span> <span class="o">=</span> <span class="n">qk</span>
+
+        <span class="n">r</span>  <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">init_inference_samples</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">n_posterior_samples</span><span class="p">,</span> <span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">model</span><span class="o">.</span><span class="n">dim_h</span><span class="p">))</span>
+
+        <span class="n">h</span>  <span class="o">=</span> <span class="p">(</span><span class="n">r</span> <span class="o">&lt;=</span> <span class="n">q_c</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">py</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">conditional</span><span class="o">.</span><span class="n">feed</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+
+        <span class="n">log_py_h</span> <span class="o">=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">conditional</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">y</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:],</span> <span class="n">py</span><span class="p">)</span>
+        <span class="n">log_ph</span>   <span class="o">=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">prior</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+        <span class="n">log_qh</span>   <span class="o">=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">posterior</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+
+        <span class="k">assert</span> <span class="n">log_py_h</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="n">log_ph</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="n">log_qh</span><span class="o">.</span><span class="n">ndim</span>
+
+        <span class="k">if</span> <span class="n">qk</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">log_p</span> <span class="o">=</span> <span class="n">log_sum_exp</span><span class="p">(</span><span class="n">log_py_h</span> <span class="o">+</span> <span class="n">log_ph</span> <span class="o">-</span> <span class="n">log_qh</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">n_posterior_samples</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">log_qkh</span> <span class="o">=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">posterior</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">qk</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+            <span class="n">log_p</span> <span class="o">=</span> <span class="n">log_sum_exp</span><span class="p">(</span><span class="n">log_py_h</span> <span class="o">+</span> <span class="n">log_ph</span> <span class="o">-</span> <span class="n">log_qkh</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">n_posterior_samples</span><span class="p">)</span>
+
+        <span class="n">log_pq</span>   <span class="o">=</span> <span class="n">log_py_h</span> <span class="o">+</span> <span class="n">log_ph</span> <span class="o">-</span> <span class="n">log_qh</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">n_posterior_samples</span><span class="p">)</span>
+        <span class="n">w_norm</span>   <span class="o">=</span> <span class="n">log_sum_exp</span><span class="p">(</span><span class="n">log_pq</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">log_w</span>    <span class="o">=</span> <span class="n">log_pq</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">shape_padleft</span><span class="p">(</span><span class="n">w_norm</span><span class="p">)</span>
+        <span class="n">w_tilde</span>  <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_w</span><span class="p">)</span>
+
+        <span class="n">y_energy</span>      <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">w_tilde</span> <span class="o">*</span> <span class="n">log_py_h</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">prior_energy</span>  <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">w_tilde</span> <span class="o">*</span> <span class="n">log_ph</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">h_energy</span>      <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">w_tilde</span> <span class="o">*</span> <span class="n">log_qh</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">nll</span>           <span class="o">=</span> <span class="o">-</span><span class="n">log_p</span>
+        <span class="n">prior_entropy</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">prior</span><span class="o">.</span><span class="n">entropy</span><span class="p">()</span>
+        <span class="n">q_entropy</span>     <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">posterior</span><span class="o">.</span><span class="n">entropy</span><span class="p">(</span><span class="n">q_c</span><span class="p">)</span>
+
+        <span class="k">assert</span> <span class="n">prior_energy</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="n">h_energy</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="n">y_energy</span><span class="o">.</span><span class="n">ndim</span><span class="p">,</span> <span class="p">(</span><span class="n">prior_energy</span><span class="o">.</span><span class="n">ndim</span><span class="p">,</span> <span class="n">h_energy</span><span class="o">.</span><span class="n">ndim</span><span class="p">,</span> <span class="n">y_energy</span><span class="o">.</span><span class="n">ndim</span><span class="p">)</span>
+
+        <span class="n">cost</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_energy</span> <span class="o">+</span> <span class="n">prior_energy</span> <span class="o">+</span> <span class="n">h_energy</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">lower_bound</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_energy</span> <span class="o">+</span> <span class="n">prior_energy</span> <span class="o">-</span> <span class="n">q_entropy</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">({</span>
+            <span class="s1">&#39;-log p(x|h)&#39;</span><span class="p">:</span> <span class="n">y_energy</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s1">&#39;-log p(h)&#39;</span><span class="p">:</span> <span class="n">prior_energy</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s1">&#39;-log q(h)&#39;</span><span class="p">:</span> <span class="n">h_energy</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s1">&#39;-log p(x)&#39;</span><span class="p">:</span> <span class="n">nll</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s1">&#39;H(p)&#39;</span><span class="p">:</span> <span class="n">prior_entropy</span><span class="p">,</span>
+            <span class="s1">&#39;H(q)&#39;</span><span class="p">:</span> <span class="n">q_entropy</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s1">&#39;lower_bound&#39;</span><span class="p">:</span> <span class="n">lower_bound</span><span class="p">,</span>
+            <span class="s1">&#39;cost&#39;</span><span class="p">:</span> <span class="n">cost</span>
+        <span class="p">})</span>
+
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">py</span><span class="o">=</span><span class="n">py</span><span class="p">)</span>
+        <span class="n">constants</span> <span class="o">=</span>  <span class="p">[</span><span class="n">w_tilde</span><span class="p">,</span> <span class="n">q_c</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">()</span>
+    
+<div class="viewcode-block" id="RWS.test"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.rws.RWS.test">[docs]</a>    <span class="k">def</span> <span class="nf">test</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">n_posterior_samples</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">qk</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">updates</span> <span class="o">=</span> <span class="bp">self</span><span class="p">(</span>
+            <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">n_posterior_samples</span><span class="o">=</span><span class="n">n_posterior_samples</span><span class="p">,</span> <span class="n">qk</span><span class="o">=</span><span class="n">qk</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="bp">None</span><span class="p">,</span> <span class="n">updates</span></div></div>
+
+<div class="viewcode-block" id="DeepRWS"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.rws.DeepRWS">[docs]</a><span class="k">class</span> <span class="nc">DeepRWS</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">model</span><span class="p">,</span>
+                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;RWS&#39;</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="n">warn_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">n_posterior_samples</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">qk</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">sample_posterior</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="n">qks</span>   <span class="o">=</span> <span class="n">qk</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+
+        <span class="k">print</span> <span class="s1">&#39;Doing RWS, </span><span class="si">%d</span><span class="s1"> samples&#39;</span> <span class="o">%</span> <span class="n">n_posterior_samples</span>
+        <span class="n">qs</span>   <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">qcs</span>   <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+            <span class="n">q</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">posteriors</span><span class="p">[</span><span class="n">l</span><span class="p">]</span><span class="o">.</span><span class="n">feed</span><span class="p">(</span><span class="n">state</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">qs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">sample_posterior</span><span class="p">:</span>
+                <span class="n">state</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">posteriors</span><span class="p">[</span><span class="n">l</span><span class="p">]</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="n">n_posterior_samples</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">state</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+            <span class="k">if</span> <span class="n">qks</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">qcs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">q</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">qcs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">qks</span><span class="p">[</span><span class="n">l</span><span class="p">])</span>
+
+        <span class="n">hs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">l</span><span class="p">,</span> <span class="n">qc</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">qcs</span><span class="p">):</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">trng</span><span class="o">.</span><span class="n">uniform</span><span class="p">((</span><span class="n">n_posterior_samples</span><span class="p">,</span> <span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">model</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="n">l</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="p">(</span><span class="n">r</span> <span class="o">&lt;=</span> <span class="n">qc</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+            <span class="n">hs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+
+        <span class="n">p_ys</span> <span class="o">=</span> <span class="p">[</span><span class="n">conditional</span><span class="o">.</span><span class="n">feed</span><span class="p">(</span><span class="n">h</span><span class="p">)</span> <span class="k">for</span> <span class="n">h</span><span class="p">,</span> <span class="n">conditional</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">hs</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">conditionals</span><span class="p">)]</span>
+        <span class="n">ys</span>   <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]]</span> <span class="o">+</span> <span class="n">hs</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">log_py_h</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">log_qh</span>   <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">log_qch</span>  <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+            <span class="n">log_py_h</span> <span class="o">-=</span> <span class="n">model</span><span class="o">.</span><span class="n">conditionals</span><span class="p">[</span><span class="n">l</span><span class="p">]</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">ys</span><span class="p">[</span><span class="n">l</span><span class="p">],</span> <span class="n">p_ys</span><span class="p">[</span><span class="n">l</span><span class="p">])</span>
+            <span class="n">log_qh</span> <span class="o">-=</span> <span class="n">model</span><span class="o">.</span><span class="n">posteriors</span><span class="p">[</span><span class="n">l</span><span class="p">]</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">hs</span><span class="p">[</span><span class="n">l</span><span class="p">],</span> <span class="n">qs</span><span class="p">[</span><span class="n">l</span><span class="p">])</span>
+            <span class="n">log_qch</span> <span class="o">-=</span> <span class="n">model</span><span class="o">.</span><span class="n">posteriors</span><span class="p">[</span><span class="n">l</span><span class="p">]</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">hs</span><span class="p">[</span><span class="n">l</span><span class="p">],</span> <span class="n">qcs</span><span class="p">[</span><span class="n">l</span><span class="p">])</span>
+        <span class="n">log_ph</span> <span class="o">=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">prior</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">hs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="k">assert</span> <span class="n">log_py_h</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="n">log_ph</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="n">log_qh</span><span class="o">.</span><span class="n">ndim</span>
+
+        <span class="n">log_p</span> <span class="o">=</span> <span class="n">log_sum_exp</span><span class="p">(</span><span class="n">log_py_h</span> <span class="o">+</span> <span class="n">log_ph</span> <span class="o">-</span> <span class="n">log_qch</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">n_posterior_samples</span><span class="p">)</span>
+
+        <span class="n">log_pq</span>   <span class="o">=</span> <span class="n">log_py_h</span> <span class="o">+</span> <span class="n">log_ph</span> <span class="o">-</span> <span class="n">log_qh</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">n_posterior_samples</span><span class="p">)</span>
+        <span class="n">w_norm</span>   <span class="o">=</span> <span class="n">log_sum_exp</span><span class="p">(</span><span class="n">log_pq</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">log_w</span>    <span class="o">=</span> <span class="n">log_pq</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">shape_padleft</span><span class="p">(</span><span class="n">w_norm</span><span class="p">)</span>
+        <span class="n">w_tilde</span>  <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_w</span><span class="p">)</span>
+
+        <span class="n">y_energy</span>      <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">w_tilde</span> <span class="o">*</span> <span class="n">log_py_h</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">prior_energy</span>  <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">w_tilde</span> <span class="o">*</span> <span class="n">log_ph</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">h_energy</span>      <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">w_tilde</span> <span class="o">*</span> <span class="n">log_qh</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">nll</span>           <span class="o">=</span> <span class="o">-</span><span class="n">log_p</span>
+        <span class="n">prior_entropy</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">prior</span><span class="o">.</span><span class="n">entropy</span><span class="p">()</span>
+        <span class="n">q_entropy</span>     <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">l</span><span class="p">,</span> <span class="n">qc</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">qcs</span><span class="p">):</span>
+            <span class="n">q_entropy</span> <span class="o">+=</span> <span class="n">model</span><span class="o">.</span><span class="n">posteriors</span><span class="p">[</span><span class="n">l</span><span class="p">]</span><span class="o">.</span><span class="n">entropy</span><span class="p">(</span><span class="n">qc</span><span class="p">)</span>
+
+        <span class="n">cost</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_energy</span> <span class="o">+</span> <span class="n">prior_energy</span> <span class="o">+</span> <span class="n">h_energy</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">lower_bound</span> <span class="o">=</span> <span class="p">(</span><span class="n">y_energy</span> <span class="o">+</span> <span class="n">prior_energy</span> <span class="o">-</span> <span class="n">q_entropy</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">({</span>
+            <span class="s1">&#39;-log p(x|h)&#39;</span><span class="p">:</span> <span class="n">y_energy</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s1">&#39;-log p(h)&#39;</span><span class="p">:</span> <span class="n">prior_energy</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s1">&#39;-log q(h)&#39;</span><span class="p">:</span> <span class="n">h_energy</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s1">&#39;-log p(x)&#39;</span><span class="p">:</span> <span class="n">nll</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s1">&#39;H(p)&#39;</span><span class="p">:</span> <span class="n">prior_entropy</span><span class="p">,</span>
+            <span class="s1">&#39;H(q)&#39;</span><span class="p">:</span> <span class="n">q_entropy</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="s1">&#39;lower_bound&#39;</span><span class="p">:</span> <span class="n">lower_bound</span><span class="p">,</span>
+            <span class="s1">&#39;cost&#39;</span><span class="p">:</span> <span class="n">cost</span>
+        <span class="p">})</span>
+
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span>
+            <span class="n">py</span><span class="o">=</span><span class="n">p_ys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="p">)</span>
+
+        <span class="n">constants</span> <span class="o">=</span> <span class="p">[</span><span class="n">w_tilde</span><span class="p">]</span> <span class="o">+</span> <span class="n">qcs</span>
+        <span class="k">return</span> <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">constants</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../inference.html" >cortex.inference</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

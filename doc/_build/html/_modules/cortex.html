@@ -1,0 +1,144 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../index.html" />
+    <link rel="up" title="Module code" href="index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;Setup scripts for Cortex.</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">import</span> <span class="nn">readline</span><span class="o">,</span> <span class="nn">glob</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
+
+<span class="kn">from</span> <span class="nn">datasets</span> <span class="kn">import</span> <span class="n">fetch_basic_data</span>
+<span class="kn">from</span> <span class="nn">utils.tools</span> <span class="kn">import</span> <span class="n">get_paths</span>
+<span class="kn">from</span> <span class="nn">utils.extra</span> <span class="kn">import</span> <span class="n">complete_path</span><span class="p">,</span> <span class="n">query_yes_no</span><span class="p">,</span> <span class="n">write_path_conf</span>
+
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../source/cortex.html#cortex.main">[docs]</a><span class="k">def</span> <span class="nf">main</span><span class="p">():</span>
+    <span class="n">readline</span><span class="o">.</span><span class="n">set_completer_delims</span><span class="p">(</span><span class="s1">&#39; </span><span class="se">\t\n</span><span class="s1">;&#39;</span><span class="p">)</span>
+    <span class="n">readline</span><span class="o">.</span><span class="n">parse_and_bind</span><span class="p">(</span><span class="s1">&#39;tab: complete&#39;</span><span class="p">)</span>
+    <span class="n">readline</span><span class="o">.</span><span class="n">set_completer</span><span class="p">(</span><span class="n">complete_path</span><span class="p">)</span>
+    <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;Welcome to Cortex: a deep learning toolbox for &#39;</span>
+            <span class="s1">&#39;neuroimaging&#39;</span><span class="p">)</span>
+    <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;Cortex requires that you enter some paths for &#39;</span>
+            <span class="s1">&#39;default dataset and output directories. These &#39;</span>
+            <span class="s1">&#39;can be changed at any time and are customizable &#39;</span>
+            <span class="s1">&#39;via the ~/.cortexrc file.&#39;</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">path_dict</span> <span class="o">=</span> <span class="n">get_paths</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="n">path_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="s1">&#39;$data&#39;</span> <span class="ow">in</span> <span class="n">path_dict</span><span class="p">:</span>
+        <span class="n">data_path</span> <span class="o">=</span> <span class="nb">raw_input</span><span class="p">(</span>
+            <span class="s1">&#39;Default data path: [</span><span class="si">%s</span><span class="s1">] &#39;</span> <span class="o">%</span> <span class="n">path_dict</span><span class="p">[</span><span class="s1">&#39;$data&#39;</span><span class="p">])</span> <span class="ow">or</span> <span class="n">path_dict</span><span class="p">[</span><span class="s1">&#39;$data&#39;</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">data_path</span> <span class="o">=</span> <span class="nb">raw_input</span><span class="p">(</span><span class="s1">&#39;Default data path: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">data_path</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;path </span><span class="si">%s</span><span class="s1"> does not exist. Please create it.&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="s1">&#39;$outs&#39;</span> <span class="ow">in</span> <span class="n">path_dict</span><span class="p">:</span>
+        <span class="n">out_path</span> <span class="o">=</span> <span class="nb">raw_input</span><span class="p">(</span>
+            <span class="s1">&#39;Default output path: [</span><span class="si">%s</span><span class="s1">] &#39;</span> <span class="o">%</span> <span class="n">path_dict</span><span class="p">[</span><span class="s1">&#39;$outs&#39;</span><span class="p">])</span> <span class="ow">or</span> <span class="n">path_dict</span><span class="p">[</span><span class="s1">&#39;$outs&#39;</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">out_path</span> <span class="o">=</span> <span class="nb">raw_input</span><span class="p">(</span><span class="s1">&#39;Default output path: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">data_path</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;path </span><span class="si">%s</span><span class="s1"> does not exist. Please create it.&#39;</span><span class="p">)</span>
+    <span class="n">write_path_conf</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="n">out_path</span><span class="p">)</span>
+
+    <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;Cortex demos require additional data that is not necessary for &#39;</span>
+           <span class="s1">&#39;general use of the Cortex as a package.&#39;</span>
+           <span class="s1">&#39;This includes MNIST, Caltech Silhoettes, and some UCI dataset &#39;</span>
+           <span class="s1">&#39;samples.&#39;</span><span class="p">)</span>
+
+    <span class="n">answer</span> <span class="o">=</span> <span class="n">query_yes_no</span><span class="p">(</span><span class="s1">&#39;Download basic dataset? &#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">answer</span><span class="p">:</span>
+        <span class="n">fetch_basic_data</span><span class="p">()</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

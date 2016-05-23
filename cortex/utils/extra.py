@@ -11,6 +11,7 @@ from progressbar import (
     ProgressBar,
     Timer
 )
+import sys
 import urllib2
 import zipfile
 
@@ -78,3 +79,50 @@ def unzip(source, out_path):
 
     with zipfile.ZipFile(source) as zf:
         zf.extractall(out_path)
+
+def write_path_conf(data_path, out_path):
+    '''Writes basic configure file.
+
+    Args:
+        data_path (str): path to data.
+        out_path (str): path to outputs.
+
+    '''
+    d = path.expanduser('~')
+    with open(path.join(d, '.cortexrc'), 'w') as f:
+        f.write('[PATHS]\n')
+        f.write('$data: %s\n' % path.abspath(data_path))
+        f.write('$outs: %s\n' % path.abspath(out_path))
+
+def query_yes_no(question, default='yes'):
+    '''Ask a yes/no question via raw_input() and return their answer.
+
+    Args:
+        question (str)
+        default (Optional[str])
+
+    Returns:
+        str
+
+    '''
+    valid = {'yes': True, 'y': True, 'ye': True, 'Y': True, 'Ye': True,
+             'no': False, 'n': False, 'N': False, 'No': False}
+    if default is None:
+        prompt = ' [y/n] '
+    elif default == 'yes':
+        prompt = ' [Y/n] '
+    elif default == 'no':
+        prompt = ' [y/N] '
+    else:
+        raise ValueError('invalid default answer: `%s`' % default)
+
+    while True:
+        sys.stdout.write(question + prompt)
+        choice = raw_input().lower()
+        if default is not None and choice == '':
+            return valid[default]
+        elif choice in valid:
+            return valid[choice]
+        else:
+            sys.stdout.write('Please respond with `yes` or `no` '
+                             '(or `y` or `n`).\n')
