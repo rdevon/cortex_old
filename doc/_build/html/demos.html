@@ -6,7 +6,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>Cortex documentation &mdash; cortex 0.1a documentation</title>
+    <title>Demos &mdash; cortex 0.1a documentation</title>
     
     <link rel="stylesheet" href="_static/classic.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
@@ -24,8 +24,8 @@
     <script type="text/javascript" src="_static/underscore.js"></script>
     <script type="text/javascript" src="_static/doctools.js"></script>
     <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <link rel="top" title="cortex 0.1a documentation" href="#" />
-    <link rel="next" title="Installation" href="setup.html" /> 
+    <link rel="top" title="cortex 0.1a documentation" href="index.html" />
+    <link rel="prev" title="Installation" href="setup.html" /> 
   </head>
   <body role="document">
     <div class="related" role="navigation" aria-label="related navigation">
@@ -39,8 +39,8 @@
              >modules</a> |</li>
         <li class="right" >
           <a href="setup.html" title="Installation"
-             accesskey="N">next</a> |</li>
-        <li class="nav-item nav-item-0"><a href="#">cortex 0.1a documentation</a> &raquo;</li> 
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">cortex 0.1a documentation</a> &raquo;</li> 
       </ul>
     </div>  
 
@@ -49,46 +49,25 @@
         <div class="bodywrapper">
           <div class="body" role="main">
             
-  <div class="section" id="cortex-documentation">
-<h1>Cortex documentation<a class="headerlink" href="#cortex-documentation" title="Permalink to this headline">¶</a></h1>
-<p>Cortex is a framework for training and evaluating neural networks using Theano.
-Cortex is not specific to, but includes tools for neuroimaging. Cortex is not
-meant to replace Theano, but is intended to be used as a compliment to scripting
-in python. It is very customizable, as all methods and classes are suggested
-templates, and pure Theano can be used when needed.</p>
-<div class="admonition warning">
-<p class="first admonition-title">Warning</p>
-<p class="last">Cortex is a brand-new project and is under rapid development. If you encounter
-any bugs or have any feature requests, please <a class="reference external" href="mailto:erroneus&#37;&#52;&#48;gmail&#46;com">email</a> or
-<a class="reference external" href="https://github.com/dhjelm/cortex/issues/new">create a GitHub issue</a>.</p>
+  <div class="section" id="demos">
+<h1>Demos<a class="headerlink" href="#demos" title="Permalink to this headline">¶</a></h1>
+<p>Cortex has several command-line demos of functionality.
+If the <code class="docutils literal"><span class="pre">basic</span></code> dataset was installed using <code class="docutils literal"><span class="pre">cortex-setup</span></code>, then the
+following demos are available:</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span>$ cortex-classifier-demo
+
+$ cortex-rbm-demo
+
+$ cortex-vae-demo
+</pre></div>
 </div>
-<div class="section" id="tutorials">
-<span id="id1"></span><h2>Tutorials<a class="headerlink" href="#tutorials" title="Permalink to this headline">¶</a></h2>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="setup.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="demos.html">Demos</a></li>
-</ul>
+<p>If you installed the neuroimaging data, then the neuroimaging demos can be run:</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span>$ cortex-rbm-vbm-demo
+
+$ cortex-rbm-olin-demo
+</pre></div>
 </div>
-</div>
-<div class="section" id="features">
-<h2>Features<a class="headerlink" href="#features" title="Permalink to this headline">¶</a></h2>
-<p>Currently Cortex supports the following models:</p>
-<ul class="simple">
-<li>Feed forward networks</li>
-<li>RNNs, GRUs, and LSTMs</li>
-<li>Helmholtz machines as well as variational inference methods</li>
-<li>Common datasets, such as MNIST and Caltech silhoettes</li>
-<li>Neuroimaging datasets, such as MRI</li>
-</ul>
-</div>
-</div>
-<div class="section" id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
-<ul class="simple">
-<li><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></li>
-<li><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></li>
-</ul>
+<p>These are partial datasets used for demo purposes only.</p>
 </div>
 
 
@@ -97,23 +76,13 @@ any bugs or have any feature requests, please <a class="reference external" href
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
-  <h3><a href="#">Table Of Contents</a></h3>
-  <ul>
-<li><a class="reference internal" href="#">Cortex documentation</a><ul>
-<li><a class="reference internal" href="#tutorials">Tutorials</a></li>
-<li><a class="reference internal" href="#features">Features</a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
-</ul>
-
-  <h4>Next topic</h4>
+  <h4>Previous topic</h4>
   <p class="topless"><a href="setup.html"
-                        title="next chapter">Installation</a></p>
+                        title="previous chapter">Installation</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
-      <li><a href="_sources/index.txt"
+      <li><a href="_sources/demos.txt"
             rel="nofollow">Show Source</a></li>
     </ul>
    </div>
@@ -142,8 +111,8 @@ any bugs or have any feature requests, please <a class="reference external" href
              >modules</a> |</li>
         <li class="right" >
           <a href="setup.html" title="Installation"
-             >next</a> |</li>
-        <li class="nav-item nav-item-0"><a href="#">cortex 0.1a documentation</a> &raquo;</li> 
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">cortex 0.1a documentation</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer" role="contentinfo">

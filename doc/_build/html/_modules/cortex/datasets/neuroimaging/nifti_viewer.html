@@ -105,6 +105,18 @@
                <span class="n">texcol</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">bgcol</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">iscale</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Saves a single nifti image.</span>
 
+<span class="sd">    Args:</span>
+<span class="sd">        nifti (str or nipy.core.api.image.image.Image): nifti file to visualize.</span>
+<span class="sd">        anat (nipy.core.api.image.image.Image): anatomical nifti file.</span>
+<span class="sd">        cluster_dict (dict): dictionary of clusters.</span>
+<span class="sd">        f (int): index.</span>
+<span class="sd">        image_threshold (float): treshold for `plot_map`.</span>
+<span class="sd">        texcol (float): text color.</span>
+<span class="sd">        bgcol (float): background color.</span>
+<span class="sd">        iscale (float): image scale.</span>
+<span class="sd">        text (Optional[str]): text for figure.</span>
+<span class="sd">        **kwargs: extra keyword arguments</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">nifti</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
         <span class="n">nifti</span> <span class="o">=</span> <span class="n">load_image</span><span class="p">(</span><span class="n">nifti</span><span class="p">)</span>
@@ -155,6 +167,15 @@
 <div class="viewcode-block" id="save_images"><a class="viewcode-back" href="../../../../source/cortex.datasets.neuroimaging.html#cortex.datasets.neuroimaging.nifti_viewer.save_images">[docs]</a><span class="k">def</span> <span class="nf">save_images</span><span class="p">(</span><span class="n">nifti_files</span><span class="p">,</span> <span class="n">anat</span><span class="p">,</span> <span class="n">roi_dict</span><span class="p">,</span> <span class="n">out_dir</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Saves multiple nifti images using multiprocessing.</span>
 
+<span class="sd">    Uses `multiprocessing`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        nifti_files (list): list of nifti file paths.</span>
+<span class="sd">        anat (nipy.core.api.image.image.Image): anatomical image.</span>
+<span class="sd">        roi_dict (dict): dictionary of cluster dictionaries.</span>
+<span class="sd">        out_dir (str): output directory path.</span>
+<span class="sd">        **kwargs: extra keyword arguments.</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">p</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="mi">30</span><span class="p">)</span>
     <span class="n">idx</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">nifti_files</span><span class="p">]</span>
@@ -172,6 +193,15 @@
             <span class="n">fig</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">out_file</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
             <span class="n">order</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">stats</span><span class="o">=</span><span class="nb">dict</span><span class="p">()):</span>
     <span class="sd">&#39;&#39;&#39;Saves a montage of nifti images.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        nifti (list or nipy.core.api.image.image.Image): 4d nifti or list of \</span>
+<span class="sd">            3D niftis.</span>
+<span class="sd">        anat (nipy.core.api.image.image.Image): anatomical nifti image.</span>
+<span class="sd">        roi_dict (dict): dictionary of cluster dictionaries.</span>
+<span class="sd">        out_file (str): output file path.</span>
+<span class="sd">        order (list): List of integers. Order of montage.</span>
+<span class="sd">        stats (Optional[dict]): extra statistics to print on montage as text.</span>
 
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">anat</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
@@ -269,9 +299,8 @@
         <span class="n">plt</span><span class="o">.</span><span class="n">draw</span><span class="p">()</span></div>
 
 <div class="viewcode-block" id="make_argument_parser"><a class="viewcode-back" href="../../../../source/cortex.datasets.neuroimaging.html#cortex.datasets.neuroimaging.nifti_viewer.make_argument_parser">[docs]</a><span class="k">def</span> <span class="nf">make_argument_parser</span><span class="p">():</span>
-    <span class="sd">&#39;&#39;&#39;</span>
-<span class="sd">    Creates an ArgumentParser to read the options for this script from</span>
-<span class="sd">    sys.argv</span>
+    <span class="sd">&#39;&#39;&#39;Creates an ArgumentParser to read the options for this script from sys.argv</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
     <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;nifti&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Nifti file to be processed.&#39;</span><span class="p">)</span>
@@ -282,8 +311,15 @@
     <span class="k">return</span> <span class="n">parser</span></div>
 
 <div class="viewcode-block" id="main"><a class="viewcode-back" href="../../../../source/cortex.datasets.neuroimaging.html#cortex.datasets.neuroimaging.nifti_viewer.main">[docs]</a><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">nifti_file</span><span class="p">,</span> <span class="n">anat_file</span><span class="p">,</span> <span class="n">roi_file</span><span class="p">,</span> <span class="n">out_file</span><span class="p">,</span> <span class="n">thr</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;</span>
-<span class="sd">    Main function for running as a script.</span>
+    <span class="sd">&#39;&#39;&#39;Main function for running as a script.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        nifti (str): path to 4D nifti file.</span>
+<span class="sd">        anat (str): path to anatomical nifti file.</span>
+<span class="sd">        roi_file (str): path to pickled roi dictionary file.</span>
+<span class="sd">        out_file (str): path to output file.</span>
+<span class="sd">        thr (float): threshold for `nipy.labs.viz.plot_map`</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">iscale</span> <span class="o">=</span> <span class="mi">2</span>
     <span class="n">nifti</span> <span class="o">=</span> <span class="n">load_image</span><span class="p">(</span><span class="n">nifti_file</span><span class="p">)</span>

@@ -157,27 +157,69 @@ list: New file list with bad files filtered.</td>
 </div>
 <div class="section" id="module-cortex.analysis.read_fmri">
 <span id="cortex-analysis-read-fmri-module"></span><h2>cortex.analysis.read_fmri module<a class="headerlink" href="#module-cortex.analysis.read_fmri" title="Permalink to this headline">¶</a></h2>
-<p>Utility for handling fMRI data</p>
+<p>Utility for handling fMRI data.</p>
 <dl class="function">
 <dt id="cortex.analysis.read_fmri.load_niftis">
-<code class="descclassname">cortex.analysis.read_fmri.</code><code class="descname">load_niftis</code><span class="sig-paren">(</span><em>source_dir</em>, <em>out_dir</em>, <em>name='mri'</em>, <em>patterns=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/read_fmri.html#load_niftis"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.read_fmri.load_niftis" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">cortex.analysis.read_fmri.</code><code class="descname">load_niftis</code><span class="sig-paren">(</span><em>source_dir</em>, <em>out_dir</em>, <em>name='fmri'</em>, <em>patterns=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/read_fmri.html#load_niftis"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.read_fmri.load_niftis" title="Permalink to this definition">¶</a></dt>
 <dd><p>Loads niftis from a directory.</p>
+<p>Saves the data, paths, mask, and <cite>sites</cite>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>source_dir</strong> (<em>str</em>) &#8211; Directory of nifti files.</li>
+<li><strong>out_dir</strong> (<em>str</em>) &#8211; Output directory for saving arrays, etc.</li>
+<li><strong>name</strong> (<em>str</em>) &#8211; Name of dataset.</li>
+<li><strong>patterns</strong> (<em>Optional[list]</em>) &#8211; list of glob for filtering files.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="function">
-<dt id="cortex.analysis.read_fmri.make_argument_parser">
-<code class="descclassname">cortex.analysis.read_fmri.</code><code class="descname">make_argument_parser</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/read_fmri.html#make_argument_parser"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.read_fmri.make_argument_parser" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dt id="cortex.analysis.read_fmri.main">
+<code class="descclassname">cortex.analysis.read_fmri.</code><code class="descname">main</code><span class="sig-paren">(</span><em>args=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/read_fmri.html#main"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.read_fmri.main" title="Permalink to this definition">¶</a></dt>
+<dd><p>Main routine.</p>
+</dd></dl>
 
 <dl class="function">
 <dt id="cortex.analysis.read_fmri.read_niftis">
 <code class="descclassname">cortex.analysis.read_fmri.</code><code class="descname">read_niftis</code><span class="sig-paren">(</span><em>file_list</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/read_fmri.html#read_niftis"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.read_fmri.read_niftis" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Finds nifti files in a directory.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>source</strong> (<em>str</em>) &#8211; The source directory for niftis</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">List of file paths.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
 
 <dl class="function">
 <dt id="cortex.analysis.read_fmri.save_mask">
 <code class="descclassname">cortex.analysis.read_fmri.</code><code class="descname">save_mask</code><span class="sig-paren">(</span><em>data</em>, <em>out_path</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/read_fmri.html#save_mask"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.read_fmri.save_mask" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Save mask of data.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>data</strong> (<em>numpy.array</em>) &#8211; Data to mask</li>
+<li><strong>out_path</strong> (<em>str</em>) &#8211; Output path for mask.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
 
 </div>
 <div class="section" id="module-cortex.analysis">

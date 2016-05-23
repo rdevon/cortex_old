@@ -22,6 +22,7 @@ Tutorials
    :maxdepth: 1
 
    setup
+   demos
 
 Features
 --------

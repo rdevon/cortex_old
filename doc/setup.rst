@@ -43,6 +43,9 @@ __________________
 .. _PyYAML: http://pyyaml.org/wiki/PyYAML
 .. _Theano: http://deeplearning.net/software/theano/
 
+* Theano_
+* PyYAML_
+
 Neuroimaging Requirements
 _________________________
 
@@ -55,8 +58,6 @@ _________________________
 .. _nipy: http://nipy.org/
 .. _afni: http://afni.nimh.nih.gov
 
-* Theano_
-* PyYAML_
 * nipy_
 * h5py_
 * afni_

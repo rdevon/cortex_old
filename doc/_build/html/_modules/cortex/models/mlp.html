@@ -123,21 +123,6 @@
         <span class="k">if</span> <span class="n">distribution_args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">distribution_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dim_in</span> <span class="o">=</span> <span class="n">dim_in</span>
 
-        <span class="k">if</span> <span class="n">out_act</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;out_act option going away. Use `distribution`.&#39;</span><span class="p">,</span> <span class="ne">FutureWarning</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">out_act</span> <span class="o">==</span> <span class="s1">&#39;T.nnet.sigmoid&#39;</span><span class="p">:</span>
-                <span class="n">distribution</span> <span class="o">=</span> <span class="s1">&#39;binomial&#39;</span>
-            <span class="k">elif</span> <span class="n">out_act</span> <span class="o">==</span> <span class="s1">&#39;T.tanh&#39;</span><span class="p">:</span>
-                <span class="n">distribution</span> <span class="o">=</span> <span class="s1">&#39;centered_binomial&#39;</span>
-            <span class="k">elif</span> <span class="n">out_act</span> <span class="o">==</span> <span class="s1">&#39;T.nnet.softmax&#39;</span><span class="p">:</span>
-                <span class="n">distribution</span> <span class="o">=</span> <span class="s1">&#39;multimnomial&#39;</span>
-            <span class="k">elif</span> <span class="n">out_act</span> <span class="o">==</span> <span class="s1">&#39;lambda x: x&#39;</span><span class="p">:</span>
-                <span class="n">distribution</span> <span class="o">=</span> <span class="s1">&#39;gaussian&#39;</span>
-            <span class="k">elif</span> <span class="n">out_act</span> <span class="o">==</span> <span class="s1">&#39;T.tanh&#39;</span><span class="p">:</span>
-                <span class="n">distribution</span> <span class="o">=</span> <span class="s1">&#39;centered binomial&#39;</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">out_act</span><span class="p">)</span>
-
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">distribution</span><span class="p">,</span> <span class="n">Distribution</span><span class="p">):</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">distribution</span> <span class="o">=</span> <span class="n">distribution</span>
         <span class="k">elif</span> <span class="n">distribution</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
@@ -413,7 +398,6 @@
 
 <span class="sd">        &#39;&#39;&#39;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_call</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">)[</span><span class="s1">&#39;z&#39;</span><span class="p">]</span></div></div>
-
 </pre></div>
 
           </div>
