@@ -30,23 +30,39 @@ class FMRI_IID(MRI):
     independently sampled data.
 
     Attributes:
-        novels
+        extras (dict): dictionary of additional arrays for analysis.
 
     '''
     def __init__(self, name='fmri_iid', **kwargs):
         super(FMRI_IID, self).__init__(name=name, **kwargs)
 
     def get_data(self, source):
+        '''Fetch the fMRI dataset.
+
+        fMRI dataset source is a yaml file.
+        An example format of said yaml is::
+
+            name: 'aod',
+            data: [
+                '/Users/devon/Data/AOD/AOD_0.npy',
+                '/Users/devon/Data/AOD/AOD_1.npy'
+            ],
+            mask: '/Users/devon/Data/AOD/AOD_mask.npy',
+            nifti: '//Users/devon/Data/VBM/H000A.nii',
+            tmp_path: '/Users/devon/Data/mri_tmp/',
+            anat_file: '/Users/devon/Data/ch2better_whitebg_aligned2EPI_V4.nii',
+
+        '''
         print('Loading file locations from %s' % source)
         source_dict = yaml.load(open(source))
         print('Source locations: %s' % pprint.pformat(source_dict))
 
-        def unpack_source(nifti_file=None, mask_file=None, anat_file=None,
+        def unpack_source(name=None, nifti=None, mask=None, anat_file=None,
                           tmp_path=None, pca=None, data=None, **kwargs):
-            return (nifti_file, mask_file, anat_file, tmp_path, pca, data, kwargs)
+            return (name, nifti, mask, anat_file, tmp_path, pca, data, kwargs)
 
-        (nifti_file, mask_file, self.anat_file,
-         self.tmp_path, pca_file, data_files, extras) = unpack_source(
+        (name, nifti_file, mask_file, self.anat_file,
+         self.tmp_path, self.pca_file, data_files, extras) = unpack_source(
             **source_dict)
 
         self.base_nifti_file = nifti_file
@@ -58,11 +74,16 @@ class FMRI_IID(MRI):
             raise ValueError("Mask has incorrect values.")
         self.mask = mask
 
-        if pca_file is not None:
-            with open(pca_file, 'rb') as f:
-                self.pca = cPickle.load(f)
+        if self.pca_file is not None:
+            try:
+                with open(self.pca_file, 'rb') as f:
+                    self.pca = cPickle.load(f)
+            except (IOError, EOFError):
+                self.pca = None
         else:
             self.pca = None
+
+        self.extras = dict((k, np.load(v)) for k, v in extras.iteritems())
 
         if isinstance(data_files, str):
             data_files = [data_files]
@@ -72,16 +93,13 @@ class FMRI_IID(MRI):
             print 'Loading %s' % data_file
             X_ = np.load(data_file)
             X.append(X_.astype(floatX))
-            Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
+            Y.append((np.zeros((X_.shape[0] * X_.shape[1],)) + i).astype(floatX))
 
         X = np.concatenate(X, axis=0)
         Y = np.concatenate(Y, axis=0)
 
-        self.targets = np.load(targets_file)
-        self.novels = np.load(novels_file)
-
-        self.n_scans = self.targets.shape[0]
-        self.n_subjects = X.shape[0] // self.n_scans
+        self.n_subjects, self.n_scans, _, _, _ = X.shape
+        X = X.reshape((X.shape[0] * X.shape[1],) + X.shape[2:])
 
         return X, Y
 
@@ -177,97 +195,3 @@ class FMRI(FMRI_IID):
         }
 
         return rval
-
-
-class ICA_Loadings(object):
-    def __init__(self, batch_size=100, source=None, label_mode='one_hot',
-                 idx=None, shuffle=True, window=10, stride=3, end_mode='clip'):
-        self.X, self.Y, self.L = self.load_data(source, idx)
-
-        self.n_runs, self.n_subjects, self.t, self.dim = X.shape
-
-        last_index = (self.t - window) - (self.t - window) % stride
-        if end_mode == 'clip':
-            self.X = self.X[:, :last_index]
-        elif end_mode == 'pad':
-            raise NotImplementedError()
-
-        if self.Y.shape[2] < self.t:
-            self.Y = np.lib.pad(self.Y, ((0, 0),
-                (0, self.t - self.Y.shape[2]),
-                (0, 0)), 'constant', constant_values=0)
-
-        if self.t < self.Y.shape[2]:
-            self.Y = self.Y[:, :, :self.t]
-
-        assert self.L.shape[0] == self.n_subjects
-
-        if label_mode == 'one_hot':
-            self.L = make_one_hot(self.L)
-
-        self.n_runs, self.n_stims, _ = self.Y.shape
-        assert self.Y.shape[2] == self.t
-
-        self.bs = batch_size
-        self.shuffle = shuffle
-
-        self.indices = []
-        for r in xrange(self.n_runs):
-            for i in xrange(self.n_subjects):
-                self.indices += [(r, i, j)
-                    for j in range(0, self.t - window + 1, stride)]
-
-        self.n = len(self.indices)
-
-        if self.shuffle:
-            self.randomize
-
-    def load_data(self, source, idx):
-        tc_file = os.path.join(source, 'tcs.npy')
-        stim_file = os.path.join(source, 'stims.npy')
-        label_file = os.path.join(source, 'labels.npy')
-        X = np.load(tc_file)
-        Y = np.load(stim_file).transpose((2, 0, 1))
-        L = np.load(label_file)
-
-        if idx is not None:
-            X = X[idx]
-            Y = Y[idx]
-            L = L[idx]
-
-        return X, Y, L
-
-    def randomize(self, ):
-        random.shuffle(self.indices)
-
-    def next(batch_size=None):
-        if batch_size is None:
-            batch_size = self.bs
-
-        if self.pos == -1:
-            self.randomize()
-            self.pos = 0
-            if not self.inf:
-                raise StopIteration
-
-        batch_size = min(batch_size, self.n - self.pos)
-
-        indices = [self.indices[p]
-                   for p in xrange(self.pos, self.pos + batch_size)]
-
-        x = np.zeros((batch_size, self.X.shape[2], self.X.shape[3])).astype('float32')
-        y = np.zeros((batch_size, self.Y.shape[1], self.Y.shape[2])).astype('int64')
-        l = np.zeros((batch_size,)).astype('int64')
-
-        window = self.X.shape[2]
-
-        for b, (r, i, j) in enumerate(indices):
-            x[i] = self.X[r, i, j:j+window]
-            y[i] = self.Y[r, :, j:j+window]
-            l[i] = self.L[i]
-
-        self.pos += batch_size
-        if self.pos >= self.n:
-            self.pos = -1
-
-        return x, y, l

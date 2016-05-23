@@ -2,6 +2,7 @@
 Module for the MRI dataset
 '''
 
+import cPickle
 import nipy
 from nipy.core.api import Image
 import numpy as np
@@ -62,10 +63,17 @@ class MRI(BasicDataset):
         X = self._mask(X)
         self.pca_components = pca_components
 
-        if self.pca_components and self.pca is None:
-            self.pca = PCA(pca_components)
-            print 'Performing PCA...'
-            X = self.pca.fit_transform(X)
+        if self.pca_components:
+            if self.pca is None:
+                print 'Forming PCA'
+                self.pca = PCA(pca_components)
+                print 'Fitting PCA... (please wait)'
+                self.pca.fit(X)
+                if self.pca_file is not None:
+                    with open(self.pca_file, 'wb') as pf:
+                        cPickle.dump(self.pca, pf)
+            print 'Performing PCA'
+            X = self.pca.transform(X)
 
         data = {name: X, 'group': Y}
         distributions = {name: distribution, 'group': 'multinomial'}
@@ -118,10 +126,13 @@ class MRI(BasicDataset):
         if not path.isdir(self.tmp_path):
             os.mkdir(self.tmp_path)
         self.anat_file = source_dict['anat_file']
-        pca_file = source_dict.get('pca', None)
-        if pca_file is not None:
-            with open(pca_file, 'rb') as f:
-                self.pca = cPickle.load(f)
+        self.pca_file = source_dict.get('pca', None)
+        if self.pca_file is not None:
+            try:
+                with open(pca_file, 'rb') as f:
+                    self.pca = cPickle.load(f)
+            except (IOError, EOFError):
+                self.pca = None
         else:
             self.pca = None
 

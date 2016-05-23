@@ -16,6 +16,6 @@
   show_every: 10,
   dataset_args: {
     dataset: 'mri',
-    source: '$data/VBM_test/VBM.yaml'
+    source: '$data/neuroimaging/VBM_test/VBM.yaml'
   }
 }

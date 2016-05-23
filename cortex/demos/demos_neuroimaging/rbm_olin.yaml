@@ -3,7 +3,7 @@
   learning_args: {
     epochs: 1000,
     optimizer: 'sgd',
-    learning_rate: 0.001,
+    learning_rate: 0.0001,
     l1_decay: 0.1
   },
   inference_args: {
@@ -16,6 +16,6 @@
   show_every: 10,
   dataset_args: {
     dataset: 'fmri_iid',
-    source: '$data/AOD/data.yaml'
+    source: '$data/neuroimaging/AOD_test/AOD.yaml'
   }
 }

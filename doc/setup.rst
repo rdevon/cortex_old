@@ -7,8 +7,14 @@ You can install Cortex using the Python package manager ``pip``.
 
    $ pip install cortex
 
+To get the most up-to-date version, you can install from the ``git`` repository:
+
+.. code-block:: bash
+
+    $ pip install git+git://github.com/rdevon/cortex.git
+
 However, currently the demos give the best example of how to script using cortex.
-So it is recommended to clone from the github repository:
+So, if this is your first time using cortex, it is recommended to clone from the github repository:
 
 .. code-block:: bash
 
@@ -31,18 +37,29 @@ Follow the instructions; you will be asked to specify default data and out
 directories. These are necessary only for the demos, and can be customized in your
 ~/.cortexrc file.
 
-Requirements
-------------
+Basic Requirements
+__________________
 
 .. _PyYAML: http://pyyaml.org/wiki/PyYAML
 .. _Theano: http://deeplearning.net/software/theano/
+
+Neuroimaging Requirements
+_________________________
+
+.. note::
+
+   These are not required for basic functionality, but are necessary for
+   neuroimaging tools.
+
 .. _h5py: http://www.h5py.org/
 .. _nipy: http://nipy.org/
+.. _afni: http://afni.nimh.nih.gov
 
 * Theano_
 * PyYAML_
 * nipy_
 * h5py_
+* afni_
 
 Documentation
 -------------

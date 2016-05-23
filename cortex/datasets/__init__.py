@@ -130,7 +130,6 @@ def load_data(dataset=None,
 
     return train, valid, test
 
-
 def load_data_split(C, idx=None, dataset=None, **dataset_args):
     '''Load dataset and split.
 
@@ -176,7 +175,7 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
         if round(np.sum(split), 5) != 1. or len(split) != 3:
             raise ValueError(split)
         dummy = C(batch_size=1, **dataset_args)
-        N = dummy.n
+        N = dummy.X.shape[0]
         idx = range(N)
         random.shuffle(idx)
         split_idx = []

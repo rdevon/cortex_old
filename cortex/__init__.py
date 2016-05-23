@@ -6,6 +6,7 @@ import readline, glob
 from os import path
 
 from datasets import fetch_basic_data
+from datasets.neuroimaging import fetch_neuroimaging_data
 from utils.tools import get_paths
 from utils.extra import complete_path, query_yes_no, write_path_conf
 
@@ -52,3 +53,11 @@ def main():
 
     if answer:
         fetch_basic_data()
+
+    print ('Cortex also requires neuroimaging data for the neuroimaging data '
+           'for the neuroimaging demos. These are large and can be skipped.')
+
+    answer = query_yes_no('Download neuroimaging dataset? ')
+
+    if answer:
+        fetch_neuroimaging_data()

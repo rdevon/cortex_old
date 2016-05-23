@@ -71,21 +71,6 @@ class MLP(Layer):
         if distribution_args is None: distribution_args = dict()
         self.dim_in = dim_in
 
-        if out_act is not None:
-            warnings.warn('out_act option going away. Use `distribution`.', FutureWarning)
-            if out_act == 'T.nnet.sigmoid':
-                distribution = 'binomial'
-            elif out_act == 'T.tanh':
-                distribution = 'centered_binomial'
-            elif out_act == 'T.nnet.softmax':
-                distribution = 'multimnomial'
-            elif out_act == 'lambda x: x':
-                distribution = 'gaussian'
-            elif out_act == 'T.tanh':
-                distribution = 'centered binomial'
-            else:
-                raise ValueError(out_act)
-
         if isinstance(distribution, Distribution):
             self.distribution = distribution
         elif distribution is not None:
@@ -361,4 +346,3 @@ class MLP(Layer):
 
         '''
         return self.step_call(x, *params)['z']
-
