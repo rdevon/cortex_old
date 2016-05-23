@@ -39,6 +39,7 @@ setup(
             'cortex-rbm-demo=cortex.demos.demos_basic:run_rbm_demo',
             'cortex-vae-demo=cortex.demos.demos_basic:run_vae_demo',
             'cortex-rbm-vbm-demo=cortex.demos.demos_neuroimaging:run_rbm_vbm_demo',
+            'cortex-rbm-olin-demo=cortex.demos.demos_neuroimaging:run_rbm_olin_demo',
             'cortex-read-mri=cortex.analysis.load_mri:main'
         ]
     },
@@ -46,6 +47,7 @@ setup(
         'cortex/demos/demos_basic/classifier_mnist.yaml',
         'cortex/demos/demos_basic/rbm_mnist.yaml',
         'cortex/demos/demos_basic/vae_mnist.yaml',
-        'cortex/demos/demos_neuroimaging/rbm_vbm.yaml'
+        'cortex/demos/demos_neuroimaging/rbm_vbm.yaml',
+        'cortex/demos/demos_neuroimaging/rbm_olin.yaml'
     ]
 )

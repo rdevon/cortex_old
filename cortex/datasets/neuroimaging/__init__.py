@@ -12,9 +12,9 @@ def resolve(dataset):
         dataset (str): dataset name
 
     '''
-    from fmri import FMRI, FMRI_IID
-    from mri import MRI
-    from snp import SNP
+    from .fmri import FMRI, FMRI_IID
+    from .mri import MRI
+    from .snp import SNP
 
     if dataset == 'fmri':
         C = FMRI

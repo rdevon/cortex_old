@@ -384,6 +384,8 @@ def main_loop(train, valid, tparams,
               input_keys=None,
               f_extra=None,
               test_every=None,
+              show_every=None,
+              output_every=None,
               name=None,
               save=None,
               save_images=None,
@@ -393,7 +395,6 @@ def main_loop(train, valid, tparams,
               monitor=None,
               out_path=None,
               extra_outs_keys=None,
-              output_every=None,
               **validation_args):
     '''Generic main loop.
 
@@ -413,6 +414,10 @@ def main_loop(train, valid, tparams,
         f_extra (theano.function): Function that is run just prior to testing.
         test_every (Optional[int]): If not None, then controls how many epochs
             before test.
+        show_every (Optional[int]): If not None, then controls how many epochs
+            before saving images.
+        output_every (Optional[int]): If not None, print rvals from
+            `f_grad_shared` and save images.
         name (str): Name of experiment.
         save (function): Saving function for parameters.
         save_images (Optional[function]): Function to save images.
@@ -423,8 +428,6 @@ def main_loop(train, valid, tparams,
         monitor (utils.monitor.Monitor).
         out_path (str): Director path for output files.
         extra_outs_keys (list): Keys for extra outs of `f_grad_shared`.
-        output_every (Optional[int]): If not None, print rvals from
-            `f_grad_shared`.
         **validation_args: kwargs. Arguments for test.
 
     '''
@@ -494,7 +497,9 @@ def main_loop(train, valid, tparams,
                                 path.join(out_path, 'stats_train.npz'))
                             monitor.save_stats_valid(
                                 path.join(out_path, 'stats_valid.npz'))
-                if save_images is not None and out_path is not None:
+                if (save_images is not None
+                    and out_path is not None
+                    and (show_every is None or ((e + 1) % show_every == 0))):
                     save_images()
 
                 e += 1

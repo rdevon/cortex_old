@@ -22,3 +22,9 @@ def run_rbm_vbm_demo():
 
     yaml_file = path.join(d, 'rbm_vbm.yaml')
     run_demo(yaml_file, train)
+
+def run_rbm_olin_demo():
+    from .rbm_ni import train
+
+    yaml_file = path.join(d, 'rbm_olin.yaml')
+    run_demo(yaml_file, train)

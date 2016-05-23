@@ -21,6 +21,7 @@ from ...utils.tools import resolve_path
 
 np.seterr(all='raise')
 
+
 class MRI(BasicDataset):
     '''Basic MRI dataset iterator.
 
@@ -153,7 +154,7 @@ class MRI(BasicDataset):
         if 'sites' in source_dict.keys():
             sites_file = source_dict['sites']
             self.sites = np.load(sites_file).tolist()
-            n_sites = np.unique(self.sites)
+            n_sites = len(np.unique(self.sites).tolist())
 
             if n_sites > 1:
                 print 'Regressing out site'

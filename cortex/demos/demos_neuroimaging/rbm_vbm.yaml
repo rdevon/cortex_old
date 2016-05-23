@@ -3,8 +3,8 @@
   learning_args: {
     epochs: 1000,
     optimizer: 'sgd',
-    learning_rate: 0.0001,
-    l1_decay: 0.01
+    learning_rate: 0.001,
+    l1_decay: 0.1
   },
   inference_args: {
     n_chains: 10,
@@ -13,6 +13,7 @@
   },
   dim_h: 60,
   test_every: 10,
+  show_every: 10,
   dataset_args: {
     dataset: 'mri',
     source: '$data/VBM_test/VBM.yaml'

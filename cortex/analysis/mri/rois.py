@@ -11,13 +11,14 @@ import multiprocessing as mp
 from nipy import load_image
 from nipy import save_image
 import numpy as np
+from os import path
 import pickle
 import pprint
 import re
 from scipy import (
     reshape, zeros, where, std,
     argmax, sqrt, ceil, floor, sign,
-    negative, linspace, double, float16
+    negative, linspace, double,
 )
 import subprocess
 from sys import stdout
@@ -60,30 +61,31 @@ def lat_opposite(side):
     Returns the lateral opposite as defined by the keyword pair {"Right", "Left"}
     '''
 
-    if side == "Right": return "Left"
-    elif side == "Left": return "Right"
-    else: raise ValueError("Lateral side error, (%s)" % side)
+    if side == 'Right': return 'Left'
+    elif side == 'Left': return 'Right'
+    else: raise ValueError('Lateral side error, (%s)' % side)
 
 def check_pair(toproi, rois, lr_cm):
-    toproi_split = toproi.split(" ",1)
+    toproi_split = toproi.split(' ',1)
     both = False
-    if toproi_split[0] in ["Left", "Right"]:
+    if toproi_split[0] in ['Left', 'Right']:
         for roi in rois:
-            roi_split = roi.split(" ",1)
+            roi_split = roi.split(' ',1)
             if (roi_split[1] == toproi_split[1]) & (roi_split[0] == lat_opposite(toproi_split[0])):
                 both = True
 
     if both:
-        toproi = " ".join(["(L+R)",toproi_split[1]])
+        toproi = ' '.join(['(L+R)',toproi_split[1]])
     else:
         if abs(lr_cm) < 9:
-            toproi = toproi.split(" ",1)[1]
+            toproi = toproi.split(' ',1)[1]
 
     return toproi
 
 def find_clusters_from_3D(fnifti, thr):
     '''Function to use afni command line to find clusters from a 3D nifti.
 
+    This currently calls afni functions from command line.
     TODO(dhjelm): change this to use nipy functions.
 
     Args:
@@ -94,17 +96,23 @@ def find_clusters_from_3D(fnifti, thr):
         list: clusters
 
     '''
-    cmd = ("3dclust "
-           "-1Dformat -quiet -nosum -2thresh -2 %.2f "
-           "-dxyz=1 2 80 2>/dev/null" % thr)
-    awk = "awk '{ print $1\"\t\"$2\"\t\"$3\"\t\"$4\"\t\"$5\"\t\"$6\"\t\"$11\"\t\"$14\"\t\"$15\"\t\"$16}'"
-    cmdline = cmd + " '%s'| " % fnifti + awk
+    if not path.isfile(fnifti):
+        raise IOError('%s not found' % fnifti)
+
+    cmd = ('3dclust -1Dformat -quiet -nosum -2thresh -2 %.2f '
+           '-dxyz=1 2 80 2>/dev/null %s' % (thr, fnifti))
+    fields = [1, 2, 3, 4, 5, 6, 11, 14, 15, 16]
+    field_strs = ['$%d' % i for i in fields]
+    tab_str = '\"\\t\"'
+    awk = 'awk \'{ print ' + tab_str.join(field_strs) + '}\''
+    cmdline = '%s | %s' % (cmd, awk)
+
     proc = subprocess.Popen(cmdline, stdout=subprocess.PIPE, shell=True)
     (out, err) = proc.communicate()
 
     if '#**' in out.split(): return []
 
-    cluster = float16(out.split())
+    cluster = [float(o) for o in out.split()]
     return cluster
 
 def find_clusters_from_4D(fnifti, i, thr):
@@ -275,7 +283,7 @@ def cluster_worker(fnifti, thr, roi_dict):
 def worker_helper(args):
     cluster_worker(*args)
 
-def find_rois(fnifti, thr):
+def find_rois(fnifti, thr, test=False):
     '''Function for finding regions of interest from a nifti file.
 
     Args:

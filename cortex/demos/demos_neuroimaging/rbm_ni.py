@@ -11,14 +11,14 @@ import pprint
 import theano
 from theano import tensor as T
 
-from ...datasets import load_data_split
-from ...datasets.neuroimaging import resolve as resolve_dataset
-from ...models.rbm import RBM, unpack
-from ...utils import floatX
-from ...utils.monitor import SimpleMonitor
-from ...utils.preprocessor import Preprocessor
-from ...utils.tools import get_trng, print_profile, print_section
-from ...utils.training import (
+from cortex.datasets import load_data_split
+from cortex.datasets.neuroimaging import resolve as resolve_dataset
+from cortex.models.rbm import RBM, unpack
+from cortex.utils import floatX
+from cortex.utils.monitor import SimpleMonitor
+from cortex.utils.preprocessor import Preprocessor
+from cortex.utils.tools import get_trng, print_profile, print_section
+from cortex.utils.training import (
     main_loop,
     make_argument_parser,
     set_experiment,
@@ -26,7 +26,6 @@ from ...utils.training import (
     set_optimizer,
     set_params
 )
-
 
 def init_learning_args(
     learning_rate=0.0001,
@@ -52,7 +51,7 @@ def init_inference_args(
 
 def train(
     out_path=None, name='', model_to_load=None, save_images=True, test_every=None,
-    dim_h=None, preprocessing=None,
+    show_every=None, dim_h=None, preprocessing=None,
     learning_args=None,
     inference_args=None,
     dataset_args=None):
@@ -98,7 +97,7 @@ def train(
 
     # ========================================================================
     print_section('Loading model and forming graph')
-    
+
     def create_model():
         model = RBM(dim_in, dim_h, v_dist=train.distributions[train.name],
                     h_dist='binomial', mean_image=train.mean_image)
@@ -193,6 +192,7 @@ def train(
         f_grad_shared, f_grad_updates, f_test, f_test_keys,
         f_extra=f_update_partition,
         test_every=test_every,
+        show_every=show_every,
         save=save,
         save_images=save_images,
         monitor=monitor,
