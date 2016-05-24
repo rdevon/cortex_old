@@ -22,6 +22,7 @@ Features
 Currently Cortex supports the following models:
 
 * Feed forward networks
+* RBMs
 * RNNs, GRUs, and LSTMs
 * Helmholtz machines as well as variational inference methods
 * Common datasets, such as MNIST and Caltech silhoettes

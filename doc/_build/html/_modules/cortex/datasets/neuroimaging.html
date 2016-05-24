@@ -55,6 +55,8 @@
 <span class="sd">&#39;&#39;&#39;</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
 <span class="kn">import</span> <span class="nn">yaml</span>
 
 <span class="kn">from</span> <span class="nn">...utils.tools</span> <span class="kn">import</span> <span class="n">resolve_path</span>
@@ -65,13 +67,17 @@
     <span class="sd">&#39;&#39;&#39;Fetch the neuroimaging dataset for demos.</span>
 
 <span class="sd">    &#39;&#39;&#39;</span>
-    <span class="n">url</span> <span class="o">=</span> <span class="s1">&#39;http://mialab.mrn.org/data/cortex/neuroimaging.zip&#39;</span>
+    <span class="n">url</span> <span class="o">=</span> <span class="s1">&#39;http://mialab.mrn.org/data/neuroimaging/neuroimaging.zip&#39;</span>
     <span class="n">out_dir</span> <span class="o">=</span> <span class="n">resolve_path</span><span class="p">(</span><span class="s1">&#39;$data&#39;</span><span class="p">)</span>
     <span class="n">download_data</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">out_dir</span><span class="p">)</span>
     <span class="n">unzip</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="s1">&#39;neuroimaging.zip&#39;</span><span class="p">),</span> <span class="n">out_dir</span><span class="p">)</span>
     <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="s1">&#39;neuroimaging.zip&#39;</span><span class="p">))</span>
 
     <span class="n">ni_dir</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="s1">&#39;neuroimaging&#39;</span><span class="p">)</span>
+
+    <span class="n">unzip</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;VBM_test.zip&#39;</span><span class="p">),</span> <span class="n">ni_dir</span><span class="p">)</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;VBM_test.zip&#39;</span><span class="p">))</span>
+
     <span class="n">unzip</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;AOD_test.zip&#39;</span><span class="p">),</span> <span class="n">ni_dir</span><span class="p">)</span>
     <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;AOD_test.zip&#39;</span><span class="p">))</span>
 
@@ -83,7 +89,7 @@
                     <span class="n">anat_file</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;ch2better_whitebg_aligned2EPI_V4&#39;</span><span class="p">),</span>
                     <span class="n">data</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;VBM_test&#39;</span><span class="p">,</span> <span class="s1">&#39;VBM_0.npy&#39;</span><span class="p">),</span>
                           <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;VBM_test&#39;</span><span class="p">,</span> <span class="s1">&#39;VBM_1.npy&#39;</span><span class="p">)],</span>
-                    <span class="n">mask</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;VBM_test&#39;</span><span class="p">,</span> <span class="s1">&#39;mask.npy&#39;</span><span class="p">),</span>
+                    <span class="n">mask</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;VBM_test&#39;</span><span class="p">,</span> <span class="s1">&#39;VBM_mask.npy&#39;</span><span class="p">),</span>
                     <span class="n">name</span><span class="o">=</span><span class="s1">&#39;VBM&#39;</span><span class="p">,</span>
                     <span class="n">nifti</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;base_nifti.nii&#39;</span><span class="p">),</span>
                     <span class="n">sites</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;VBM_test&#39;</span><span class="p">,</span> <span class="s1">&#39;VBM_sites.npy&#39;</span><span class="p">),</span>
@@ -92,8 +98,6 @@
                 <span class="p">)</span>
             <span class="p">)</span>
 
-    <span class="n">unzip</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;VBM_test.zip&#39;</span><span class="p">),</span> <span class="n">ni_dir</span><span class="p">)</span>
-    <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s1">&#39;VBM_test.zip&#39;</span><span class="p">))</span>
 
     <span class="n">yaml_file</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;AOD_test&#39;</span><span class="p">,</span> <span class="s1">&#39;AOD.yaml&#39;</span><span class="p">)</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">yaml_file</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">yf</span><span class="p">:</span>
@@ -103,10 +107,9 @@
                     <span class="n">anat_file</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;ch2better_whitebg_aligned2EPI_V4&#39;</span><span class="p">),</span>
                     <span class="n">data</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;AOD_test&#39;</span><span class="p">,</span> <span class="s1">&#39;AOD_0.npy&#39;</span><span class="p">),</span>
                           <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;AOD_test&#39;</span><span class="p">,</span> <span class="s1">&#39;AOD_1.npy&#39;</span><span class="p">)],</span>
-                    <span class="n">mask</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;AOD_test&#39;</span><span class="p">,</span> <span class="s1">&#39;mask.npy&#39;</span><span class="p">),</span>
+                    <span class="n">mask</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;AOD_test&#39;</span><span class="p">,</span> <span class="s1">&#39;AOD_mask.npy&#39;</span><span class="p">),</span>
                     <span class="n">name</span><span class="o">=</span><span class="s1">&#39;AOD&#39;</span><span class="p">,</span>
                     <span class="n">nifti</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;base_nifti.nii&#39;</span><span class="p">),</span>
-                    <span class="n">sites</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;AOD_test&#39;</span><span class="p">,</span> <span class="s1">&#39;AOD_sites.npy&#39;</span><span class="p">),</span>
                     <span class="n">tmp_path</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ni_dir</span><span class="p">,</span> <span class="s1">&#39;AOD_test&#39;</span><span class="p">,</span> <span class="s1">&#39;AOD_tmp&#39;</span><span class="p">)</span>
                     <span class="p">)</span>
                 <span class="p">)</span>

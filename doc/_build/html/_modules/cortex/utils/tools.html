@@ -88,11 +88,17 @@
 <div class="viewcode-block" id="print_section"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.print_section">[docs]</a><span class="k">def</span> <span class="nf">print_section</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;For printing sections to scripts nicely.</span>
 
+<span class="sd">    Args:</span>
+<span class="sd">        s (str): string of section</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;-&#39;</span> <span class="o">*</span> <span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">s</span> <span class="o">+</span> <span class="p">(</span><span class="s1">&#39;-&#39;</span> <span class="o">*</span> <span class="p">(</span><span class="n">_columns</span> <span class="o">-</span> <span class="mi">3</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)))</span></div>
 
 <div class="viewcode-block" id="get_paths"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.get_paths">[docs]</a><span class="k">def</span> <span class="nf">get_paths</span><span class="p">():</span>
-    <span class="sd">&#39;&#39;&#39;Pulls all paths from `paths.conf` file.</span>
+    <span class="sd">&#39;&#39;&#39;Pulls all paths from `~/.cortexrc` file.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: dictionary of paths from `~.cortexrc`.</span>
 
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">d</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="s1">&#39;~&#39;</span><span class="p">)</span>
@@ -113,6 +119,12 @@
 
 <div class="viewcode-block" id="resolve_path"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.resolve_path">[docs]</a><span class="k">def</span> <span class="nf">resolve_path</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Resolves a path using the `.cortexrc` file.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        p (str): path string.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: path with substrings replaced from `~/.cortexrc`.</span>
 
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">path_dict</span> <span class="o">=</span> <span class="n">get_paths</span><span class="p">()</span>
@@ -140,12 +152,23 @@
     <span class="k">return</span> <span class="n">trng</span></div>
 
 <div class="viewcode-block" id="warn_kwargs"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.warn_kwargs">[docs]</a><span class="k">def</span> <span class="nf">warn_kwargs</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Warns of extra keyword arguments.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        c (object): class</span>
+<span class="sd">        **kwargs: extra keyword arguments.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;Class instance </span><span class="si">%s</span><span class="s1"> has leftover kwargs </span><span class="si">%s</span><span class="s1">&#39;</span>
                        <span class="o">%</span> <span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">c</span><span class="p">),</span> <span class="n">kwargs</span><span class="p">),</span> <span class="ne">RuntimeWarning</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="update_dict_of_lists"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.update_dict_of_lists">[docs]</a><span class="k">def</span> <span class="nf">update_dict_of_lists</span><span class="p">(</span><span class="n">d_to_update</span><span class="p">,</span> <span class="o">**</span><span class="n">d</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Updates a dict of list with kwargs.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        d_to_update (dict): dictionary of lists.</span>
+<span class="sd">        **d: keyword arguments to append.</span>
 
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
@@ -157,6 +180,14 @@
 <div class="viewcode-block" id="debug_shape"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.debug_shape">[docs]</a><span class="k">def</span> <span class="nf">debug_shape</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t_out</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Debug function that returns the shape then raises assert error.</span>
 
+<span class="sd">    Raises assert False. For debugging shape only.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        X (T.tensor): input tensor.</span>
+<span class="sd">        x (numpy.array): input values.</span>
+<span class="sd">        t_out (T.tensor): output tensor.</span>
+<span class="sd">        updates (theano.OrderedUpdates): updates for function.</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">f</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">([</span><span class="n">X</span><span class="p">],</span> <span class="n">t_out</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="n">updates</span><span class="p">)</span>
     <span class="n">out</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
@@ -166,13 +197,22 @@
 <div class="viewcode-block" id="print_profile"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.print_profile">[docs]</a><span class="k">def</span> <span class="nf">print_profile</span><span class="p">(</span><span class="n">tparams</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Prints shapes of the shared variables.</span>
 
+<span class="sd">    Args:</span>
+<span class="sd">        tparams (dict): parameters to print shape of.</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">print</span> <span class="s1">&#39;Print profile for tparams (name, shape)&#39;</span>
     <span class="k">for</span> <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
         <span class="k">print</span> <span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span></div>
 
 <div class="viewcode-block" id="shuffle_columns"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.shuffle_columns">[docs]</a><span class="k">def</span> <span class="nf">shuffle_columns</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">srng</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Shuffles a tensor along the second index.&#39;&#39;&#39;</span>
+    <span class="sd">&#39;&#39;&#39;Shuffles a tensor along the second index.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        x (T.tensor).</span>
+<span class="sd">        srng (sharedRandomstream).</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">def</span> <span class="nf">step_shuffle</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">perm</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">m</span><span class="p">[</span><span class="n">perm</span><span class="p">]</span>
 
@@ -185,6 +225,19 @@
 <div class="viewcode-block" id="scan"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.scan">[docs]</a><span class="k">def</span> <span class="nf">scan</span><span class="p">(</span><span class="n">f_scan</span><span class="p">,</span> <span class="n">seqs</span><span class="p">,</span> <span class="n">outputs_info</span><span class="p">,</span> <span class="n">non_seqs</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;scan&#39;</span><span class="p">,</span>
          <span class="n">strict</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Convenience function for scan.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        f_scan (function): scanning function.</span>
+<span class="sd">        seqs (list or tuple): list of sequence tensors.</span>
+<span class="sd">        outputs_info (list or tuple): list of scan outputs.</span>
+<span class="sd">        non_seqs (list or tuple): list of non-sequences.</span>
+<span class="sd">        n_steps (int): number of steps.</span>
+<span class="sd">        name (str): name of scanning procedure.</span>
+<span class="sd">        strict (bool).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple: scan outputs.</span>
+<span class="sd">        theano.OrderedUpdates: updates.</span>
 
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">return</span> <span class="n">theano</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span>
@@ -202,6 +255,16 @@
                  <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Inialization function for weights.</span>
 
+<span class="sd">    Args:</span>
+<span class="sd">        model (Layer).</span>
+<span class="sd">        weight_noise (bool): noise the weights.</span>
+<span class="sd">        weight_scale (float): scale for weight initialization.</span>
+<span class="sd">        dropout (bool): use dropout.</span>
+<span class="sd">        **kwargs: extra kwargs.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: extra kwargs.</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">model</span><span class="o">.</span><span class="n">weight_noise</span> <span class="o">=</span> <span class="n">weight_noise</span>
     <span class="n">model</span><span class="o">.</span><span class="n">weight_scale</span> <span class="o">=</span> <span class="n">weight_scale</span>
@@ -210,6 +273,15 @@
 
 <div class="viewcode-block" id="init_rngs"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.init_rngs">[docs]</a><span class="k">def</span> <span class="nf">init_rngs</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">trng</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Initialization function for RNGs.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model (Layer).</span>
+<span class="sd">        rng (np.randomStreams).</span>
+<span class="sd">        trng (theano.randomStreams).</span>
+<span class="sd">        **kwargs: extra kwargs.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: extra kwargs.</span>
 
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">if</span> <span class="n">rng</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
@@ -222,7 +294,17 @@
     <span class="k">return</span> <span class="n">kwargs</span></div>
 
 <div class="viewcode-block" id="logit"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.logit">[docs]</a><span class="k">def</span> <span class="nf">logit</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
-    <span class="sd">&#39;&#39;&#39;Logit function.&#39;&#39;&#39;</span>
+    <span class="sd">&#39;&#39;&#39;Logit function.</span>
+
+<span class="sd">    :math:`\log \\frac{z}{1 - z}`</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        z (T.tensor).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        T.tensor.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
     <span class="n">z</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="mf">1e-7</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="mf">1e-7</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">z</span><span class="p">)</span></div>
 
@@ -230,6 +312,14 @@
     <span class="sd">&#39;&#39;&#39;Slice a tensor into 2 along last axis.</span>
 
 <span class="sd">    Extended from Cho&#39;s arctic repo.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        _x (T.tensor).</span>
+<span class="sd">        n (int).</span>
+<span class="sd">        dim (int).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        T.tensor.</span>
 
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">if</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
@@ -247,6 +337,14 @@
 <span class="k">def</span> <span class="nf">_slice2</span><span class="p">(</span><span class="n">_x</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Slightly different slice function than above.</span>
 
+<span class="sd">    Args:</span>
+<span class="sd">        _x (T.tensor).</span>
+<span class="sd">        start (int).</span>
+<span class="sd">        end (int).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        T.tensor.</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">if</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_x</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
@@ -263,6 +361,12 @@
 <div class="viewcode-block" id="load_experiment"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.load_experiment">[docs]</a><span class="k">def</span> <span class="nf">load_experiment</span><span class="p">(</span><span class="n">experiment_yaml</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Load an experiment from a yaml.</span>
 
+<span class="sd">    Args:</span>
+<span class="sd">        experiment_yaml (str): path to yaml</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: extracted yaml.</span>
+
 <span class="sd">    &#39;&#39;&#39;</span>
     <span class="k">print</span><span class="p">(</span><span class="s1">&#39;Loading experiment from </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">experiment_yaml</span><span class="p">)</span>
     <span class="n">exp_dict</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">experiment_yaml</span><span class="p">))</span>
@@ -271,6 +375,23 @@
 
 <div class="viewcode-block" id="load_model"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.load_model">[docs]</a><span class="k">def</span> <span class="nf">load_model</span><span class="p">(</span><span class="n">model_file</span><span class="p">,</span> <span class="n">f_unpack</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="o">**</span><span class="n">extra_args</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;Loads pretrained model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model_file (str): path to file.</span>
+<span class="sd">        f_unpack (function): unpacking function.</span>
+<span class="sd">            Must return tuple of::</span>
+
+<span class="sd">                models: a list of Layer objects</span>
+<span class="sd">                pretrained_kwargs: a dictionary of saved parameters.</span>
+<span class="sd">                kwargs: dictionary of extra arguments (can be None).</span>
+
+<span class="sd">            See `cortex.models.rnn.unpack` for an example.</span>
+<span class="sd">        strict (bool): fail on extra parameters.</span>
+<span class="sd">        **extra_args: extra keyword arguments to pass to unpack.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: dictionary of models.</span>
+<span class="sd">        dict: extra keyword arguments.</span>
 
 <span class="sd">    &#39;&#39;&#39;</span>
 
@@ -292,6 +413,8 @@
     <span class="n">model_dict</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
 
     <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">models</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">continue</span>
         <span class="k">print</span> <span class="s1">&#39;--- Loading params for </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">model</span><span class="o">.</span><span class="n">name</span>
         <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
             <span class="k">try</span><span class="p">:</span>

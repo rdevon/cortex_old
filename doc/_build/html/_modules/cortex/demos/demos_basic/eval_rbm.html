@@ -51,6 +51,7 @@
             
   <h1>Source code for cortex.demos.demos_basic.eval_rbm</h1><div class="highlight"><pre>
 <span></span><span class="sd">&#39;&#39;&#39;Eval script for pretrained RBMs.</span>
+
 <span class="sd">&#39;&#39;&#39;</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
@@ -60,6 +61,7 @@
 <span class="kn">from</span> <span class="nn">cortex.datasets</span> <span class="kn">import</span> <span class="n">load_data</span>
 <span class="kn">from</span> <span class="nn">cortex.models.rbm</span> <span class="kn">import</span> <span class="n">unpack</span>
 <span class="kn">from</span> <span class="nn">cortex.utils</span> <span class="kn">import</span> <span class="n">floatX</span>
+<span class="kn">from</span> <span class="nn">cortex.utils.preprocessor</span> <span class="kn">import</span> <span class="n">Preprocessor</span>
 <span class="kn">from</span> <span class="nn">cortex.utils.training</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">make_argument_parser_test</span><span class="p">,</span>
     <span class="n">reload_model</span>
@@ -74,11 +76,14 @@
 
 <div class="viewcode-block" id="evaluate"><a class="viewcode-back" href="../../../../source/cortex.demos.demos_basic.html#cortex.demos.demos_basic.eval_rbm.evaluate">[docs]</a><span class="k">def</span> <span class="nf">evaluate</span><span class="p">(</span>
     <span class="n">model_to_load</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
-    <span class="n">center_input</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
-    <span class="n">dataset_args</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span>
+    <span class="n">preprocessing</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">dataset_args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
     <span class="n">out_path</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
     <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;test&#39;</span><span class="p">,</span>
     <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+    <span class="k">if</span> <span class="n">dataset_args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">dataset_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">preprocessing</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">preprocessing</span> <span class="o">=</span> <span class="p">[]</span>
 
     <span class="c1"># ========================================================================</span>
     <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Setting up data&#39;</span><span class="p">)</span>
@@ -111,12 +116,8 @@
     <span class="n">X</span><span class="o">.</span><span class="n">tag</span><span class="o">.</span><span class="n">test_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">10</span><span class="p">,</span> <span class="n">dim_in</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">X</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
     <span class="n">trng</span> <span class="o">=</span> <span class="n">get_trng</span><span class="p">()</span>
 
-    <span class="k">if</span> <span class="n">center_input</span><span class="p">:</span>
-        <span class="k">print</span> <span class="s1">&#39;Centering input with train dataset mean image&#39;</span>
-        <span class="n">X_mean</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">train</span><span class="o">.</span><span class="n">mean_image</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;X_mean&#39;</span><span class="p">)</span>
-        <span class="n">X_i</span> <span class="o">=</span> <span class="n">X</span> <span class="o">-</span> <span class="n">X_mean</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">X_i</span> <span class="o">=</span> <span class="n">X</span>
+    <span class="n">preproc</span> <span class="o">=</span> <span class="n">Preprocessor</span><span class="p">(</span><span class="n">preprocessing</span><span class="p">)</span>
+    <span class="n">X_i</span> <span class="o">=</span> <span class="n">preproc</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">data_iter</span><span class="o">=</span><span class="n">train</span><span class="p">)</span>
 
     <span class="c1"># ========================================================================</span>
     <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Loading model and forming graph&#39;</span><span class="p">)</span>

@@ -2403,6 +2403,18 @@ dict: keyword arguements for saved numpy arrays for unpacking.</p>
 output.</p>
 </dd></dl>
 
+<dl class="attribute">
+<dt id="cortex.models.rnn.RNN.nets">
+<code class="descname">nets</code><a class="headerlink" href="#cortex.models.rnn.RNN.nets" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>list</em> &#8211; list of networks. input network, output_net, conditional.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.models.rnn.RNN.inter_nets">
+<code class="descname">inter_nets</code><a class="headerlink" href="#cortex.models.rnn.RNN.inter_nets" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>list</em> &#8211; list of inter-networks between recurrent layers.</p>
+</dd></dl>
+
 <dl class="method">
 <dt id="cortex.models.rnn.RNN.call_seqs">
 <code class="descname">call_seqs</code><span class="sig-paren">(</span><em>x</em>, <em>condition_on</em>, <em>level</em>, <em>*params</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/models/rnn.html#RNN.call_seqs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.models.rnn.RNN.call_seqs" title="Permalink to this definition">¶</a></dt>
@@ -2455,7 +2467,7 @@ output.</p>
 
 <dl class="staticmethod">
 <dt id="cortex.models.rnn.RNN.factory">
-<em class="property">static </em><code class="descname">factory</code><span class="sig-paren">(</span><em>data_iter=None</em>, <em>dim_in=None</em>, <em>dim_out=None</em>, <em>dim_hs=None</em>, <em>i_net=None</em>, <em>o_net=None</em>, <em>c_net=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/models/rnn.html#RNN.factory"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.models.rnn.RNN.factory" title="Permalink to this definition">¶</a></dt>
+<em class="property">static </em><code class="descname">factory</code><span class="sig-paren">(</span><em>data_iter=None</em>, <em>dim_in=None</em>, <em>dim_out=None</em>, <em>dim_h=None</em>, <em>dim_hs=None</em>, <em>i_net=None</em>, <em>o_net=None</em>, <em>c_net=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/models/rnn.html#RNN.factory"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.models.rnn.RNN.factory" title="Permalink to this definition">¶</a></dt>
 <dd><p>Factory for creating MLPs for RNN and returning .</p>
 <p>Convenience to quickly create MLPs from dictionaries, linking all
 relevent dimensions and distributions.</p>
@@ -2465,7 +2477,8 @@ relevent dimensions and distributions.</p>
 <tbody valign="top">
 <tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
 <li><strong>dim_in</strong> (<em>int</em>) &#8211; input dimention.</li>
-<li><strong>dim_hs</strong> (<em>list</em>) &#8211; dimensions of reccurent units.</li>
+<li><strong>dim_h</strong> (<em>Optional[int]</em>) &#8211; dimension of recurrent unit for single layer.</li>
+<li><strong>dim_hs</strong> (<em>list</em>) &#8211; dimensions of recurrent units.</li>
 <li><strong>data_iter</strong> (<a class="reference internal" href="cortex.datasets.html#cortex.datasets.Dataset" title="cortex.datasets.Dataset"><em>Dataset</em></a>) &#8211; provides dimension and distribution info.</li>
 <li><strong>dim_out</strong> (<em>Optional[int]</em>) &#8211; output dimension. If not provided, assumed
 to be dim_in.</li>
@@ -2708,6 +2721,32 @@ the input, returning the current states and sample.</p>
 </td>
 </tr>
 <tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">T.tensor</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.models.rnn.unpack">
+<code class="descclassname">cortex.models.rnn.</code><code class="descname">unpack</code><span class="sig-paren">(</span><em>rnn_args</em>, <em>data_iter=None</em>, <em>**model_args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/models/rnn.html#unpack"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.models.rnn.unpack" title="Permalink to this definition">¶</a></dt>
+<dd><p>Unpacks a saved RNN.</p>
+<p>See <cite>utils.tools.load_model</cite> for details.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>rnn_args</strong> (<em>dict</em>) &#8211; dictionary of model arguments for forming object.</li>
+<li><strong>**model_args</strong> &#8211; keyword arguments of saved parameters.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">list of models.
+dict: dictionary of saved parameters.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list</p>
 </td>
 </tr>
 </tbody>

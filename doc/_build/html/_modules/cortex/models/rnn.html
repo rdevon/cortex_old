@@ -111,6 +111,28 @@
 
     <span class="k">return</span> <span class="n">h0s</span></div>
 
+<div class="viewcode-block" id="unpack"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.unpack">[docs]</a><span class="k">def</span> <span class="nf">unpack</span><span class="p">(</span><span class="n">rnn_args</span><span class="p">,</span> <span class="n">data_iter</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Unpacks a saved RNN.</span>
+
+<span class="sd">    See `utils.tools.load_model` for details.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        rnn_args (dict): dictionary of model arguments for forming object.</span>
+<span class="sd">        **model_args: keyword arguments of saved parameters.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list: list of models.</span>
+<span class="sd">        dict: dictionary of saved parameters.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">data_iter</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Data iterator must be passed to `unpack` &#39;</span>
+                         <span class="s1">&#39;(or `load_model`).&#39;</span><span class="p">)</span>
+
+    <span class="n">model</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">factory</span><span class="p">(</span><span class="n">data_iter</span><span class="o">=</span><span class="n">data_iter</span><span class="p">,</span> <span class="o">**</span><span class="n">rnn_args</span><span class="p">)</span>
+    <span class="n">models</span> <span class="o">=</span> <span class="p">[</span><span class="n">model</span><span class="p">]</span> <span class="o">+</span> <span class="n">model</span><span class="o">.</span><span class="n">nets</span> <span class="o">+</span> <span class="n">model</span><span class="o">.</span><span class="n">inter_nets</span>
+    <span class="k">return</span> <span class="n">models</span><span class="p">,</span> <span class="n">model_args</span><span class="p">,</span> <span class="bp">None</span></div>
+
 
 <div class="viewcode-block" id="RNN"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN">[docs]</a><span class="k">class</span> <span class="nc">RNN</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
     <span class="sd">&#39;&#39;&#39;RNN class.</span>
@@ -126,6 +148,8 @@
 <span class="sd">        output_net (MLP): MLP to read from recurrent layers.</span>
 <span class="sd">        condtional (Optional[MLP]): MLP to condition output on previous</span>
 <span class="sd">            output.</span>
+<span class="sd">        nets (list): list of networks. input network, output_net, conditional.</span>
+<span class="sd">        inter_nets (list): list of inter-networks between recurrent layers.</span>
 
 <span class="sd">    &#39;&#39;&#39;</span>
 
@@ -165,8 +189,8 @@
         <span class="nb">super</span><span class="p">(</span><span class="n">RNN</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
 
     <span class="nd">@staticmethod</span>
-<div class="viewcode-block" id="RNN.factory"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.factory">[docs]</a>    <span class="k">def</span> <span class="nf">factory</span><span class="p">(</span><span class="n">data_iter</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_in</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_hs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
-                <span class="n">i_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">o_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">c_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="RNN.factory"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.factory">[docs]</a>    <span class="k">def</span> <span class="nf">factory</span><span class="p">(</span><span class="n">data_iter</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_in</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_h</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                <span class="n">dim_hs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">i_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">o_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">c_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="sd">&#39;&#39;&#39;Factory for creating MLPs for RNN and returning .</span>
 
 <span class="sd">        Convenience to quickly create MLPs from dictionaries, linking all</span>
@@ -174,7 +198,8 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            dim_in (int): input dimention.</span>
-<span class="sd">            dim_hs (list): dimensions of reccurent units.</span>
+<span class="sd">            dim_h (Optional[int]): dimension of recurrent unit for single layer.</span>
+<span class="sd">            dim_hs (list): dimensions of recurrent units.</span>
 <span class="sd">            data_iter (Dataset): provides dimension and distribution info.</span>
 <span class="sd">            dim_out (Optional[int]): output dimension. If not provided, assumed</span>
 <span class="sd">                to be dim_in.</span>
@@ -187,6 +212,8 @@
 
 <span class="sd">        &#39;&#39;&#39;</span>
 
+        <span class="k">if</span> <span class="n">dim_hs</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">and</span> <span class="n">dim_h</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">dim_hs</span> <span class="o">=</span> <span class="p">[</span><span class="n">dim_h</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">dim_in</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
             <span class="n">dim_in</span> <span class="o">=</span> <span class="n">data_iter</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="n">data_iter</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">dim_out</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
