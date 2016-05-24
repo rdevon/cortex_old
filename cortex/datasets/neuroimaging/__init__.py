@@ -5,6 +5,9 @@ Neuroimaging data classes and utilities
 import numpy as np
 import yaml
 
+from ...utils.tools import resolve_path
+from ...utils.extra import download_data, unzip
+
 
 def fetch_neuroimaging_data():
     '''Fetch the neuroimaging dataset for demos.

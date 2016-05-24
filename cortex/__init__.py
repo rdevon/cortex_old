@@ -4,6 +4,7 @@
 
 import readline, glob
 from os import path
+import urllib2
 
 from datasets import fetch_basic_data
 from datasets.neuroimaging import fetch_neuroimaging_data
@@ -52,7 +53,10 @@ def main():
     answer = query_yes_no('Download basic dataset? ')
 
     if answer:
-        fetch_basic_data()
+        try:
+            fetch_basic_data()
+        except urllib2.HTTPError:
+            print 'Error: basic dataset not found.'
 
     print ('Cortex also requires neuroimaging data for the neuroimaging data '
            'for the neuroimaging demos. These are large and can be skipped.')
@@ -60,4 +64,7 @@ def main():
     answer = query_yes_no('Download neuroimaging dataset? ')
 
     if answer:
-        fetch_neuroimaging_data()
+        try:
+            fetch_neuroimaging_data()
+        except urllib2.HTTPError:
+            print 'Error: neuroimaging dataset not found.'

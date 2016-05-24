@@ -340,7 +340,7 @@ class RNN(Layer):
         for net in self.nets:
             if net is None:
                 continue
-            cost += net.get_L2_weight_cost(rate)
+            cost += net.l2_decay(rate)
 
         rval = OrderedDict(
             cost = cost
