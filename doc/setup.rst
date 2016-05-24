@@ -51,16 +51,20 @@ _________________________
 
 .. note::
 
-   These are not required for basic functionality, but are necessary for
-   neuroimaging tools.
-
 .. _h5py: http://www.h5py.org/
 .. _nipy: http://nipy.org/
 .. _afni: http://afni.nimh.nih.gov
+.. _nibabel: http://http://nipy.org/nibabel/
+.. _sklearn: http://scikit-learn.org/stable/
+
+   These are not required for basic functionality, but are necessary for
+   neuroimaging tools. `afni`_, in particular, needs to be installed manually.
 
 * nipy_
 * h5py_
 * afni_
+* nibabel_
+* sklearn_
 
 Documentation
 -------------

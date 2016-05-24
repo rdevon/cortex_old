@@ -54,6 +54,7 @@
 
 <span class="kn">import</span> <span class="nn">readline</span><span class="o">,</span> <span class="nn">glob</span>
 <span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
+<span class="kn">import</span> <span class="nn">urllib2</span>
 
 <span class="kn">from</span> <span class="nn">datasets</span> <span class="kn">import</span> <span class="n">fetch_basic_data</span>
 <span class="kn">from</span> <span class="nn">datasets.neuroimaging</span> <span class="kn">import</span> <span class="n">fetch_neuroimaging_data</span>
@@ -102,7 +103,10 @@
     <span class="n">answer</span> <span class="o">=</span> <span class="n">query_yes_no</span><span class="p">(</span><span class="s1">&#39;Download basic dataset? &#39;</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">answer</span><span class="p">:</span>
-        <span class="n">fetch_basic_data</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">fetch_basic_data</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">urllib2</span><span class="o">.</span><span class="n">HTTPError</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Error: basic dataset not found.&#39;</span>
 
     <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;Cortex also requires neuroimaging data for the neuroimaging data &#39;</span>
            <span class="s1">&#39;for the neuroimaging demos. These are large and can be skipped.&#39;</span><span class="p">)</span>
@@ -110,7 +114,10 @@
     <span class="n">answer</span> <span class="o">=</span> <span class="n">query_yes_no</span><span class="p">(</span><span class="s1">&#39;Download neuroimaging dataset? &#39;</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">answer</span><span class="p">:</span>
-        <span class="n">fetch_neuroimaging_data</span><span class="p">()</span></div>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">fetch_neuroimaging_data</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">urllib2</span><span class="o">.</span><span class="n">HTTPError</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Error: neuroimaging dataset not found.&#39;</span></div>
 </pre></div>
 
           </div>

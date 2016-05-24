@@ -392,7 +392,7 @@
         <span class="k">for</span> <span class="n">net</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nets</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">net</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
                 <span class="k">continue</span>
-            <span class="n">cost</span> <span class="o">+=</span> <span class="n">net</span><span class="o">.</span><span class="n">get_L2_weight_cost</span><span class="p">(</span><span class="n">rate</span><span class="p">)</span>
+            <span class="n">cost</span> <span class="o">+=</span> <span class="n">net</span><span class="o">.</span><span class="n">l2_decay</span><span class="p">(</span><span class="n">rate</span><span class="p">)</span>
 
         <span class="n">rval</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span>
             <span class="n">cost</span> <span class="o">=</span> <span class="n">cost</span>
