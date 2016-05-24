@@ -3,6 +3,8 @@ Neuroimaging data classes and utilities
 '''
 
 import numpy as np
+import os
+from os import path
 import yaml
 
 from ...utils.tools import resolve_path
@@ -13,13 +15,17 @@ def fetch_neuroimaging_data():
     '''Fetch the neuroimaging dataset for demos.
 
     '''
-    url = 'http://mialab.mrn.org/data/cortex/neuroimaging.zip'
+    url = 'http://mialab.mrn.org/data/neuroimaging/neuroimaging.zip'
     out_dir = resolve_path('$data')
     download_data(url, out_dir)
     unzip(path.join(out_dir, 'neuroimaging.zip'), out_dir)
     os.remove(path.join(out_dir, 'neuroimaging.zip'))
 
     ni_dir = path.join(out_dir, 'neuroimaging')
+
+    unzip(path.join(ni_dir, 'VBM_test.zip'), ni_dir)
+    os.remove(path.join(ni_dir, 'VBM_test.zip'))
+
     unzip(path.join(ni_dir, 'AOD_test.zip'), ni_dir)
     os.remove(path.join(ni_dir, 'AOD_test.zip'))
 
@@ -31,7 +37,7 @@ def fetch_neuroimaging_data():
                     anat_file=path.join(ni_dir, 'ch2better_whitebg_aligned2EPI_V4'),
                     data=[path.join(ni_dir, 'VBM_test', 'VBM_0.npy'),
                           path.join(ni_dir, 'VBM_test', 'VBM_1.npy')],
-                    mask=path.join(ni_dir, 'VBM_test', 'mask.npy'),
+                    mask=path.join(ni_dir, 'VBM_test', 'VBM_mask.npy'),
                     name='VBM',
                     nifti=path.join(ni_dir, 'base_nifti.nii'),
                     sites=path.join(ni_dir, 'VBM_test', 'VBM_sites.npy'),
@@ -40,8 +46,6 @@ def fetch_neuroimaging_data():
                 )
             )
 
-    unzip(path.join(ni_dir, 'VBM_test.zip'), ni_dir)
-    os.remove(path.join('VBM_test.zip'))
 
     yaml_file = path.join(ni_dir, 'AOD_test', 'AOD.yaml')
     with open(yaml_file, 'w') as yf:
@@ -51,10 +55,9 @@ def fetch_neuroimaging_data():
                     anat_file=path.join(ni_dir, 'ch2better_whitebg_aligned2EPI_V4'),
                     data=[path.join(ni_dir, 'AOD_test', 'AOD_0.npy'),
                           path.join(ni_dir, 'AOD_test', 'AOD_1.npy')],
-                    mask=path.join(ni_dir, 'AOD_test', 'mask.npy'),
+                    mask=path.join(ni_dir, 'AOD_test', 'AOD_mask.npy'),
                     name='AOD',
                     nifti=path.join(ni_dir, 'base_nifti.nii'),
-                    sites=path.join(ni_dir, 'AOD_test', 'AOD_sites.npy'),
                     tmp_path=path.join(ni_dir, 'AOD_test', 'AOD_tmp')
                     )
                 )

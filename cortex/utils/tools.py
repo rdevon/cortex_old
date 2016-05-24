@@ -37,11 +37,17 @@ _columns = int(_columns)
 def print_section(s):
     '''For printing sections to scripts nicely.
 
+    Args:
+        s (str): string of section
+
     '''
     print ('-' * 3) + s + ('-' * (_columns - 3 - len(s)))
 
 def get_paths():
-    '''Pulls all paths from `paths.conf` file.
+    '''Pulls all paths from `~/.cortexrc` file.
+
+    Returns:
+        dict: dictionary of paths from `~.cortexrc`.
 
     '''
     d = os.path.expanduser('~')
@@ -62,6 +68,12 @@ def get_paths():
 
 def resolve_path(p):
     '''Resolves a path using the `.cortexrc` file.
+
+    Args:
+        p (str): path string.
+
+    Returns:
+        str: path with substrings replaced from `~/.cortexrc`.
 
     '''
     path_dict = get_paths()
@@ -89,12 +101,23 @@ def get_trng():
     return trng
 
 def warn_kwargs(c, **kwargs):
+    '''Warns of extra keyword arguments.
+
+    Args:
+        c (object): class
+        **kwargs: extra keyword arguments.
+
+    '''
     if len(kwargs) > 0:
         warnings.warn('Class instance %s has leftover kwargs %s'
                        % (type(c), kwargs), RuntimeWarning)
 
 def update_dict_of_lists(d_to_update, **d):
     '''Updates a dict of list with kwargs.
+
+    Args:
+        d_to_update (dict): dictionary of lists.
+        **d: keyword arguments to append.
 
     '''
     for k, v in d.iteritems():
@@ -106,6 +129,14 @@ def update_dict_of_lists(d_to_update, **d):
 def debug_shape(X, x, t_out, updates=None):
     '''Debug function that returns the shape then raises assert error.
 
+    Raises assert False. For debugging shape only.
+
+    Args:
+        X (T.tensor): input tensor.
+        x (numpy.array): input values.
+        t_out (T.tensor): output tensor.
+        updates (theano.OrderedUpdates): updates for function.
+
     '''
     f = theano.function([X], t_out, updates=updates)
     out = f(x)
@@ -115,13 +146,22 @@ def debug_shape(X, x, t_out, updates=None):
 def print_profile(tparams):
     '''Prints shapes of the shared variables.
 
+    Args:
+        tparams (dict): parameters to print shape of.
+
     '''
     print 'Print profile for tparams (name, shape)'
     for (k, v) in tparams.iteritems():
         print '\t', k, v.get_value().shape
 
 def shuffle_columns(x, srng):
-    '''Shuffles a tensor along the second index.'''
+    '''Shuffles a tensor along the second index.
+
+    Args:
+        x (T.tensor).
+        srng (sharedRandomstream).
+
+    '''
     def step_shuffle(m, perm):
         return m[perm]
 
@@ -134,6 +174,19 @@ def shuffle_columns(x, srng):
 def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan',
          strict=False):
     '''Convenience function for scan.
+
+    Args:
+        f_scan (function): scanning function.
+        seqs (list or tuple): list of sequence tensors.
+        outputs_info (list or tuple): list of scan outputs.
+        non_seqs (list or tuple): list of non-sequences.
+        n_steps (int): number of steps.
+        name (str): name of scanning procedure.
+        strict (bool).
+
+    Returns:
+        tuple: scan outputs.
+        theano.OrderedUpdates: updates.
 
     '''
     return theano.scan(
@@ -151,6 +204,16 @@ def init_weights(model, weight_noise=False, weight_scale=0.001, dropout=False,
                  **kwargs):
     '''Inialization function for weights.
 
+    Args:
+        model (Layer).
+        weight_noise (bool): noise the weights.
+        weight_scale (float): scale for weight initialization.
+        dropout (bool): use dropout.
+        **kwargs: extra kwargs.
+
+    Returns:
+        dict: extra kwargs.
+
     '''
     model.weight_noise = weight_noise
     model.weight_scale = weight_scale
@@ -159,6 +222,15 @@ def init_weights(model, weight_noise=False, weight_scale=0.001, dropout=False,
 
 def init_rngs(model, rng=None, trng=None, **kwargs):
     '''Initialization function for RNGs.
+
+    Args:
+        model (Layer).
+        rng (np.randomStreams).
+        trng (theano.randomStreams).
+        **kwargs: extra kwargs.
+
+    Returns:
+        dict: extra kwargs.
 
     '''
     if rng is None:
@@ -171,7 +243,17 @@ def init_rngs(model, rng=None, trng=None, **kwargs):
     return kwargs
 
 def logit(z):
-    '''Logit function.'''
+    '''Logit function.
+
+    :math:`\log \\frac{z}{1 - z}`
+
+    Args:
+        z (T.tensor).
+
+    Returns:
+        T.tensor.
+
+    '''
     z = T.clip(z, 1e-7, 1.0 - 1e-7)
     return T.log(z) - T.log(1 - z)
 
@@ -179,6 +261,14 @@ def _slice(_x, n, dim):
     '''Slice a tensor into 2 along last axis.
 
     Extended from Cho's arctic repo.
+
+    Args:
+        _x (T.tensor).
+        n (int).
+        dim (int).
+
+    Returns:
+        T.tensor.
 
     '''
     if _x.ndim == 1:
@@ -196,6 +286,14 @@ def _slice(_x, n, dim):
 def _slice2(_x, start, end):
     '''Slightly different slice function than above.
 
+    Args:
+        _x (T.tensor).
+        start (int).
+        end (int).
+
+    Returns:
+        T.tensor.
+
     '''
     if _x.ndim == 1:
         return _x[start:end]
@@ -212,6 +310,12 @@ def _slice2(_x, start, end):
 def load_experiment(experiment_yaml):
     '''Load an experiment from a yaml.
 
+    Args:
+        experiment_yaml (str): path to yaml
+
+    Returns:
+        dict: extracted yaml.
+
     '''
     print('Loading experiment from %s' % experiment_yaml)
     exp_dict = yaml.load(open(experiment_yaml))
@@ -220,6 +324,23 @@ def load_experiment(experiment_yaml):
 
 def load_model(model_file, f_unpack=None, strict=True, **extra_args):
     '''Loads pretrained model.
+
+    Args:
+        model_file (str): path to file.
+        f_unpack (function): unpacking function.
+            Must return tuple of::
+
+                models: a list of Layer objects
+                pretrained_kwargs: a dictionary of saved parameters.
+                kwargs: dictionary of extra arguments (can be None).
+
+            See `cortex.models.rnn.unpack` for an example.
+        strict (bool): fail on extra parameters.
+        **extra_args: extra keyword arguments to pass to unpack.
+
+    Returns:
+        dict: dictionary of models.
+        dict: extra keyword arguments.
 
     '''
 
@@ -241,6 +362,8 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
     model_dict = OrderedDict()
 
     for model in models:
+        if model is None:
+            continue
         print '--- Loading params for %s' % model.name
         for k, v in model.params.iteritems():
             try:

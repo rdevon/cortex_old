@@ -1,4 +1,5 @@
 '''Eval script for pretrained RBMs.
+
 '''
 
 import numpy as np
@@ -8,6 +9,7 @@ from theano import tensor as T
 from cortex.datasets import load_data
 from cortex.models.rbm import unpack
 from cortex.utils import floatX
+from cortex.utils.preprocessor import Preprocessor
 from cortex.utils.training import (
     make_argument_parser_test,
     reload_model
@@ -22,11 +24,14 @@ from cortex.utils.tools import (
 
 def evaluate(
     model_to_load=None,
-    center_input=False,
-    dataset_args=dict(),
+    preprocessing=None,
+    dataset_args=None,
     out_path=None,
     mode='test',
     **kwargs):
+
+    if dataset_args is None: dataset_args = dict()
+    if preprocessing is None: preprocessing = []
 
     # ========================================================================
     print_section('Setting up data')
@@ -59,12 +64,8 @@ def evaluate(
     X.tag.test_value = np.zeros((10, dim_in), dtype=X.dtype)
     trng = get_trng()
 
-    if center_input:
-        print 'Centering input with train dataset mean image'
-        X_mean = theano.shared(train.mean_image.astype(floatX), name='X_mean')
-        X_i = X - X_mean
-    else:
-        X_i = X
+    preproc = Preprocessor(preprocessing)
+    X_i = preproc(X, data_iter=train)
 
     # ========================================================================
     print_section('Loading model and forming graph')

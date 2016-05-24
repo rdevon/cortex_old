@@ -170,6 +170,14 @@ def reload_model(args):
     except:
         raise ValueError()
 
+    params = np.load(model_file)
+    try:
+        print 'Loading dataset arguments from saved model.'
+        dataset_args = params['dataset_args'].item()
+        exp_dict.update(dataset_args=dataset_args)
+    except KeyError:
+        pass
+
     exp_dict['model_to_load'] = model_file
     args = vars(args)
     args = OrderedDict((k, v) for k, v in args.iteritems() if v is not None)

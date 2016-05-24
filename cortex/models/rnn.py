@@ -59,6 +59,28 @@ def init_h(h_init, X, batch_size, models, **h_args):
 
     return h0s
 
+def unpack(rnn_args, data_iter=None, **model_args):
+    '''Unpacks a saved RNN.
+
+    See `utils.tools.load_model` for details.
+
+    Args:
+        rnn_args (dict): dictionary of model arguments for forming object.
+        **model_args: keyword arguments of saved parameters.
+
+    Returns:
+        list: list of models.
+        dict: dictionary of saved parameters.
+
+    '''
+    if data_iter is None:
+        raise ValueError('Data iterator must be passed to `unpack` '
+                         '(or `load_model`).')
+
+    model = RNN.factory(data_iter=data_iter, **rnn_args)
+    models = [model] + model.nets + model.inter_nets
+    return models, model_args, None
+
 
 class RNN(Layer):
     '''RNN class.
@@ -74,6 +96,8 @@ class RNN(Layer):
         output_net (MLP): MLP to read from recurrent layers.
         condtional (Optional[MLP]): MLP to condition output on previous
             output.
+        nets (list): list of networks. input network, output_net, conditional.
+        inter_nets (list): list of inter-networks between recurrent layers.
 
     '''
 
@@ -113,8 +137,8 @@ class RNN(Layer):
         super(RNN, self).__init__(name=name)
 
     @staticmethod
-    def factory(data_iter=None, dim_in=None, dim_out=None, dim_hs=None,
-                i_net=None, o_net=None, c_net=None, **kwargs):
+    def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
+                dim_hs=None, i_net=None, o_net=None, c_net=None, **kwargs):
         '''Factory for creating MLPs for RNN and returning .
 
         Convenience to quickly create MLPs from dictionaries, linking all
@@ -122,7 +146,8 @@ class RNN(Layer):
 
         Args:
             dim_in (int): input dimention.
-            dim_hs (list): dimensions of reccurent units.
+            dim_h (Optional[int]): dimension of recurrent unit for single layer.
+            dim_hs (list): dimensions of recurrent units.
             data_iter (Dataset): provides dimension and distribution info.
             dim_out (Optional[int]): output dimension. If not provided, assumed
                 to be dim_in.
@@ -135,6 +160,8 @@ class RNN(Layer):
 
         '''
 
+        if dim_hs is None and dim_h is not None:
+            dim_hs = [dim_h]
         if dim_in is None:
             dim_in = data_iter.dims[data_iter.name]
         if dim_out is None:

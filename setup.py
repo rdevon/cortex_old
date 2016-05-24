@@ -16,7 +16,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='cortex',
-    version='0.11a',
+    version='0.12a',
     description='cortex: a deep learning toolbox for neuroimaging',
     long_description=long_description,
     url='https://github.com/rdevon/cortex',
@@ -40,7 +40,8 @@ setup(
             'cortex-vae-demo=cortex.demos.demos_basic:run_vae_demo',
             'cortex-rbm-vbm-demo=cortex.demos.demos_neuroimaging:run_rbm_vbm_demo',
             'cortex-rbm-olin-demo=cortex.demos.demos_neuroimaging:run_rbm_olin_demo',
-            'cortex-read-mri=cortex.analysis.load_mri:main'
+            'cortex-read-mri=cortex.analysis.load_mri:main',
+            'cortex-read-fmri=cortex.analysis.load_fmri:main'
         ]
     },
     data_files=[
