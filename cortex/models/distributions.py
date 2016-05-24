@@ -20,7 +20,16 @@ from ..utils.tools import (
 _clip = 1e-7 # clipping for Guassian distributions.
 
 def resolve(c, conditional=False):
-    '''Resolves Distribution subclass from str.'''
+    '''Resolves Distribution subclass from str.
+
+    Args:
+        c (str): distribution string.
+        conditional (Optional[bool]): if True, then use `Conditional` class.
+
+    Returns:
+        Distribution.
+
+    '''
     resolve_dict = dict(
         binomial=Binomial,
         continuous_binomial=ContinuousBinomial,
@@ -45,17 +54,18 @@ class Distribution(Layer):
     Not meant to be used alone, use subclass.
 
     Attributes:
-        has_kl: bool, convenience for if distribution subclass has exact KL.
-        is_continuous: bool, whether distribution is continuous (as opposed to
+        has_kl (bool): convenience for if distribution subclass has exact KL.
+        is_continuous (bool): whether distribution is continuous (as opposed to
             discrete).
-        dim: int, dimension of distribution.
-        must_sample: bool, whether sampling is required for calculating
+        dim (int): dimension of distribution.
+        must_sample (bool): whether sampling is required for calculating
             density.
-        scale: int, scaling for distributions whose probs are higher order,
+        scale (int): scaling for distributions whose probs are higher order,
             such as Gaussian, which has mu and sigma.
-        f_sample: function (optional), sampling function.
-        f_neg_log_prob: function (optional), negative log probability funciton.
-        f_entropy: function (optional), entropy function.
+        f_sample (Optional[function]): sampling function.
+        f_neg_log_prob (Optional[function]): negative log probability funciton.
+        f_entropy (Optional[function]): entropy function.
+
     '''
     has_kl = False
     is_continuous = False
@@ -65,9 +75,10 @@ class Distribution(Layer):
         '''Init function for Distribution class.
 
         Args:
-            dim: int, dimension of distribution.
-            must_sample: bool.
-            scale: int, scale for distribution tesnor.
+            dim (int): dimension of distribution.
+            must_sample (bool).
+            scale (int): scale for distribution tensor.
+
         '''
         self.dim = dim
         self.must_sample = must_sample
@@ -82,23 +93,33 @@ class Distribution(Layer):
         raise NotImplementedError()
 
     def get_params(self):
-        '''Fetches distribution parameters.'''
+        '''Fetches distribution parameters.
+
+        '''
         raise NotImplementedError()
 
     def get_prob(self):
-        '''Returns single tensory from params.'''
+        '''Returns single tensory from params.
+
+        '''
         raise NotImplementedError()
 
     def kl_divergence(self, q):
-        '''KL divergence function.'''
+        '''KL divergence function.
+
+        '''
         raise NotImplementedError()
 
     def __call__(self, z):
-        '''Call function.'''
+        '''Call function.
+
+        '''
         raise NotImplementedError()
 
     def sample(self, n_samples, p=None):
-        '''Samples from distribution.'''
+        '''Samples from distribution.
+
+        '''
         if p is None:
             p = self.get_prob(*self.get_params())
         if p.ndim == 1:
@@ -113,32 +134,78 @@ class Distribution(Layer):
         return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
 
     def step_neg_log_prob(self, x, *params):
-        '''Step negative log probability for scan.'''
+        '''Step negative log probability for scan.
+
+        Args:
+            x (T.tensor): input.
+            *params: theano shared variables.
+
+        Returns:
+            T.tensor: :math:`-\log p(x)`.
+
+        '''
         p = self.get_prob(*params)
         return self.f_neg_log_prob(x, p)
 
     def neg_log_prob(self, x, p=None, sum_probs=True):
-        '''Negative log probability.'''
+        '''Negative log probability.
+
+        Args:
+            x (T.tensor): input.
+            p (Optional[T.tensor]): probability.
+            sum_probs (bool): whether to sum the last axis.
+
+        Returns:
+            T.tensor: :math:`-\log p(x)`.
+
+        '''
         if p is None:
             p = self.get_prob(*self.get_params())
         return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
 
     def entropy(self, p=None):
-        '''Entropy function.'''
+        '''Entropy function.
+
+        Args:
+            p (T.tensor): probability.
+
+        Returns:
+            T.tensor: entropy.
+
+        '''
         if p is None:
             p = self.get_prob(*self.get_params())
         return self.f_entropy(p)
 
     def get_center(self, p):
-        '''Center of the distribution.'''
+        '''Center of the distribution.
+
+        Args:
+            p (T.tensor): probability.
+
+        Returns:
+            T.tensor: center of distribution.
+
+        '''
         return p
 
     def get_energy_bias(self, x, z):
-        '''For use in RBMs and other energy based models'''
+        '''For use in RBMs and other energy based models.
+
+        Args:
+            x (T.tensor): input.
+            z (T.tensor): distribution tensor.
+
+        '''
         raise NotImplementedError()
 
     def scale_for_energy_model(self, x, *params):
-        '''Scales input for energy based models.'''
+        '''Scales input for energy based models.
+
+        Args:
+            x (T.tensor): input.
+
+        '''
         return x
 
 
@@ -149,9 +216,11 @@ def make_conditional(C):
     such as from an MLP.
 
     Args:
-        C: Distribution subclass.
+        C (Distribution).
+
     Returns:
-        Conditional subclass.
+        Conditional.
+
     '''
     class Conditional(C):
         def set_params(self): self.params = OrderedDict()
@@ -162,7 +231,9 @@ def make_conditional(C):
 
 
 class Binomial(Distribution):
-    '''Binomial distribution.'''
+    '''Binomial distribution.
+
+    '''
     def __init__(self, dim, name='binomial', **kwargs):
         self.f_sample = _binomial
         self.f_neg_log_prob = _cross_entropy
@@ -203,12 +274,13 @@ class Binomial(Distribution):
         return p - p0
 
     def get_energy_bias(self, x, z):
-        '''For use in RBMs and other energy based models'''
         return T.dot(x, z)
 
 
 class CenteredBinomial(Binomial):
-    '''Centered binomial.'''
+    '''Centered binomial.
+
+    '''
     def get_prob(self, z):
         return T.nnet.sigmoid(2.0 * z) * 0.9999 + 0.000005
 
@@ -219,7 +291,9 @@ class CenteredBinomial(Binomial):
         return (2.0 * (epsilon <= p).astype(floatX) - 1.0)
 
     def sample(self, n_samples, p=None):
-        '''Samples from distribution.'''
+        '''Samples from distribution.
+
+        '''
         if p is None:
             p = self.get_prob(*self.get_params())
         if p.ndim == 1:
@@ -243,7 +317,9 @@ class CenteredBinomial(Binomial):
 class ContinuousBinomial(Binomial):
     '''Continuous binomial.
 
-    Doesn't sample.
+    Note:
+        Doesn't sample.
+
     '''
     def sample(self, n_samples, p=None):
         if p is None:
@@ -252,7 +328,9 @@ class ContinuousBinomial(Binomial):
 
 
 class Multinomial(Distribution):
-    '''Multinomial distribuion.'''
+    '''Multinomial distribuion.
+
+    '''
     def __init__(self, dim, name='multinomial', **kwargs):
         self.f_sample = _sample_multinomial
         self.f_neg_log_prob = _categorical_cross_entropy
@@ -271,7 +349,9 @@ class Multinomial(Distribution):
 
 
 class Gaussian(Distribution):
-    '''Gaussian distribution.'''
+    '''Gaussian distribution.
+
+    '''
     has_kl = True
     is_continuous = True
 
@@ -372,18 +452,26 @@ class Gaussian(Distribution):
         return py
 
     def scale_for_energy_model(self, x, mu, log_sigma):
-        '''Scales input for energy based models.'''
+        '''Scales input for energy based models.
+
+        '''
         return x / T.exp(2 * log_sigma)
 
     def get_energy_bias(self, x, mu, log_sigma):
-        '''For use in RBMs and other energy based models'''
+        '''For use in RBMs and other energy based models.
+
+        '''
         return -((x - mu) ** 2 / (2. * T.exp(log_sigma)) ** 2).sum(axis=x.ndim-1)
 
 
 class Logistic(Distribution):
     '''Logistic distribution.
 
-    Not to be confused with logistic function.
+    :math:`p(x)=\\frac{e^{\\frac{x - \mu}{s}}}{s(1+e^{\\frac{x - \mu}{s}})^2}`
+
+    Note:
+        Not to be confused with logistic function.
+
     '''
     is_continuous = True
 
@@ -466,6 +554,9 @@ class Logistic(Distribution):
 
 class Laplace(Distribution):
     '''Laplace distribution.
+
+    :math:`p(x) = \\frac{1}{2 b} e^{-\\frac{|x - \mu|}{b}}`.
+
     '''
     is_continuous = True
 

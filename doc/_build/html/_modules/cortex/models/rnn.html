@@ -1,0 +1,749 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.models.rnn &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex.models" href="../models.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../models.html" accesskey="U">cortex.models</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.models.rnn</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Module for RNN layers.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">Layer</span>
+<span class="kn">from</span> <span class="nn">.mlp</span> <span class="kn">import</span> <span class="n">MLP</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">floatX</span><span class="p">,</span> <span class="n">pi</span><span class="p">,</span> <span class="n">tools</span>
+<span class="kn">from</span> <span class="nn">..utils.tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">concatenate</span><span class="p">,</span>
+    <span class="n">init_rngs</span><span class="p">,</span>
+    <span class="n">init_weights</span><span class="p">,</span>
+    <span class="n">ortho_weight</span><span class="p">,</span>
+    <span class="n">norm_weight</span><span class="p">,</span>
+    <span class="n">scan</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="init_h"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.init_h">[docs]</a><span class="k">def</span> <span class="nf">init_h</span><span class="p">(</span><span class="n">h_init</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">models</span><span class="p">,</span> <span class="o">**</span><span class="n">h_args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Initializes the RNN hidden state.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        h_init (str): type of initialization.</span>
+<span class="sd">        X (T.tensor): input tensor for initialization through MLP.</span>
+<span class="sd">        batch_size (int)</span>
+<span class="sd">        models (list): list of Layer, pulls &#39;h_net&#39; for initialization</span>
+<span class="sd">            (TODO change this).</span>
+<span class="sd">        **h_args: kwargs for different initializations.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        T.tensor: Full 3D tensor returned to train `h_net`.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">h_init</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">h0</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="k">elif</span> <span class="n">h_init</span> <span class="o">==</span> <span class="s1">&#39;last&#39;</span><span class="p">:</span>
+        <span class="k">print</span> <span class="s1">&#39;Initializing h0 from chain&#39;</span>
+        <span class="n">h0</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">rnn</span><span class="o">.</span><span class="n">dim_h</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">))</span>
+        <span class="n">h0s</span> <span class="o">=</span> <span class="n">h0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+    <span class="k">elif</span> <span class="n">h_init</span> <span class="o">==</span> <span class="s1">&#39;noise&#39;</span><span class="p">:</span>
+        <span class="n">noise_amount</span> <span class="o">=</span> <span class="n">h_args</span><span class="p">[</span><span class="s1">&#39;noise_amount&#39;</span><span class="p">]</span>
+        <span class="k">print</span> <span class="s1">&#39;Initializing h0 from noise&#39;</span>
+        <span class="n">h0</span> <span class="o">=</span> <span class="n">trng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">avg</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">rnn</span><span class="o">.</span><span class="n">dim_h</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">h0s</span> <span class="o">=</span> <span class="n">h0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+    <span class="k">elif</span> <span class="n">h_init</span> <span class="o">==</span> <span class="s1">&#39;average&#39;</span><span class="p">:</span>
+        <span class="k">print</span> <span class="s1">&#39;Initializing h0 from running average&#39;</span>
+        <span class="n">averager</span> <span class="o">=</span> <span class="n">models</span><span class="p">[</span><span class="s1">&#39;averager&#39;</span><span class="p">]</span>
+        <span class="n">h0</span> <span class="o">=</span> <span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">alloc</span><span class="p">(</span><span class="mf">0.</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">rnn</span><span class="o">.</span><span class="n">dim_h</span><span class="p">)</span> <span class="o">+</span> <span class="n">averager</span><span class="o">.</span><span class="n">m</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">h0s</span> <span class="o">=</span> <span class="n">h0</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+    <span class="k">elif</span> <span class="n">h_init</span> <span class="o">==</span> <span class="s1">&#39;mlp&#39;</span><span class="p">:</span>
+        <span class="k">print</span> <span class="s1">&#39;Initializing h0 from MLP&#39;</span>
+        <span class="n">mlp</span> <span class="o">=</span> <span class="n">models</span><span class="p">[</span><span class="s1">&#39;h_net&#39;</span><span class="p">]</span>
+        <span class="n">h0s</span> <span class="o">=</span> <span class="n">mlp</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">h0s</span></div>
+
+<div class="viewcode-block" id="unpack"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.unpack">[docs]</a><span class="k">def</span> <span class="nf">unpack</span><span class="p">(</span><span class="n">rnn_args</span><span class="p">,</span> <span class="n">data_iter</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">model_args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Unpacks a saved RNN.</span>
+
+<span class="sd">    See `utils.tools.load_model` for details.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        rnn_args (dict): dictionary of model arguments for forming object.</span>
+<span class="sd">        **model_args: keyword arguments of saved parameters.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list: list of models.</span>
+<span class="sd">        dict: dictionary of saved parameters.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">data_iter</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Data iterator must be passed to `unpack` &#39;</span>
+                         <span class="s1">&#39;(or `load_model`).&#39;</span><span class="p">)</span>
+
+    <span class="n">model</span> <span class="o">=</span> <span class="n">RNN</span><span class="o">.</span><span class="n">factory</span><span class="p">(</span><span class="n">data_iter</span><span class="o">=</span><span class="n">data_iter</span><span class="p">,</span> <span class="o">**</span><span class="n">rnn_args</span><span class="p">)</span>
+    <span class="n">models</span> <span class="o">=</span> <span class="p">[</span><span class="n">model</span><span class="p">]</span> <span class="o">+</span> <span class="n">model</span><span class="o">.</span><span class="n">nets</span> <span class="o">+</span> <span class="n">model</span><span class="o">.</span><span class="n">inter_nets</span>
+    <span class="k">return</span> <span class="n">models</span><span class="p">,</span> <span class="n">model_args</span><span class="p">,</span> <span class="bp">None</span></div>
+
+
+<div class="viewcode-block" id="RNN"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN">[docs]</a><span class="k">class</span> <span class="nc">RNN</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;RNN class.</span>
+
+<span class="sd">    Implements a generic multilayer RNN.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        dim_in (int): input dimension.</span>
+<span class="sd">        dim_out (int): output dimension.</span>
+<span class="sd">        dim_hs (list): dimenstions of recurrent units.</span>
+<span class="sd">        n_layers (int): number of recurrent layers. Should match len(dim_hs).</span>
+<span class="sd">        input_net (MLP): MLP to feed input into recurrent layers.</span>
+<span class="sd">        output_net (MLP): MLP to read from recurrent layers.</span>
+<span class="sd">        condtional (Optional[MLP]): MLP to condition output on previous</span>
+<span class="sd">            output.</span>
+<span class="sd">        nets (list): list of networks. input network, output_net, conditional.</span>
+<span class="sd">        inter_nets (list): list of inter-networks between recurrent layers.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_hs</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                 <span class="n">conditional</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">input_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">output_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;rnn&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Init function for RNN.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dim_in (int): input dimension.</span>
+<span class="sd">            dim_hs (list): dimensions of the recurrent layers.</span>
+<span class="sd">            dim_out (int): output dimention.</span>
+<span class="sd">            conditional (Optional[MLP]): conditional network for p(x_t | x_{t-1})</span>
+<span class="sd">            input_net (MLP): input network.</span>
+<span class="sd">            output_net (MLP): output network.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim_in</span> <span class="o">=</span> <span class="n">dim_in</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span> <span class="o">=</span> <span class="n">dim_hs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dim_out</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dim_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_in</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dim_out</span> <span class="o">=</span> <span class="n">dim_out</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_net</span> <span class="o">=</span> <span class="n">input_net</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span> <span class="o">=</span> <span class="n">output_net</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conditional</span> <span class="o">=</span> <span class="n">conditional</span>
+
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">init_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">init_rngs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Extra args found: </span><span class="si">%r</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">kwargs</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">RNN</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="RNN.factory"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.factory">[docs]</a>    <span class="k">def</span> <span class="nf">factory</span><span class="p">(</span><span class="n">data_iter</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_in</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_h</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                <span class="n">dim_hs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">i_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">o_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">c_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Factory for creating MLPs for RNN and returning .</span>
+
+<span class="sd">        Convenience to quickly create MLPs from dictionaries, linking all</span>
+<span class="sd">        relevent dimensions and distributions.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dim_in (int): input dimention.</span>
+<span class="sd">            dim_h (Optional[int]): dimension of recurrent unit for single layer.</span>
+<span class="sd">            dim_hs (list): dimensions of recurrent units.</span>
+<span class="sd">            data_iter (Dataset): provides dimension and distribution info.</span>
+<span class="sd">            dim_out (Optional[int]): output dimension. If not provided, assumed</span>
+<span class="sd">                to be dim_in.</span>
+<span class="sd">            i_net (dict): input network args.</span>
+<span class="sd">            o_net (dict): output network args.</span>
+<span class="sd">            c_net (dict): conditional network args.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            RNN</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+
+        <span class="k">if</span> <span class="n">dim_hs</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">and</span> <span class="n">dim_h</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">dim_hs</span> <span class="o">=</span> <span class="p">[</span><span class="n">dim_h</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">dim_in</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">dim_in</span> <span class="o">=</span> <span class="n">data_iter</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="n">data_iter</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">dim_out</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">dim_out</span> <span class="o">=</span> <span class="n">dim_in</span>
+        <span class="k">if</span> <span class="n">i_net</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">i_net</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">o_net</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">o_net</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+        <span class="n">mlps</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">i_net</span><span class="p">[</span><span class="s1">&#39;distribution&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;centered_binomial&#39;</span>
+        <span class="n">input_net</span> <span class="o">=</span> <span class="n">MLP</span><span class="o">.</span><span class="n">factory</span><span class="p">(</span><span class="n">dim_in</span><span class="o">=</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="n">dim_hs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                <span class="n">name</span><span class="o">=</span><span class="s1">&#39;input_net&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">i_net</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">o_net</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;distribution&#39;</span><span class="p">,</span> <span class="bp">False</span><span class="p">):</span>
+            <span class="n">o_net</span><span class="p">[</span><span class="s1">&#39;distribution&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_iter</span><span class="o">.</span><span class="n">distributions</span><span class="p">[</span><span class="n">data_iter</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+        <span class="n">output_net</span> <span class="o">=</span> <span class="n">MLP</span><span class="o">.</span><span class="n">factory</span><span class="p">(</span><span class="n">dim_in</span><span class="o">=</span><span class="n">dim_hs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">dim_out</span><span class="o">=</span><span class="n">dim_out</span><span class="p">,</span>
+                                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;output_net&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">o_net</span><span class="p">)</span>
+        <span class="n">mlps</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">input_net</span><span class="o">=</span><span class="n">input_net</span><span class="p">,</span> <span class="n">output_net</span><span class="o">=</span><span class="n">output_net</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">c_net</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">c_net</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dim_in&#39;</span><span class="p">,</span> <span class="bp">False</span><span class="p">):</span>
+                <span class="n">c_net</span><span class="p">[</span><span class="s1">&#39;dim_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dim_in</span>
+            <span class="n">conditional</span> <span class="o">=</span> <span class="n">MLP</span><span class="o">.</span><span class="n">factory</span><span class="p">(</span><span class="n">dim_out</span><span class="o">=</span><span class="n">dim_hs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                      <span class="n">name</span><span class="o">=</span><span class="s1">&#39;conditional&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">c_net</span><span class="p">)</span>
+            <span class="n">mlps</span><span class="p">[</span><span class="s1">&#39;conditional&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">conditional</span>
+
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">mlps</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">RNN</span><span class="p">(</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_hs</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="n">dim_out</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RNN.set_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.set_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Initialize RNN parameters.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">dim_h</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">):</span>
+            <span class="n">Ur</span> <span class="o">=</span> <span class="n">ortho_weight</span><span class="p">(</span><span class="n">dim_h</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="s1">&#39;Ur</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">Ur</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_net_params</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="RNN.set_net_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.set_net_params">[docs]</a>    <span class="k">def</span> <span class="nf">set_net_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Initialize MLP parameters.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_net</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">input_net</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dim_in</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">rng</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span> <span class="n">trng</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="p">,</span>
+                <span class="n">distribution</span><span class="o">=</span><span class="s1">&#39;centered_binomial&#39;</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s1">&#39;input_net&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_net</span><span class="o">.</span><span class="n">dim_in</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_in</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_net</span><span class="o">.</span><span class="n">dim_out</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_net</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_input_net&#39;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_out</span><span class="p">,</span>
+                <span class="n">rng</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span> <span class="n">trng</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="p">,</span>
+                <span class="n">distribution</span><span class="o">=</span><span class="s1">&#39;binomial&#39;</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s1">&#39;output_net&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span><span class="o">.</span><span class="n">dim_in</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_output_net&#39;</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">conditional</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">conditional</span><span class="o">.</span><span class="n">dim_out</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">conditional</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_conditional&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">nets</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">input_net</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">conditional</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">inter_nets</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">[</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">],</span>
+                    <span class="n">rng</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span> <span class="n">trng</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">trng</span><span class="p">,</span>
+                    <span class="n">distribution</span><span class="o">=</span><span class="s1">&#39;centered_binomial&#39;</span><span class="p">,</span>
+                    <span class="n">name</span><span class="o">=</span><span class="s1">&#39;rnn_net</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">inter_nets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RNN.set_tparams"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.set_tparams">[docs]</a>    <span class="k">def</span> <span class="nf">set_tparams</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Sets and returns theano parameters.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">tparams</span> <span class="o">=</span> <span class="nb">super</span><span class="p">(</span><span class="n">RNN</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">set_tparams</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">net</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">inter_nets</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">nets</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">net</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">tparams</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">net</span><span class="o">.</span><span class="n">set_tparams</span><span class="p">())</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]</span>
+        <span class="n">accum</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">for</span> <span class="n">net</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">inter_nets</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">nets</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">net</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">accum</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">net</span><span class="o">.</span><span class="n">get_params</span><span class="p">())</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">accum</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tparams</span></div>
+
+<div class="viewcode-block" id="RNN.get_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.get_params">[docs]</a>    <span class="k">def</span> <span class="nf">get_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns parameters for scan.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">__dict__</span><span class="p">[</span><span class="s1">&#39;Ur</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">)]</span>
+        <span class="k">for</span> <span class="n">net</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">inter_nets</span><span class="p">:</span>
+            <span class="n">params</span> <span class="o">+=</span> <span class="n">net</span><span class="o">.</span><span class="n">get_params</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">params</span></div>
+
+<div class="viewcode-block" id="RNN.get_net_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.get_net_params">[docs]</a>    <span class="k">def</span> <span class="nf">get_net_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns MLP parameters for scan.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">net</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nets</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">net</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">params</span> <span class="o">+=</span> <span class="n">net</span><span class="o">.</span><span class="n">get_params</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">params</span></div>
+
+<div class="viewcode-block" id="RNN.get_sample_params"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.get_sample_params">[docs]</a>    <span class="k">def</span> <span class="nf">get_sample_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns parameters used for sampling.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_params</span><span class="p">()</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_net_params</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">params</span></div>
+
+<div class="viewcode-block" id="RNN.get_recurrent_args"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.get_recurrent_args">[docs]</a>    <span class="k">def</span> <span class="nf">get_recurrent_args</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Get the recurrent arguments for `scan`.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">args</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span></div>
+
+<div class="viewcode-block" id="RNN.get_inter_args"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.get_inter_args">[docs]</a>    <span class="k">def</span> <span class="nf">get_inter_args</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Get the inter-network arguments for `scan`.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="p">[</span><span class="n">level</span><span class="p">]:</span><span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="p">[</span><span class="n">level</span><span class="o">+</span><span class="mi">1</span><span class="p">]]</span></div>
+
+<div class="viewcode-block" id="RNN.get_input_args"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.get_input_args">[docs]</a>    <span class="k">def</span> <span class="nf">get_input_args</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Get the input arguments for `scan`.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span><span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]]</span></div>
+
+<div class="viewcode-block" id="RNN.get_output_args"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.get_output_args">[docs]</a>    <span class="k">def</span> <span class="nf">get_output_args</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Get the output arguments for `scan`.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]:</span><span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="o">+</span><span class="mi">1</span><span class="p">]]</span></div>
+
+<div class="viewcode-block" id="RNN.get_conditional_args"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.get_conditional_args">[docs]</a>    <span class="k">def</span> <span class="nf">get_conditional_args</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Get the conditional arguments for `scan`.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="n">args</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="o">+</span><span class="mi">1</span><span class="p">]:</span><span class="bp">self</span><span class="o">.</span><span class="n">param_idx</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="o">+</span><span class="mi">2</span><span class="p">]]</span></div>
+
+    <span class="c1"># Extra functions ---------------------------------------------------------</span>
+
+<div class="viewcode-block" id="RNN.energy"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.energy">[docs]</a>    <span class="k">def</span> <span class="nf">energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">h0s</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Negative log probability of data point.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            X (T.tensor): 3D tensor of samples.</span>
+<span class="sd">            h0s (list): List of initial hidden states.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: energies for each batch.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">outs</span><span class="p">,</span> <span class="n">updates</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="n">X</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">h0s</span><span class="o">=</span><span class="n">h0s</span><span class="p">)</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">outs</span><span class="p">[</span><span class="s1">&#39;p&#39;</span><span class="p">]</span>
+        <span class="n">energy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">p</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">energy</span></div>
+
+<div class="viewcode-block" id="RNN.neg_log_prob"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.neg_log_prob">[docs]</a>    <span class="k">def</span> <span class="nf">neg_log_prob</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Negative log prob function.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): samples</span>
+<span class="sd">            p (T.tensor): probabilities</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: negative log probabilities.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="RNN.l2_decay"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.l2_decay">[docs]</a>    <span class="k">def</span> <span class="nf">l2_decay</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rate</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;L2 decay.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            rate (float): decay rate.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict: dictionary of l2 decay costs for each subnet.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">cost</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">([</span><span class="n">rate</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__dict__</span><span class="p">[</span><span class="s1">&#39;Ur</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">)])</span>
+        <span class="n">cost</span> <span class="o">+=</span> <span class="nb">sum</span><span class="p">([</span><span class="n">rate</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">__dict__</span><span class="p">[</span><span class="s1">&#39;W</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+                     <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)])</span>
+
+        <span class="k">for</span> <span class="n">net</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nets</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">net</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">cost</span> <span class="o">+=</span> <span class="n">net</span><span class="o">.</span><span class="n">l2_decay</span><span class="p">(</span><span class="n">rate</span><span class="p">)</span>
+
+        <span class="n">rval</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">(</span>
+            <span class="n">cost</span> <span class="o">=</span> <span class="n">cost</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">rval</span></div>
+
+<div class="viewcode-block" id="RNN.step_sample_preact"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.step_sample_preact">[docs]</a>    <span class="k">def</span> <span class="nf">step_sample_preact</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Returns preact for sampling step.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">hs_</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="o">+</span><span class="mi">1</span><span class="p">:]</span>
+
+        <span class="n">Urs</span>           <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_recurrent_args</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">input_params</span>  <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_input_args</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">output_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_output_args</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">y</span>             <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_net</span><span class="o">.</span><span class="n">step_preact</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">input_params</span><span class="p">)</span>
+
+        <span class="n">hs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+            <span class="n">h_</span> <span class="o">=</span> <span class="n">hs_</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">Ur</span> <span class="o">=</span> <span class="n">Urs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">h_</span><span class="p">,</span> <span class="n">Ur</span><span class="p">)</span>
+            <span class="n">hs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">inter_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_inter_args</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">)</span>
+                <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">inter_nets</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">step_preact</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="o">*</span><span class="n">inter_params</span><span class="p">)</span>
+
+        <span class="n">preact</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span><span class="o">.</span><span class="n">step_preact</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="o">*</span><span class="n">output_params</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">hs</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">preact</span><span class="p">,)</span></div>
+
+<div class="viewcode-block" id="RNN.step_sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.step_sample">[docs]</a>    <span class="k">def</span> <span class="nf">step_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;RNN step sample function for scan.</span>
+
+<span class="sd">        A convenience function for scan, this method samples the output given</span>
+<span class="sd">        the input, returning the current states and sample.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">outs</span>   <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_sample_preact</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">hs</span>     <span class="o">=</span> <span class="n">outs</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]</span>
+        <span class="n">preact</span> <span class="o">=</span> <span class="n">outs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">p</span>      <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span><span class="o">.</span><span class="n">distribution</span><span class="p">(</span><span class="n">preact</span><span class="p">)</span>
+        <span class="n">x</span><span class="p">,</span> <span class="n">_</span>   <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">x</span>      <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">hs</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">preact</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">h_</span><span class="p">,</span> <span class="n">Ur</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Step function for RNN call.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            m (T.tensor): masks.</span>
+<span class="sd">            y (T.tensor): inputs.</span>
+<span class="sd">            h_ (T.tensor): recurrent state.</span>
+<span class="sd">            Ur (theano.shared): recurrent connection.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            T.tensor: next recurrent state.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">preact</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">h_</span><span class="p">,</span> <span class="n">Ur</span><span class="p">)</span> <span class="o">+</span> <span class="n">y</span>
+        <span class="n">h</span>      <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">preact</span><span class="p">)</span>
+        <span class="n">h</span>      <span class="o">=</span> <span class="n">m</span> <span class="o">*</span> <span class="n">h</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">m</span><span class="p">)</span> <span class="o">*</span> <span class="n">h_</span>
+        <span class="k">return</span> <span class="n">h</span>
+
+<div class="viewcode-block" id="RNN.call_seqs"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.call_seqs">[docs]</a>    <span class="k">def</span> <span class="nf">call_seqs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">condition_on</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Prepares the input for __call__</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input</span>
+<span class="sd">            condtion_on (T.tensor or None): tensor to condition recurrence on.</span>
+<span class="sd">            level (int): reccurent level.</span>
+<span class="sd">            *params: list of theano.shared.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list: list of scan inputs.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">i_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_input_args</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+            <span class="n">a</span>        <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">input_net</span><span class="o">.</span><span class="n">step_preact</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">i_params</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">i_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_inter_args</span><span class="p">(</span><span class="n">level</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">)</span>
+            <span class="n">a</span>        <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">inter_nets</span><span class="p">[</span><span class="n">level</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">step_preact</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">*</span><span class="n">i_params</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">condition_on</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">a</span> <span class="o">+=</span> <span class="n">condition_on</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">a</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="RNN.step_call"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.step_call">[docs]</a>    <span class="k">def</span> <span class="nf">step_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="n">h0s</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Step version of __call__ for scan</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input.</span>
+<span class="sd">            m (T.tensor): mask.</span>
+<span class="sd">            h0s (list): list of recurrent initial states.</span>
+<span class="sd">            *params: list of theano.shared.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: dictionary of results.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">n_steps</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">n_samples</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">updates</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">()</span>
+
+        <span class="n">hs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">h0</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">h0s</span><span class="p">):</span>
+            <span class="n">seqs</span>         <span class="o">=</span> <span class="p">[</span><span class="n">m</span><span class="p">[:,</span> <span class="p">:,</span> <span class="bp">None</span><span class="p">]]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">call_seqs</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">None</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">)</span>
+            <span class="n">outputs_info</span> <span class="o">=</span> <span class="p">[</span><span class="n">h0</span><span class="p">]</span>
+            <span class="n">non_seqs</span>     <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">get_recurrent_args</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)[</span><span class="n">i</span><span class="p">]]</span>
+            <span class="n">h</span><span class="p">,</span> <span class="n">updates_</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">,</span>
+                <span class="n">sequences</span><span class="o">=</span><span class="n">seqs</span><span class="p">,</span>
+                <span class="n">outputs_info</span><span class="o">=</span><span class="n">outputs_info</span><span class="p">,</span>
+                <span class="n">non_sequences</span><span class="o">=</span><span class="n">non_seqs</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_recurrent_steps_</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">,</span>
+                <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">)</span>
+            <span class="n">hs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">h</span>
+            <span class="n">updates</span> <span class="o">+=</span> <span class="n">updates_</span>
+
+        <span class="n">o_params</span>    <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_output_args</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">out_net_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span><span class="o">.</span><span class="n">step_call</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="o">*</span><span class="n">o_params</span><span class="p">)</span>
+        <span class="n">preact</span>      <span class="o">=</span> <span class="n">out_net_out</span><span class="p">[</span><span class="s1">&#39;z&#39;</span><span class="p">]</span>
+        <span class="n">p</span>           <span class="o">=</span> <span class="n">out_net_out</span><span class="p">[</span><span class="s1">&#39;p&#39;</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">hs</span><span class="o">=</span><span class="n">hs</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="n">preact</span><span class="p">),</span> <span class="n">updates</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">m</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">h0s</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">condition_on</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Call function.</span>
+
+<span class="sd">        For learning RNNs.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (T.tensor): input sequence. window x batch x dim</span>
+<span class="sd">            m (T.tensor): mask. window x batch. For masking in recurrent steps.</span>
+<span class="sd">            h0s (Optional[list]): initial h0s.</span>
+<span class="sd">            condition_on (Optional[T.tensor]): conditional for recurrent step.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: dictionary of results: hiddens, probabilities, and</span>
+<span class="sd">                preacts.</span>
+<span class="sd">            theano.OrderedUpdates.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">h0s</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">h0s</span> <span class="o">=</span> <span class="p">[</span><span class="n">T</span><span class="o">.</span><span class="n">alloc</span><span class="p">(</span><span class="mf">0.</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dim_h</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span> <span class="k">for</span> <span class="n">dim_h</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">m</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">m</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+
+        <span class="n">params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_sample_params</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_call</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span> <span class="n">h0s</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">)</span>
+
+<div class="viewcode-block" id="RNN.sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.RNN.sample">[docs]</a>    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x0</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">h0s</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+               <span class="n">condition_on</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Samples from an initial state.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x0 (Optional[T.tensor]): initial input state.</span>
+<span class="sd">            h0 (Optional[T.tensor]): initial recurrent state.</span>
+<span class="sd">            n_samples (Optional[int]): if no x0 or h0, used to initial batch.</span>
+<span class="sd">                Number of chains.</span>
+<span class="sd">            n_steps (int): number of sampling steps.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            OrderedDict: dictionary of results. hiddens, probabilities, and preacts.</span>
+<span class="sd">            theano.OrderedUpdates: updates.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">x0</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">x0</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span>
+                <span class="n">p</span><span class="o">=</span><span class="n">T</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">),</span>
+                <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_net</span><span class="o">.</span><span class="n">dim_out</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">h0s</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">h0s</span> <span class="o">=</span> <span class="p">[</span><span class="n">T</span><span class="o">.</span><span class="n">alloc</span><span class="p">(</span><span class="mf">0.</span><span class="p">,</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dim_h</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span> <span class="k">for</span> <span class="n">dim_h</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_hs</span><span class="p">]</span>
+
+        <span class="n">seqs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">outputs_info</span> <span class="o">=</span> <span class="n">h0s</span> <span class="o">+</span> <span class="p">[</span><span class="n">x0</span><span class="p">,</span> <span class="bp">None</span><span class="p">,</span> <span class="bp">None</span><span class="p">]</span>
+        <span class="n">non_seqs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">non_seqs</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_sample_params</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">n_steps</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">inps</span> <span class="o">=</span> <span class="n">outputs_info</span><span class="p">[:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="n">non_seqs</span>
+            <span class="n">outs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_sample</span><span class="p">(</span><span class="o">*</span><span class="n">inps</span><span class="p">)</span>
+            <span class="n">updates</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">()</span>
+            <span class="n">hs</span> <span class="o">=</span> <span class="n">outs</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]</span>
+            <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">outs</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">shape_padleft</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">shape_padleft</span><span class="p">(</span><span class="n">p</span><span class="p">)</span>
+            <span class="n">z</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">shape_padleft</span><span class="p">(</span><span class="n">z</span><span class="p">)</span>
+            <span class="n">hs</span> <span class="o">=</span> <span class="p">[</span><span class="n">T</span><span class="o">.</span><span class="n">shape_padleft</span><span class="p">(</span><span class="n">h</span><span class="p">)</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">hs</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">outs</span><span class="p">,</span> <span class="n">updates</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">step_sample</span><span class="p">,</span> <span class="n">seqs</span><span class="p">,</span> <span class="n">outputs_info</span><span class="p">,</span> <span class="n">non_seqs</span><span class="p">,</span>
+                                 <span class="n">n_steps</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="o">+</span><span class="s1">&#39;_sampling&#39;</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+            <span class="n">hs</span> <span class="o">=</span> <span class="n">outs</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]</span>
+            <span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">outs</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span>
+
+        <span class="k">return</span> <span class="n">OrderedDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">p</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="n">z</span><span class="p">,</span> <span class="n">hs</span><span class="o">=</span><span class="n">hs</span><span class="p">),</span> <span class="n">updates</span></div></div>
+
+
+<div class="viewcode-block" id="SimpleRNN"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.SimpleRNN">[docs]</a><span class="k">class</span> <span class="nc">SimpleRNN</span><span class="p">(</span><span class="n">RNN</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Simple RNN class, single hidden layer.</span>
+
+<span class="sd">    Wraps RNN but with a single hidden layer in __init__ instead of list.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_h</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;SimpleRNN init function.&#39;&#39;&#39;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SimpleRNN</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">dim_in</span><span class="p">,</span> <span class="p">[</span><span class="n">dim_h</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+<div class="viewcode-block" id="SimpleRNN.factory"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.SimpleRNN.factory">[docs]</a>    <span class="k">def</span> <span class="nf">factory</span><span class="p">(</span><span class="n">data_iter</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_in</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_h</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                    <span class="n">i_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">o_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">c_net</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Convenience factory for SimpleRNN (see `RNN.factory`).</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+
+        <span class="k">if</span> <span class="n">dim_in</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">dim_in</span> <span class="o">=</span> <span class="n">data_iter</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="n">data_iter</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">dim_out</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">dim_out</span> <span class="o">=</span> <span class="n">dim_in</span>
+        <span class="k">if</span> <span class="n">i_net</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">i_net</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">o_net</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">o_net</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+
+        <span class="n">mlps</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="n">i_net</span><span class="p">[</span><span class="s1">&#39;distribution&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;centered_binomial&#39;</span>
+        <span class="n">input_net</span> <span class="o">=</span> <span class="n">MLP</span><span class="o">.</span><span class="n">factory</span><span class="p">(</span><span class="n">dim_in</span><span class="o">=</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="n">dim_h</span><span class="p">,</span>
+                                <span class="n">name</span><span class="o">=</span><span class="s1">&#39;input_net&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">i_net</span><span class="p">)</span>
+
+        <span class="n">o_net</span><span class="p">[</span><span class="s1">&#39;distribution&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_iter</span><span class="o">.</span><span class="n">distributions</span><span class="p">[</span><span class="n">data_iter</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+        <span class="n">output_net</span> <span class="o">=</span> <span class="n">MLP</span><span class="o">.</span><span class="n">factory</span><span class="p">(</span><span class="n">dim_in</span><span class="o">=</span><span class="n">dim_h</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="n">dim_out</span><span class="p">,</span>
+                                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;output_net&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">o_net</span><span class="p">)</span>
+        <span class="n">mlps</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">input_net</span><span class="o">=</span><span class="n">input_net</span><span class="p">,</span> <span class="n">output_net</span><span class="o">=</span><span class="n">output_net</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">c_net</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">c_net</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;dim_in&#39;</span><span class="p">,</span> <span class="bp">False</span><span class="p">):</span>
+                <span class="n">c_net</span><span class="p">[</span><span class="s1">&#39;dim_in&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dim_in</span>
+            <span class="n">conditional</span> <span class="o">=</span> <span class="n">MLP</span><span class="o">.</span><span class="n">factory</span><span class="p">(</span><span class="n">dim_out</span><span class="o">=</span><span class="n">dim_h</span><span class="p">,</span>
+                                      <span class="n">name</span><span class="o">=</span><span class="s1">&#39;conditional&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">c_net</span><span class="p">)</span>
+            <span class="n">mlps</span><span class="p">[</span><span class="s1">&#39;conditional&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">conditional</span>
+
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">mlps</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">SimpleRNN</span><span class="p">(</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_h</span><span class="p">,</span> <span class="n">dim_out</span><span class="o">=</span><span class="n">dim_out</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SimpleRNN.energy"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.SimpleRNN.energy">[docs]</a>    <span class="k">def</span> <span class="nf">energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">h0</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Energy function.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">h0</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">h0s</span> <span class="o">=</span> <span class="p">[</span><span class="n">h0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">h0s</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">SimpleRNN</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">energy</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">h0s</span><span class="o">=</span><span class="n">h0s</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">m</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">h0</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">condition_on</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Call function (see `RNN.__call__`).</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">h0</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">h0s</span> <span class="o">=</span> <span class="p">[</span><span class="n">h0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">h0s</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">SimpleRNN</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span>
+            <span class="n">x</span><span class="p">,</span> <span class="n">m</span><span class="o">=</span><span class="n">m</span><span class="p">,</span> <span class="n">h0s</span><span class="o">=</span><span class="n">h0s</span><span class="p">,</span> <span class="n">condition_on</span><span class="o">=</span><span class="n">condition_on</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SimpleRNN.sample"><a class="viewcode-back" href="../../../source/cortex.models.html#cortex.models.rnn.SimpleRNN.sample">[docs]</a>    <span class="k">def</span> <span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x0</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">h0</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Sample the SimpleRNN (see `RNN.sample`).</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">h0</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">h0s</span> <span class="o">=</span> <span class="p">[</span><span class="n">h0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">h0s</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">SimpleRNN</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">x0</span><span class="o">=</span><span class="n">x0</span><span class="p">,</span> <span class="n">h0s</span><span class="o">=</span><span class="n">h0s</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../models.html" >cortex.models</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

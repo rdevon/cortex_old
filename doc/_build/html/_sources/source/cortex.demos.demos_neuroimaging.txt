@@ -4,10 +4,10 @@ cortex.demos.demos_neuroimaging package
 Submodules
 ----------
 
-cortex.demos.demos_neuroimaging.rbm_fmri module
------------------------------------------------
+cortex.demos.demos_neuroimaging.rbm_ni module
+---------------------------------------------
 
-.. automodule:: cortex.demos.demos_neuroimaging.rbm_fmri
+.. automodule:: cortex.demos.demos_neuroimaging.rbm_ni
     :members:
     :undoc-members:
     :show-inheritance:

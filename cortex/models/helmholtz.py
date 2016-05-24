@@ -20,7 +20,7 @@ from .distributions import (
     Logistic,
     resolve as resolve_prior
 )
-from .mlp import MLP, MultiModalMLP, resolve as resolve_mlp
+from .mlp import MLP, resolve as resolve_mlp
 from ..utils import floatX, tools
 from ..utils.tools import (
     concatenate,

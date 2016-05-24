@@ -50,8 +50,194 @@
 <div class="section" id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="cortex-analysis-mri-rois-module">
-<h2>cortex.analysis.mri.rois module<a class="headerlink" href="#cortex-analysis-mri-rois-module" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-cortex.analysis.mri.rois">
+<span id="cortex-analysis-mri-rois-module"></span><h2>cortex.analysis.mri.rois module<a class="headerlink" href="#module-cortex.analysis.mri.rois" title="Permalink to this headline">¶</a></h2>
+<p>Module for finding ROIS for MRI niftis</p>
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.check_grey">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">check_grey</code><span class="sig-paren">(</span><em>coords</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#check_grey"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.check_grey" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to check if a particular cluster corresponds to grey matter.</p>
+<p>This function uses the CA_N27_GW atlas. Other metrics could be used, but
+this feature needs to be added.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>coords</strong> (<em>tuple or list</em>) &#8211; Coordinates, should have length 3</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">probability of grey matter</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">float</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.check_pair">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">check_pair</code><span class="sig-paren">(</span><em>toproi</em>, <em>rois</em>, <em>lr_cm</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#check_pair"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.check_pair" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.cluster_worker">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">cluster_worker</code><span class="sig-paren">(</span><em>fnifti</em>, <em>thr</em>, <em>roi_dict</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#cluster_worker"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.cluster_worker" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.find_clusters_from_3D">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">find_clusters_from_3D</code><span class="sig-paren">(</span><em>fnifti</em>, <em>thr</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#find_clusters_from_3D"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.find_clusters_from_3D" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to use afni command line to find clusters from a 3D nifti.</p>
+<p>This currently calls afni functions from command line.
+TODO(dhjelm): change this to use nipy functions.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>fnifti</strong> (<em>str</em>) &#8211; Nifti file to process.</li>
+<li><strong>thr</strong> (<em>float</em>) &#8211; threshold used for clusters.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">clusters</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.find_clusters_from_4D">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">find_clusters_from_4D</code><span class="sig-paren">(</span><em>fnifti</em>, <em>i</em>, <em>thr</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#find_clusters_from_4D"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.find_clusters_from_4D" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to use afni command line to find clusters from a 4D nifti.</p>
+<p>TODO(dhjelm): change this to use nipy functions.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>fnifti</strong> (<em>str</em>) &#8211; Nifti file to process.</li>
+<li><strong>i</strong> (<em>int</em>) &#8211; Index of the feature in the nifti file.</li>
+<li><strong>thr</strong> (<em>float</em>) &#8211; threshold used for clusters.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">List of 3d clusters.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.find_region_names">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">find_region_names</code><span class="sig-paren">(</span><em>coords</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#find_region_names"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.find_region_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get region names from a set of atlases.</p>
+<p>Only 3 atlases are currently supported, but more could be added in the future.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>coords</strong> (<em>tuple or list</em>) &#8211; coordinates, chould be length 3.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">List of regions of interest corresponding to a cluster coordinate.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.find_rois">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">find_rois</code><span class="sig-paren">(</span><em>fnifti</em>, <em>thr</em>, <em>test=False</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#find_rois"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.find_rois" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function for finding regions of interest from a nifti file.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>fnifti</strong> (<em>str</em>) &#8211; path to the nifti file or list of paths to files</li>
+<li><strong>thr</strong> (<em>float</em>) &#8211; threshold for clusters.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+<dl class="docutils">
+<dt>Returns</dt>
+<dd>dict: regions of interest</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.get_cluster_info">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">get_cluster_info</code><span class="sig-paren">(</span><em>clusters</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#get_cluster_info"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.get_cluster_info" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.lat_opposite">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">lat_opposite</code><span class="sig-paren">(</span><em>side</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#lat_opposite"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.lat_opposite" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the lateral opposite as defined by the keyword pair {&#8220;Right&#8221;, &#8220;Left&#8221;}</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.main">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">main</code><span class="sig-paren">(</span><em>fnifti</em>, <em>thr=0</em>, <em>out_file=None</em>, <em>out_txt=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#main"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.main" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.make_argument_parser">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">make_argument_parser</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#make_argument_parser"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.make_argument_parser" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates an ArgumentParser to read the options for this script from
+sys.argv</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.return_region">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">return_region</code><span class="sig-paren">(</span><em>coords</em>, <em>atlas</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#return_region"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.return_region" title="Permalink to this definition">¶</a></dt>
+<dd><p>Function to return the region of interest as defined by the atlas.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>cluster</strong> (<em>tuple or list</em>) &#8211; coordinates, should be length 3</li>
+<li><strong>atlas</strong> (<em>str</em>) &#8211; name of atlas to use.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><dl class="docutils">
+<dt>List of strings. This should be a list of all the regions</dt>
+<dd><p class="first last">corresponding to a coordinate.</p>
+</dd>
+</dl>
+</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.save_roi_txt">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">save_roi_txt</code><span class="sig-paren">(</span><em>roi_dict</em>, <em>out_file</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#save_roi_txt"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.save_roi_txt" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.analysis.mri.rois.worker_helper">
+<code class="descclassname">cortex.analysis.mri.rois.</code><code class="descname">worker_helper</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/analysis/mri/rois.html#worker_helper"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.analysis.mri.rois.worker_helper" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </div>
 <div class="section" id="module-cortex.analysis.mri">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-cortex.analysis.mri" title="Permalink to this headline">¶</a></h2>
@@ -68,7 +254,7 @@
   <ul>
 <li><a class="reference internal" href="#">cortex.analysis.mri package</a><ul>
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
-<li><a class="reference internal" href="#cortex-analysis-mri-rois-module">cortex.analysis.mri.rois module</a></li>
+<li><a class="reference internal" href="#module-cortex.analysis.mri.rois">cortex.analysis.mri.rois module</a></li>
 <li><a class="reference internal" href="#module-cortex.analysis.mri">Module contents</a></li>
 </ul>
 </li>

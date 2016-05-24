@@ -1,0 +1,304 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.demos.demos_neuroimaging.rbm_ni &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../../index.html" />
+    <link rel="up" title="cortex.demos.demos_neuroimaging" href="../demos_neuroimaging.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../demos_neuroimaging.html" accesskey="U">cortex.demos.demos_neuroimaging</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.demos.demos_neuroimaging.rbm_ni</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Demo for training RBM with MRI or fMRI dataset.</span>
+
+<span class="sd">Try with `python rbm_ni.py rbm_olin.yaml`.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
+<span class="kn">import</span> <span class="nn">pprint</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+
+<span class="kn">from</span> <span class="nn">cortex.datasets</span> <span class="kn">import</span> <span class="n">load_data_split</span>
+<span class="kn">from</span> <span class="nn">cortex.datasets.neuroimaging</span> <span class="kn">import</span> <span class="n">resolve</span> <span class="k">as</span> <span class="n">resolve_dataset</span>
+<span class="kn">from</span> <span class="nn">cortex.models.rbm</span> <span class="kn">import</span> <span class="n">RBM</span><span class="p">,</span> <span class="n">unpack</span>
+<span class="kn">from</span> <span class="nn">cortex.utils</span> <span class="kn">import</span> <span class="n">floatX</span>
+<span class="kn">from</span> <span class="nn">cortex.utils.monitor</span> <span class="kn">import</span> <span class="n">SimpleMonitor</span>
+<span class="kn">from</span> <span class="nn">cortex.utils.preprocessor</span> <span class="kn">import</span> <span class="n">Preprocessor</span>
+<span class="kn">from</span> <span class="nn">cortex.utils.tools</span> <span class="kn">import</span> <span class="n">get_trng</span><span class="p">,</span> <span class="n">print_profile</span><span class="p">,</span> <span class="n">print_section</span>
+<span class="kn">from</span> <span class="nn">cortex.utils.training</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">main_loop</span><span class="p">,</span>
+    <span class="n">make_argument_parser</span><span class="p">,</span>
+    <span class="n">set_experiment</span><span class="p">,</span>
+    <span class="n">set_model</span><span class="p">,</span>
+    <span class="n">set_optimizer</span><span class="p">,</span>
+    <span class="n">set_params</span>
+<span class="p">)</span>
+
+<div class="viewcode-block" id="init_learning_args"><a class="viewcode-back" href="../../../../source/cortex.demos.demos_neuroimaging.html#cortex.demos.demos_neuroimaging.rbm_ni.init_learning_args">[docs]</a><span class="k">def</span> <span class="nf">init_learning_args</span><span class="p">(</span>
+    <span class="n">learning_rate</span><span class="o">=</span><span class="mf">0.0001</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="o">=</span><span class="s1">&#39;sgd&#39;</span><span class="p">,</span>
+    <span class="n">l2_decay</span><span class="o">=</span><span class="mf">0.</span><span class="p">,</span>
+    <span class="n">l1_decay</span><span class="o">=</span><span class="mf">0.</span><span class="p">,</span>
+    <span class="n">optimizer_args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">learning_rate_schedule</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">valid_batch_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">epochs</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">valid_key</span><span class="o">=</span><span class="s1">&#39;nll&#39;</span><span class="p">,</span>
+    <span class="n">valid_sign</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">,</span>
+    <span class="n">excludes</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;rbm_visible_log_sigma&#39;</span><span class="p">]):</span>
+    <span class="k">if</span> <span class="n">optimizer_args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">optimizer_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="k">return</span> <span class="nb">locals</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="init_inference_args"><a class="viewcode-back" href="../../../../source/cortex.demos.demos_neuroimaging.html#cortex.demos.demos_neuroimaging.rbm_ni.init_inference_args">[docs]</a><span class="k">def</span> <span class="nf">init_inference_args</span><span class="p">(</span>
+    <span class="n">n_chains</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">persistent</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="k">return</span> <span class="nb">locals</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="train"><a class="viewcode-back" href="../../../../source/cortex.demos.demos_neuroimaging.html#cortex.demos.demos_neuroimaging.rbm_ni.train">[docs]</a><span class="k">def</span> <span class="nf">train</span><span class="p">(</span>
+    <span class="n">out_path</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">model_to_load</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">save_images</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">test_every</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">show_every</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">dim_h</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">preprocessing</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">learning_args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">inference_args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+    <span class="n">dataset_args</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="k">if</span> <span class="n">preprocessing</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">preprocessing</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">learning_args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">learning_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">inference_args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="n">inference_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">dataset_args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Dataset args must be provided&#39;</span><span class="p">)</span>
+
+    <span class="n">learning_args</span> <span class="o">=</span> <span class="n">init_learning_args</span><span class="p">(</span><span class="o">**</span><span class="n">learning_args</span><span class="p">)</span>
+    <span class="n">inference_args</span> <span class="o">=</span> <span class="n">init_inference_args</span><span class="p">(</span><span class="o">**</span><span class="n">inference_args</span><span class="p">)</span>
+
+    <span class="k">print</span> <span class="s1">&#39;Dataset args: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="k">print</span> <span class="s1">&#39;Learning args: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">learning_args</span><span class="p">)</span>
+    <span class="k">print</span> <span class="s1">&#39;Inference args: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">inference_args</span><span class="p">)</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Setting up data&#39;</span><span class="p">)</span>
+    <span class="n">batch_size</span> <span class="o">=</span> <span class="n">learning_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;batch_size&#39;</span><span class="p">)</span>
+    <span class="n">valid_batch_size</span> <span class="o">=</span> <span class="n">learning_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;valid_batch_size&#39;</span><span class="p">)</span>
+    <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset_args</span><span class="p">[</span><span class="s1">&#39;dataset&#39;</span><span class="p">]</span>
+    <span class="n">dataset_class</span> <span class="o">=</span> <span class="n">resolve_dataset</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+
+    <span class="n">train</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">test</span><span class="p">,</span> <span class="n">idx</span> <span class="o">=</span> <span class="n">load_data_split</span><span class="p">(</span>
+        <span class="n">dataset_class</span><span class="p">,</span>
+        <span class="n">train_batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
+        <span class="n">valid_batch_size</span><span class="o">=</span><span class="n">valid_batch_size</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="n">dataset_args</span><span class="p">[</span><span class="s1">&#39;idx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">idx</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Setting model and variables&#39;</span><span class="p">)</span>
+    <span class="n">dim_in</span> <span class="o">=</span> <span class="n">train</span><span class="o">.</span><span class="n">dims</span><span class="p">[</span><span class="n">train</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+
+    <span class="n">X</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">matrix</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span>
+    <span class="n">X</span><span class="o">.</span><span class="n">tag</span><span class="o">.</span><span class="n">test_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">dim_in</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">X</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="n">trng</span> <span class="o">=</span> <span class="n">get_trng</span><span class="p">()</span>
+
+    <span class="n">preproc</span> <span class="o">=</span> <span class="n">Preprocessor</span><span class="p">(</span><span class="n">preprocessing</span><span class="p">)</span>
+    <span class="n">X_i</span> <span class="o">=</span> <span class="n">preproc</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">data_iter</span><span class="o">=</span><span class="n">train</span><span class="p">)</span>
+    <span class="n">inps</span> <span class="o">=</span> <span class="p">[</span><span class="n">X</span><span class="p">]</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Loading model and forming graph&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">create_model</span><span class="p">():</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">RBM</span><span class="p">(</span><span class="n">dim_in</span><span class="p">,</span> <span class="n">dim_h</span><span class="p">,</span> <span class="n">v_dist</span><span class="o">=</span><span class="n">train</span><span class="o">.</span><span class="n">distributions</span><span class="p">[</span><span class="n">train</span><span class="o">.</span><span class="n">name</span><span class="p">],</span>
+                    <span class="n">h_dist</span><span class="o">=</span><span class="s1">&#39;binomial&#39;</span><span class="p">,</span> <span class="n">mean_image</span><span class="o">=</span><span class="n">train</span><span class="o">.</span><span class="n">mean_image</span><span class="p">)</span>
+        <span class="n">models</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="n">models</span><span class="p">[</span><span class="n">model</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="k">return</span> <span class="n">models</span>
+
+    <span class="n">models</span> <span class="o">=</span> <span class="n">set_model</span><span class="p">(</span><span class="n">create_model</span><span class="p">,</span> <span class="n">model_to_load</span><span class="p">,</span> <span class="n">unpack</span><span class="p">)</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">models</span><span class="p">[</span><span class="s1">&#39;rbm&#39;</span><span class="p">]</span>
+    <span class="n">tparams</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">set_tparams</span><span class="p">()</span>
+    <span class="n">print_profile</span><span class="p">(</span><span class="n">tparams</span><span class="p">)</span>
+
+    <span class="c1"># ==========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Getting cost&#39;</span><span class="p">)</span>
+
+    <span class="n">persistent</span> <span class="o">=</span> <span class="n">inference_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;persistent&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">persistent</span><span class="p">:</span>
+        <span class="n">H_p</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">inference_args</span><span class="p">[</span><span class="s1">&#39;n_chains&#39;</span><span class="p">],</span> <span class="n">model</span><span class="o">.</span><span class="n">h_dist</span><span class="o">.</span><span class="n">dim</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">),</span>
+            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;h_p&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">H_p</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="n">results</span><span class="p">,</span> <span class="n">samples</span><span class="p">,</span> <span class="n">updates</span><span class="p">,</span> <span class="n">constants</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span>
+        <span class="n">X_i</span><span class="p">,</span> <span class="n">h_p</span><span class="o">=</span><span class="n">H_p</span><span class="p">,</span> <span class="o">**</span><span class="n">inference_args</span><span class="p">)</span>
+
+    <span class="n">updates</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">persistent</span><span class="p">:</span>
+        <span class="n">updates</span> <span class="o">+=</span> <span class="n">theano</span><span class="o">.</span><span class="n">OrderedUpdates</span><span class="p">([(</span><span class="n">H_p</span><span class="p">,</span> <span class="n">samples</span><span class="p">[</span><span class="s1">&#39;hs&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">])])</span>
+
+    <span class="n">cost</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="s1">&#39;cost&#39;</span><span class="p">]</span>
+    <span class="n">extra_outs</span> <span class="o">=</span> <span class="p">[</span><span class="n">results</span><span class="p">[</span><span class="s1">&#39;free_energy&#39;</span><span class="p">]]</span>
+    <span class="n">extra_outs_keys</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;cost&#39;</span><span class="p">,</span> <span class="s1">&#39;free_energy&#39;</span><span class="p">]</span>
+
+    <span class="n">l1_decay</span> <span class="o">=</span> <span class="n">learning_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;l1_decay&#39;</span><span class="p">)</span>
+    <span class="n">l2_decay</span> <span class="o">=</span> <span class="n">learning_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;l2_decay&#39;</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="ow">not</span><span class="p">(</span><span class="n">l1_decay</span> <span class="ow">and</span> <span class="n">l2_decay</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">l1_decay</span><span class="p">:</span>
+        <span class="n">l1_cost</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">l1_decay</span><span class="p">(</span><span class="n">l1_decay</span><span class="p">)</span>
+        <span class="n">results</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">l1_cost</span><span class="o">=</span><span class="n">l1_cost</span><span class="p">)</span>
+        <span class="n">cost</span> <span class="o">+=</span> <span class="n">l1_cost</span>
+    <span class="k">if</span> <span class="n">l2_decay</span><span class="p">:</span>
+        <span class="n">l2_cost</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">l2_decay</span><span class="p">(</span><span class="n">l2_decay</span><span class="p">)</span>
+        <span class="n">results</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">l1_cost</span><span class="o">=</span><span class="n">l2_cost</span><span class="p">)</span>
+        <span class="n">cost</span> <span class="o">+=</span> <span class="n">l2_cost</span>
+
+    <span class="c1"># ==========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Test functions&#39;</span><span class="p">)</span>
+    <span class="n">f_test_keys</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    <span class="n">f_test</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">([</span><span class="n">X</span><span class="p">],</span> <span class="n">results</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">z_updates</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">update_partition_function</span><span class="p">(</span><span class="n">K</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+        <span class="n">f_update_partition</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">([],</span> <span class="p">[],</span> <span class="n">updates</span><span class="o">=</span><span class="n">z_updates</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">NotImplementedError</span><span class="p">:</span>
+        <span class="n">f_update_partition</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="n">H0</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">trng</span><span class="o">.</span><span class="n">binomial</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">h_dist</span><span class="o">.</span><span class="n">dim</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">floatX</span><span class="p">)</span>
+    <span class="n">s_outs</span><span class="p">,</span> <span class="n">s_updates</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">H0</span><span class="p">,</span> <span class="n">n_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+    <span class="n">f_chain</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span>
+        <span class="p">[],</span> <span class="n">model</span><span class="o">.</span><span class="n">v_dist</span><span class="o">.</span><span class="n">get_center</span><span class="p">(</span><span class="n">s_outs</span><span class="p">[</span><span class="s1">&#39;pvs&#39;</span><span class="p">]),</span> <span class="n">updates</span><span class="o">=</span><span class="n">s_updates</span><span class="p">)</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Setting final tparams and save function&#39;</span><span class="p">)</span>
+    <span class="n">excludes</span> <span class="o">=</span> <span class="n">learning_args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;excludes&#39;</span><span class="p">)</span>
+    <span class="n">tparams</span><span class="p">,</span> <span class="n">all_params</span> <span class="o">=</span> <span class="n">set_params</span><span class="p">(</span><span class="n">tparams</span><span class="p">,</span> <span class="n">updates</span><span class="p">,</span> <span class="n">excludes</span><span class="o">=</span><span class="n">excludes</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="n">tparams</span><span class="p">,</span> <span class="n">outfile</span><span class="p">):</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">get_value</span><span class="p">())</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">all_params</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="n">d</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">dim_in</span><span class="o">=</span><span class="n">dim_in</span><span class="p">,</span>
+            <span class="n">dim_h</span><span class="o">=</span><span class="n">dim_h</span><span class="p">,</span>
+            <span class="n">dataset_args</span><span class="o">=</span><span class="n">dataset_args</span>
+        <span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">savez</span><span class="p">(</span><span class="n">outfile</span><span class="p">,</span> <span class="o">**</span><span class="n">d</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">save_images</span><span class="p">():</span>
+        <span class="n">w</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">W</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">train</span><span class="o">.</span><span class="n">save_images</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="s1">&#39;weights.png&#39;</span><span class="p">))</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Getting gradients and building optimizer.&#39;</span><span class="p">)</span>
+    <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_grad_updates</span><span class="p">,</span> <span class="n">learning_args</span> <span class="o">=</span> <span class="n">set_optimizer</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">X</span><span class="p">],</span> <span class="n">cost</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">updates</span><span class="p">,</span> <span class="n">extra_outs</span><span class="p">,</span> <span class="o">**</span><span class="n">learning_args</span><span class="p">)</span>
+
+    <span class="c1"># ========================================================================</span>
+    <span class="n">print_section</span><span class="p">(</span><span class="s1">&#39;Actually running (main loop)&#39;</span><span class="p">)</span>
+    <span class="n">monitor</span> <span class="o">=</span> <span class="n">SimpleMonitor</span><span class="p">()</span>
+
+    <span class="n">main_loop</span><span class="p">(</span>
+        <span class="n">train</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span>
+        <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_grad_updates</span><span class="p">,</span> <span class="n">f_test</span><span class="p">,</span> <span class="n">f_test_keys</span><span class="p">,</span>
+        <span class="n">f_extra</span><span class="o">=</span><span class="n">f_update_partition</span><span class="p">,</span>
+        <span class="n">test_every</span><span class="o">=</span><span class="n">test_every</span><span class="p">,</span>
+        <span class="n">show_every</span><span class="o">=</span><span class="n">show_every</span><span class="p">,</span>
+        <span class="n">save</span><span class="o">=</span><span class="n">save</span><span class="p">,</span>
+        <span class="n">save_images</span><span class="o">=</span><span class="n">save_images</span><span class="p">,</span>
+        <span class="n">monitor</span><span class="o">=</span><span class="n">monitor</span><span class="p">,</span>
+        <span class="n">out_path</span><span class="o">=</span><span class="n">out_path</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">extra_outs_keys</span><span class="o">=</span><span class="n">extra_outs_keys</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">learning_args</span><span class="p">)</span></div>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">make_argument_parser</span><span class="p">()</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-i&#39;</span><span class="p">,</span> <span class="s1">&#39;--save_images&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">)</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+    <span class="n">exp_dict</span> <span class="o">=</span> <span class="n">set_experiment</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+
+    <span class="n">train</span><span class="p">(</span><span class="o">**</span><span class="n">exp_dict</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../demos_neuroimaging.html" >cortex.demos.demos_neuroimaging</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

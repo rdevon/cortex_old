@@ -1,0 +1,451 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.analysis.mri.rois &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../../index.html" />
+    <link rel="up" title="cortex" href="../../../cortex.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../../cortex.html" accesskey="U">cortex</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.analysis.mri.rois</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Module for finding ROIS for MRI niftis</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">multiprocessing</span> <span class="kn">as</span> <span class="nn">mp</span>
+<span class="kn">from</span> <span class="nn">nipy</span> <span class="kn">import</span> <span class="n">load_image</span>
+<span class="kn">from</span> <span class="nn">nipy</span> <span class="kn">import</span> <span class="n">save_image</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
+<span class="kn">import</span> <span class="nn">pickle</span>
+<span class="kn">import</span> <span class="nn">pprint</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">reshape</span><span class="p">,</span> <span class="n">zeros</span><span class="p">,</span> <span class="n">where</span><span class="p">,</span> <span class="n">std</span><span class="p">,</span>
+    <span class="n">argmax</span><span class="p">,</span> <span class="n">sqrt</span><span class="p">,</span> <span class="n">ceil</span><span class="p">,</span> <span class="n">floor</span><span class="p">,</span> <span class="n">sign</span><span class="p">,</span>
+    <span class="n">negative</span><span class="p">,</span> <span class="n">linspace</span><span class="p">,</span> <span class="n">double</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">import</span> <span class="nn">subprocess</span>
+<span class="kn">from</span> <span class="nn">sys</span> <span class="kn">import</span> <span class="n">stdout</span>
+
+
+<span class="c1"># These are general names of regions for use elsewhere.</span>
+<span class="n">singles</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Postcentral Gyrus&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Cingulate Gyrus&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Thalamus&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Superior Frontal Gyrus&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Pyramis&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Caudate&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Declive&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Cuneus&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Ulvula&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Medial Frontal Gyrus&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Precuneus&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Lingual Gyrus&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Paracentral Lobule&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Semi-Lunar Lobule&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Posterior Cingulate&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Culmen&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Cerebellar Tonsil&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Cingulate Gyrus&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Middle Frontal Gyrus&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;Anterior Cingulate&#39;</span>
+           <span class="p">]</span>
+
+<span class="c1"># Larger functional regions. Not used here, but can be referenced.</span>
+<span class="n">SC</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Caudate&#39;</span><span class="p">,</span><span class="s1">&#39;Putamen&#39;</span><span class="p">,</span><span class="s1">&#39;Thalamus&#39;</span><span class="p">,</span><span class="s1">&#39;Caudate Tail&#39;</span><span class="p">,</span><span class="s1">&#39;Caudate Body&#39;</span><span class="p">,</span><span class="s1">&#39;Caudate Head&#39;</span><span class="p">]</span>
+<span class="n">AUD</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Transverse Temporal Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Superior Temporal Gyrus&#39;</span><span class="p">]</span>
+<span class="n">SM</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Superior Parietal Lobule&#39;</span><span class="p">,</span><span class="s1">&#39;Paracentral Lobule&#39;</span><span class="p">,</span><span class="s1">&#39;Postcentral Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Precentral Gyrus&#39;</span><span class="p">]</span> <span class="c1">#missing sma</span>
+<span class="n">VIS</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Fusiform Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Lingual Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Middle Occipital Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Superior Occipital Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Inferior Occipital Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Cuneus&#39;</span><span class="p">,</span><span class="s1">&#39;Middle Temporal Gyrus&#39;</span><span class="p">]</span> <span class="c1">#missing calcarine gyrus</span>
+<span class="n">CC</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Inferior Temporal Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Insula&#39;</span><span class="p">,</span><span class="s1">&#39;Inferior Frontal Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Inferior Parietal Lobule&#39;</span><span class="p">,</span><span class="s1">&#39;Middle Frontal Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Parahippocampal Gyrus&#39;</span><span class="p">]</span> <span class="c1">#missing mcc</span>
+<span class="n">DM</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Precuneus&#39;</span><span class="p">,</span><span class="s1">&#39;Superior Frontal Gyrus&#39;</span><span class="p">,</span><span class="s1">&#39;Posterior Cingulate&#39;</span><span class="p">,</span><span class="s1">&#39;Anterior Cingulate&#39;</span><span class="p">,</span><span class="s1">&#39;Angular Gyrus&#39;</span><span class="p">]</span>
+<span class="n">CB</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Cerebellar Tonsil&#39;</span><span class="p">,</span><span class="s1">&#39;Pyramis&#39;</span><span class="p">]</span>
+
+<div class="viewcode-block" id="lat_opposite"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.lat_opposite">[docs]</a><span class="k">def</span> <span class="nf">lat_opposite</span><span class="p">(</span><span class="n">side</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Returns the lateral opposite as defined by the keyword pair {&quot;Right&quot;, &quot;Left&quot;}</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">if</span> <span class="n">side</span> <span class="o">==</span> <span class="s1">&#39;Right&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="s1">&#39;Left&#39;</span>
+    <span class="k">elif</span> <span class="n">side</span> <span class="o">==</span> <span class="s1">&#39;Left&#39;</span><span class="p">:</span> <span class="k">return</span> <span class="s1">&#39;Right&#39;</span>
+    <span class="k">else</span><span class="p">:</span> <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Lateral side error, (</span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="n">side</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="check_pair"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.check_pair">[docs]</a><span class="k">def</span> <span class="nf">check_pair</span><span class="p">(</span><span class="n">toproi</span><span class="p">,</span> <span class="n">rois</span><span class="p">,</span> <span class="n">lr_cm</span><span class="p">):</span>
+    <span class="n">toproi_split</span> <span class="o">=</span> <span class="n">toproi</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">both</span> <span class="o">=</span> <span class="bp">False</span>
+    <span class="k">if</span> <span class="n">toproi_split</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;Left&#39;</span><span class="p">,</span> <span class="s1">&#39;Right&#39;</span><span class="p">]:</span>
+        <span class="k">for</span> <span class="n">roi</span> <span class="ow">in</span> <span class="n">rois</span><span class="p">:</span>
+            <span class="n">roi_split</span> <span class="o">=</span> <span class="n">roi</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">roi_split</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">toproi_split</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">roi_split</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">lat_opposite</span><span class="p">(</span><span class="n">toproi_split</span><span class="p">[</span><span class="mi">0</span><span class="p">])):</span>
+                <span class="n">both</span> <span class="o">=</span> <span class="bp">True</span>
+
+    <span class="k">if</span> <span class="n">both</span><span class="p">:</span>
+        <span class="n">toproi</span> <span class="o">=</span> <span class="s1">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="s1">&#39;(L+R)&#39;</span><span class="p">,</span><span class="n">toproi_split</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">lr_cm</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">9</span><span class="p">:</span>
+            <span class="n">toproi</span> <span class="o">=</span> <span class="n">toproi</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">,</span><span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">toproi</span></div>
+
+<div class="viewcode-block" id="find_clusters_from_3D"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.find_clusters_from_3D">[docs]</a><span class="k">def</span> <span class="nf">find_clusters_from_3D</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span> <span class="n">thr</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Function to use afni command line to find clusters from a 3D nifti.</span>
+
+<span class="sd">    This currently calls afni functions from command line.</span>
+<span class="sd">    TODO(dhjelm): change this to use nipy functions.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fnifti (str): Nifti file to process.</span>
+<span class="sd">        thr (float): threshold used for clusters.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list: clusters</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">fnifti</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">IOError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1"> not found&#39;</span> <span class="o">%</span> <span class="n">fnifti</span><span class="p">)</span>
+
+    <span class="n">cmd</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;3dclust -1Dformat -quiet -nosum -2thresh -2 </span><span class="si">%.2f</span><span class="s1"> &#39;</span>
+           <span class="s1">&#39;-dxyz=1 2 80 2&gt;/dev/null </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">thr</span><span class="p">,</span> <span class="n">fnifti</span><span class="p">))</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">14</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">16</span><span class="p">]</span>
+    <span class="n">field_strs</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;$</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">]</span>
+    <span class="n">tab_str</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\&quot;\\</span><span class="s1">t</span><span class="se">\&quot;</span><span class="s1">&#39;</span>
+    <span class="n">awk</span> <span class="o">=</span> <span class="s1">&#39;awk </span><span class="se">\&#39;</span><span class="s1">{ print &#39;</span> <span class="o">+</span> <span class="n">tab_str</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">field_strs</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;}</span><span class="se">\&#39;</span><span class="s1">&#39;</span>
+    <span class="n">cmdline</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="si">%s</span><span class="s1"> | </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">awk</span><span class="p">)</span>
+
+    <span class="n">proc</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span><span class="n">cmdline</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span> <span class="o">=</span> <span class="n">proc</span><span class="o">.</span><span class="n">communicate</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="s1">&#39;#**&#39;</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">split</span><span class="p">():</span> <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="n">cluster</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">o</span><span class="p">)</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">split</span><span class="p">()]</span>
+    <span class="k">return</span> <span class="n">cluster</span></div>
+
+<div class="viewcode-block" id="find_clusters_from_4D"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.find_clusters_from_4D">[docs]</a><span class="k">def</span> <span class="nf">find_clusters_from_4D</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">thr</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Function to use afni command line to find clusters from a 4D nifti.</span>
+
+<span class="sd">    TODO(dhjelm): change this to use nipy functions.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fnifti (str): Nifti file to process.</span>
+<span class="sd">        i (int): Index of the feature in the nifti file.</span>
+<span class="sd">        thr (float): threshold used for clusters.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list: List of 3d clusters.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">thr</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">))</span>
+
+    <span class="n">cmd</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;3dclust &quot;</span>
+           <span class="s2">&quot;-1Dformat -quiet -nosum -1dindex </span><span class="si">%d</span><span class="s2"> -1tindex </span><span class="si">%d</span><span class="s2"> -2thresh -2 </span><span class="si">%.2f</span><span class="s2"> &quot;</span>
+           <span class="s2">&quot;-dxyz=1 2 80 2&gt;/dev/null&quot;</span> <span class="o">%</span>
+           <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">thr</span><span class="p">))</span>
+    <span class="n">awk</span> <span class="o">=</span> <span class="s2">&quot;awk &#39;{ print $1</span><span class="se">\&quot;\t\&quot;</span><span class="s2">$2</span><span class="se">\&quot;\t\&quot;</span><span class="s2">$3</span><span class="se">\&quot;\t\&quot;</span><span class="s2">$4</span><span class="se">\&quot;\t\&quot;</span><span class="s2">$5</span><span class="se">\&quot;\t\&quot;</span><span class="s2">$6</span><span class="se">\&quot;\t\&quot;</span><span class="s2">$11</span><span class="se">\&quot;\t\&quot;</span><span class="s2">$14</span><span class="se">\&quot;\t\&quot;</span><span class="s2">$15</span><span class="se">\&quot;\t\&quot;</span><span class="s2">$16}&#39;&quot;</span>
+    <span class="n">cmdline</span> <span class="o">=</span> <span class="n">cmd</span> <span class="o">+</span> <span class="s2">&quot; &#39;</span><span class="si">%s</span><span class="s2">&#39;| &quot;</span> <span class="o">%</span> <span class="n">fnifti</span> <span class="o">+</span> <span class="n">awk</span>
+    <span class="n">proc</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span><span class="n">cmdline</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">err</span><span class="p">)</span> <span class="o">=</span> <span class="n">proc</span><span class="o">.</span><span class="n">communicate</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="s2">&quot;#**&quot;</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">split</span><span class="p">():</span> <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="n">clusters</span> <span class="o">=</span> <span class="n">float16</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">clusters</span></div>
+
+<div class="viewcode-block" id="check_grey"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.check_grey">[docs]</a><span class="k">def</span> <span class="nf">check_grey</span><span class="p">(</span><span class="n">coords</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Function to check if a particular cluster corresponds to grey matter.</span>
+
+<span class="sd">    This function uses the CA_N27_GW atlas. Other metrics could be used, but</span>
+<span class="sd">    this feature needs to be added.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        coords (tuple or list): Coordinates, should have length 3</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        float: probability of grey matter</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+    <span class="n">atlas</span> <span class="o">=</span> <span class="s1">&#39;CA_N27_GW&#39;</span>
+
+    <span class="c1"># where am I command.</span>
+    <span class="n">waicmd</span> <span class="o">=</span> <span class="s2">&quot;whereami -atlas </span><span class="si">%s</span><span class="s2"> -space MNI </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> 2&gt;/dev/null&quot;</span> <span class="o">%</span> <span class="p">((</span><span class="n">atlas</span><span class="p">,</span> <span class="p">)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
+    <span class="n">proc</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span><span class="n">waicmd</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">out</span><span class="p">,</span><span class="n">err</span><span class="p">)</span> <span class="o">=</span> <span class="n">proc</span><span class="o">.</span><span class="n">communicate</span><span class="p">()</span>
+
+    <span class="n">lines</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">patt</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s1">&#39;   Focus point: grey   \(p = ([0-9]\.[0-9]*)\)&#39;</span><span class="p">)</span>
+    <span class="n">prob</span> <span class="o">=</span> <span class="n">double</span><span class="p">([</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="p">[</span><span class="n">patt</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">line</span><span class="p">)</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">]</span> <span class="k">if</span> <span class="n">m</span><span class="p">])</span>
+
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">prob</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="n">prob</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="return_region"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.return_region">[docs]</a><span class="k">def</span> <span class="nf">return_region</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">atlas</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Function to return the region of interest as defined by the atlas.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        cluster (tuple or list): coordinates, should be length 3</span>
+<span class="sd">        atlas (str): name of atlas to use.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list: List of strings. This should be a list of all the regions</span>
+<span class="sd">            corresponding to a coordinate.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">assert</span> <span class="n">atlas</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;CA_N27_ML&#39;</span><span class="p">,</span> <span class="s1">&#39;CA_ML_18_MNIA&#39;</span><span class="p">,</span> <span class="s1">&#39;TT_Daemon&#39;</span><span class="p">],</span> <span class="s1">&#39;Atlas </span><span class="si">%s</span><span class="s1"> not supported yet.&#39;</span> <span class="o">%</span> <span class="n">atlas</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+
+    <span class="c1"># where am I command.</span>
+    <span class="n">waicmd</span> <span class="o">=</span> <span class="s1">&#39;whereami -atlas </span><span class="si">%s</span><span class="s1"> -space MNI </span><span class="si">%d</span><span class="s1"> </span><span class="si">%d</span><span class="s1"> </span><span class="si">%d</span><span class="s1"> 2&gt;/dev/null&#39;</span> <span class="o">%</span> <span class="p">((</span><span class="n">atlas</span><span class="p">,</span> <span class="p">)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
+    <span class="n">proc</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span><span class="n">waicmd</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">out</span><span class="p">,</span><span class="n">err</span><span class="p">)</span> <span class="o">=</span> <span class="n">proc</span><span class="o">.</span><span class="n">communicate</span><span class="p">()</span>
+
+    <span class="n">lines</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">patt</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="s1">&#39;   Focus point: (.*)&#39;</span><span class="p">)</span>
+    <span class="n">region</span> <span class="o">=</span> <span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="p">[</span><span class="n">patt</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">line</span><span class="p">)</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">]</span> <span class="k">if</span> <span class="n">m</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">region</span><span class="p">)):</span>
+        <span class="n">region</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">region</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
+
+    <span class="k">return</span> <span class="n">region</span></div>
+
+
+<div class="viewcode-block" id="find_region_names"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.find_region_names">[docs]</a><span class="k">def</span> <span class="nf">find_region_names</span><span class="p">(</span><span class="n">coords</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Get region names from a set of atlases.</span>
+
+<span class="sd">    Only 3 atlases are currently supported, but more could be added in the future.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        coords (tuple or list): coordinates, chould be length 3.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list: List of regions of interest corresponding to a cluster coordinate.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+
+    <span class="n">n27</span> <span class="o">=</span> <span class="s1">&#39;CA_N27_ML&#39;</span>
+    <span class="n">mnia</span> <span class="o">=</span> <span class="s1">&#39;CA_ML_18_MNIA&#39;</span>
+    <span class="n">tt</span> <span class="o">=</span> <span class="s1">&#39;TT_Daemon&#39;</span>
+
+    <span class="n">rois</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">atlas</span> <span class="ow">in</span> <span class="p">[</span><span class="n">n27</span><span class="p">,</span> <span class="n">mnia</span><span class="p">,</span> <span class="n">tt</span><span class="p">]:</span>
+        <span class="n">rois</span> <span class="o">+=</span> <span class="n">return_region</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">atlas</span><span class="p">)</span>
+
+    <span class="n">rois</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">rois</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">rois</span></div>
+
+<div class="viewcode-block" id="get_cluster_info"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.get_cluster_info">[docs]</a><span class="k">def</span> <span class="nf">get_cluster_info</span><span class="p">(</span><span class="n">clusters</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">clusters</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+
+    <span class="n">cluster_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">intensity_sum</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c1"># Retrieve information on all the clusters.</span>
+    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">clusters</span><span class="p">)</span> <span class="o">//</span> <span class="mi">10</span><span class="p">):</span>
+        <span class="n">cs</span> <span class="o">=</span> <span class="n">clusters</span><span class="p">[</span><span class="n">c</span> <span class="o">*</span> <span class="mi">10</span><span class="p">:</span> <span class="p">(</span><span class="n">c</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mi">10</span><span class="p">]</span>
+        <span class="n">intensity_sum</span> <span class="o">+=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">cs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">cs</span><span class="p">[</span><span class="mi">6</span><span class="p">])</span>
+
+        <span class="n">cm</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">([</span><span class="n">cs</span><span class="p">[</span><span class="n">x</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]])</span>
+        <span class="n">coords</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">([</span><span class="n">cs</span><span class="p">[</span><span class="n">x</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">]])</span>
+
+        <span class="n">rois</span> <span class="o">=</span> <span class="n">find_region_names</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+<span class="c1">#            grey_value = check_grey(coords)</span>
+
+        <span class="n">cluster_dict</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">coords</span> <span class="o">=</span> <span class="n">coords</span><span class="p">,</span>
+            <span class="n">volume</span> <span class="o">=</span> <span class="n">cs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">cm</span> <span class="o">=</span> <span class="n">cm</span><span class="p">,</span>
+            <span class="n">mean_intensity</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">cs</span><span class="p">[</span><span class="mi">6</span><span class="p">]),</span>
+            <span class="n">rois</span> <span class="o">=</span> <span class="n">rois</span>
+            <span class="p">)</span>
+<span class="c1">#                             &#39;grey_value&#39;: grey_value}</span>
+
+    <span class="c1"># Given the cluster information found above, we find the &#39;top&#39; cluster.</span>
+    <span class="c1"># The maximum clister is given by the one with the highest mean intensity * volume.</span>
+    <span class="n">max_int_prop</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">top_clust</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">cluster</span> <span class="ow">in</span> <span class="n">cluster_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="n">cluster</span><span class="p">[</span><span class="s1">&#39;int_prop&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">cluster</span><span class="p">[</span><span class="s1">&#39;mean_intensity&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">cluster</span><span class="p">[</span><span class="s1">&#39;volume&#39;</span><span class="p">]</span> <span class="o">/</span>
+                               <span class="n">intensity_sum</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">cluster</span><span class="p">[</span><span class="s1">&#39;int_prop&#39;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">max_int_prop</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">cluster</span><span class="p">[</span><span class="s1">&#39;int_prop&#39;</span><span class="p">]):</span> <span class="c1"># why nan?</span>
+            <span class="n">max_int_prop</span> <span class="o">=</span> <span class="n">cluster</span><span class="p">[</span><span class="s1">&#39;int_prop&#39;</span><span class="p">]</span>
+            <span class="n">top_clust</span> <span class="o">=</span> <span class="n">cluster</span>
+
+    <span class="k">if</span> <span class="n">top_clust</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">cluster_dict</span><span class="p">[</span><span class="s1">&#39;top_clust&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">top_clust</span>
+
+    <span class="k">return</span> <span class="n">cluster_dict</span></div>
+
+<div class="viewcode-block" id="cluster_worker"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.cluster_worker">[docs]</a><span class="k">def</span> <span class="nf">cluster_worker</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span> <span class="n">thr</span><span class="p">,</span> <span class="n">roi_dict</span><span class="p">):</span>
+    <span class="n">clusters</span> <span class="o">=</span> <span class="n">find_clusters_from_3D</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span> <span class="n">thr</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">fnifti</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">fnifti</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">roi_dict</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_cluster_info</span><span class="p">(</span><span class="n">clusters</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="worker_helper"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.worker_helper">[docs]</a><span class="k">def</span> <span class="nf">worker_helper</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+    <span class="n">cluster_worker</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="find_rois"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.find_rois">[docs]</a><span class="k">def</span> <span class="nf">find_rois</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span> <span class="n">thr</span><span class="p">,</span> <span class="n">test</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Function for finding regions of interest from a nifti file.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        fnifti (str): path to the nifti file or list of paths to files</span>
+<span class="sd">        thr (float): threshold for clusters.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">        dict: regions of interest</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">print</span>
+    <span class="k">print</span><span class="p">(</span><span class="s1">&#39;Finding clusters from niftis&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">nifti</span> <span class="o">=</span> <span class="n">load_image</span><span class="p">(</span><span class="n">fnifti</span><span class="p">)</span>
+        <span class="n">num_features</span> <span class="o">=</span> <span class="n">nifti</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">roi_dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">num_features</span><span class="p">):</span>
+            <span class="n">clusters</span> <span class="o">=</span> <span class="n">find_clusters_from_4D</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">thr</span><span class="p">)</span>
+            <span class="n">roi_dict</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_cluster_info</span><span class="p">(</span><span class="n">clusters</span><span class="p">)</span>
+
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">num_features</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">fnifti</span><span class="p">)</span>
+        <span class="n">roi_dict</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Manager</span><span class="p">()</span><span class="o">.</span><span class="n">dict</span><span class="p">()</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Pool</span><span class="p">(</span><span class="n">num_features</span><span class="p">)</span>
+        <span class="n">args_iter</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">izip</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span>
+                                   <span class="n">itertools</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">thr</span><span class="p">),</span>
+                                   <span class="n">itertools</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">roi_dict</span><span class="p">))</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">worker_helper</span><span class="p">,</span> <span class="n">args_iter</span><span class="p">)</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="n">p</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+        <span class="n">roi_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">roi_dict</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s1">&#39;Type </span><span class="si">%s</span><span class="s1"> not supported&#39;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">(</span><span class="n">fnifti</span><span class="p">))</span>
+
+    <span class="n">roi_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">roi_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="k">print</span><span class="p">(</span><span class="s1">&#39;Finished. Found </span><span class="si">%d</span><span class="s1"> clusters&#39;</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">roi_dict</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">roi_dict</span></div>
+
+<div class="viewcode-block" id="save_roi_txt"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.save_roi_txt">[docs]</a><span class="k">def</span> <span class="nf">save_roi_txt</span><span class="p">(</span><span class="n">roi_dict</span><span class="p">,</span> <span class="n">out_file</span><span class="p">):</span>
+    <span class="nb">open</span><span class="p">(</span><span class="n">out_file</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">out_file</span><span class="p">,</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pprint</span><span class="o">.</span><span class="n">pprint</span><span class="p">(</span><span class="n">roi_dict</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">f</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.main">[docs]</a><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span> <span class="n">thr</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">out_file</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">out_txt</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="n">roi_dict</span> <span class="o">=</span> <span class="n">find_rois</span><span class="p">(</span><span class="n">fnifti</span><span class="p">,</span> <span class="n">thr</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">out_txt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">save_roi_txt</span><span class="p">(</span><span class="n">roi_dict</span><span class="p">,</span> <span class="n">out_txt</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">out_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">roi_dict</span><span class="p">,</span> <span class="nb">open</span><span class="p">(</span><span class="n">out_file</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">roi_dict</span></div>
+
+<div class="viewcode-block" id="make_argument_parser"><a class="viewcode-back" href="../../../../source/cortex.analysis.mri.html#cortex.analysis.mri.rois.make_argument_parser">[docs]</a><span class="k">def</span> <span class="nf">make_argument_parser</span><span class="p">():</span>
+    <span class="sd">&#39;&#39;&#39;Creates an ArgumentParser to read the options for this script from</span>
+<span class="sd">    sys.argv</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;nifti&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Nifti file to be processed.&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--out&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Output pickle file of roi dict.&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;--txt&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Readable txt file of rois.&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">parser</span></div>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">make_argument_parser</span><span class="p">()</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+    <span class="n">roi_dict</span> <span class="o">=</span> <span class="n">main</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">nifti</span><span class="p">,</span> <span class="n">out_file</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">out</span><span class="p">,</span> <span class="n">out_txt</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">txt</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">out</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">and</span> <span class="n">args</span><span class="o">.</span><span class="n">txt</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">print</span> <span class="n">roi_dict</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../../cortex.html" >cortex</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

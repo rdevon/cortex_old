@@ -1,5 +1,5 @@
-'''
-Module for RBM class
+'''Module for RBM class.
+
 '''
 
 from collections import OrderedDict
@@ -26,6 +26,19 @@ def unpack(dim_h=None,
            dim_in=None,
            data_iter=None,
            **model_args):
+    '''Unpacks already trained RBM.
+
+    Args:
+        dim_h (int): hidden dimensionality.
+        dim_in (int): input dimensionality.
+        data_iter (Dataset): dataset iterator.
+        **model_args: keyword arguments for saved numpy arrays
+
+    Returns:
+        list: list of Layers. Just the RBM.
+        dict: keyword arguements for saved numpy arrays for unpacking.
+
+    '''
 
     dim_in = int(dim_in)
     dim_h = int(dim_h)
@@ -43,24 +56,26 @@ class RBM(Layer):
     Currently supports only binary hidden units.
 
     Attributes:
-        h_dist: Distribution, conditional distribution of hiddens.
-        v_dist: Distribution, conditional distribution of visibles.
-        dim_h: int, number of hidden units.
-        dim_v: int, number of visible units.
-        W: T.tensor, weights
-        log_Z: T.tensor, current approximation of the log marginal.
-        std_log_Z: T.tensor, current std of the approximate log marginal.
-        mean_image: T.tensor, used for marginal approximation.
+        h_dist (Distribution): conditional distribution of hiddens.
+        v_dist (Distribution): conditional distribution of visibles.
+        dim_h (int): number of hidden units.
+        dim_v (int): number of visible units.
+        W (T.tensor): weights
+        log_Z (T.tensor): current approximation of the log marginal.
+        std_log_Z (T.tensor): current std of the approximate log marginal.
+        mean_image (T.tensor): used for marginal approximation.
+
     '''
     def __init__(self, dim_v, dim_h, mean_image=None, name='rbm',
                  v_dist='binomial', h_dist='binomial', **kwargs):
         '''Init method for RBM class.
 
         Args:
-            dim_v: int, number of visible layer units
-            dim_h: int, number of hidden layer units
-            mean_image: np.array (optional), used for marginal approximation.
+            dim_v (int): number of visible layer units
+            dim_h (int): number of hidden layer units
+            mean_image (Optional[numpy.array]): used for marginal approximation.
                 if None, then set to 0.5.
+
         '''
 
         if v_dist is None:
@@ -82,7 +97,14 @@ class RBM(Layer):
 
     @staticmethod
     def factory(dim_v=None, dim_h=None, **kwargs):
-        '''Convenience factory method'''
+        '''Convenience factory method.
+
+        Args:
+            dim_v (int): visible dimensionality.
+            dim_h (int): hidden dimensionality.
+            **kwargs: additional keyword arguments.
+
+        '''
         return RBM(dim_v, dim_h, **kwargs)
 
     def set_params(self):
@@ -101,45 +123,121 @@ class RBM(Layer):
         return [self.W] + self.v_dist.get_params() + self.h_dist.get_params()
 
     def split_params(self, *params):
+        '''Splits parameters between visible and hidden.
+
+        Args:
+            *params: shared variables.
+
+        '''
         W = params[0]
         v_params = params[1:1+self.v_dist.n_params]
         h_params = params[1+self.v_dist.n_params:]
         return W, v_params, h_params
 
     def pv_h(self, h):
-        '''Function for probility of v given h'''
+        '''Function for probility of v given h
+
+        Args:
+            h (T.tensor): hidden state.
+
+        Returns:
+            T.tensor: conditional visible probability
+
+        '''
         return self.step_pv_h(h, *self.get_params())
 
     def ph_v(self, x):
-        '''Function for probability of h given v'''
+        '''Function for probability of h given v.
+
+        Args:
+            x (T.tensor): visible state.
+
+        Returns:
+            T.tensor: conditional hidden probability.
+
+        '''
         return self.step_ph_v(x, *self.get_params())
 
     def step_pv_h(self, h, *params):
-        '''Step function for cacluating probility of v given h.'''
+        '''Step function for cacluating probility of v given h.
+
+        Args:
+            h (T.tensor): hidden state.
+            *params: theano shared variables.
+
+        Returns:
+            T.tensor: conditional visible probability.
+
+        '''
         W, v_params, h_params = self.split_params(*params)
         h = self.h_dist.scale_for_energy_model(h, *h_params)
         center = T.dot(h, W.T) + v_params[0]
         return self.v_dist.get_prob(*([center] + [v[None, :] for v in v_params[1:]]))
 
     def step_ph_v(self, x, *params):
-        '''Step function for probability of h given v'''
+        '''Step function for probability of h given v.
+
+        Args:
+            x (T.tensor): visible state.
+            *params: theano shared variables.
+
+        Returns:
+            T.tensor: conditional hidden probability.
+
+        '''
         W, v_params, h_params = self.split_params(*params)
         x = self.v_dist.scale_for_energy_model(x, *v_params)
         center = T.dot(x, W) + self.h_dist.get_center(*h_params)
         return self.h_dist.get_prob(center, *(h_params[1:]))
 
     def step_sv_h(self, r, h, *params):
-        '''Step function for samples from v given h'''
+        '''Step function for samples from v given h.
+
+        Args:
+            r (theano.randomstream): random variables.
+            h (T.tensor): hidden state.
+            *params: theano shared variables.
+
+        Returns:
+            T.tensor: samples.
+            T.tensor: conditional visible probability.
+
+        '''
         p = self.step_pv_h(h, *params)
         return self.v_dist.step_sample(r, p), p
 
     def step_sh_v(self, r, x, *params):
-        '''Step function for sampling h given v'''
+        '''Step function for sampling h given v.
+
+        Args:
+            r (theano.randomstream): random variables.
+            x (T.tensor): visible state.
+            *params: theano shared variables.
+
+        Returns:
+            T.tensor: samples.
+            T.tensor: conditional hidden probability.
+
+        '''
         p = self.step_ph_v(x, *params)
         return self.h_dist.step_sample(r, p), p
 
     def step_gibbs(self, r_h, r_v, h, *params):
-        '''Step Gibbs sample'''
+        '''Step Gibbs sample.
+
+        Args:
+            r_h (theano.randomstream): random variables for hiddens.
+            r_v (theano.randomstream): random variables for visibles.
+            h (T.tensor): hidden state.
+            *params: theano shared variables.
+
+        Returns:
+            T.tensor: hidden samples.
+            T.tensor: visible samples.
+            T.tensor: conditional hidden probability.
+            T.tensor: conditional visible probability.
+
+        '''
         v, pv = self.step_sv_h(r_v, h, *params)
         h, ph = self.step_sh_v(r_h, v, *params)
         return h, v, ph, pv
@@ -150,12 +248,14 @@ class RBM(Layer):
         Sampling starts from hidden state (arbitrary design choice).
 
         Args:
-            h0: T.tensor, Initial hidden layer state.
-            n_steps: int, number of Gibbs steps.
+            h0 (T.tensor): Initial hidden layer state.
+            n_steps (int): number of Gibbs steps.
+
         Returns:
-            results: OrderedDict, all of the visible and hidden states as well
-                as the probability densities from Gibbs sampling.
-            updates: OrderedUpdates, from scan
+            OrderedDict: all of the visible and hidden states as well as the \
+                probability densities from Gibbs sampling.
+            theano.OrderedUpdates: updates.
+
         '''
 
         r_vs = self.trng.uniform(size=(n_steps, h0.shape[0], self.v_dist.dim), dtype=floatX)
@@ -179,9 +279,27 @@ class RBM(Layer):
         return results, updates
 
     def l2_decay(self, gamma):
+        '''l2 decay cost:
+
+        Args:
+            gamma (float)
+
+        Returns:
+            T.tensor: l2 cost.
+
+        '''
         return gamma * (self.W ** 2).sum()
 
     def l1_decay(self, gamma):
+        '''l1 decay cost:
+
+        Args:
+            gamma (float)
+
+        Returns:
+            T.tensor: l1 cost.
+
+        '''
         return gamma * abs(self.W).sum()
 
     def reconstruct(self, x):
@@ -190,10 +308,12 @@ class RBM(Layer):
         Performs one step of Gibbs.
 
         Args:
-            x: T.tensor, input
+            x (T.tensor): input
+
         Returns:
-            pv: T.tensor, visible conditional probability density from
-                hidden sampled from p(h | x)
+            pv (T.tensor): visible conditional probability density from
+                hidden sampled from :math:`p(h | x)`
+
         '''
         r = self.trng.uniform(
             size=(x.shape[0], self.h_dist.dim),
@@ -205,7 +325,15 @@ class RBM(Layer):
         return pv
 
     def estimate_nll(self, X):
-        '''Estimate the NLL using the estimate of log_Z.'''
+        '''Estimate the :math:`-\log p(x)` using the estimate of :math:`log_Z`.
+
+        Args:
+            X (T.tensor): data samples.
+
+        Returns:
+            T.tensor: NLL estimate.
+
+        '''
         fe = self.free_energy(X)
         return fe.mean() + self.log_Z
 
@@ -213,19 +341,24 @@ class RBM(Layer):
                        W_a, b_a, c_a, W_b, b_b, c_b):
         '''Step Gibbs sample for AIS.
 
-        Only works for Binomial / Binomial
-        Gibbs sampling for the transition operator that keeps p*_{k-1} invariant.
+        Gibbs sampling for the transition operator that keeps
+        :math:`p^{\star}_{k-1}` invariant.
+
+        Note:
+            Only works for Binomial / Binomial RBMs
 
         Args:
-            r_h_a: T.tensor, random tensor for sampling h_a.
-            r_h_b: T.tensor, random tensor for sampling h_b.
-            r_v: T.tensor, random tensor for sampling v.
-            v: T.tensor, input to T_{k-1}(.|v_{k-1})
-            beta: float, annealing factor.
-            W_a, b_a, c_a: T.tensor, parameters of RBM a.
-            W_b, b_b, c_b: T.tensor, parameters of RBM b.
+            r_h_a (T.tensor): random tensor for sampling h_a.
+            r_h_b (T.tensor): random tensor for sampling h_b.
+            r_v (T.tensor): random tensor for sampling v.
+            v (T.tensor) input to :math:`T_{k-1}(.|v_{k-1})`.
+            beta (float): annealing factor.
+            W_a, b_a, c_a (T.tensor): parameters of RBM a.
+            W_b, b_b, c_b (T.tensor): parameters of RBM b.
+
         Returns:
-            v: T.tensor, sample v_k \sim T_{k-1}(.|v_{k-1}).
+            T.tensor: sample :math:`v_k \sim T_{k-1}(.|v_{k-1})`.
+
         '''
         W_a = (1 - beta) * W_a
         b_a = (1 - beta) * b_a
@@ -247,14 +380,17 @@ class RBM(Layer):
     def update_partition_function(self, K=10000, M=100):
         '''Updates the partition function.
 
-        Only works for Binomial / Binomial.
+        Note:
+            Only works for Binomial / Binomial.
 
         Args:
-            K: int, number of AIS steps.
-            M: int, number of AIS runs.
+            K (int): number of AIS steps.
+            M (int): number of AIS runs.
+
         Returns:
-            results: OrderedDict, results from AIS.
-            updates: OrderedUpdates, updates for partition function.
+            OrderedDict: results from AIS.
+            OrderedUpdates: updates for partition function.
+
         '''
 
         if not (isinstance(self.v_dist, Binomial) and isinstance(self.h_dist, Binomial)):
@@ -275,24 +411,37 @@ class RBM(Layer):
     def ais(self, K, M):
         '''Performs AIS to estimate the log of the partition function, Z.
 
-        Only works for Binomial / Binomial.
+        Note:
+            Only works for Binomial / Binomial.
 
         Args:
-            K, int. Number of annealing steps.
-            M: int. Number of annealing runs.
+            K (int): Number of annealing steps.
+            M (int): Number of annealing runs.
+
         Returns:
-            log_za: T.tensor.
-            d_logz: T.tensor.
-            var_dlogz: T.tensor.
-            log_ws: T.tensor, log weights.
-            xs[-1]: T.tensor, samples.
+            T.tensor: :math:`log Z_a`.
+            T.tensor: :math:`d \log Z`.
+            T.tensor: variance of :math:`d \log Z`.
+            T.tensor: log weights.
+            T.tensor: samples.
+
         '''
 
         if not (isinstance(self.v_dist, Binomial) and isinstance(self.h_dist, Binomial)):
             raise NotImplementedError('Only binomial / binomial RBM supported for AIS.')
 
         def free_energy(x, beta, *params):
-            '''Calculates the free energy from the annealed distribution.'''
+            '''Calculates the free energy from the annealed distribution.
+
+            Args:
+                x (T.tensor): samples.
+                beta (int): beta constant (for annealing).
+                *params: shared variables.
+
+            Returns:
+                T.tensor: free energy.
+
+            '''
             fe_a = self.step_free_energy(x, 1. - beta, *(params[:3]))
             fe_b = self.step_free_energy(x, beta, *(params[3:]))
             return fe_a + fe_b
@@ -301,7 +450,6 @@ class RBM(Layer):
             return (k / float(K)).astype(floatX)
 
         def step_anneal(r_h_a, r_h_b, r_v, k, log_w, x, *params):
-            '''Step annealing function for scan.'''
             beta_ = get_beta(k - 1)
             beta  = get_beta(k)
             log_w = log_w + free_energy(x, beta_, *params) - free_energy(x, beta, *params)
@@ -343,7 +491,17 @@ class RBM(Layer):
         return log_za, d_logz, var_dlogz, log_ws, xs[-1]
 
     def step_free_energy(self, x, beta, *params):
-        '''Step free energy function.'''
+        '''Step free energy function.
+
+        Args:
+            x (T.tensor): data sample.
+            beta (float): beta value for annealing.
+            *params: theano shared variables.
+
+        Returns:
+            T.tensor: free energy.
+
+        '''
         W, v_params, h_params = self.split_params(*params)
 
         vis_term = beta * self.v_dist.get_energy_bias(x, *v_params)
@@ -353,7 +511,17 @@ class RBM(Layer):
         return fe
 
     def step_free_energy_h(self, h, beta, *params):
-        '''Step free energy function for hidden states.'''
+        '''Step free energy function for hidden states.
+
+        Args:
+            h (T.tensor): hidden sample.
+            beta (float): beta value for annealing.
+            *params: theano shared variables.
+
+        Returns:
+            T.tensor: free energy.
+
+        '''
         W, v_params, h_params = self.split_params(*params)
 
         hid_term = beta * self.h_dist.get_energy_bias(h, *h_params)
@@ -363,7 +531,15 @@ class RBM(Layer):
         return fe
 
     def free_energy(self, x):
-        '''Free energy function'''
+        '''Free energy function.
+
+        Args:
+            x (T.tensor): data sample.
+
+        Returns:
+            T.tensor: free energy.
+
+        '''
         if x.ndim == 3:
             reduce_dims = (x.shape[0], x.shape[1])
             x = x.reshape((reduce_dims[0] * reduce_dims[1], x.shape[2]))
@@ -377,7 +553,15 @@ class RBM(Layer):
         return fe
 
     def free_energy_h(self, h):
-        '''Free energy function for hidden states.'''
+        '''Free energy function for hidden states.
+
+        Args:
+            h (T.tensor): hidden sample.
+
+        Returns:
+            T.tensor: free energy.
+
+        '''
         if h.ndim == 3:
             reduce_dims = (h.shape[0], h.shape[1])
             h = h.reshape((reduce_dims[0] * reduce_dims[1], h.shape[2]))
@@ -391,7 +575,16 @@ class RBM(Layer):
         return fe
 
     def energy(self, v, h):
-        '''Energy of a visible, hidden configuration.'''
+        '''Energy of a visible, hidden configuration.
+
+        Args:
+            v (T.tensor): visible sample.
+            h (T.tensor): hidden sample.
+
+        Returns:
+            T.tensor: energies.
+
+        '''
 
         if v.ndim == 3:
             reduce_dims = (v.shape[0], v.shape[1])
@@ -417,11 +610,29 @@ class RBM(Layer):
         return energy
 
     def v_neg_log_prob(self, x, p):
-        '''Convenience negative log prob function.'''
+        '''Convenience negative log prob function.
+
+        Args:
+            x (T.tensor): visible sample.
+            p (T.tensor): probability.
+
+        Returns:
+            T.tensor: negative log probability.
+
+        '''
         return self.v_dist.neg_log_prob(x, p)
 
     def h_neg_log_prob(self, h, p):
-        '''Convenience negative log prob function.'''
+        '''Convenience negative log prob function.
+
+        Args:
+            h (T.tensor): hidden sample.
+            p (T.tensor): probability.
+
+        Returns:
+            T.tensor: negative log probability.
+
+        '''
         return self.h_dist.neg_log_prob(h, p)
 
     def __call__(self, x, h_p=None, n_steps=1, n_chains=10):
@@ -431,15 +642,16 @@ class RBM(Layer):
         Gibbs chain.
 
         Args:
-            x: T.tensor, input visible state.
-            h_p: T.tensor (optional), for PCD.
-            n_steps: int, number of Gibbs steps.
-            n_chains: int (optional), for CD.
+            x (T.tensor): input visible state.
+            h_p  (Optional[T.tensor]): for PCD.
+            n_steps (int): number of Gibbs steps.
+            n_chains (Optional[int]): for CD.
         Returns:
-            results: OrderedDict, dictionary of results, all nums.
-            samples: OrderedDict, dictionary of results, all arrays.
-            updates: OrderedUpdates.
-            []: (constants, TODO)
+            OrderedDict: dictionary of results, all nums.
+            OrderedDict: dictionary of results, all arrays.
+            theano.OrderedUpdates: updates.
+            list: constants (empty).
+
         '''
         ph0 = self.step_ph_v(x, *self.get_params())
         if h_p is None:

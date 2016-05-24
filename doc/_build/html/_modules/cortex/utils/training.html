@@ -1,0 +1,649 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.utils.training &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex" href="../../cortex.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" accesskey="U">cortex</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.utils.training</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Generic training scripts.</span>
+
+<span class="sd">These scripts are meant as a basic example for building scripts for training,</span>
+<span class="sd">not as a basis for all training.</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">glob</span> <span class="kn">import</span> <span class="n">glob</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
+<span class="kn">from</span> <span class="nn">progressbar</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Bar</span><span class="p">,</span>
+    <span class="n">Percentage</span><span class="p">,</span>
+    <span class="n">ProgressBar</span><span class="p">,</span>
+    <span class="n">RotatingMarker</span><span class="p">,</span>
+    <span class="n">SimpleProgress</span><span class="p">,</span>
+    <span class="n">Timer</span>
+<span class="p">)</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+<span class="kn">import</span> <span class="nn">time</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">op</span>
+<span class="kn">from</span> <span class="nn">.learning_scheduler</span> <span class="kn">import</span> <span class="n">Scheduler</span>
+<span class="kn">from</span> <span class="nn">.tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">check_bad_nums</span><span class="p">,</span>
+    <span class="n">itemlist</span><span class="p">,</span>
+    <span class="n">load_experiment</span><span class="p">,</span>
+    <span class="n">load_model</span><span class="p">,</span>
+    <span class="n">resolve_path</span><span class="p">,</span>
+    <span class="n">update_dict_of_lists</span><span class="p">,</span>
+    <span class="n">warn_kwargs</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="make_argument_parser"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.make_argument_parser">[docs]</a><span class="k">def</span> <span class="nf">make_argument_parser</span><span class="p">():</span>
+    <span class="sd">&#39;&#39;&#39;Generic experiment parser.</span>
+
+<span class="sd">    Generic parser takes the experiment yaml as the main argument, but has some</span>
+<span class="sd">    options for reloading, etc. This parser can be easily extended using a</span>
+<span class="sd">    wrapper method.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        argparse.parser</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;experiment&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="s1">&#39;--out_path&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Output path for stuff&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-r&#39;</span><span class="p">,</span> <span class="s1">&#39;--load_last&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-l&#39;</span><span class="p">,</span> <span class="s1">&#39;--load_model&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-n&#39;</span><span class="p">,</span> <span class="s1">&#39;--name&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">parser</span></div>
+
+<div class="viewcode-block" id="make_argument_parser_test"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.make_argument_parser_test">[docs]</a><span class="k">def</span> <span class="nf">make_argument_parser_test</span><span class="p">():</span>
+    <span class="sd">&#39;&#39;&#39;Generic experiment parser for testing.</span>
+
+<span class="sd">    Takes the experiment directory as the argument in command line.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        argparse.parser</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;experiment_dir&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-m&#39;</span><span class="p">,</span> <span class="s1">&#39;--mode&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s1">&#39;valid&#39;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Dataset mode: valid, test, or train&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-b&#39;</span><span class="p">,</span> <span class="s1">&#39;--best&#39;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s1">&#39;store_true&#39;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Load best instead of last saved model.&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">parser</span></div>
+
+<div class="viewcode-block" id="set_experiment"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.set_experiment">[docs]</a><span class="k">def</span> <span class="nf">set_experiment</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Generic experiment setup method.</span>
+
+<span class="sd">    Extracts args from a parser like from `make_argument_parser`. These are</span>
+<span class="sd">    extracted into a dictionary for kwargs.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args (dict or argparse.args).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: dictionary of experiment arguments.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="k">if</span> <span class="s1">&#39;load_model&#39;</span> <span class="ow">in</span> <span class="n">args</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">load_model</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;load_model&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">load_model</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="k">if</span> <span class="s1">&#39;load_last&#39;</span> <span class="ow">in</span> <span class="n">args</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">load_last</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;load_last&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">load_last</span> <span class="o">=</span> <span class="bp">False</span>
+
+    <span class="n">args</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">args</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">)</span>
+    <span class="n">exp_dict</span> <span class="o">=</span> <span class="n">load_experiment</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="s1">&#39;experiment&#39;</span><span class="p">]))</span>
+    <span class="n">exp_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="s1">&#39;out_path&#39;</span> <span class="ow">in</span> <span class="n">exp_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">exp_dict</span><span class="p">[</span><span class="s1">&#39;out_path&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">resolve_path</span><span class="p">(</span><span class="s1">&#39;$outs&#39;</span><span class="p">)</span>
+
+    <span class="n">exp_dict</span><span class="p">[</span><span class="s1">&#39;out_path&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">exp_dict</span><span class="p">[</span><span class="s1">&#39;out_path&#39;</span><span class="p">],</span> <span class="n">exp_dict</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">])</span>
+
+    <span class="n">out_path</span> <span class="o">=</span> <span class="n">exp_dict</span><span class="p">[</span><span class="s1">&#39;out_path&#39;</span><span class="p">]</span>
+    <span class="k">print</span> <span class="s1">&#39;Saving to </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">out_path</span>
+    <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">out_path</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">()</span>
+    <span class="k">elif</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">out_path</span><span class="p">):</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">out_path</span><span class="p">))</span>
+
+    <span class="n">experiment</span> <span class="o">=</span> <span class="n">exp_dict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;experiment&#39;</span><span class="p">)</span>
+    <span class="n">shutil</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">experiment</span><span class="p">),</span> <span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">out_path</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">load_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">model_to_load</span> <span class="o">=</span> <span class="n">load_model</span>
+    <span class="k">elif</span> <span class="n">load_last</span><span class="p">:</span>
+        <span class="n">model_to_load</span> <span class="o">=</span> <span class="n">glob</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="s1">&#39;*last.npz&#39;</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">model_to_load</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="n">exp_dict</span><span class="p">[</span><span class="s1">&#39;model_to_load&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_to_load</span>
+    <span class="k">return</span> <span class="n">exp_dict</span></div>
+
+<div class="viewcode-block" id="reload_model"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.reload_model">[docs]</a><span class="k">def</span> <span class="nf">reload_model</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Reloads a model from argparse args.</span>
+
+<span class="sd">    Extracts model into a dictionary from argparse args like from</span>
+<span class="sd">    `make_argument_parser_test`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        args (argparse.args).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: dictionary of experiment arguments.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">exp_dir</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">experiment_dir</span><span class="p">)</span>
+    <span class="n">out_path</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">exp_dir</span><span class="p">,</span> <span class="s1">&#39;results&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">out_path</span><span class="p">):</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">out_path</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">yaml</span> <span class="o">=</span> <span class="n">glob</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">exp_dir</span><span class="p">,</span> <span class="s1">&#39;*.yaml&#39;</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">print</span> <span class="s1">&#39;Found yaml </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">yaml</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;yaml file not found. Cannot reload experiment.&#39;</span><span class="p">)</span>
+
+    <span class="n">exp_dict</span> <span class="o">=</span> <span class="n">load_experiment</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">yaml</span><span class="p">))</span>
+    <span class="n">exp_dict</span><span class="p">[</span><span class="s1">&#39;out_path&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">out_path</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">best</span><span class="p">:</span>
+            <span class="n">tag</span> <span class="o">=</span> <span class="s1">&#39;best&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">tag</span> <span class="o">=</span> <span class="s1">&#39;last&#39;</span>
+        <span class="n">model_file</span> <span class="o">=</span> <span class="n">glob</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">exp_dir</span><span class="p">,</span> <span class="s1">&#39;*</span><span class="si">%s</span><span class="s1">*npz&#39;</span> <span class="o">%</span> <span class="n">tag</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">print</span> <span class="s1">&#39;Found </span><span class="si">%s</span><span class="s1"> in </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="n">model_file</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">()</span>
+
+    <span class="n">params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">model_file</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">print</span> <span class="s1">&#39;Loading dataset arguments from saved model.&#39;</span>
+        <span class="n">dataset_args</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="s1">&#39;dataset_args&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="n">exp_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">dataset_args</span><span class="o">=</span><span class="n">dataset_args</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="n">exp_dict</span><span class="p">[</span><span class="s1">&#39;model_to_load&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model_file</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="nb">vars</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">args</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">)</span>
+    <span class="n">exp_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">args</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">exp_dict</span></div>
+
+<div class="viewcode-block" id="set_model"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.set_model">[docs]</a><span class="k">def</span> <span class="nf">set_model</span><span class="p">(</span><span class="n">create_model</span><span class="p">,</span> <span class="n">model_to_load</span><span class="p">,</span> <span class="n">unpack</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Convenience method for creating new or loading old model.</span>
+
+<span class="sd">    Object creation often can be reduced to 3 things: a creation method,</span>
+<span class="sd">    a saved model, and a means of unpacking the saved model. This method</span>
+<span class="sd">    attempts to summarize these into one method.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        create_model (function): method for creating model.</span>
+<span class="sd">            No arguments. Methods should be defined out-of-method, e.g.::</span>
+
+<span class="sd">                dim = 100</span>
+<span class="sd">                def create_model():</span>
+<span class="sd">                    return ModelClass(dim)</span>
+
+<span class="sd">            and then passed into `set_model`</span>
+<span class="sd">        model_to_load (str): path the npz file.</span>
+<span class="sd">        unpack (function): Takes model_to_load.</span>
+<span class="sd">            See `utils.tools.load_model` for details.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: dictionary of Layer subclass objects</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">model_to_load</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">models</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">load_model</span><span class="p">(</span><span class="n">model_to_load</span><span class="p">,</span> <span class="n">unpack</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">models</span> <span class="o">=</span> <span class="n">create_model</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">models</span></div>
+
+<div class="viewcode-block" id="set_tparams"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.set_tparams">[docs]</a><span class="k">def</span> <span class="nf">set_tparams</span><span class="p">(</span><span class="n">model_dict</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Generic tparams setter.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model_dict (dict)</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">tparams</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">model_dict</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">tparams</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">model</span><span class="o">.</span><span class="n">set_tparams</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">tparams</span></div>
+
+<div class="viewcode-block" id="set_params"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.set_params">[docs]</a><span class="k">def</span> <span class="nf">set_params</span><span class="p">(</span><span class="n">tparams</span><span class="p">,</span> <span class="n">updates</span><span class="p">,</span> <span class="n">excludes</span><span class="o">=</span><span class="p">[]):</span>
+    <span class="sd">&#39;&#39;&#39;Sets params, removing updates from tparams.</span>
+
+<span class="sd">    Convenience function to extract the theano parameters that will have</span>
+<span class="sd">    gradients calculated.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        tparams (dict): dictionary of Theano shared variables.</span>
+<span class="sd">        updates (theano.OrderedUpdates): used to exclude variables that have</span>
+<span class="sd">            gradients calculated.</span>
+<span class="sd">        excludes (list): list of keys to exclude from gradients or learning.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        OrderedDict: dict of variables that will have gradients calculated.</span>
+<span class="sd">        OrderedDict: dict of variables that will be saved.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">all_params</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">())</span>
+
+    <span class="n">tparams</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">v</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">updates</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="ow">and</span> <span class="p">(</span><span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">excludes</span><span class="p">))</span>
+
+    <span class="k">print</span> <span class="s1">&#39;Learned model params: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">tparams</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    <span class="k">print</span> <span class="s1">&#39;Saved params: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">all_params</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">all_params</span></div>
+
+<div class="viewcode-block" id="set_optimizer"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.set_optimizer">[docs]</a><span class="k">def</span> <span class="nf">set_optimizer</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">constants</span><span class="p">,</span> <span class="n">updates</span><span class="p">,</span> <span class="n">extra_outs</span><span class="p">,</span>
+                  <span class="n">optimizer</span><span class="o">=</span><span class="s1">&#39;sgd&#39;</span><span class="p">,</span> <span class="n">optimizer_args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                  <span class="o">**</span><span class="n">learning_args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Sets the parameter update functions with optimizer.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        inputs (T.tensor): input variables.</span>
+<span class="sd">        cost (T.scalar): cost</span>
+<span class="sd">        tparams (OrderedDict): directionary of tensor parameters</span>
+<span class="sd">        constants (list): list of constant tensors.</span>
+<span class="sd">        updates (theano.OrderedUpdates): updates.</span>
+<span class="sd">        extra_outs (list): list of extra output tensors.</span>
+<span class="sd">        optimizer (Optional[str]): optimizer string. See `utils.op` for details.</span>
+<span class="sd">            Defaults to `sgd`.</span>
+<span class="sd">        optimizer_args (Optional[dict]): optional arguments for optimizer.</span>
+<span class="sd">        **learning_args: extra kwargs for learning not used.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        theano.function: gradient function.</span>
+<span class="sd">        theano.function: update function.</span>
+<span class="sd">        dict: extra learning keyword arguments.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">if</span> <span class="n">optimizer_args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">optimizer_args</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="n">grads</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span><span class="n">cost</span><span class="p">,</span> <span class="n">wrt</span><span class="o">=</span><span class="n">itemlist</span><span class="p">(</span><span class="n">tparams</span><span class="p">),</span>
+                   <span class="n">consider_constant</span><span class="o">=</span><span class="n">constants</span><span class="p">)</span>
+
+    <span class="n">lr</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">scalar</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;lr&#39;</span><span class="p">)</span>
+    <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_grad_updates</span> <span class="o">=</span> <span class="nb">eval</span><span class="p">(</span><span class="s1">&#39;op.&#39;</span> <span class="o">+</span> <span class="n">optimizer</span><span class="p">)(</span>
+        <span class="n">lr</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">extra_ups</span><span class="o">=</span><span class="n">updates</span><span class="p">,</span>
+        <span class="n">extra_outs</span><span class="o">=</span><span class="n">extra_outs</span><span class="p">,</span> <span class="o">**</span><span class="n">optimizer_args</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_grad_updates</span><span class="p">,</span> <span class="n">learning_args</span></div>
+
+<div class="viewcode-block" id="test"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.test">[docs]</a><span class="k">def</span> <span class="nf">test</span><span class="p">(</span><span class="n">data_iter</span><span class="p">,</span> <span class="n">f_test</span><span class="p">,</span> <span class="n">f_test_keys</span><span class="p">,</span> <span class="n">input_keys</span><span class="p">,</span> <span class="n">n_samples</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Tests the model using a data iterator.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        data_iter (Dataset): dataset iterator.</span>
+<span class="sd">        f_test (theano.function)</span>
+<span class="sd">        f_test_keys (list): The keys that go with the corresponding list</span>
+<span class="sd">            of outputs from `f_test`.</span>
+<span class="sd">        input_keys (list): Used to extract multiple modes from dataset</span>
+<span class="sd">            for `f_test`.</span>
+<span class="sd">        n_samples (Optional[int]) If not None, use only this number of samples</span>
+<span class="sd">            as input to `f_test`.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        OrderedDict: dictionary of np.array results.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">data_iter</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+    <span class="n">maxvalid</span> <span class="o">=</span> <span class="n">data_iter</span><span class="o">.</span><span class="n">n</span>
+
+    <span class="n">widgets</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Testing (</span><span class="si">%s</span><span class="s1"> set): &#39;</span> <span class="o">%</span> <span class="n">data_iter</span><span class="o">.</span><span class="n">mode</span><span class="p">,</span> <span class="n">Percentage</span><span class="p">(),</span>
+               <span class="s1">&#39; (&#39;</span><span class="p">,</span> <span class="n">Timer</span><span class="p">(),</span> <span class="s1">&#39;)&#39;</span><span class="p">]</span>
+    <span class="n">pbar</span>    <span class="o">=</span> <span class="n">ProgressBar</span><span class="p">(</span><span class="n">widgets</span><span class="o">=</span><span class="n">widgets</span><span class="p">,</span> <span class="n">maxval</span><span class="o">=</span><span class="n">maxvalid</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">outs</span> <span class="o">=</span> <span class="n">data_iter</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+            <span class="n">inps</span> <span class="o">=</span> <span class="p">[</span><span class="n">outs</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">input_keys</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">n_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">inps</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="p">[:</span><span class="n">n_samples</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">inps</span><span class="p">]</span>
+            <span class="n">r</span> <span class="o">=</span> <span class="n">f_test</span><span class="p">(</span><span class="o">*</span><span class="n">inps</span><span class="p">)</span>
+            <span class="n">results_i</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">f_test_keys</span><span class="p">,</span> <span class="n">r</span><span class="p">))</span>
+            <span class="n">update_dict_of_lists</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="o">**</span><span class="n">results_i</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">data_iter</span><span class="o">.</span><span class="n">pos</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">maxvalid</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">data_iter</span><span class="o">.</span><span class="n">pos</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+            <span class="k">print</span>
+            <span class="k">break</span>
+
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">results</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">results</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">print</span> <span class="n">k</span>
+            <span class="k">print</span> <span class="n">v</span>
+            <span class="k">raise</span> <span class="n">e</span>
+
+    <span class="n">data_iter</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">results</span></div>
+
+<div class="viewcode-block" id="validate"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.validate">[docs]</a><span class="k">def</span> <span class="nf">validate</span><span class="p">(</span><span class="n">tparams</span><span class="p">,</span> <span class="n">results</span><span class="p">,</span> <span class="n">best_valid</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">best_epoch</span><span class="p">,</span>
+             <span class="n">save</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">valid_key</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">valid_sign</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">bestfile</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+             <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Generic validation method.</span>
+
+<span class="sd">    Compares the validation result against previous best.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        tparams (OrderedDict): dictionary of Theano shared variables.</span>
+<span class="sd">            For saving params.</span>
+<span class="sd">        results (OrderedDict): dictionary of np.array results.</span>
+<span class="sd">        best_valid (float): Best pervious value.</span>
+<span class="sd">        e (int): Epoch</span>
+<span class="sd">        best_epoch (int): Epoch for best_valid.</span>
+<span class="sd">        save (function): Method for saving params.</span>
+<span class="sd">        valid_key (str): Key from results to test against best_valid.</span>
+<span class="sd">        bestfile (str): Path to best file.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        float: best valid</span>
+<span class="sd">        int: best epoch</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">warn_kwargs</span><span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="n">valid_value</span> <span class="o">=</span> <span class="n">results</span><span class="p">[</span><span class="n">valid_key</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">valid_sign</span> <span class="o">==</span> <span class="s1">&#39;-&#39;</span><span class="p">:</span>
+        <span class="n">valid_value</span> <span class="o">*=</span> <span class="o">-</span><span class="mi">1</span>
+
+    <span class="k">if</span> <span class="n">valid_value</span> <span class="o">&lt;</span> <span class="n">best_valid</span><span class="p">:</span>
+        <span class="k">print</span> <span class="s1">&#39;Found best </span><span class="si">%s</span><span class="s1">: </span><span class="si">%.2f</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">valid_key</span><span class="p">,</span> <span class="n">valid_value</span><span class="p">)</span>
+        <span class="n">best_valid</span> <span class="o">=</span> <span class="n">valid_value</span>
+        <span class="n">best_epoch</span> <span class="o">=</span> <span class="n">e</span>
+        <span class="k">if</span> <span class="n">save</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="n">bestfile</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s1">&#39;Saving best to </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">bestfile</span>
+            <span class="n">save</span><span class="p">(</span><span class="n">tparams</span><span class="p">,</span> <span class="n">bestfile</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">print</span> <span class="s1">&#39;Best (</span><span class="si">%.2f</span><span class="s1">) at epoch </span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">best_valid</span><span class="p">,</span> <span class="n">best_epoch</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">best_valid</span><span class="p">,</span> <span class="n">best_epoch</span></div>
+
+<div class="viewcode-block" id="main_loop"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.training.main_loop">[docs]</a><span class="k">def</span> <span class="nf">main_loop</span><span class="p">(</span><span class="n">train</span><span class="p">,</span> <span class="n">valid</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span>
+              <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_grad_updates</span><span class="p">,</span> <span class="n">f_test</span><span class="p">,</span> <span class="n">f_test_keys</span><span class="p">,</span>
+              <span class="n">input_keys</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">f_extra</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">test_every</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">show_every</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">output_every</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">save</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">save_images</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">epochs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">learning_rate</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">learning_rate_scheduler</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">monitor</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">out_path</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="n">extra_outs_keys</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+              <span class="o">**</span><span class="n">validation_args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Generic main loop.</span>
+
+<span class="sd">    Typical main loop. For special applications, a different loop is better.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        train (Dataset): Training dataset.</span>
+<span class="sd">        valid (Dataset): Validation dataset.</span>
+<span class="sd">        tparams (OrderedDict): dictionary of Theano.shared.</span>
+<span class="sd">            Parameters of the model.</span>
+<span class="sd">        f_grad_shared (theano.function): Computes gradients.</span>
+<span class="sd">        f_grad_updates (theano.function): Updates parameters.</span>
+<span class="sd">        f_test (theano.function): Tests model are returns results.</span>
+<span class="sd">        f_test_keys (list): List of keys that go with `f_test`.</span>
+<span class="sd">        input_keys (Optional[list]): If not None, used to extract</span>
+<span class="sd">            multiple modes from dataset for `f_grad_shared`.</span>
+<span class="sd">        f_extra (theano.function): Function that is run just prior to testing.</span>
+<span class="sd">        test_every (Optional[int]): If not None, then controls how many epochs</span>
+<span class="sd">            before test.</span>
+<span class="sd">        show_every (Optional[int]): If not None, then controls how many epochs</span>
+<span class="sd">            before saving images.</span>
+<span class="sd">        output_every (Optional[int]): If not None, print rvals from</span>
+<span class="sd">            `f_grad_shared` and save images.</span>
+<span class="sd">        name (str): Name of experiment.</span>
+<span class="sd">        save (function): Saving function for parameters.</span>
+<span class="sd">        save_images (Optional[function]): Function to save images.</span>
+<span class="sd">        epochs (int): Number of training epochs.</span>
+<span class="sd">        learning_rate (float).</span>
+<span class="sd">        learning_rate_scheduler (Optional[Scheduler]): For scheduling learning</span>
+<span class="sd">            rate.</span>
+<span class="sd">        monitor (utils.monitor.Monitor).</span>
+<span class="sd">        out_path (str): Director path for output files.</span>
+<span class="sd">        extra_outs_keys (list): Keys for extra outs of `f_grad_shared`.</span>
+<span class="sd">        **validation_args: Arguments for test.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="n">best_valid</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s1">&#39;inf&#39;</span><span class="p">)</span>
+    <span class="n">best_epoch</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">if</span> <span class="n">learning_rate_scheduler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">learning_rate_scheduler</span> <span class="o">=</span> <span class="n">Scheduler</span><span class="p">(</span><span class="o">**</span><span class="n">learning_rate_scheduler</span><span class="p">)</span>
+        <span class="n">learning_rate</span> <span class="o">=</span> <span class="p">[</span><span class="n">v</span><span class="p">[</span><span class="s1">&#39;learning_rate&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">learning_rate_scheduler</span><span class="o">.</span><span class="n">d</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">learning_rate</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
+        <span class="n">learning_rate</span> <span class="o">=</span> <span class="p">(</span><span class="n">learning_rate</span><span class="p">,)</span>
+
+    <span class="k">if</span> <span class="n">input_keys</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">input_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">train</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">out_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">bestfile</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="s1">&#39;{name}_best.npz&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">bestfile</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">epoch_t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">e</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="n">widgets</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Epoch {epoch} (training {name}, &#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">epoch</span><span class="o">=</span><span class="n">e</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">),</span>
+                   <span class="n">Timer</span><span class="p">(),</span> <span class="s1">&#39;): &#39;</span><span class="p">,</span> <span class="n">Bar</span><span class="p">()]</span>
+        <span class="n">epoch_pbar</span> <span class="o">=</span> <span class="n">ProgressBar</span><span class="p">(</span><span class="n">widgets</span><span class="o">=</span><span class="n">widgets</span><span class="p">,</span> <span class="n">maxval</span><span class="o">=</span><span class="n">train</span><span class="o">.</span><span class="n">n</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="n">training_time</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">outs</span> <span class="o">=</span> <span class="n">train</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+                <span class="n">inps</span> <span class="o">=</span> <span class="p">[</span><span class="n">outs</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">input_keys</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">train</span><span class="o">.</span><span class="n">pos</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                    <span class="n">epoch_pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">train</span><span class="o">.</span><span class="n">n</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">epoch_pbar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">train</span><span class="o">.</span><span class="n">pos</span><span class="p">)</span>
+
+            <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">test_every</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">((</span><span class="n">e</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">test_every</span> <span class="o">==</span> <span class="mi">0</span><span class="p">):</span>
+                    <span class="k">print</span>
+                    <span class="k">if</span> <span class="n">f_extra</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                        <span class="k">print</span> <span class="s1">&#39;Performing initial evaluation function...&#39;</span>
+                        <span class="n">f_extra</span><span class="p">()</span>
+                    <span class="n">epoch_t1</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+                    <span class="n">dt_epoch</span> <span class="o">=</span> <span class="n">epoch_t1</span> <span class="o">-</span> <span class="n">epoch_t0</span>
+                    <span class="n">training_time</span> <span class="o">+=</span> <span class="n">dt_epoch</span>
+                    <span class="n">results</span> <span class="o">=</span> <span class="n">test</span><span class="p">(</span><span class="n">train</span><span class="p">,</span> <span class="n">f_test</span><span class="p">,</span> <span class="n">f_test_keys</span><span class="p">,</span> <span class="n">input_keys</span><span class="p">,</span>
+                                   <span class="n">n_samples</span><span class="o">=</span><span class="n">valid</span><span class="o">.</span><span class="n">n</span><span class="p">)</span>
+                    <span class="n">results_valid</span> <span class="o">=</span> <span class="n">test</span><span class="p">(</span><span class="n">valid</span><span class="p">,</span> <span class="n">f_test</span><span class="p">,</span> <span class="n">f_test_keys</span><span class="p">,</span> <span class="n">input_keys</span><span class="p">)</span>
+                    <span class="n">best_valid</span><span class="p">,</span> <span class="n">best_epoch</span> <span class="o">=</span> <span class="n">validate</span><span class="p">(</span>
+                        <span class="n">tparams</span><span class="p">,</span>
+                        <span class="n">results_valid</span><span class="p">,</span> <span class="n">best_valid</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">best_epoch</span><span class="p">,</span>
+                        <span class="n">bestfile</span><span class="o">=</span><span class="n">bestfile</span><span class="p">,</span>
+                        <span class="n">save</span><span class="o">=</span><span class="n">save</span><span class="p">,</span> <span class="o">**</span><span class="n">validation_args</span><span class="p">)</span>
+
+                    <span class="k">if</span> <span class="n">monitor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                        <span class="n">monitor</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">results</span><span class="p">)</span>
+                        <span class="n">monitor</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">dt_epoch</span><span class="o">=</span><span class="n">dt_epoch</span><span class="p">,</span>
+                                       <span class="n">training_time</span><span class="o">=</span><span class="n">training_time</span><span class="p">)</span>
+                        <span class="n">monitor</span><span class="o">.</span><span class="n">update_valid</span><span class="p">(</span><span class="o">**</span><span class="n">results_valid</span><span class="p">)</span>
+                        <span class="n">monitor</span><span class="o">.</span><span class="n">display</span><span class="p">()</span>
+                        <span class="k">if</span> <span class="n">out_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                            <span class="n">monitor</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="s1">&#39;monitor.png&#39;</span><span class="p">))</span>
+                            <span class="n">monitor</span><span class="o">.</span><span class="n">save_stats</span><span class="p">(</span>
+                                <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="s1">&#39;stats_train.npz&#39;</span><span class="p">))</span>
+                            <span class="n">monitor</span><span class="o">.</span><span class="n">save_stats_valid</span><span class="p">(</span>
+                                <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="s1">&#39;stats_valid.npz&#39;</span><span class="p">))</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">save_images</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span>
+                    <span class="ow">and</span> <span class="n">out_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span>
+                    <span class="ow">and</span> <span class="p">(</span><span class="n">show_every</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="p">((</span><span class="n">e</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">show_every</span> <span class="o">==</span> <span class="mi">0</span><span class="p">))):</span>
+                    <span class="n">save_images</span><span class="p">()</span>
+
+                <span class="n">e</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                <span class="k">if</span> <span class="n">learning_rate_scheduler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="n">learning_rate</span> <span class="o">=</span> <span class="n">learning_rate_scheduler</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+
+                <span class="n">epoch_t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+                <span class="n">widgets</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Epoch {epoch} ({name}, &#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">epoch</span><span class="o">=</span><span class="n">e</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">),</span>
+                           <span class="n">Timer</span><span class="p">(),</span> <span class="s1">&#39;): &#39;</span><span class="p">,</span> <span class="n">Bar</span><span class="p">()]</span>
+                <span class="n">epoch_pbar</span> <span class="o">=</span> <span class="n">ProgressBar</span><span class="p">(</span><span class="n">widgets</span><span class="o">=</span><span class="n">widgets</span><span class="p">,</span> <span class="n">maxval</span><span class="o">=</span><span class="n">train</span><span class="o">.</span><span class="n">n</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+                <span class="k">continue</span>
+
+            <span class="k">if</span> <span class="n">e</span> <span class="o">&gt;</span> <span class="n">epochs</span><span class="p">:</span>
+                <span class="k">break</span>
+
+            <span class="n">rval</span> <span class="o">=</span> <span class="n">f_grad_shared</span><span class="p">(</span><span class="o">*</span><span class="n">inps</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">output_every</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="n">s</span> <span class="o">%</span> <span class="n">output_every</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">rval</span><span class="p">,</span> <span class="n">extra_outs_keys</span><span class="p">):</span>
+                    <span class="k">print</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span>
+
+                <span class="k">if</span> <span class="n">save_images</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="n">out_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="n">save_images</span><span class="p">()</span>
+            <span class="n">check_bad_nums</span><span class="p">(</span><span class="n">rval</span><span class="p">,</span> <span class="n">extra_outs_keys</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">check_bad_nums</span><span class="p">(</span><span class="n">rval</span><span class="p">[:</span><span class="mi">1</span><span class="p">],</span> <span class="n">extra_outs_keys</span><span class="p">[:</span><span class="mi">1</span><span class="p">]):</span>
+                <span class="k">print</span> <span class="s1">&#39;Dying, found bad cost... Sorry (bleh)&#39;</span>
+                <span class="nb">exit</span><span class="p">()</span>
+            <span class="n">f_grad_updates</span><span class="p">(</span><span class="o">*</span><span class="n">learning_rate</span><span class="p">)</span>
+            <span class="n">s</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
+        <span class="k">print</span> <span class="s1">&#39;Training interrupted.&#39;</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">out_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">outfile</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="s1">&#39;{name}_{t}.npz&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">())))</span>
+            <span class="n">last_outfile</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="s1">&#39;{name}_last.npz&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">))</span>
+
+            <span class="k">if</span> <span class="n">save</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="k">print</span> <span class="s1">&#39;Saving&#39;</span>
+                <span class="n">save</span><span class="p">(</span><span class="n">tparams</span><span class="p">,</span> <span class="n">outfile</span><span class="p">)</span>
+                <span class="n">save</span><span class="p">(</span><span class="n">tparams</span><span class="p">,</span> <span class="n">last_outfile</span><span class="p">)</span>
+                <span class="k">print</span> <span class="s1">&#39;Done saving.&#39;</span>
+    <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
+        <span class="k">print</span> <span class="s1">&#39;Saving interupted.&#39;</span>
+
+    <span class="k">print</span> <span class="s1">&#39;Main loop finished.&#39;</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

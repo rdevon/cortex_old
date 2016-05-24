@@ -46,7 +46,7 @@ def make_argument_parser():
     wrapper method.
 
     Returns:
-        parser
+        argparse.parser
 
     '''
     parser = argparse.ArgumentParser()
@@ -64,7 +64,7 @@ def make_argument_parser_test():
     Takes the experiment directory as the argument in command line.
 
     Returns:
-        parser
+        argparse.parser
 
     '''
     parser = argparse.ArgumentParser()
@@ -82,10 +82,10 @@ def set_experiment(args):
     extracted into a dictionary for kwargs.
 
     Args:
-        args: dictionary or argparse args.
+        args (dict or argparse.args).
 
     Returns:
-        exp_dict: dict, dictionary of experiment arguments.
+        dict: dictionary of experiment arguments.
 
     '''
 
@@ -140,10 +140,10 @@ def reload_model(args):
     `make_argument_parser_test`.
 
     Args:
-        args: argparse args.
+        args (argparse.args).
 
     Returns:
-        exp_dict: dict, dictionary of experiment arguments.
+        dict: dictionary of experiment arguments.
 
     '''
     exp_dir = path.abspath(args.experiment_dir)
@@ -170,6 +170,14 @@ def reload_model(args):
     except:
         raise ValueError()
 
+    params = np.load(model_file)
+    try:
+        print 'Loading dataset arguments from saved model.'
+        dataset_args = params['dataset_args'].item()
+        exp_dict.update(dataset_args=dataset_args)
+    except KeyError:
+        pass
+
     exp_dict['model_to_load'] = model_file
     args = vars(args)
     args = OrderedDict((k, v) for k, v in args.iteritems() if v is not None)
@@ -184,20 +192,20 @@ def set_model(create_model, model_to_load, unpack, **kwargs):
     attempts to summarize these into one method.
 
     Args:
-        create_model: python functional, method for creating model.
-            No arguments. Methods should be defined out-of-method, e.g.:
-            `
-            dim = 100
-            def create_model():
-                return ModelClass(dim)
-            `
+        create_model (function): method for creating model.
+            No arguments. Methods should be defined out-of-method, e.g.::
+
+                dim = 100
+                def create_model():
+                    return ModelClass(dim)
+
             and then passed into `set_model`
-        model_to_load: str, path the npz file.
-        unpack, python function name, Takes model_to_load.
+        model_to_load (str): path the npz file.
+        unpack (function): Takes model_to_load.
             See `utils.tools.load_model` for details.
 
     Returns:
-        models: Dict of Layer subclass objects
+        dict: dictionary of Layer subclass objects
 
     '''
     if model_to_load is not None:
@@ -208,6 +216,9 @@ def set_model(create_model, model_to_load, unpack, **kwargs):
 
 def set_tparams(model_dict):
     '''Generic tparams setter.
+
+    Args:
+        model_dict (dict)
 
     '''
     tparams = OrderedDict()
@@ -221,17 +232,15 @@ def set_params(tparams, updates, excludes=[]):
     Convenience function to extract the theano parameters that will have
     gradients calculated.
 
-    Arg:
-        tparams: OrderedDict of Theano shared variables.
-        updates: OrderedUpdates. Used to exclude variables that have gradients
-            calculated.
-        excludes: list of str. List of keys to exclude from gradients or
-            learning.
+    Args:
+        tparams (dict): dictionary of Theano shared variables.
+        updates (theano.OrderedUpdates): used to exclude variables that have
+            gradients calculated.
+        excludes (list): list of keys to exclude from gradients or learning.
 
     Returns:
-        tparams: OrderedDict of Theano shared variables that will have gradients
-            calculated.
-        all_params: OrderedDict of Theano shared variables that will be saved.
+        OrderedDict: dict of variables that will have gradients calculated.
+        OrderedDict: dict of variables that will be saved.
 
     '''
     all_params = OrderedDict((k, v) for k, v in tparams.iteritems())
@@ -246,9 +255,26 @@ def set_params(tparams, updates, excludes=[]):
     return tparams, all_params
 
 def set_optimizer(inputs, cost, tparams, constants, updates, extra_outs,
-                  optimizer=None, optimizer_args=None,
+                  optimizer='sgd', optimizer_args=None,
                   **learning_args):
     '''Sets the parameter update functions with optimizer.
+
+    Args:
+        inputs (T.tensor): input variables.
+        cost (T.scalar): cost
+        tparams (OrderedDict): directionary of tensor parameters
+        constants (list): list of constant tensors.
+        updates (theano.OrderedUpdates): updates.
+        extra_outs (list): list of extra output tensors.
+        optimizer (Optional[str]): optimizer string. See `utils.op` for details.
+            Defaults to `sgd`.
+        optimizer_args (Optional[dict]): optional arguments for optimizer.
+        **learning_args: extra kwargs for learning not used.
+
+    Returns:
+        theano.function: gradient function.
+        theano.function: update function.
+        dict: extra learning keyword arguments.
 
     '''
 
@@ -268,17 +294,17 @@ def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
     '''Tests the model using a data iterator.
 
     Args:
-        data_iter: Dataset object.
-        f_test: Theano funciton.
-        f_test_keys: list of str. The keys that go with the corresponding list
+        data_iter (Dataset): dataset iterator.
+        f_test (theano.function)
+        f_test_keys (list): The keys that go with the corresponding list
             of outputs from `f_test`.
-        input_keys: list of str. Used to extract multiple modes from dataset
+        input_keys (list): Used to extract multiple modes from dataset
             for `f_test`.
-        n_samples: int (optional). If not None, use only this number of samples
+        n_samples (Optional[int]) If not None, use only this number of samples
             as input to `f_test`.
 
     Returns:
-        results: OrderedDict of np.array.
+        OrderedDict: dictionary of np.array results.
 
     '''
     data_iter.reset()
@@ -327,18 +353,19 @@ def validate(tparams, results, best_valid, e, best_epoch,
     Compares the validation result against previous best.
 
     Args:
-        tparams: OrderedDict of Theano shared variables. For saving params.
-        results: OrderedDict of np.array.
-        best_valid: float. Best pervious value.
-        e: int. Epoch
-        best_epoch: int. Epoch for best_valid.
-        save: function. Method for saving params.
-        valid_key: str. Key from results to test against best_valid.
-        bestfile: str. Path to best file.
+        tparams (OrderedDict): dictionary of Theano shared variables.
+            For saving params.
+        results (OrderedDict): dictionary of np.array results.
+        best_valid (float): Best pervious value.
+        e (int): Epoch
+        best_epoch (int): Epoch for best_valid.
+        save (function): Method for saving params.
+        valid_key (str): Key from results to test against best_valid.
+        bestfile (str): Path to best file.
 
     Returns:
-        best_valid: float
-        best_epoch: int
+        float: best valid
+        int: best epoch
 
     '''
     warn_kwargs(None, **kwargs)
@@ -364,6 +391,8 @@ def main_loop(train, valid, tparams,
               input_keys=None,
               f_extra=None,
               test_every=None,
+              show_every=None,
+              output_every=None,
               name=None,
               save=None,
               save_images=None,
@@ -373,38 +402,40 @@ def main_loop(train, valid, tparams,
               monitor=None,
               out_path=None,
               extra_outs_keys=None,
-              output_every=None,
               **validation_args):
     '''Generic main loop.
 
     Typical main loop. For special applications, a different loop is better.
 
     Args:
-        train: Dataset object. Training dataset.
-        valid: Dataset object. Validation dataset.
-        tparams: OrderedDict of Theano.shared. Parameters of the model.
-        f_grad_shared: Theano function. Computes gradients.
-        f_grad_updates: Theano function. Updates parameters.
-        f_test: Theano function. Tests model are returns results.
-        f_test_keys: list of str. List of keys that go with `f_test`.
-        input_keys: list of str (optional). If not None, used to extract
+        train (Dataset): Training dataset.
+        valid (Dataset): Validation dataset.
+        tparams (OrderedDict): dictionary of Theano.shared.
+            Parameters of the model.
+        f_grad_shared (theano.function): Computes gradients.
+        f_grad_updates (theano.function): Updates parameters.
+        f_test (theano.function): Tests model are returns results.
+        f_test_keys (list): List of keys that go with `f_test`.
+        input_keys (Optional[list]): If not None, used to extract
             multiple modes from dataset for `f_grad_shared`.
-        f_extra: Theano or python function. Function that is run just prior to
-            testing.
-        test_every: int (optional). If not None, then controls how many epochs
+        f_extra (theano.function): Function that is run just prior to testing.
+        test_every (Optional[int]): If not None, then controls how many epochs
             before test.
-        name: str. Name of experiment.
-        save: function. Saving function for parameters.
-        save_images: function (optional). Function to save images.
-        epochs: int. Number of training epochs.
-        learning_rate: float.
-        learning_rate_scheduler: Scheduler object. For scheduling learning rate.
-        monitor: utils.monitor.Monitor.
-        out_path: str. Director path for output files.
-        extra_outs_keys: list of str. Keys for extra outs of `f_grad_shared`.
-        output_every: int (optional). If not None, print rvals from
-            `f_grad_shared`.
-        validation_args: kwargs. Arguments for test.
+        show_every (Optional[int]): If not None, then controls how many epochs
+            before saving images.
+        output_every (Optional[int]): If not None, print rvals from
+            `f_grad_shared` and save images.
+        name (str): Name of experiment.
+        save (function): Saving function for parameters.
+        save_images (Optional[function]): Function to save images.
+        epochs (int): Number of training epochs.
+        learning_rate (float).
+        learning_rate_scheduler (Optional[Scheduler]): For scheduling learning
+            rate.
+        monitor (utils.monitor.Monitor).
+        out_path (str): Director path for output files.
+        extra_outs_keys (list): Keys for extra outs of `f_grad_shared`.
+        **validation_args: Arguments for test.
 
     '''
 
@@ -473,7 +504,9 @@ def main_loop(train, valid, tparams,
                                 path.join(out_path, 'stats_train.npz'))
                             monitor.save_stats_valid(
                                 path.join(out_path, 'stats_valid.npz'))
-                if save_images is not None and out_path is not None:
+                if (save_images is not None
+                    and out_path is not None
+                    and (show_every is None or ((e + 1) % show_every == 0))):
                     save_images()
 
                 e += 1

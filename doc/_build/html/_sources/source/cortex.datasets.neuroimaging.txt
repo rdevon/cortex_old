@@ -12,6 +12,14 @@ cortex.datasets.neuroimaging.fmri module
     :undoc-members:
     :show-inheritance:
 
+cortex.datasets.neuroimaging.mri module
+---------------------------------------
+
+.. automodule:: cortex.datasets.neuroimaging.mri
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 cortex.datasets.neuroimaging.nifti_viewer module
 ------------------------------------------------
 

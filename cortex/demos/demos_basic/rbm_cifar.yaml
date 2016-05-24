@@ -15,6 +15,6 @@
   test_every: 10,
   dataset_args: {
     dataset: 'cifar',
-    source: '$data/cifar-10-batches-py'
+    source: '$data/basic/cifar-10-batches-py'
   }
 }

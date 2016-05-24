@@ -50,32 +50,457 @@
 <div class="section" id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="cortex-datasets-neuroimaging-fmri-module">
-<h2>cortex.datasets.neuroimaging.fmri module<a class="headerlink" href="#cortex-datasets-neuroimaging-fmri-module" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-cortex.datasets.neuroimaging.fmri">
+<span id="cortex-datasets-neuroimaging-fmri-module"></span><h2>cortex.datasets.neuroimaging.fmri module<a class="headerlink" href="#module-cortex.datasets.neuroimaging.fmri" title="Permalink to this headline">¶</a></h2>
+<p>Module for fMRI data</p>
+<dl class="class">
+<dt id="cortex.datasets.neuroimaging.fmri.FMRI">
+<em class="property">class </em><code class="descclassname">cortex.datasets.neuroimaging.fmri.</code><code class="descname">FMRI</code><span class="sig-paren">(</span><em>name='fmri'</em>, <em>window=10</em>, <em>stride=1</em>, <em>idx=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/fmri.html#FMRI"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.fmri.FMRI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#cortex.datasets.neuroimaging.fmri.FMRI_IID" title="cortex.datasets.neuroimaging.fmri.FMRI_IID"><code class="xref py py-class docutils literal"><span class="pre">cortex.datasets.neuroimaging.fmri.FMRI_IID</span></code></a></p>
+<p>fMRI dataset class.</p>
+<p>Treats fMRI as sequences, instead as IID as with FMRI_IID.</p>
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.fmri.FMRI.window">
+<code class="descname">window</code><a class="headerlink" href="#cortex.datasets.neuroimaging.fmri.FMRI.window" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>int</em> &#8211; window size of fMRI batches.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.fmri.FMRI.stride">
+<code class="descname">stride</code><a class="headerlink" href="#cortex.datasets.neuroimaging.fmri.FMRI.stride" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>int</em> &#8211; stride of fMRI batches.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.fmri.FMRI.n">
+<code class="descname">n</code><a class="headerlink" href="#cortex.datasets.neuroimaging.fmri.FMRI.n" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>int</em> &#8211; number of subjects.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.fmri.FMRI.idx">
+<code class="descname">idx</code><a class="headerlink" href="#cortex.datasets.neuroimaging.fmri.FMRI.idx" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>list</em> &#8211; indices of subject, scan-window pairs.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.fmri.FMRI.next">
+<code class="descname">next</code><span class="sig-paren">(</span><em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/fmri.html#FMRI.next"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.fmri.FMRI.next" title="Permalink to this definition">¶</a></dt>
+<dd><p>Draws the next batch of windowed fMRI.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>batch_size</strong> (<em>Optional[int]</em>) &#8211; number of windows in batch.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">dictionary of batched data</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.fmri.FMRI.randomize">
+<code class="descname">randomize</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/fmri.html#FMRI.randomize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.fmri.FMRI.randomize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Randomize the fMRI dataset.</p>
+<p>Shuffles the idx.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="cortex.datasets.neuroimaging.fmri.FMRI_IID">
+<em class="property">class </em><code class="descclassname">cortex.datasets.neuroimaging.fmri.</code><code class="descname">FMRI_IID</code><span class="sig-paren">(</span><em>name='fmri_iid'</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/fmri.html#FMRI_IID"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.fmri.FMRI_IID" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#cortex.datasets.neuroimaging.mri.MRI" title="cortex.datasets.neuroimaging.mri.MRI"><code class="xref py py-class docutils literal"><span class="pre">cortex.datasets.neuroimaging.mri.MRI</span></code></a></p>
+<p>fMRI data treated as IID.</p>
+<p>Use this dataset if you plan to use a model that needs identical and
+independently sampled data.</p>
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.fmri.FMRI_IID.extras">
+<code class="descname">extras</code><a class="headerlink" href="#cortex.datasets.neuroimaging.fmri.FMRI_IID.extras" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>dict</em> &#8211; dictionary of additional arrays for analysis.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.fmri.FMRI_IID.get_data">
+<code class="descname">get_data</code><span class="sig-paren">(</span><em>source</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/fmri.html#FMRI_IID.get_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.fmri.FMRI_IID.get_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fetch the fMRI dataset.</p>
+<p>fMRI dataset source is a yaml file.
+An example format of said yaml is:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">name</span><span class="p">:</span> <span class="s1">&#39;aod&#39;</span><span class="p">,</span>
+<span class="n">data</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s1">&#39;/Users/devon/Data/AOD/AOD_0.npy&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;/Users/devon/Data/AOD/AOD_1.npy&#39;</span>
+<span class="p">],</span>
+<span class="n">mask</span><span class="p">:</span> <span class="s1">&#39;/Users/devon/Data/AOD/AOD_mask.npy&#39;</span><span class="p">,</span>
+<span class="n">nifti</span><span class="p">:</span> <span class="s1">&#39;//Users/devon/Data/VBM/H000A.nii&#39;</span><span class="p">,</span>
+<span class="n">tmp_path</span><span class="p">:</span> <span class="s1">&#39;/Users/devon/Data/mri_tmp/&#39;</span><span class="p">,</span>
+<span class="n">anat_file</span><span class="p">:</span> <span class="s1">&#39;/Users/devon/Data/ch2better_whitebg_aligned2EPI_V4.nii&#39;</span><span class="p">,</span>
+</pre></div>
 </div>
-<div class="section" id="cortex-datasets-neuroimaging-nifti-viewer-module">
-<h2>cortex.datasets.neuroimaging.nifti_viewer module<a class="headerlink" href="#cortex-datasets-neuroimaging-nifti-viewer-module" title="Permalink to this headline">¶</a></h2>
+</dd></dl>
+
+</dd></dl>
+
 </div>
-<div class="section" id="cortex-datasets-neuroimaging-simtb-module">
-<h2>cortex.datasets.neuroimaging.simTB module<a class="headerlink" href="#cortex-datasets-neuroimaging-simtb-module" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-cortex.datasets.neuroimaging.mri">
+<span id="cortex-datasets-neuroimaging-mri-module"></span><h2>cortex.datasets.neuroimaging.mri module<a class="headerlink" href="#module-cortex.datasets.neuroimaging.mri" title="Permalink to this headline">¶</a></h2>
+<p>Module for the MRI dataset</p>
+<dl class="class">
+<dt id="cortex.datasets.neuroimaging.mri.MRI">
+<em class="property">class </em><code class="descclassname">cortex.datasets.neuroimaging.mri.</code><code class="descname">MRI</code><span class="sig-paren">(</span><em>source=None</em>, <em>name='mri'</em>, <em>idx=None</em>, <em>pca_components=0</em>, <em>distribution='gaussian'</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/mri.html#MRI"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="cortex.datasets.html#cortex.datasets.BasicDataset" title="cortex.datasets.BasicDataset"><code class="xref py py-class docutils literal"><span class="pre">cortex.datasets.BasicDataset</span></code></a></p>
+<p>Basic MRI dataset iterator.</p>
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.image_shape">
+<code class="descname">image_shape</code><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.image_shape" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>tuple</em> &#8211; shape of images for visualization.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.pca">
+<code class="descname">pca</code><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.pca" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>Optional[sklearn.decomposition.PCA]</em> &#8211; If not None, PCA
+decomposition of the data.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.pca_components">
+<code class="descname">pca_components</code><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.pca_components" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>Optional[int]</em> &#8211; number of PCA components if self.pca
+is not None</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.tmp_path">
+<code class="descname">tmp_path</code><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.tmp_path" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>str</em> &#8211; path for temporary niftis in visualization.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.base_nifti_file">
+<code class="descname">base_nifti_file</code><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.base_nifti_file" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>str</em> &#8211; path for base nifti for forming niftis from arrays.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.anat_file">
+<code class="descname">anat_file</code><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.anat_file" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>str</em> &#8211; path for anatomical nifti file for visualization.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.sites">
+<code class="descname">sites</code><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.sites" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>Optional[list]</em> &#8211; list of sites where data was collected.</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.mask">
+<code class="descname">mask</code><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.mask" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>numpy.array</em> &#8211; mask</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.get_data">
+<code class="descname">get_data</code><span class="sig-paren">(</span><em>source</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/mri.html#MRI.get_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.get_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fetch the MRI dataset.</p>
+<p>MRI dataset source is a yaml file.
+An example format of said yaml is:</p>
+<div class="highlight-default"><div class="highlight"><pre><span></span><span class="n">name</span><span class="p">:</span> <span class="s1">&#39;aod&#39;</span><span class="p">,</span>
+<span class="n">data</span><span class="p">:</span> <span class="p">[</span>
+    <span class="s1">&#39;/Users/devon/Data/AOD/AOD_0.npy&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;/Users/devon/Data/AOD/AOD_1.npy&#39;</span>
+<span class="p">],</span>
+<span class="n">mask</span><span class="p">:</span> <span class="s1">&#39;/Users/devon/Data/AOD/AOD_mask.npy&#39;</span><span class="p">,</span>
+<span class="n">nifti</span><span class="p">:</span> <span class="s1">&#39;//Users/devon/Data/VBM/H000A.nii&#39;</span><span class="p">,</span>
+<span class="n">tmp_path</span><span class="p">:</span> <span class="s1">&#39;/Users/devon/Data/mri_tmp/&#39;</span><span class="p">,</span>
+<span class="n">anat_file</span><span class="p">:</span> <span class="s1">&#39;/Users/devon/Data/ch2better_whitebg_aligned2EPI_V4.nii&#39;</span><span class="p">,</span>
+<span class="n">sites</span><span class="p">:</span> <span class="s1">&#39;/Users/devon/Data/AOD/AOD_sites.npy&#39;</span>
+</pre></div>
 </div>
-<div class="section" id="cortex-datasets-neuroimaging-snp-module">
-<h2>cortex.datasets.neuroimaging.snp module<a class="headerlink" href="#cortex-datasets-neuroimaging-snp-module" title="Permalink to this headline">¶</a></h2>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.make_image">
+<code class="descname">make_image</code><span class="sig-paren">(</span><em>X</em>, <em>base_nifti</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/mri.html#MRI.make_image"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.make_image" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create a nitfi image from array.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>X</strong> (<em>numpy.array</em>) &#8211; array from which to make nifti image.</li>
+<li><strong>base_nifti</strong> (<em>nipy.core.api.Image</em>) &#8211; nifti image template.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">nipy.core.api.Image</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.save_images">
+<code class="descname">save_images</code><span class="sig-paren">(</span><em>x</em>, <em>out_file</em>, <em>remove_niftis=True</em>, <em>order=None</em>, <em>stats={}</em>, <em>x_limit=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/mri.html#MRI.save_images"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.save_images" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves images from array.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>x</strong> (<em>numpy.array</em>) &#8211; array from which to make images.</li>
+<li><strong>out_file</strong> (<em>str</em>) &#8211; ouput file for image montage.</li>
+<li><strong>remove_niftis</strong> (<em>bool</em>) &#8211; delete images after making montage.</li>
+<li><strong>order</strong> (<em>Optional[list]</em>) &#8211; reorder the images in the montage.</li>
+<li><strong>stats</strong> (<em>Optional[dict]</em>) &#8211; dictionary of statistics to add to
+montage.</li>
+<li><strong>x_limit</strong> (<em>Optional(int</em>) &#8211; if not None, limit the number of images
+along the x axis.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.mri.MRI.save_niftis">
+<code class="descname">save_niftis</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/mri.html#MRI.save_niftis"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.mri.MRI.save_niftis" title="Permalink to this definition">¶</a></dt>
+<dd><p>Save nifti files from array.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>X</strong> (<em>numpy.array</em>) &#8211; array from which to make images.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">list of nifti images.
+list: list of output files for images.</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-cortex.datasets.neuroimaging.nifti_viewer">
+<span id="cortex-datasets-neuroimaging-nifti-viewer-module"></span><h2>cortex.datasets.neuroimaging.nifti_viewer module<a class="headerlink" href="#module-cortex.datasets.neuroimaging.nifti_viewer" title="Permalink to this headline">¶</a></h2>
+<p>Module to view nifti data.</p>
+<dl class="function">
+<dt id="cortex.datasets.neuroimaging.nifti_viewer.main">
+<code class="descclassname">cortex.datasets.neuroimaging.nifti_viewer.</code><code class="descname">main</code><span class="sig-paren">(</span><em>nifti_file</em>, <em>anat_file</em>, <em>roi_file</em>, <em>out_file</em>, <em>thr=2</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/nifti_viewer.html#main"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.nifti_viewer.main" title="Permalink to this definition">¶</a></dt>
+<dd><p>Main function for running as a script.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>nifti</strong> (<em>str</em>) &#8211; path to 4D nifti file.</li>
+<li><strong>anat</strong> (<em>str</em>) &#8211; path to anatomical nifti file.</li>
+<li><strong>roi_file</strong> (<em>str</em>) &#8211; path to pickled roi dictionary file.</li>
+<li><strong>out_file</strong> (<em>str</em>) &#8211; path to output file.</li>
+<li><strong>thr</strong> (<em>float</em>) &#8211; threshold for <cite>nipy.labs.viz.plot_map</cite></li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.datasets.neuroimaging.nifti_viewer.make_argument_parser">
+<code class="descclassname">cortex.datasets.neuroimaging.nifti_viewer.</code><code class="descname">make_argument_parser</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/nifti_viewer.html#make_argument_parser"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.nifti_viewer.make_argument_parser" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates an ArgumentParser to read the options for this script from sys.argv</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.datasets.neuroimaging.nifti_viewer.montage">
+<code class="descclassname">cortex.datasets.neuroimaging.nifti_viewer.</code><code class="descname">montage</code><span class="sig-paren">(</span><em>nifti</em>, <em>anat</em>, <em>roi_dict</em>, <em>thr=2</em>, <em>fig=None</em>, <em>out_file=None</em>, <em>order=None</em>, <em>stats={}</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/nifti_viewer.html#montage"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.nifti_viewer.montage" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves a montage of nifti images.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>nifti</strong> (<em>list or nipy.core.api.image.image.Image</em>) &#8211; 4d nifti or list of             3D niftis.</li>
+<li><strong>anat</strong> (<em>nipy.core.api.image.image.Image</em>) &#8211; anatomical nifti image.</li>
+<li><strong>roi_dict</strong> (<em>dict</em>) &#8211; dictionary of cluster dictionaries.</li>
+<li><strong>out_file</strong> (<em>str</em>) &#8211; output file path.</li>
+<li><strong>order</strong> (<em>list</em>) &#8211; List of integers. Order of montage.</li>
+<li><strong>stats</strong> (<em>Optional[dict]</em>) &#8211; extra statistics to print on montage as text.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.datasets.neuroimaging.nifti_viewer.save_helper">
+<code class="descclassname">cortex.datasets.neuroimaging.nifti_viewer.</code><code class="descname">save_helper</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/nifti_viewer.html#save_helper"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.nifti_viewer.save_helper" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.datasets.neuroimaging.nifti_viewer.save_image">
+<code class="descclassname">cortex.datasets.neuroimaging.nifti_viewer.</code><code class="descname">save_image</code><span class="sig-paren">(</span><em>nifti</em>, <em>anat</em>, <em>cluster_dict</em>, <em>out_path</em>, <em>f</em>, <em>image_threshold=2</em>, <em>texcol=1</em>, <em>bgcol=0</em>, <em>iscale=2</em>, <em>text=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/nifti_viewer.html#save_image"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.nifti_viewer.save_image" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves a single nifti image.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>nifti</strong> (<em>str or nipy.core.api.image.image.Image</em>) &#8211; nifti file to visualize.</li>
+<li><strong>anat</strong> (<em>nipy.core.api.image.image.Image</em>) &#8211; anatomical nifti file.</li>
+<li><strong>cluster_dict</strong> (<em>dict</em>) &#8211; dictionary of clusters.</li>
+<li><strong>f</strong> (<em>int</em>) &#8211; index.</li>
+<li><strong>image_threshold</strong> (<em>float</em>) &#8211; treshold for <cite>plot_map</cite>.</li>
+<li><strong>texcol</strong> (<em>float</em>) &#8211; text color.</li>
+<li><strong>bgcol</strong> (<em>float</em>) &#8211; background color.</li>
+<li><strong>iscale</strong> (<em>float</em>) &#8211; image scale.</li>
+<li><strong>text</strong> (<em>Optional[str]</em>) &#8211; text for figure.</li>
+<li><strong>**kwargs</strong> &#8211; extra keyword arguments</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="cortex.datasets.neuroimaging.nifti_viewer.save_images">
+<code class="descclassname">cortex.datasets.neuroimaging.nifti_viewer.</code><code class="descname">save_images</code><span class="sig-paren">(</span><em>nifti_files</em>, <em>anat</em>, <em>roi_dict</em>, <em>out_dir</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/nifti_viewer.html#save_images"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.nifti_viewer.save_images" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves multiple nifti images using multiprocessing.</p>
+<p>Uses <cite>multiprocessing</cite>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>nifti_files</strong> (<em>list</em>) &#8211; list of nifti file paths.</li>
+<li><strong>anat</strong> (<em>nipy.core.api.image.image.Image</em>) &#8211; anatomical image.</li>
+<li><strong>roi_dict</strong> (<em>dict</em>) &#8211; dictionary of cluster dictionaries.</li>
+<li><strong>out_dir</strong> (<em>str</em>) &#8211; output directory path.</li>
+<li><strong>**kwargs</strong> &#8211; extra keyword arguments.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<div class="section" id="module-cortex.datasets.neuroimaging.simTB">
+<span id="cortex-datasets-neuroimaging-simtb-module"></span><h2>cortex.datasets.neuroimaging.simTB module<a class="headerlink" href="#module-cortex.datasets.neuroimaging.simTB" title="Permalink to this headline">¶</a></h2>
+<p>SimTB dataset class.</p>
+<dl class="class">
+<dt id="cortex.datasets.neuroimaging.simTB.SimTB">
+<em class="property">class </em><code class="descclassname">cortex.datasets.neuroimaging.simTB.</code><code class="descname">SimTB</code><span class="sig-paren">(</span><em>source=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/simTB.html#SimTB"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.simTB.SimTB" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="cortex.datasets.html#cortex.datasets.Dataset" title="cortex.datasets.Dataset"><code class="xref py py-class docutils literal"><span class="pre">cortex.datasets.Dataset</span></code></a></p>
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.simTB.SimTB.get_data">
+<code class="descname">get_data</code><span class="sig-paren">(</span><em>source</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/simTB.html#SimTB.get_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.simTB.SimTB.get_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fetch the data from source.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.simTB.SimTB.next">
+<code class="descname">next</code><span class="sig-paren">(</span><em>batch_size=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/simTB.html#SimTB.next"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.simTB.SimTB.next" title="Permalink to this definition">¶</a></dt>
+<dd><p>Iterate the data.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.simTB.SimTB.save_images">
+<code class="descname">save_images</code><span class="sig-paren">(</span><em>x</em>, <em>imgfile</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/simTB.html#SimTB.save_images"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.simTB.SimTB.save_images" title="Permalink to this definition">¶</a></dt>
+<dd><p>Save images for visualization.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-cortex.datasets.neuroimaging.snp">
+<span id="cortex-datasets-neuroimaging-snp-module"></span><h2>cortex.datasets.neuroimaging.snp module<a class="headerlink" href="#module-cortex.datasets.neuroimaging.snp" title="Permalink to this headline">¶</a></h2>
+<p>SNP dataset class.</p>
+<dl class="class">
+<dt id="cortex.datasets.neuroimaging.snp.SNP">
+<em class="property">class </em><code class="descclassname">cortex.datasets.neuroimaging.snp.</code><code class="descname">SNP</code><span class="sig-paren">(</span><em>source=None</em>, <em>name='snp'</em>, <em>mode='train'</em>, <em>convert_one_hot=True</em>, <em>idx=None</em>, <em>**kwargs</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/snp.html#SNP"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.snp.SNP" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="cortex.datasets.html#cortex.datasets.BasicDataset" title="cortex.datasets.BasicDataset"><code class="xref py py-class docutils literal"><span class="pre">cortex.datasets.BasicDataset</span></code></a></p>
+<p>SNP dataset class.</p>
+<p>Currently only handled continuous preprocessed data.
+Discrete data TODO</p>
+<dl class="method">
+<dt id="cortex.datasets.neuroimaging.snp.SNP.get_data">
+<code class="descname">get_data</code><span class="sig-paren">(</span><em>source</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging/snp.html#SNP.get_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.snp.SNP.get_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fetch the data from source.</p>
+<p>Genetic data is in the matrix format with size Subjec*SNP
+SNP can be either preprocessed or notprocessed
+Labels is a vector with diagnosis info
+Patients are coded with 1 and health control coded with 2</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>source</strong> (<em>dict</em>) &#8211; file names of genetic data and labels
+{&#8216;snp&#8217; key for genetic data
+&#8216;labels&#8217; key for diagnosis }</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
 </div>
 <div class="section" id="module-cortex.datasets.neuroimaging">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-cortex.datasets.neuroimaging" title="Permalink to this headline">¶</a></h2>
 <p>Neuroimaging data classes and utilities</p>
 <dl class="function">
+<dt id="cortex.datasets.neuroimaging.fetch_neuroimaging_data">
+<code class="descclassname">cortex.datasets.neuroimaging.</code><code class="descname">fetch_neuroimaging_data</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging.html#fetch_neuroimaging_data"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.fetch_neuroimaging_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fetch the neuroimaging dataset for demos.</p>
+</dd></dl>
+
+<dl class="function">
 <dt id="cortex.datasets.neuroimaging.medfilt">
-<code class="descclassname">cortex.datasets.neuroimaging.</code><code class="descname">medfilt</code><span class="sig-paren">(</span><em>x</em>, <em>k</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.neuroimaging.medfilt" title="Permalink to this definition">¶</a></dt>
-<dd><p>Apply a length-k median filter to a 1D array x.
-Boundaries are extended by repeating endpoints.</p>
+<code class="descclassname">cortex.datasets.neuroimaging.</code><code class="descname">medfilt</code><span class="sig-paren">(</span><em>x</em>, <em>k</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging.html#medfilt"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.medfilt" title="Permalink to this definition">¶</a></dt>
+<dd><p>Apply a length-k median filter to a 1D array x.</p>
+<p>Boundaries are extended by repeating endpoints.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>x</strong> (<em>numpy.array</em>) &#8211; </li>
+<li><strong>k</strong> (<em>int</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">numpy.array</p>
+</td>
+</tr>
+</tbody>
+</table>
 </dd></dl>
 
 <dl class="function">
 <dt id="cortex.datasets.neuroimaging.resolve">
-<code class="descclassname">cortex.datasets.neuroimaging.</code><code class="descname">resolve</code><span class="sig-paren">(</span><em>dataset</em><span class="sig-paren">)</span><a class="headerlink" href="#cortex.datasets.neuroimaging.resolve" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
+<code class="descclassname">cortex.datasets.neuroimaging.</code><code class="descname">resolve</code><span class="sig-paren">(</span><em>dataset</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/datasets/neuroimaging.html#resolve"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.datasets.neuroimaging.resolve" title="Permalink to this definition">¶</a></dt>
+<dd><p>Resolve neuroimaging dataset.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>dataset</strong> (<em>str</em>) &#8211; dataset name</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
 
 </div>
 </div>
@@ -90,10 +515,11 @@ Boundaries are extended by repeating endpoints.</p>
   <ul>
 <li><a class="reference internal" href="#">cortex.datasets.neuroimaging package</a><ul>
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
-<li><a class="reference internal" href="#cortex-datasets-neuroimaging-fmri-module">cortex.datasets.neuroimaging.fmri module</a></li>
-<li><a class="reference internal" href="#cortex-datasets-neuroimaging-nifti-viewer-module">cortex.datasets.neuroimaging.nifti_viewer module</a></li>
-<li><a class="reference internal" href="#cortex-datasets-neuroimaging-simtb-module">cortex.datasets.neuroimaging.simTB module</a></li>
-<li><a class="reference internal" href="#cortex-datasets-neuroimaging-snp-module">cortex.datasets.neuroimaging.snp module</a></li>
+<li><a class="reference internal" href="#module-cortex.datasets.neuroimaging.fmri">cortex.datasets.neuroimaging.fmri module</a></li>
+<li><a class="reference internal" href="#module-cortex.datasets.neuroimaging.mri">cortex.datasets.neuroimaging.mri module</a></li>
+<li><a class="reference internal" href="#module-cortex.datasets.neuroimaging.nifti_viewer">cortex.datasets.neuroimaging.nifti_viewer module</a></li>
+<li><a class="reference internal" href="#module-cortex.datasets.neuroimaging.simTB">cortex.datasets.neuroimaging.simTB module</a></li>
+<li><a class="reference internal" href="#module-cortex.datasets.neuroimaging.snp">cortex.datasets.neuroimaging.snp module</a></li>
 <li><a class="reference internal" href="#module-cortex.datasets.neuroimaging">Module contents</a></li>
 </ul>
 </li>

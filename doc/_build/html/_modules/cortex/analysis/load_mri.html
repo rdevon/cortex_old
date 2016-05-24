@@ -1,0 +1,302 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.analysis.load_mri &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex" href="../../cortex.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" accesskey="U">cortex</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.analysis.load_mri</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;Utilities for handling nifti files.</span>
+
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">from</span> <span class="nn">glob</span> <span class="kn">import</span> <span class="n">glob</span>
+<span class="kn">import</span> <span class="nn">nibabel</span> <span class="kn">as</span> <span class="nn">nib</span>
+<span class="kn">from</span> <span class="nn">nipy</span> <span class="kn">import</span> <span class="n">save_image</span><span class="p">,</span> <span class="n">load_image</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
+<span class="kn">import</span> <span class="nn">pickle</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">readline</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="kn">import</span> <span class="n">io</span>
+<span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="kn">import</span> <span class="n">kurtosis</span>
+<span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="kn">import</span> <span class="n">skew</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">from</span> <span class="nn">sys</span> <span class="kn">import</span> <span class="n">stdout</span>
+<span class="kn">import</span> <span class="nn">yaml</span>
+
+<span class="kn">from</span> <span class="nn">..utils.extra</span> <span class="kn">import</span> <span class="n">complete_path</span>
+
+
+<div class="viewcode-block" id="find_niftis"><a class="viewcode-back" href="../../../source/cortex.analysis.html#cortex.analysis.load_mri.find_niftis">[docs]</a><span class="k">def</span> <span class="nf">find_niftis</span><span class="p">(</span><span class="n">source</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Finds nifti files in a directory.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        source (str): The source directory for niftis</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        list: List of file paths.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">return</span> <span class="n">glob</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="s1">&#39;*.nii&#39;</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="read_niftis"><a class="viewcode-back" href="../../../source/cortex.analysis.html#cortex.analysis.load_mri.read_niftis">[docs]</a><span class="k">def</span> <span class="nf">read_niftis</span><span class="p">(</span><span class="n">file_list</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Reads niftis from a file list into numpy array.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        file_list (int): List of file paths.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        numpy.array: Array of data from nifti file list.</span>
+<span class="sd">        list: New file list with bad files filtered.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="n">data0</span> <span class="o">=</span> <span class="n">load_image</span><span class="p">(</span><span class="n">file_list</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">get_data</span><span class="p">()</span>
+
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">data0</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">print</span> <span class="s1">&#39;Found </span><span class="si">%d</span><span class="s1"> files with data shape is </span><span class="si">%r</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">file_list</span><span class="p">),</span> <span class="n">data0</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">file_list</span><span class="p">)</span>
+
+    <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">new_file_list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">file_list</span><span class="p">):</span>
+        <span class="k">print</span> <span class="s1">&#39;</span><span class="si">%d</span><span class="s1">) Loading subject from file: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+
+        <span class="n">nifti</span> <span class="o">=</span> <span class="n">load_image</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="n">subject_data</span> <span class="o">=</span> <span class="n">nifti</span><span class="o">.</span><span class="n">get_data</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">subject_data</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Shape mismatch&#39;</span><span class="p">)</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">subject_data</span><span class="p">)</span>
+        <span class="n">new_file_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">new_file_list</span></div>
+
+<div class="viewcode-block" id="save_mask"><a class="viewcode-back" href="../../../source/cortex.analysis.html#cortex.analysis.load_mri.save_mask">[docs]</a><span class="k">def</span> <span class="nf">save_mask</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">out_path</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Save mask of data.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        data (numpy.array): Data to mask</span>
+<span class="sd">        out_path (str): Output path for mask.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">print</span> <span class="s1">&#39;Getting mask&#39;</span>
+
+    <span class="n">n</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">))</span>
+
+    <span class="n">zero_freq</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">x</span> <span class="o">*</span> <span class="n">y</span> <span class="o">*</span> <span class="n">z</span><span class="p">))</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1.</span> <span class="o">/</span> <span class="nb">reduce</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">x_</span><span class="p">,</span> <span class="n">y_</span><span class="p">:</span> <span class="n">x_</span> <span class="o">*</span> <span class="n">y_</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+
+    <span class="k">for</span> <span class="n">freq</span> <span class="ow">in</span> <span class="n">zero_freq</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">freq</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="n">freq</span>
+        <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">zero_freq</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span> <span class="o">-</span> <span class="n">freq</span><span class="p">)</span> <span class="o">&gt;</span> <span class="o">.</span><span class="mo">05</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Spurious datapoint, mean zeros frequency is&quot;</span>
+                             <span class="s2">&quot;</span><span class="si">%.2f</span><span class="s2">, datapoint is </span><span class="si">%.2f</span><span class="s2">&quot;</span>
+                             <span class="o">%</span> <span class="p">(</span><span class="n">zero_freq</span><span class="o">.</span><span class="n">mean</span><span class="p">(),</span> <span class="n">freq</span><span class="p">))</span>
+
+    <span class="n">nonzero_avg</span> <span class="o">=</span> <span class="p">(</span><span class="n">data</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">mask</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">nonzero_avg</span> <span class="o">&gt;</span> <span class="o">.</span><span class="mi">99</span><span class="p">)]</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">print</span> <span class="s1">&#39;Masked out </span><span class="si">%d</span><span class="s1"> out of </span><span class="si">%d</span><span class="s1"> voxels&#39;</span> <span class="o">%</span> <span class="p">((</span><span class="n">mask</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="nb">reduce</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">x_</span><span class="p">,</span> <span class="n">y_</span><span class="p">:</span> <span class="n">x_</span> <span class="o">*</span> <span class="n">y_</span><span class="p">,</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+
+    <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="load_niftis"><a class="viewcode-back" href="../../../source/cortex.analysis.html#cortex.analysis.load_mri.load_niftis">[docs]</a><span class="k">def</span> <span class="nf">load_niftis</span><span class="p">(</span><span class="n">source_dir</span><span class="p">,</span> <span class="n">out_dir</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;mri&#39;</span><span class="p">,</span> <span class="n">patterns</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Loads niftis from a directory.</span>
+
+<span class="sd">    Saves the data, paths, mask, and `sites`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        source_dir (str): Directory of nifti files.</span>
+<span class="sd">        out_dir (str): Output directory for saving arrays, etc.</span>
+<span class="sd">        name (str): Name of dataset.</span>
+<span class="sd">        patterns (Optional[list]): list of glob for filtering files.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">if</span> <span class="n">patterns</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">file_lists</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">pattern</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">patterns</span><span class="p">):</span>
+            <span class="n">file_list</span> <span class="o">=</span> <span class="n">glob</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">source_dir</span><span class="p">,</span> <span class="n">pattern</span><span class="p">))</span>
+            <span class="n">file_lists</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">file_list</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">file_lists</span> <span class="o">=</span> <span class="p">[</span><span class="n">find_niftis</span><span class="p">(</span><span class="n">source_dir</span><span class="p">)]</span>
+
+    <span class="n">base_file</span> <span class="o">=</span> <span class="n">file_lists</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">paths_file</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_file_paths.npy&#39;</span><span class="p">)</span>
+    <span class="n">sites_file</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_sites.npy&#39;</span><span class="p">)</span>
+    <span class="n">mask_file</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_mask.npy&#39;</span><span class="p">)</span>
+    <span class="n">yaml_file</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;.yaml&#39;</span><span class="p">)</span>
+    <span class="n">tmp_dir</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_tmp&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">tmp_dir</span><span class="p">):</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">tmp_dir</span><span class="p">)</span>
+
+    <span class="n">readline</span><span class="o">.</span><span class="n">set_completer_delims</span><span class="p">(</span><span class="s1">&#39; </span><span class="se">\t\n</span><span class="s1">;&#39;</span><span class="p">)</span>
+    <span class="n">readline</span><span class="o">.</span><span class="n">parse_and_bind</span><span class="p">(</span><span class="s1">&#39;tab: complete&#39;</span><span class="p">)</span>
+    <span class="n">readline</span><span class="o">.</span><span class="n">set_completer</span><span class="p">(</span><span class="n">complete_path</span><span class="p">)</span>
+    <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;The MRI dataset requires an anatomical nifti file to visualize&#39;</span>
+           <span class="s1">&#39; properly. Enter the path for the anatomical file or leave blank&#39;</span>
+           <span class="s1">&#39; if you plan not to use visualization or will enter into the yaml&#39;</span>
+           <span class="s1">&#39; file later.&#39;</span><span class="p">)</span>
+
+    <span class="n">anat_file</span> <span class="o">=</span> <span class="nb">raw_input</span><span class="p">(</span><span class="s1">&#39;Anat file: &#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">anat_file</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span> <span class="n">yaml_file</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="n">datas</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">new_file_lists</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">data_paths</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">file_list</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">file_lists</span><span class="p">):</span>
+        <span class="n">data</span><span class="p">,</span> <span class="n">new_file_list</span> <span class="o">=</span> <span class="n">read_niftis</span><span class="p">(</span><span class="n">file_list</span><span class="p">)</span>
+        <span class="n">new_file_lists</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_file_list</span><span class="p">)</span>
+        <span class="n">datas</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">data_path</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_dir</span><span class="p">,</span> <span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_</span><span class="si">%d</span><span class="s1">.npy&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">)</span>
+        <span class="n">data_paths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data_path</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+
+    <span class="n">sites</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span> <span class="k">if</span> <span class="s1">&#39;st&#39;</span> <span class="ow">in</span> <span class="n">f</span> <span class="k">else</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">fl</span><span class="p">]</span> <span class="k">for</span> <span class="n">fl</span> <span class="ow">in</span> <span class="n">file_lists</span><span class="p">]</span>
+    <span class="n">sites</span> <span class="o">=</span> <span class="n">sites</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">sites</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">save_mask</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">datas</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">mask_file</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">paths_file</span><span class="p">,</span> <span class="n">new_file_lists</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">sites_file</span><span class="p">,</span> <span class="n">sites</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">yaml_file</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">yf</span><span class="p">:</span>
+        <span class="n">yf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+            <span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span>
+                <span class="nb">dict</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                     <span class="n">data</span><span class="o">=</span><span class="n">data_paths</span><span class="p">,</span>
+                     <span class="n">mask</span><span class="o">=</span><span class="n">mask_file</span><span class="p">,</span>
+                     <span class="n">nifti</span><span class="o">=</span><span class="n">base_file</span><span class="p">,</span>
+                     <span class="n">sites</span><span class="o">=</span><span class="n">sites_file</span><span class="p">,</span>
+                     <span class="n">tmp_path</span><span class="o">=</span><span class="n">tmp_dir</span><span class="p">,</span>
+                     <span class="n">anat_file</span><span class="o">=</span><span class="n">anat_file</span>
+                     <span class="p">)</span>
+                <span class="p">)</span>
+            <span class="p">)</span></div>
+
+<div class="viewcode-block" id="make_argument_parser"><a class="viewcode-back" href="../../../source/cortex.analysis.html#cortex.analysis.load_mri.make_argument_parser">[docs]</a><span class="k">def</span> <span class="nf">make_argument_parser</span><span class="p">():</span>
+    <span class="sd">&#39;&#39;&#39;Parses command-line arguments.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">parser</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;source&#39;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;source directory for all subjects.&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;out_path&#39;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="s1">&#39;output directory under args.name&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-n&#39;</span><span class="p">,</span> <span class="s1">&#39;--name&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s1">&#39;mri&#39;</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s1">&#39;-p&#39;</span><span class="p">,</span> <span class="s1">&#39;--patterns&#39;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">parser</span></div>
+
+<div class="viewcode-block" id="main"><a class="viewcode-back" href="../../../source/cortex.analysis.html#cortex.analysis.load_mri.main">[docs]</a><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Main routine.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">args</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">args</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+
+        <span class="n">parser</span> <span class="o">=</span> <span class="n">make_argument_parser</span><span class="p">()</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+
+    <span class="n">source_dir</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">source</span><span class="p">)</span>
+    <span class="n">out_dir</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">out_path</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">out_dir</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;No output directory found (</span><span class="si">%s</span><span class="s1">)&#39;</span> <span class="o">%</span> <span class="n">out_dir</span><span class="p">)</span>
+
+    <span class="n">load_niftis</span><span class="p">(</span><span class="n">source_dir</span><span class="p">,</span> <span class="n">out_dir</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">patterns</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">patterns</span><span class="p">)</span></div>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

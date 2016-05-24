@@ -4,10 +4,38 @@ Generic dataset class
 
 from collections import OrderedDict
 import numpy as np
+import os
+from os import path
 import random
 
+from ..utils.tools import resolve_path
+from ..utils.extra import download_data, unzip
+
+
+def fetch_basic_data():
+    '''Fetch the basic dataset for demos.
+
+    '''
+    url = 'http://mialab.mrn.org/data/cortex/basic.zip'
+    out_dir = resolve_path('$data')
+    download_data(url, out_dir)
+    unzip(path.join(out_dir, 'basic.zip'), out_dir)
+    os.remove(path.join(out_dir, 'basic.zip'))
 
 def resolve(c):
+    '''Resolves the dataset class from string.
+
+    This method only includes basic datasets, such as MNIST. For neuroimaging
+    datasets, see `cortex.datasets.neuroimaging`
+
+
+    Args:
+        c (str): string to resolve.
+
+    Returns:
+        Dataset: dataset object resolved.
+
+    '''
     from .basic.mnist import MNIST
     from .basic.caltech import CALTECH
     from .basic.uci import UCI
@@ -27,6 +55,15 @@ def resolve(c):
     return C
 
 def make_one_hot(Y):
+    '''Makes integer label data into one-hot.
+
+    Args:
+        Y (numpy.array): N x 1 array of integers.
+
+    Returns:
+        numpy.array: N x n_labels array of ones and zeros.
+
+    '''
     class_list = np.unique(Y).tolist()
     n_classes = len(class_list)
 
@@ -48,14 +85,17 @@ def load_data(dataset=None,
     For the batch sizes, if any are None, the corresponding dataset
     will also be None.
 
-    Arguments:
-        dataset: str
-        train_batch_size (Optional) int.
-        valid_batch_size (Optional) int.
-        test_batch_size (Optional) int.
+    Args:
+        dataset (str): name of the dataset
+        train_batch_size (Optional[int])
+        valid_batch_size (Optional[int])
+        test_batch_size (Optional[int])
 
     Returns:
-        train, valid, test Dataset objects.
+        Dataset: train dataset
+        Dataset: valid dataset
+        Dataset: test dataset
+
     '''
 
     if resolve_dataset is None:
@@ -90,16 +130,18 @@ def load_data(dataset=None,
 
     return train, valid, test
 
-
 def load_data_split(C, idx=None, dataset=None, **dataset_args):
     '''Load dataset and split.
-    Arguments:
-        idx: (Optional) list of list of int. Indices for train/valid/test
-            datasets.
+
+    Args:
+        idx: (Optional[list]): Indices for train/valid/test datasets.
 
     Returns:
-        train, valid, test Dataset objects.
-        idx: Indices for if split is created.
+        Dataset: train dataset
+        Dataset: valid dataset
+        Dataset: test dataset
+        list: Indices for if split is created.
+
     '''
     train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
@@ -114,24 +156,26 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
     If idx is None, use split ratios to create indices.
 
     Arguments:
-        C: Dataset class.
-        split: (Optional) list of float. Split ratios over total.
-        idx: (Optional) list of list of int. Indices for train/valid/test
-            datasets.
-        train_batch_size (Optional) int.
-        valid_batch_size (Optional) int.
-        test_batch_size (Optional) int.
+        C (Dataset).
+        split (Optional[list]: Split ratios over total.
+        idx (Optional[list]: Indices for train/valid/test datasets.
+        train_batch_size (Optional[int])
+        valid_batch_size (Optional[int])
+        test_batch_size (Optional[int])
 
     Returns:
-        train, valid, test Dataset objects.
-        idx: Indices for if split is created.
+        Dataset: train dataset
+        Dataset: valid dataset
+        Dataset: test dataset
+        list: Indices for if split is created.
+
     '''
     if idx is None:
         assert split is not None
         if round(np.sum(split), 5) != 1. or len(split) != 3:
             raise ValueError(split)
         dummy = C(batch_size=1, **dataset_args)
-        N = dummy.n
+        N = dummy.X.shape[0]
         idx = range(N)
         random.shuffle(idx)
         split_idx = []
@@ -165,8 +209,38 @@ def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
 
 
 class Dataset(object):
+    '''Base dataset iterator class.
+
+    Attributes:
+        batch_size (int): batch size for the iterator.
+        shuffle (bool): shuffle the dataset after each epoch.
+        inf (bool): reset the dataset after iterating through who set.
+        name (str): name of the dataset.
+        pos (int): current position of the iterator.
+        stop (int): stop the dataset at this index when loading.
+        mode (str): usually train, test, valid.
+        balance (bool): replicate samples to balance the dataset.
+
+    '''
     def __init__(self, batch_size=None, shuffle=True, inf=False, name='dataset',
                  mode=None, stop=None, balance=False, **kwargs):
+        '''Init function for Dataset
+
+        Args:
+            batch_size (int): batch size for the iterator.
+            shuffle (bool): shuffle the dataset after each epoch.
+            inf (bool): reset the dataset after iterating through who set.
+            name (str): name of the dataset.
+            pos (int): current position of the iterator.
+            stop (int): stop the dataset at this index when loading.
+            mode (str): usually train, test, valid.
+            balance (bool): replicate samples to balance the dataset.
+            **kwargs: keyword arguments not used
+
+        Returns:
+            dict: leftover keyword arguments.
+
+        '''
         if batch_size is None:
             raise ValueError('Batch size argument must be given')
 
@@ -182,17 +256,29 @@ class Dataset(object):
         return kwargs
 
     def randomize(self):
+        '''Randomize the dataset.
+
+        '''
         return
 
     def reset(self):
+        '''Reset the dataset post-epoch.
+
+        '''
         self.pos = 0
         if self.shuffle:
             self.randomize()
 
     def __iter__(self):
+        '''Iterator.
+
+        '''
         return self
 
     def save_images(self, *args):
+        '''Save images.
+
+        '''
         pass
 
 class BasicDataset(Dataset):
@@ -200,9 +286,33 @@ class BasicDataset(Dataset):
     Dataset with numpy arrays as inputs. No visualization available.
 
     Arrays must be a dictionary of name/numpy array key/value pairs.
+
+    Attributes:
+        data (dict): dictionary of numpy.array.
+        n (int): number of data samples.
+        dims (dict): dictionary of data dimensions.
+        distributions (dict): dictionary of strings. See `models.distributions`
+            for details.
+        X (numpy.array): MRI data.
+        Y (Optional[numpy.array]): If not None, lables.
+        mean_image (numpy.array): mean image of primary data.
+
     '''
     def __init__(self, data, distributions=None, labels='label', name=None,
                 **kwargs):
+        '''Init function for BasicDataset.
+
+        Args:
+            data (dict): Dictionary of np.array. Keys are data name, value is
+                the actual data.
+            distributions (dict): See `models.distributions` for more details.
+            labels (str): key for the labels.
+            name: (Optional[str]): Name of the dataset. Should be one of the
+                keys in data.
+            **kwargs: extra arguments to pass to Dataset constructor.
+
+        '''
+
         if not isinstance(data, dict):
             raise ValueError('array argument must be a dict.')
         if name is None:
@@ -248,10 +358,14 @@ class BasicDataset(Dataset):
             self.balance_labels()
 
         self.X = self.data[self.name]
+        self.mean_image = self.X.mean(axis=0)
         if labels in self.data.keys():
             self.Y = self.data[labels]
 
     def balance_labels(self):
+        '''Balanced the dataset.
+
+        '''
         label_nums = self.data[self.labels].sum(axis=0)
         max_num = int(max(label_nums))
 
@@ -277,11 +391,24 @@ class BasicDataset(Dataset):
         self.label_props = self.label_nums / float(self.n)
 
     def randomize(self):
+        '''Randomizes the dataset
+
+        '''
         rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
         for k in self.data.keys():
             self.data[k] = self.data[k][rnd_idx]
 
     def next(self, batch_size=None):
+        '''Draws the next batch of data samples.
+
+        Arguments:
+            batch_size (int).
+
+        Returns:
+            dict: Dictionary of data.
+
+        '''
+
         if batch_size is None:
             batch_size = self.batch_size
 

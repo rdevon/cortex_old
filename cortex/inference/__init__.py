@@ -1,5 +1,5 @@
-'''
-Inference methods.
+'''Inference methods.
+
 '''
 
 from .air import AIR, DeepAIR
@@ -8,6 +8,18 @@ from .rws import RWS, DeepRWS
 
 
 def resolve(model, inference_method=None, deep=False, **inference_args):
+    '''Resolves the inference method.
+
+    Args:
+        model (Helmholtz): helmholtz model that we are doing inference with.
+        inference_method: (str): inference method.
+        deep (bool): deep or no.
+        **inference_args: extra keyword args for inference.
+
+    Returns:
+        IRVI: inference method
+
+    '''
     if deep:
         if inference_method == 'momentum':
             raise NotImplementedError(inference_method)

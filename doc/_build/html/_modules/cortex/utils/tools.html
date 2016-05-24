@@ -1,0 +1,696 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.utils.tools &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex" href="../../cortex.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" accesskey="U">cortex</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.utils.tools</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Helper module for learning.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">ConfigParser</span> <span class="kn">import</span> <span class="n">ConfigParser</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">pprint</span>
+<span class="kn">from</span> <span class="nn">progressbar</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Bar</span><span class="p">,</span>
+    <span class="n">Percentage</span><span class="p">,</span>
+    <span class="n">ProgressBar</span><span class="p">,</span>
+    <span class="n">RotatingMarker</span><span class="p">,</span>
+    <span class="n">SimpleProgress</span><span class="p">,</span>
+    <span class="n">Timer</span>
+<span class="p">)</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+<span class="kn">from</span> <span class="nn">theano.sandbox.rng_mrg</span> <span class="kn">import</span> <span class="n">MRG_RandomStreams</span> <span class="k">as</span> <span class="n">RandomStreams</span>
+<span class="kn">from</span> <span class="nn">theano.tensor.shared_randomstreams</span> <span class="kn">import</span> <span class="n">RandomStreams</span> <span class="k">as</span> <span class="n">SRandomStreams</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">import</span> <span class="nn">yaml</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">floatX</span>
+
+
+<span class="n">random_seed</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10000</span><span class="p">)</span>
+<span class="n">rng_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="n">random_seed</span><span class="p">)</span>
+<span class="n">profile</span> <span class="o">=</span> <span class="bp">False</span>
+
+<span class="c1"># For getting terminal column width</span>
+<span class="n">_</span><span class="p">,</span> <span class="n">_columns</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">popen</span><span class="p">(</span><span class="s1">&#39;stty size&#39;</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+<span class="n">_columns</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">_columns</span><span class="p">)</span>
+
+<div class="viewcode-block" id="print_section"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.print_section">[docs]</a><span class="k">def</span> <span class="nf">print_section</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;For printing sections to scripts nicely.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        s (str): string of section</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;-&#39;</span> <span class="o">*</span> <span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">s</span> <span class="o">+</span> <span class="p">(</span><span class="s1">&#39;-&#39;</span> <span class="o">*</span> <span class="p">(</span><span class="n">_columns</span> <span class="o">-</span> <span class="mi">3</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)))</span></div>
+
+<div class="viewcode-block" id="get_paths"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.get_paths">[docs]</a><span class="k">def</span> <span class="nf">get_paths</span><span class="p">():</span>
+    <span class="sd">&#39;&#39;&#39;Pulls all paths from `~/.cortexrc` file.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: dictionary of paths from `~.cortexrc`.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="s1">&#39;~&#39;</span><span class="p">)</span>
+    <span class="n">config_file</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="s1">&#39;.cortexrc&#39;</span><span class="p">)</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">ConfigParser</span><span class="p">()</span>
+    <span class="n">config</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">config_file</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">path_dict</span> <span class="o">=</span> <span class="n">config</span><span class="o">.</span><span class="n">_sections</span><span class="p">[</span><span class="s1">&#39;PATHS&#39;</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;There is a problem with the .cortexrc file. Either &#39;</span>
+                         <span class="s1">&#39;create this file in your $HOME directory, or run &#39;</span>
+                         <span class="s1">&#39;`cortex-setup`. If this file already exists, please &#39;</span>
+                         <span class="s1">&#39;make sure that the `[PATHS]` field exists.&#39;</span><span class="p">)</span>
+
+    <span class="n">path_dict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s1">&#39;__name__&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">path_dict</span></div>
+
+<div class="viewcode-block" id="resolve_path"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.resolve_path">[docs]</a><span class="k">def</span> <span class="nf">resolve_path</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Resolves a path using the `.cortexrc` file.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        p (str): path string.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        str: path with substrings replaced from `~/.cortexrc`.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">path_dict</span> <span class="o">=</span> <span class="n">get_paths</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">path_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+    <span class="n">pieces</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">piece</span> <span class="ow">in</span> <span class="n">pieces</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">piece</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;$&#39;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Field in .cortexrc file is missing and may need &#39;</span>
+                             <span class="s1">&#39;to be filled: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">piece</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">p</span></div>
+
+<div class="viewcode-block" id="get_srng"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.get_srng">[docs]</a><span class="k">def</span> <span class="nf">get_srng</span><span class="p">():</span>
+    <span class="sd">&#39;&#39;&#39;Shared Randomstream.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">srng</span> <span class="o">=</span> <span class="n">SRandomStreams</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1000000</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">srng</span></div>
+
+<div class="viewcode-block" id="get_trng"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.get_trng">[docs]</a><span class="k">def</span> <span class="nf">get_trng</span><span class="p">():</span>
+    <span class="sd">&#39;&#39;&#39;Normal Randomstream.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">trng</span> <span class="o">=</span> <span class="n">RandomStreams</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1000000</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">trng</span></div>
+
+<div class="viewcode-block" id="warn_kwargs"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.warn_kwargs">[docs]</a><span class="k">def</span> <span class="nf">warn_kwargs</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Warns of extra keyword arguments.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        c (object): class</span>
+<span class="sd">        **kwargs: extra keyword arguments.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;Class instance </span><span class="si">%s</span><span class="s1"> has leftover kwargs </span><span class="si">%s</span><span class="s1">&#39;</span>
+                       <span class="o">%</span> <span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">c</span><span class="p">),</span> <span class="n">kwargs</span><span class="p">),</span> <span class="ne">RuntimeWarning</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="update_dict_of_lists"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.update_dict_of_lists">[docs]</a><span class="k">def</span> <span class="nf">update_dict_of_lists</span><span class="p">(</span><span class="n">d_to_update</span><span class="p">,</span> <span class="o">**</span><span class="n">d</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Updates a dict of list with kwargs.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        d_to_update (dict): dictionary of lists.</span>
+<span class="sd">        **d: keyword arguments to append.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">d_to_update</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">d_to_update</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">d_to_update</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">v</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="debug_shape"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.debug_shape">[docs]</a><span class="k">def</span> <span class="nf">debug_shape</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">t_out</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Debug function that returns the shape then raises assert error.</span>
+
+<span class="sd">    Raises assert False. For debugging shape only.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        X (T.tensor): input tensor.</span>
+<span class="sd">        x (numpy.array): input values.</span>
+<span class="sd">        t_out (T.tensor): output tensor.</span>
+<span class="sd">        updates (theano.OrderedUpdates): updates for function.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">([</span><span class="n">X</span><span class="p">],</span> <span class="n">t_out</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="n">updates</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="k">print</span> <span class="n">out</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">assert</span> <span class="bp">False</span></div>
+
+<div class="viewcode-block" id="print_profile"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.print_profile">[docs]</a><span class="k">def</span> <span class="nf">print_profile</span><span class="p">(</span><span class="n">tparams</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Prints shapes of the shared variables.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        tparams (dict): parameters to print shape of.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">print</span> <span class="s1">&#39;Print profile for tparams (name, shape)&#39;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="k">print</span> <span class="s1">&#39;</span><span class="se">\t</span><span class="s1">&#39;</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span></div>
+
+<div class="viewcode-block" id="shuffle_columns"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.shuffle_columns">[docs]</a><span class="k">def</span> <span class="nf">shuffle_columns</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">srng</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Shuffles a tensor along the second index.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        x (T.tensor).</span>
+<span class="sd">        srng (sharedRandomstream).</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">step_shuffle</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">perm</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">m</span><span class="p">[</span><span class="n">perm</span><span class="p">]</span>
+
+    <span class="n">perm_mat</span> <span class="o">=</span> <span class="n">srng</span><span class="o">.</span><span class="n">permutation</span><span class="p">(</span><span class="n">n</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],))</span>
+    <span class="n">y</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span>
+        <span class="n">step_shuffle</span><span class="p">,</span> <span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">perm_mat</span><span class="p">],</span> <span class="p">[</span><span class="bp">None</span><span class="p">],</span> <span class="p">[],</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+        <span class="n">name</span><span class="o">=</span><span class="s1">&#39;shuffle&#39;</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">y</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="scan"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.scan">[docs]</a><span class="k">def</span> <span class="nf">scan</span><span class="p">(</span><span class="n">f_scan</span><span class="p">,</span> <span class="n">seqs</span><span class="p">,</span> <span class="n">outputs_info</span><span class="p">,</span> <span class="n">non_seqs</span><span class="p">,</span> <span class="n">n_steps</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;scan&#39;</span><span class="p">,</span>
+         <span class="n">strict</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Convenience function for scan.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        f_scan (function): scanning function.</span>
+<span class="sd">        seqs (list or tuple): list of sequence tensors.</span>
+<span class="sd">        outputs_info (list or tuple): list of scan outputs.</span>
+<span class="sd">        non_seqs (list or tuple): list of non-sequences.</span>
+<span class="sd">        n_steps (int): number of steps.</span>
+<span class="sd">        name (str): name of scanning procedure.</span>
+<span class="sd">        strict (bool).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple: scan outputs.</span>
+<span class="sd">        theano.OrderedUpdates: updates.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">return</span> <span class="n">theano</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span>
+        <span class="n">f_scan</span><span class="p">,</span>
+        <span class="n">sequences</span><span class="o">=</span><span class="n">seqs</span><span class="p">,</span>
+        <span class="n">outputs_info</span><span class="o">=</span><span class="n">outputs_info</span><span class="p">,</span>
+        <span class="n">non_sequences</span><span class="o">=</span><span class="n">non_seqs</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">n_steps</span><span class="o">=</span><span class="n">n_steps</span><span class="p">,</span>
+        <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">,</span>
+        <span class="n">strict</span><span class="o">=</span><span class="n">strict</span>
+    <span class="p">)</span></div>
+
+<div class="viewcode-block" id="init_weights"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.init_weights">[docs]</a><span class="k">def</span> <span class="nf">init_weights</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">weight_noise</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">weight_scale</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span> <span class="n">dropout</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Inialization function for weights.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model (Layer).</span>
+<span class="sd">        weight_noise (bool): noise the weights.</span>
+<span class="sd">        weight_scale (float): scale for weight initialization.</span>
+<span class="sd">        dropout (bool): use dropout.</span>
+<span class="sd">        **kwargs: extra kwargs.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: extra kwargs.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">weight_noise</span> <span class="o">=</span> <span class="n">weight_noise</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">weight_scale</span> <span class="o">=</span> <span class="n">weight_scale</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">dropout</span> <span class="o">=</span> <span class="n">dropout</span>
+    <span class="k">return</span> <span class="n">kwargs</span></div>
+
+<div class="viewcode-block" id="init_rngs"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.init_rngs">[docs]</a><span class="k">def</span> <span class="nf">init_rngs</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">trng</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Initialization function for RNGs.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model (Layer).</span>
+<span class="sd">        rng (np.randomStreams).</span>
+<span class="sd">        trng (theano.randomStreams).</span>
+<span class="sd">        **kwargs: extra kwargs.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: extra kwargs.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">rng</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">rng_</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">rng</span> <span class="o">=</span> <span class="n">rng</span>
+    <span class="k">if</span> <span class="n">trng</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">trng</span> <span class="o">=</span> <span class="n">RandomStreams</span><span class="p">(</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10000</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">trng</span> <span class="o">=</span> <span class="n">trng</span>
+    <span class="k">return</span> <span class="n">kwargs</span></div>
+
+<div class="viewcode-block" id="logit"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.logit">[docs]</a><span class="k">def</span> <span class="nf">logit</span><span class="p">(</span><span class="n">z</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Logit function.</span>
+
+<span class="sd">    :math:`\log \\frac{z}{1 - z}`</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        z (T.tensor).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        T.tensor.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">z</span><span class="p">,</span> <span class="mf">1e-7</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="mf">1e-7</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">z</span><span class="p">)</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">z</span><span class="p">)</span></div>
+
+<span class="k">def</span> <span class="nf">_slice</span><span class="p">(</span><span class="n">_x</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">dim</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Slice a tensor into 2 along last axis.</span>
+
+<span class="sd">    Extended from Cho&#39;s arctic repo.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        _x (T.tensor).</span>
+<span class="sd">        n (int).</span>
+<span class="sd">        dim (int).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        T.tensor.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_x</span><span class="p">[</span><span class="n">n</span><span class="o">*</span><span class="n">dim</span><span class="p">:(</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="n">dim</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_x</span><span class="p">[:,</span> <span class="n">n</span><span class="o">*</span><span class="n">dim</span><span class="p">:(</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="n">dim</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_x</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">n</span><span class="o">*</span><span class="n">dim</span><span class="p">:(</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="n">dim</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_x</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="n">n</span><span class="o">*</span><span class="n">dim</span><span class="p">:(</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="n">dim</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Number of dims (</span><span class="si">%d</span><span class="s1">) not supported&#39;</span>
+                         <span class="s1">&#39; (but can add easily here)&#39;</span> <span class="o">%</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">_slice2</span><span class="p">(</span><span class="n">_x</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Slightly different slice function than above.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        _x (T.tensor).</span>
+<span class="sd">        start (int).</span>
+<span class="sd">        end (int).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        T.tensor.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_x</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_x</span><span class="p">[:,</span> <span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_x</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_x</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Number of dims (</span><span class="si">%d</span><span class="s1">) not supported&#39;</span>
+                         <span class="s1">&#39; (but can add easily here)&#39;</span> <span class="o">%</span> <span class="n">_x</span><span class="o">.</span><span class="n">ndim</span><span class="p">)</span>
+
+<div class="viewcode-block" id="load_experiment"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.load_experiment">[docs]</a><span class="k">def</span> <span class="nf">load_experiment</span><span class="p">(</span><span class="n">experiment_yaml</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Load an experiment from a yaml.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        experiment_yaml (str): path to yaml</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: extracted yaml.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">print</span><span class="p">(</span><span class="s1">&#39;Loading experiment from </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">experiment_yaml</span><span class="p">)</span>
+    <span class="n">exp_dict</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">experiment_yaml</span><span class="p">))</span>
+    <span class="k">print</span><span class="p">(</span><span class="s1">&#39;Experiment hyperparams: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">exp_dict</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">exp_dict</span></div>
+
+<div class="viewcode-block" id="load_model"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.load_model">[docs]</a><span class="k">def</span> <span class="nf">load_model</span><span class="p">(</span><span class="n">model_file</span><span class="p">,</span> <span class="n">f_unpack</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="o">**</span><span class="n">extra_args</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Loads pretrained model.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        model_file (str): path to file.</span>
+<span class="sd">        f_unpack (function): unpacking function.</span>
+<span class="sd">            Must return tuple of::</span>
+
+<span class="sd">                models: a list of Layer objects</span>
+<span class="sd">                pretrained_kwargs: a dictionary of saved parameters.</span>
+<span class="sd">                kwargs: dictionary of extra arguments (can be None).</span>
+
+<span class="sd">            See `cortex.models.rnn.unpack` for an example.</span>
+<span class="sd">        strict (bool): fail on extra parameters.</span>
+<span class="sd">        **extra_args: extra keyword arguments to pass to unpack.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        dict: dictionary of models.</span>
+<span class="sd">        dict: extra keyword arguments.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">print</span> <span class="s1">&#39;Loading model from </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">model_file</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">model_file</span><span class="p">)</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">params</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+
+    <span class="n">d</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="o">**</span><span class="n">extra_args</span><span class="p">)</span>
+    <span class="n">models</span><span class="p">,</span> <span class="n">pretrained_kwargs</span><span class="p">,</span> <span class="n">kwargs</span> <span class="o">=</span> <span class="n">f_unpack</span><span class="p">(</span><span class="o">**</span><span class="n">d</span><span class="p">)</span>
+
+    <span class="k">print</span><span class="p">(</span><span class="s1">&#39;Pretrained model(s) has the following parameters: </span><span class="se">\n</span><span class="si">%s</span><span class="s1">&#39;</span>
+          <span class="o">%</span> <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">pretrained_kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+
+    <span class="n">model_dict</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">models</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">print</span> <span class="s1">&#39;--- Loading params for </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">model</span><span class="o">.</span><span class="n">name</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">param_key</span> <span class="o">=</span> <span class="s1">&#39;{name}_{key}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">k</span><span class="p">)</span>
+                <span class="n">pretrained_v</span> <span class="o">=</span> <span class="n">pretrained_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">param_key</span><span class="p">)</span>
+                <span class="k">print</span> <span class="s1">&#39;Found </span><span class="si">%s</span><span class="s1"> for </span><span class="si">%s</span><span class="s1"> </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">pretrained_v</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="n">model</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">pretrained_v</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="p">(</span>
+                    <span class="s1">&#39;Sizes do not match: </span><span class="si">%s</span><span class="s1"> vs </span><span class="si">%s</span><span class="s1">&#39;</span>
+                    <span class="o">%</span> <span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">pretrained_v</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">model</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">pretrained_v</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">param_key</span> <span class="o">=</span> <span class="s1">&#39;{key}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">k</span><span class="p">)</span>
+                    <span class="n">pretrained_v</span> <span class="o">=</span> <span class="n">pretrained_kwargs</span><span class="p">[</span><span class="n">param_key</span><span class="p">]</span>
+                    <span class="k">print</span> <span class="s1">&#39;Found </span><span class="si">%s</span><span class="s1">, but name is ambiguous&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">k</span><span class="p">)</span>
+                    <span class="k">assert</span> <span class="n">model</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">pretrained_v</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="p">(</span>
+                        <span class="s1">&#39;Sizes do not match: </span><span class="si">%s</span><span class="s1"> vs </span><span class="si">%s</span><span class="s1">&#39;</span>
+                        <span class="o">%</span> <span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">pretrained_v</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="n">model</span><span class="o">.</span><span class="n">params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">pretrained_v</span>
+                <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                    <span class="k">print</span> <span class="s1">&#39;{} not found&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+        <span class="n">model_dict</span><span class="p">[</span><span class="n">model</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">model</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pretrained_kwargs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">strict</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;ERROR: Leftover params: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span>
+                         <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">pretrained_kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+    <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">pretrained_kwargs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="s1">&#39;Leftover params: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span>
+                      <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">pretrained_kwargs</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+
+    <span class="k">return</span> <span class="n">model_dict</span><span class="p">,</span> <span class="n">kwargs</span></div>
+
+<div class="viewcode-block" id="check_bad_nums"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.check_bad_nums">[docs]</a><span class="k">def</span> <span class="nf">check_bad_nums</span><span class="p">(</span><span class="n">rvals</span><span class="p">,</span> <span class="n">names</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Checks for nans and infs.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="bp">False</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">out</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">names</span><span class="p">,</span> <span class="n">rvals</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">out</span><span class="p">)):</span>
+            <span class="k">print</span> <span class="s1">&#39;Found nan num &#39;</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="s1">&#39;(nan)&#39;</span>
+            <span class="n">found</span> <span class="o">=</span> <span class="bp">True</span>
+        <span class="k">elif</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">out</span><span class="p">)):</span>
+            <span class="k">print</span> <span class="s1">&#39;Found inf &#39;</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="s1">&#39;(inf)&#39;</span>
+            <span class="n">found</span> <span class="o">=</span> <span class="bp">True</span>
+    <span class="k">return</span> <span class="n">found</span></div>
+
+<div class="viewcode-block" id="flatten_dict"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.flatten_dict">[docs]</a><span class="k">def</span> <span class="nf">flatten_dict</span><span class="p">(</span><span class="n">d</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Flattens a dictionary of dictionaries.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">rval</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">OrderedDict</span><span class="p">):</span>
+            <span class="n">new_d</span> <span class="o">=</span> <span class="n">flatten_dict</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">k_</span><span class="p">,</span> <span class="n">v_</span> <span class="ow">in</span> <span class="n">new_d</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+                <span class="n">rval</span><span class="p">[</span><span class="n">k</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="n">k_</span><span class="p">]</span> <span class="o">=</span> <span class="n">v_</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">rval</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+    <span class="k">return</span> <span class="n">rval</span></div>
+
+<div class="viewcode-block" id="zipp"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.zipp">[docs]</a><span class="k">def</span> <span class="nf">zipp</span><span class="p">(</span><span class="n">params</span><span class="p">,</span> <span class="n">tparams</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Push parameters to Theano shared variables.</span>
+
+<span class="sd">    From Cho&#39;s arctic repo.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">for</span> <span class="n">kk</span><span class="p">,</span> <span class="n">vv</span> <span class="ow">in</span> <span class="n">params</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="n">tparams</span><span class="p">[</span><span class="n">kk</span><span class="p">]</span><span class="o">.</span><span class="n">set_value</span><span class="p">(</span><span class="n">vv</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="unzip"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.unzip">[docs]</a><span class="k">def</span> <span class="nf">unzip</span><span class="p">(</span><span class="n">zipped</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Pull parameters from Theano shared variables.</span>
+
+<span class="sd">    From Cho&#39;s arctic repo.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">new_params</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">kk</span><span class="p">,</span> <span class="n">vv</span> <span class="ow">in</span> <span class="n">zipped</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="n">new_params</span><span class="p">[</span><span class="n">kk</span><span class="p">]</span> <span class="o">=</span> <span class="n">vv</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">new_params</span></div>
+
+<div class="viewcode-block" id="itemlist"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.itemlist">[docs]</a><span class="k">def</span> <span class="nf">itemlist</span><span class="p">(</span><span class="n">tparams</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Get the list of parameters: Note that tparams must be OrderedDict.</span>
+
+<span class="sd">    From Cho&#39;s arctic repo.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">return</span> <span class="n">tparams</span><span class="o">.</span><span class="n">values</span><span class="p">()</span></div>
+
+<span class="k">def</span> <span class="nf">_p</span><span class="p">(</span><span class="n">pp</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Make prefix-appended name</span>
+
+<span class="sd">    From Cho&#39;s arctic repo.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">return</span> <span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_</span><span class="si">%s</span><span class="s1">&#39;</span><span class="o">%</span><span class="p">(</span><span class="n">pp</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ortho_weight"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.ortho_weight">[docs]</a><span class="k">def</span> <span class="nf">ortho_weight</span><span class="p">(</span><span class="n">ndim</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Make ortho weight tensor.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">rng</span><span class="p">:</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">rng_</span>
+    <span class="n">W</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">ndim</span><span class="p">,</span> <span class="n">ndim</span><span class="p">)</span>
+    <span class="n">u</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">svd</span><span class="p">(</span><span class="n">W</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">u</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="norm_weight"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.norm_weight">[docs]</a><span class="k">def</span> <span class="nf">norm_weight</span><span class="p">(</span><span class="n">nin</span><span class="p">,</span> <span class="n">nout</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">ortho</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Make normal weight tensor.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">rng</span><span class="p">:</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">rng_</span>
+    <span class="k">if</span> <span class="n">nout</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">nout</span> <span class="o">=</span> <span class="n">nin</span>
+    <span class="k">if</span> <span class="n">nout</span> <span class="o">==</span> <span class="n">nin</span> <span class="ow">and</span> <span class="n">ortho</span><span class="p">:</span>
+        <span class="n">W</span> <span class="o">=</span> <span class="n">ortho_weight</span><span class="p">(</span><span class="n">nin</span><span class="p">,</span> <span class="n">rng</span><span class="o">=</span><span class="n">rng</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">W</span> <span class="o">=</span> <span class="n">scale</span> <span class="o">*</span> <span class="n">rng</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">nin</span><span class="p">,</span> <span class="n">nout</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">W</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s1">&#39;float32&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="parzen_estimation"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.parzen_estimation">[docs]</a><span class="k">def</span> <span class="nf">parzen_estimation</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">tests</span><span class="p">,</span> <span class="n">h</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Estimate parzen window.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">log_p</span> <span class="o">=</span> <span class="mf">0.</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="n">samples</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">d</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">h</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">test</span> <span class="ow">in</span> <span class="n">tests</span><span class="p">:</span>
+        <span class="n">d_s</span> <span class="o">=</span> <span class="p">(</span><span class="n">samples</span> <span class="o">-</span> <span class="n">test</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:])</span> <span class="o">/</span> <span class="n">h</span>
+        <span class="n">e</span> <span class="o">=</span> <span class="n">log_mean_exp</span><span class="p">((</span><span class="o">-.</span><span class="mi">5</span> <span class="o">*</span> <span class="n">d_s</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">as_numpy</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">log_p</span> <span class="o">+=</span> <span class="n">e</span> <span class="o">-</span> <span class="n">z</span>
+    <span class="k">return</span> <span class="n">log_p</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">tests</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span></div>
+
+<div class="viewcode-block" id="get_w_tilde"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.get_w_tilde">[docs]</a><span class="k">def</span> <span class="nf">get_w_tilde</span><span class="p">(</span><span class="n">log_factor</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Gets normalized weights.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">log_factor</span> <span class="o">=</span> <span class="n">log_factor</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">log_factor</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+    <span class="n">w_norm</span>   <span class="o">=</span> <span class="n">log_sum_exp</span><span class="p">(</span><span class="n">log_factor</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">log_w</span>    <span class="o">=</span> <span class="n">log_factor</span> <span class="o">-</span> <span class="n">T</span><span class="o">.</span><span class="n">shape_padleft</span><span class="p">(</span><span class="n">w_norm</span><span class="p">)</span>
+    <span class="n">w_tilde</span>  <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_w</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">w_tilde</span></div>
+
+<div class="viewcode-block" id="log_mean_exp"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.log_mean_exp">[docs]</a><span class="k">def</span> <span class="nf">log_mean_exp</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">as_numpy</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Numerically stable log(exp(x).mean()).</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">if</span> <span class="n">as_numpy</span><span class="p">:</span>
+        <span class="n">Te</span> <span class="o">=</span> <span class="n">np</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">Te</span> <span class="o">=</span> <span class="n">T</span>
+    <span class="n">x_max</span> <span class="o">=</span> <span class="n">Te</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Te</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">Te</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">Te</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">x_max</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">))</span> <span class="o">+</span> <span class="n">x_max</span></div>
+
+<div class="viewcode-block" id="log_sum_exp"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.log_sum_exp">[docs]</a><span class="k">def</span> <span class="nf">log_sum_exp</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Numerically stable log( sum( exp(A) ) ).</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">x_max</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">x_max</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="bp">True</span><span class="p">))</span> <span class="o">+</span> <span class="n">x_max</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">axis</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">y</span></div>
+
+<div class="viewcode-block" id="split_int_into_closest_two"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.split_int_into_closest_two">[docs]</a><span class="k">def</span> <span class="nf">split_int_into_closest_two</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Splits an integer into the closest 2 integers.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        x (int).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        int.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: if input is not an integer.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">long</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Input is not an integer.&#39;</span><span class="p">)</span>
+
+    <span class="kn">from</span> <span class="nn">math</span> <span class="kn">import</span> <span class="n">sqrt</span><span class="p">,</span> <span class="n">floor</span>
+
+    <span class="n">n</span> <span class="o">=</span> <span class="n">floor</span><span class="p">(</span><span class="n">sqrt</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span>
+        <span class="n">rem</span> <span class="o">=</span> <span class="n">x</span> <span class="o">%</span> <span class="n">n</span>
+        <span class="k">if</span> <span class="n">rem</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">x</span> <span class="o">/</span> <span class="n">n</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">-=</span> <span class="mi">1</span></div>
+
+<div class="viewcode-block" id="concatenate"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.tools.concatenate">[docs]</a><span class="k">def</span> <span class="nf">concatenate</span><span class="p">(</span><span class="n">tensor_list</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Alternative implementation of `theano.T.concatenate`.</span>
+
+<span class="sd">    This function does exactly the same thing, but contrary to Theano&#39;s own</span>
+<span class="sd">    implementation, the gradient is implemented on the GPU.</span>
+<span class="sd">    Backpropagating through `theano.tensor.concatenate` yields slowdowns</span>
+<span class="sd">    because the inverse operation (splitting) needs to be done on the CPU.</span>
+<span class="sd">    This implementation does not have that problem.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; x, y = theano.tensor.matrices(&#39;x&#39;, &#39;y&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; c = concatenate([x, y], axis=1)</span>
+
+<span class="sd">    Argsuments:</span>
+<span class="sd">        tensor_list: list, list of Theano tensor expressions that should be concatenated.</span>
+<span class="sd">        axis: int, the tensors will be joined along this axis.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        out: tensor, the concatenated tensor expression.</span>
+
+<span class="sd">    From Cho&#39;s arctic repo.</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">concat_size</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">tt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="k">for</span> <span class="n">tt</span> <span class="ow">in</span> <span class="n">tensor_list</span><span class="p">)</span>
+
+    <span class="n">output_shape</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">axis</span><span class="p">):</span>
+        <span class="n">output_shape</span> <span class="o">+=</span> <span class="p">(</span><span class="n">tensor_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">k</span><span class="p">],)</span>
+    <span class="n">output_shape</span> <span class="o">+=</span> <span class="p">(</span><span class="n">concat_size</span><span class="p">,)</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">axis</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tensor_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span><span class="p">):</span>
+        <span class="n">output_shape</span> <span class="o">+=</span> <span class="p">(</span><span class="n">tensor_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">k</span><span class="p">],)</span>
+
+    <span class="n">out</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">output_shape</span><span class="p">)</span>
+    <span class="n">offset</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">tt</span> <span class="ow">in</span> <span class="n">tensor_list</span><span class="p">:</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="p">()</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">axis</span><span class="p">):</span>
+            <span class="n">indices</span> <span class="o">+=</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="bp">None</span><span class="p">),)</span>
+        <span class="n">indices</span> <span class="o">+=</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="n">offset</span><span class="p">,</span> <span class="n">offset</span> <span class="o">+</span> <span class="n">tt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">axis</span><span class="p">]),)</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">axis</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">tensor_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">ndim</span><span class="p">):</span>
+            <span class="n">indices</span> <span class="o">+=</span> <span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="bp">None</span><span class="p">),)</span>
+
+        <span class="n">out</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">set_subtensor</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="n">indices</span><span class="p">],</span> <span class="n">tt</span><span class="p">)</span>
+        <span class="n">offset</span> <span class="o">+=</span> <span class="n">tt</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">out</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

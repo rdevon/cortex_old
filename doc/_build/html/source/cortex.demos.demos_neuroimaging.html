@@ -50,14 +50,59 @@
 <div class="section" id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
 </div>
-<div class="section" id="cortex-demos-demos-neuroimaging-rbm-fmri-module">
-<h2>cortex.demos.demos_neuroimaging.rbm_fmri module<a class="headerlink" href="#cortex-demos-demos-neuroimaging-rbm-fmri-module" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-cortex.demos.demos_neuroimaging.rbm_ni">
+<span id="cortex-demos-demos-neuroimaging-rbm-ni-module"></span><h2>cortex.demos.demos_neuroimaging.rbm_ni module<a class="headerlink" href="#module-cortex.demos.demos_neuroimaging.rbm_ni" title="Permalink to this headline">¶</a></h2>
+<p>Demo for training RBM with MRI or fMRI dataset.</p>
+<p>Try with <cite>python rbm_ni.py rbm_olin.yaml</cite>.</p>
+<dl class="function">
+<dt id="cortex.demos.demos_neuroimaging.rbm_ni.init_inference_args">
+<code class="descclassname">cortex.demos.demos_neuroimaging.rbm_ni.</code><code class="descname">init_inference_args</code><span class="sig-paren">(</span><em>n_chains=10</em>, <em>persistent=False</em>, <em>n_steps=1</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/demos/demos_neuroimaging/rbm_ni.html#init_inference_args"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.demos.demos_neuroimaging.rbm_ni.init_inference_args" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.demos.demos_neuroimaging.rbm_ni.init_learning_args">
+<code class="descclassname">cortex.demos.demos_neuroimaging.rbm_ni.</code><code class="descname">init_learning_args</code><span class="sig-paren">(</span><em>learning_rate=0.0001, optimizer='sgd', l2_decay=0.0, l1_decay=0.0, optimizer_args=None, learning_rate_schedule=None, batch_size=100, valid_batch_size=100, epochs=100, valid_key='nll', valid_sign='+', excludes=['rbm_visible_log_sigma']</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/demos/demos_neuroimaging/rbm_ni.html#init_learning_args"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.demos.demos_neuroimaging.rbm_ni.init_learning_args" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.demos.demos_neuroimaging.rbm_ni.train">
+<code class="descclassname">cortex.demos.demos_neuroimaging.rbm_ni.</code><code class="descname">train</code><span class="sig-paren">(</span><em>out_path=None</em>, <em>name=''</em>, <em>model_to_load=None</em>, <em>save_images=True</em>, <em>test_every=None</em>, <em>show_every=None</em>, <em>dim_h=None</em>, <em>preprocessing=None</em>, <em>learning_args=None</em>, <em>inference_args=None</em>, <em>dataset_args=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/demos/demos_neuroimaging/rbm_ni.html#train"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.demos.demos_neuroimaging.rbm_ni.train" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </div>
-<div class="section" id="cortex-demos-demos-neuroimaging-vae-module">
-<h2>cortex.demos.demos_neuroimaging.vae module<a class="headerlink" href="#cortex-demos-demos-neuroimaging-vae-module" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-cortex.demos.demos_neuroimaging.vae">
+<span id="cortex-demos-demos-neuroimaging-vae-module"></span><h2>cortex.demos.demos_neuroimaging.vae module<a class="headerlink" href="#module-cortex.demos.demos_neuroimaging.vae" title="Permalink to this headline">¶</a></h2>
+<p>Demo for training VAE.</p>
+<p>Try with <cite>python vae.py vae_mri.yaml</cite>.</p>
+<dl class="function">
+<dt id="cortex.demos.demos_neuroimaging.vae.init_learning_args">
+<code class="descclassname">cortex.demos.demos_neuroimaging.vae.</code><code class="descname">init_learning_args</code><span class="sig-paren">(</span><em>learning_rate=0.0001, learning_rate_schedule=None, l2_decay=0.0, optimizer='rmsprop', optimizer_args=None, n_posterior_samples=20, batch_size=100, valid_batch_size=100, epochs=100, valid_key='-log p(x)', valid_sign='+', excludes=['gaussian_log_sigma', 'gaussian_mu']</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/demos/demos_neuroimaging/vae.html#init_learning_args"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.demos.demos_neuroimaging.vae.init_learning_args" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.demos.demos_neuroimaging.vae.train">
+<code class="descclassname">cortex.demos.demos_neuroimaging.vae.</code><code class="descname">train</code><span class="sig-paren">(</span><em>out_path=None</em>, <em>name=''</em>, <em>model_to_load=None</em>, <em>save_images=True</em>, <em>test_every=None</em>, <em>dim_h=None</em>, <em>rec_args=None</em>, <em>gen_args=None</em>, <em>prior='gaussian'</em>, <em>preprocessing=None</em>, <em>learning_args=None</em>, <em>dataset_args=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/demos/demos_neuroimaging/vae.html#train"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.demos.demos_neuroimaging.vae.train" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </div>
 <div class="section" id="module-cortex.demos.demos_neuroimaging">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-cortex.demos.demos_neuroimaging" title="Permalink to this headline">¶</a></h2>
+<p>For command-line scripts of demos</p>
+<dl class="function">
+<dt id="cortex.demos.demos_neuroimaging.run_demo">
+<code class="descclassname">cortex.demos.demos_neuroimaging.</code><code class="descname">run_demo</code><span class="sig-paren">(</span><em>yaml_file</em>, <em>train</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/demos/demos_neuroimaging.html#run_demo"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.demos.demos_neuroimaging.run_demo" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.demos.demos_neuroimaging.run_rbm_olin_demo">
+<code class="descclassname">cortex.demos.demos_neuroimaging.</code><code class="descname">run_rbm_olin_demo</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/demos/demos_neuroimaging.html#run_rbm_olin_demo"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.demos.demos_neuroimaging.run_rbm_olin_demo" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="cortex.demos.demos_neuroimaging.run_rbm_vbm_demo">
+<code class="descclassname">cortex.demos.demos_neuroimaging.</code><code class="descname">run_rbm_vbm_demo</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/cortex/demos/demos_neuroimaging.html#run_rbm_vbm_demo"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#cortex.demos.demos_neuroimaging.run_rbm_vbm_demo" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
 </div>
 </div>
 
@@ -71,8 +116,8 @@
   <ul>
 <li><a class="reference internal" href="#">cortex.demos.demos_neuroimaging package</a><ul>
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
-<li><a class="reference internal" href="#cortex-demos-demos-neuroimaging-rbm-fmri-module">cortex.demos.demos_neuroimaging.rbm_fmri module</a></li>
-<li><a class="reference internal" href="#cortex-demos-demos-neuroimaging-vae-module">cortex.demos.demos_neuroimaging.vae module</a></li>
+<li><a class="reference internal" href="#module-cortex.demos.demos_neuroimaging.rbm_ni">cortex.demos.demos_neuroimaging.rbm_ni module</a></li>
+<li><a class="reference internal" href="#module-cortex.demos.demos_neuroimaging.vae">cortex.demos.demos_neuroimaging.vae module</a></li>
 <li><a class="reference internal" href="#module-cortex.demos.demos_neuroimaging">Module contents</a></li>
 </ul>
 </li>

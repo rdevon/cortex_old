@@ -15,22 +15,22 @@ from ..utils.tools import (
 
 class IRVI(object):
     '''Iterative refinement of the approximate posterior.
-    
+
     Will take a variety of methods as the refinement step (see GDIR and AIR).
+
     NOTE: this class will *not* perform inference by itself, but needs to be
     instantiated from one of the child classes.
-    
+
     Atrributes:
-        name: str. Name of inference method.
-        model: Layer. Typically Helmholtz
-        init_inference: str. Inference initialization option.
-        inference_rate: float. Rate of inference steps.
-        n_inference_steps: int. Number of inference steps.
-        n_inference_samples: int. Number of samples to draw from the approximate
-            posterior.
-        pass_gradients: bool. Pass gradients during inference.
-        use_all_samples: bool. Use all the samples rather than just last.
-    
+        name (str): Name of inference method.
+        model (Layer) Typically Helmholtz
+        init_inference (str): Inference initialization option.
+        inference_rate (float): Rate of inference steps.
+        n_inference_steps (int): Number of inference steps.
+        n_inference_samples (int): Number of samples to draw from the approximate posterior.
+        pass_gradients (bool): Pass gradients during inference.
+        use_all_samples (bool): Use all the samples rather than just last.
+
     '''
     def __init__(self,
                  model,
@@ -43,16 +43,17 @@ class IRVI(object):
                  use_all_samples=False,
                  **kwargs):
         '''Initialization function for IRVI.
-        
+
         Args:
-            model: Layer object. Typically Helmholtz.
-            init_inference: str. Inference initialization option.
-            inference_rate: float. Rate of inference steps.
-            n_inference_steps: int. Number of inference steps.
-            n_inference_samples: int. Number of samples to draw from the approximate
+            model (Layer): Typically Helmholtz.
+            init_inference (str): Inference initialization option.
+            inference_rate (float): Rate of inference steps.
+            n_inference_steps (int): Number of inference steps.
+            n_inference_samples (int): Number of samples to draw from the approximate
                 posterior.
-            pass_gradients: bool. Pass gradients during inference.
-            use_all_samples: bool. Use all the samples rather than just last.        
+            pass_gradients (bool): Pass gradients during inference.
+            use_all_samples (bool): Use all the samples rather than just last.
+
         '''
 
         self.name = name
@@ -67,19 +68,48 @@ class IRVI(object):
         warn_kwargs(self, **kwargs)
 
     # Child-specific methods. These must be defined in child class.
-    def step_infer(self, *params):  raise NotImplementedError()
-    def init_infer(self, q):        raise NotImplementedError()
-    def unpack_infer(self, outs):   raise NotImplementedError()
-    def params_infer(self):         raise NotImplementedError()
+    def step_infer(self, *params):
+        '''Step inference for `scan`.
+
+        Args:
+            *params: shared parameters.
+
+        '''
+        raise NotImplementedError()
+
+    def init_infer(self, q):
+        '''Initialize inference.
+
+        Args:
+            q (T.tensor)
+
+        '''
+        raise NotImplementedError()
+
+    def unpack_infer(self, outs):
+        '''Unpack inference.
+
+        Args:
+            outs (list)
+
+        '''
+        raise NotImplementedError()
+
+    def params_infer(self):
+        '''Parameters for inference.
+
+        '''
+        raise NotImplementedError()
 
     def init_variational_inference(self, x):
         '''Initialize variational inference.
-        
+
         Args:
-            x: T.tensor. Data samples
-            
+            x (T.tensor): Data samples
+
         Returns:
-            q0: T.tensor. Initial variational parameters.
+            T.tensor: Initial variational parameters.
+
         '''
         model = self.model
 
@@ -96,16 +126,17 @@ class IRVI(object):
 
     def inference(self, x, y, q0=None):
         '''Perform inference
-        
+
         Args:
-            x: T.tensor. Input data sample for posterior, p(h|x)
-            y: T.tensor. Output data sample for conditional, p(x|h)
-            q0: T.tensor (optional). Initial posterior parameters.
-        
+            x (T.tensor): Input data sample for posterior, p(h|x)
+            y (T.tensor): Output data sample for conditional, p(x|h)
+            q0 (Optional[T.tensor]): Initial posterior parameters.
+
         Returns:
-            rval: OrderedDict. Results from inference.
-            constants: list
-            updates: OrderedUpdates from scan.
+            OrderedDict: Results from inference.
+            list: constants in learning.
+            theano.OrderedUpdates: updates.
+
         '''
         model = self.model
         updates = theano.OrderedUpdates()
@@ -160,7 +191,7 @@ class IRVI(object):
             qk = qs
         else:
             qk = qs[-1]
-        
+
         rval = OrderedDict(
             qk=qk,
             qs=qs,
@@ -171,20 +202,21 @@ class IRVI(object):
 
     def test(self, x, y, stride=1, **model_args):
         '''Testing function for inference.
-        
+
         Returns a larger summary across different number of inference steps.
-        
+
         Args:
-            x: T.tensor. Input data sample for posterior, p(h|x)
-            y: T.tensor. Output data sample for conditional, p(x|h)
-            stride: int. Stride for result summary
-            model_args: dict. dictionary of arguments for model results.
-            
+            x (T.tensor): Input data sample for posterior, p(h|x)
+            y (T.tensor): Output data sample for conditional, p(x|h)
+            stride (int): Stride for result summary
+            model_args (dict): dictionary of arguments for model results.
+
         Returns:
-            results: OrderedDict of results. Only first- and last-step results.
-            samples: OrderedDict of tensors for visualization, etc.
-            full_results: OrderedDict of complete result summary
-            updates: OrderedUpdates from scan.
+            OrderedDict: Only first- and last-step results.
+            OrderedDict: tensors for visualization, etc.
+            OrderedDict: complete result summary
+            theano.OrderedUpdates: updates.
+
         '''
         model = self.model
 
@@ -229,17 +261,18 @@ class IRVI(object):
 
     def __call__(self, x, y, **model_args):
         '''Call function for performing inference.
-        
+
         Args:
-            x: T.tensor. Input data sample for posterior, p(h|x)
-            y: T.tensor. Output data sample for conditional, p(x|h)
-            model_args: dict. dictionary of arguments for model results.
-            
+            x (T.tensor): Input data sample for posterior, p(h|x)
+            y (T.tensor): Output data sample for conditional, p(x|h)
+            model_args (dict): dictionary of arguments for model results.
+
         Returns:
-            results: OrderedDict
-            samples: OrderedDict of tensors
-            constants: list
-            updates: OrderedUpdates from scan.
+            OrderedDict: results.
+            OrderedDict: tensors for visualization, etc.
+            list: constants in learning
+            theano.OrderedUpdates: updates.
+
         '''
         model = self.model
         inference_outs, constants, updates = self.inference(x, y)
@@ -251,6 +284,24 @@ class IRVI(object):
 
 
 class DeepIRVI(object):
+    '''Deep iterative refinement of the approximate posterior.
+
+    Will take a variety of methods as the refinement step (see DeepGDIR and DeepAIR).
+    NOTE: this class will *not* perform inference by itself, but needs to be
+    instantiated from one of the child classes.
+
+    Atrributes:
+        name (str): Name of inference method.
+        model (Layer) Typically Helmholtz
+        init_inference (str): Inference initialization option.
+        inference_rate (float): Rate of inference steps.
+        n_inference_steps (int): Number of inference steps.
+        n_inference_samples (int): Number of samples to draw from the \
+            approximate posterior.
+        pass_gradients (bool): Pass gradients during inference.
+        use_all_samples (bool): Use all the samples rather than just last.
+
+    '''
 
     def __init__(self,
                  model,
@@ -262,6 +313,19 @@ class DeepIRVI(object):
                  sample_posterior=False,
                  init_inference='recognition_network',
                  **kwargs):
+        '''Initialization function for DeepIRVI.
+
+        Args:
+            model (Layer): Typically Helmholtz.
+            init_inference (str): Inference initialization option.
+            inference_rate (float): Rate of inference steps.
+            n_inference_steps (int): Number of inference steps.
+            n_inference_samples (int): Number of samples to draw from the
+                approximate posterior.
+            pass_gradients (bool): Pass gradients during inference.
+            use_all_samples (bool): Use all the samples rather than just last.
+
+        '''
 
         self.name = name
         self.model = model
@@ -273,12 +337,49 @@ class DeepIRVI(object):
         self.sample_posterior = sample_posterior
         warn_kwargs(self, **kwargs)
 
-    def step_infer(self, *params):  raise NotImplementedError()
-    def init_infer(self, q0s):      raise NotImplementedError()
-    def unpack_infer(self, outs):   raise NotImplementedError()
-    def params_infer(self):         raise NotImplementedError()
+    def step_infer(self, *params):
+        '''Step inference for `scan`.
+
+        Args:
+            *params: shared parameters.
+
+        '''
+        raise NotImplementedError()
+
+    def init_infer(self, q):
+        '''Initialize inference.
+
+        Args:
+            q (T.tensor)
+
+        '''
+        raise NotImplementedError()
+
+    def unpack_infer(self, outs):
+        '''Unpack inference.
+
+        Args:
+            outs (list)
+
+        '''
+        raise NotImplementedError()
+
+    def params_infer(self):
+        '''Parameters for inference.
+
+        '''
+        raise NotImplementedError()
 
     def init_variational_inference(self, x):
+        '''Initialize variational inference.
+
+        Args:
+            x (T.tensor): Data samples
+
+        Returns:
+            T.tensor: Initial variational parameters.
+
+        '''
         model = self.model
 
         if self.init_inference == 'recognition_network':
@@ -299,6 +400,19 @@ class DeepIRVI(object):
         return q0s
 
     def inference(self, x, y, q0s=None):
+        '''Perform inference
+
+        Args:
+            x (T.tensor): Input data sample for posterior, p(h|x)
+            y (T.tensor): Output data sample for conditional, p(x|h)
+            q0s (Optional[list]): Initial posterior parameters.
+
+        Returns:
+            OrderedDict: Results from inference.
+            list: constants in learning.
+            theano.OrderedUpdates: updates.
+
+        '''
         model = self.model
         updates = theano.OrderedUpdates()
 
@@ -358,6 +472,23 @@ class DeepIRVI(object):
         return rval, constants, updates
 
     def test(self, x, y, stride=10, **model_args):
+        '''Testing function for inference.
+
+        Returns a larger summary across different number of inference steps.
+
+        Args:
+            x (T.tensor): Input data sample for posterior, p(h|x)
+            y (T.tensor): Output data sample for conditional, p(x|h)
+            stride (int): Stride for result summary
+            model_args (dict): dictionary of arguments for model results.
+
+        Returns:
+            OrderedDict: Only first- and last-step results.
+            OrderedDict: tensors for visualization, etc.
+            OrderedDict: complete result summary
+            theano.OrderedUpdates: updates.
+
+        '''
         model = self.model
 
         inference_outs, _, updates = self.inference(x, y)
@@ -391,8 +522,22 @@ class DeepIRVI(object):
             results['d_' + k] = v[0] - v[-1]
 
         return results, samples, full_results, updates
-    
+
     def __call__(self, x, y, **model_args):
+        '''Call function for performing inference.
+
+        Args:
+            x (T.tensor): Input data sample for posterior, p(h|x)
+            y (T.tensor): Output data sample for conditional, p(x|h)
+            model_args (dict): dictionary of arguments for model results.
+
+        Returns:
+            OrderedDict: results.
+            OrderedDict: tensors for visualization, etc.
+            list: constants in learning
+            theano.OrderedUpdates: updates.
+
+        '''
         model = self.model
         inference_outs, constants, updates = self.inference(x, y)
         qks = inference_outs['qks']

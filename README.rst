@@ -8,6 +8,7 @@ in python. It is very customizable, as all methods and classes are suggested
 templates, and pure Theano can be used when needed.
 
 .. warning::
+
    Cortex is a brand-new project and is under rapid development. If you encounter
    any bugs or have any feature requests, please `email`_ or
    `create a GitHub issue`_.
@@ -21,6 +22,7 @@ Features
 Currently Cortex supports the following models:
 
 * Feed forward networks
+* RBMs
 * RNNs, GRUs, and LSTMs
 * Helmholtz machines as well as variational inference methods
 * Common datasets, such as MNIST and Caltech silhoettes
@@ -68,15 +70,59 @@ directories. These are necessary only for the demos, and can be customized in yo
 Requirements
 ------------
 
+Basic Requirements
+__________________
+
 .. _PyYAML: http://pyyaml.org/wiki/PyYAML
 .. _Theano: http://deeplearning.net/software/theano/
-.. _h5py: http://www.h5py.org/
-.. _nipy: http://nipy.org/
 
 * Theano_
 * PyYAML_
+
+Neuroimaging Requirements
+_________________________
+
+.. note::
+
+   These are not required for basic functionality, but are necessary for
+   neuroimaging tools. `afni`_, in particular, needs to be installed manually.
+
+.. _h5py: http://www.h5py.org/
+.. _nipy: http://nipy.org/
+.. _afni: http://afni.nimh.nih.gov
+.. _nibabel: http://http://nipy.org/nibabel/
+.. _sklearn: http://scikit-learn.org/stable/
+
 * nipy_
 * h5py_
+* afni_
+* nibabel_
+* sklearn_
+
+Demos
+-----
+
+Cortex has several command-line demos of functionality.
+If the ``basic`` dataset was installed using ``cortex-setup``, then the
+following demos are available:
+
+.. code-block:: bash
+
+   $ cortex-classifier-demo
+
+   $ cortex-rbm-demo
+
+   $ cortex-vae-demo
+
+If you installed the neuroimaging data, then the neuroimaging demos can be run:
+
+.. code-block:: bash
+
+    $ cortex-rbm-vbm-demo
+
+    $ cortex-rbm-olin-demo
+
+These are partial datasets used for demo purposes only.
 
 Documentation
 -------------

@@ -1,0 +1,441 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.utils.op &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex" href="../../cortex.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" accesskey="U">cortex</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.utils.op</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Optimization routines.</span>
+
+<span class="sd">Based (and copied) on Kyunghyun Cho&#39;s arctic repo.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+<span class="kn">import</span> <span class="nn">tools</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+
+
+<span class="n">profile</span> <span class="o">=</span> <span class="bp">False</span>
+
+<div class="viewcode-block" id="adam3"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.op.adam3">[docs]</a><span class="k">def</span> <span class="nf">adam3</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">inp</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">extra_ups</span><span class="o">=</span><span class="p">[],</span> <span class="n">extra_outs</span><span class="o">=</span><span class="p">[],</span>
+          <span class="n">exclude_params</span><span class="o">=</span><span class="nb">set</span><span class="p">([])):</span>
+    <span class="n">gshared</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_grad&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+               <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    g_norm = 0.</span>
+
+<span class="sd">    for i in xrange(len(grads)):</span>
+
+<span class="sd">        grads[i] /= T.cast(100, dtype=theano.config.floatX)</span>
+<span class="sd">        g_norm += (grads[i]**2).sum()</span>
+
+<span class="sd">    g_norm = T.sqrt(g_norm)</span>
+<span class="sd">    scaler = 5 / T.maximum(5, g_norm)</span>
+
+<span class="sd">    for i in xrange(len(grads)):</span>
+<span class="sd">        grads[i] *= scaler</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">gsup</span> <span class="o">=</span> <span class="p">[(</span><span class="n">gs</span><span class="p">,</span> <span class="n">g</span><span class="p">)</span> <span class="k">for</span> <span class="n">gs</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">gshared</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+
+    <span class="n">f_grad_shared</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span>
+        <span class="n">inp</span><span class="p">,</span> <span class="p">[</span><span class="n">cost</span><span class="p">]</span><span class="o">+</span><span class="n">extra_outs</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="n">gsup</span><span class="o">+</span><span class="n">extra_ups</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="n">b1</span> <span class="o">=</span> <span class="mf">0.9</span>
+    <span class="n">b2</span> <span class="o">=</span> <span class="mf">0.999</span>
+    <span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-8</span>
+    <span class="n">lambd</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="mf">1e-8</span><span class="p">)</span>
+
+    <span class="n">updates</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+
+    <span class="n">i</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">))</span>
+    <span class="n">i_t</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mf">1.</span>
+    <span class="n">fix1</span> <span class="o">=</span> <span class="n">b1</span><span class="o">**</span><span class="p">(</span><span class="n">i_t</span><span class="p">)</span>
+    <span class="n">fix2</span> <span class="o">=</span> <span class="n">b2</span><span class="o">**</span><span class="p">(</span><span class="n">i_t</span><span class="p">)</span>
+    <span class="n">b1_t</span> <span class="o">=</span> <span class="n">b1</span> <span class="o">*</span> <span class="n">lambd</span><span class="o">**</span><span class="n">i</span>
+    <span class="n">b2_t</span> <span class="o">=</span> <span class="n">b2</span> <span class="o">*</span> <span class="n">lambd</span><span class="o">**</span><span class="n">i</span>
+
+    <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tparams</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">gshared</span><span class="p">):</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="n">m_t</span> <span class="o">=</span> <span class="n">b1_t</span> <span class="o">*</span> <span class="n">m</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">b1_t</span><span class="p">)</span> <span class="o">*</span> <span class="n">g</span>
+        <span class="n">v_t</span> <span class="o">=</span> <span class="n">b2_t</span> <span class="o">*</span> <span class="n">v</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">b2_t</span><span class="p">)</span> <span class="o">*</span> <span class="n">g</span><span class="o">**</span><span class="mi">2</span>
+
+        <span class="n">m_t_hat</span> <span class="o">=</span> <span class="n">m_t</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">fix1</span><span class="p">)</span>
+        <span class="n">v_t_hat</span> <span class="o">=</span> <span class="n">v_t</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">fix2</span><span class="p">)</span>
+
+        <span class="n">g_t</span> <span class="o">=</span> <span class="n">m_t_hat</span> <span class="o">/</span> <span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">v_t_hat</span><span class="p">)</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span>
+
+        <span class="n">p_t</span> <span class="o">=</span> <span class="n">p</span> <span class="o">-</span> <span class="n">lr</span> <span class="o">*</span> <span class="n">g_t</span>
+        <span class="n">updates</span><span class="p">[</span><span class="n">m</span><span class="p">]</span> <span class="o">=</span>  <span class="n">m_t</span>
+        <span class="n">updates</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">=</span>  <span class="n">v_t</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">exclude_params</span><span class="p">:</span>
+            <span class="n">updates</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">=</span> <span class="n">p_t</span>
+
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    for k, updated_param in updates.items():</span>
+<span class="sd">        if &#39;W&#39; in str(k):</span>
+<span class="sd">            col_norms = T.sqrt(T.sqr(updated_param).sum(axis=0))</span>
+<span class="sd">            desired_norms = T.clip(col_norms, 0, 1.9365)</span>
+<span class="sd">            ratio = (desired_norms / (1e-8 + col_norms))</span>
+<span class="sd">            updates[k] = updated_param * ratio</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">updates</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">i_t</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span> <span class="n">lr</span> <span class="o">=</span> <span class="p">[</span><span class="n">lr</span><span class="p">]</span>
+    <span class="n">f_update</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="p">[],</span> <span class="n">updates</span><span class="o">=</span><span class="n">updates</span><span class="p">,</span>
+                               <span class="n">on_unused_input</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_update</span></div>
+
+
+<div class="viewcode-block" id="adam2"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.op.adam2">[docs]</a><span class="k">def</span> <span class="nf">adam2</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">inp</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">extra_ups</span><span class="o">=</span><span class="p">[],</span> <span class="n">extra_outs</span><span class="o">=</span><span class="p">[],</span>
+          <span class="n">exclude_params</span><span class="o">=</span><span class="nb">set</span><span class="p">([])):</span>
+    <span class="n">gshared</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_grad&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+               <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    g_norm = 0.</span>
+
+<span class="sd">    for i in xrange(len(grads)):</span>
+
+<span class="sd">        grads[i] /= T.cast(100, dtype=theano.config.floatX)</span>
+<span class="sd">        g_norm += (grads[i]**2).sum()</span>
+
+<span class="sd">    g_norm = T.sqrt(g_norm)</span>
+<span class="sd">    scaler = 5 / T.maximum(5, g_norm)</span>
+
+<span class="sd">    for i in xrange(len(grads)):</span>
+<span class="sd">        grads[i] *= scaler</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">gsup</span> <span class="o">=</span> <span class="p">[(</span><span class="n">gs</span><span class="p">,</span> <span class="n">g</span><span class="p">)</span> <span class="k">for</span> <span class="n">gs</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">gshared</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+
+    <span class="n">f_grad_shared</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span>
+        <span class="n">inp</span><span class="p">,</span> <span class="p">[</span><span class="n">cost</span><span class="p">]</span><span class="o">+</span><span class="n">extra_outs</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="n">gsup</span><span class="o">+</span><span class="n">extra_ups</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="n">b1</span> <span class="o">=</span> <span class="mf">0.9</span>
+    <span class="n">b2</span> <span class="o">=</span> <span class="mf">0.999</span>
+    <span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-8</span>
+    <span class="n">lambd</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="mf">1e-8</span><span class="p">)</span>
+
+    <span class="n">updates</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+
+    <span class="n">i</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">))</span>
+    <span class="n">i_t</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mf">1.</span>
+    <span class="n">fix1</span> <span class="o">=</span> <span class="n">b1</span><span class="o">**</span><span class="p">(</span><span class="n">i_t</span><span class="p">)</span>
+    <span class="n">fix2</span> <span class="o">=</span> <span class="n">b2</span><span class="o">**</span><span class="p">(</span><span class="n">i_t</span><span class="p">)</span>
+    <span class="n">b1_t</span> <span class="o">=</span> <span class="n">b1</span> <span class="o">*</span> <span class="n">lambd</span><span class="o">**</span><span class="n">i</span>
+
+    <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tparams</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">gshared</span><span class="p">):</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="n">m_t</span> <span class="o">=</span> <span class="n">b1_t</span> <span class="o">*</span> <span class="n">m</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">b1_t</span><span class="p">)</span> <span class="o">*</span> <span class="n">g</span>
+        <span class="n">v_t</span> <span class="o">=</span> <span class="n">b2</span> <span class="o">*</span> <span class="n">v</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">b2</span><span class="p">)</span> <span class="o">*</span> <span class="n">g</span><span class="o">**</span><span class="mi">2</span>
+
+        <span class="n">m_t_hat</span> <span class="o">=</span> <span class="n">m_t</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">fix1</span><span class="p">)</span>
+        <span class="n">v_t_hat</span> <span class="o">=</span> <span class="n">v_t</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">fix2</span><span class="p">)</span>
+
+        <span class="n">g_t</span> <span class="o">=</span> <span class="n">m_t_hat</span> <span class="o">/</span> <span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">v_t_hat</span><span class="p">)</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span>
+
+        <span class="n">p_t</span> <span class="o">=</span> <span class="n">p</span> <span class="o">-</span> <span class="n">lr</span> <span class="o">*</span> <span class="n">g_t</span>
+        <span class="n">updates</span><span class="p">[</span><span class="n">m</span><span class="p">]</span> <span class="o">=</span>  <span class="n">m_t</span>
+        <span class="n">updates</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">=</span>  <span class="n">v_t</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">exclude_params</span><span class="p">:</span>
+            <span class="n">updates</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">=</span> <span class="n">p_t</span>
+
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    for k, updated_param in updates.items():</span>
+<span class="sd">        if &#39;W&#39; in str(k):</span>
+<span class="sd">            col_norms = T.sqrt(T.sqr(updated_param).sum(axis=0))</span>
+<span class="sd">            desired_norms = T.clip(col_norms, 0, 1.9365)</span>
+<span class="sd">            ratio = (desired_norms / (1e-8 + col_norms))</span>
+<span class="sd">            updates[k] = updated_param * ratio</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">updates</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">i_t</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span> <span class="n">lr</span> <span class="o">=</span> <span class="p">[</span><span class="n">lr</span><span class="p">]</span>
+    <span class="n">f_update</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="p">[],</span> <span class="n">updates</span><span class="o">=</span><span class="n">updates</span><span class="p">,</span>
+                               <span class="n">on_unused_input</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_update</span></div>
+
+<div class="viewcode-block" id="adam"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.op.adam">[docs]</a><span class="k">def</span> <span class="nf">adam</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">inp</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">extra_ups</span><span class="o">=</span><span class="p">[],</span> <span class="n">extra_outs</span><span class="o">=</span><span class="p">[],</span>
+         <span class="n">exclude_params</span><span class="o">=</span><span class="nb">set</span><span class="p">([])):</span>
+    <span class="n">gshared</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_grad&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+               <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    g_norm = 0.</span>
+
+<span class="sd">    for i in xrange(len(grads)):</span>
+
+<span class="sd">        grads[i] /= T.cast(100, dtype=theano.config.floatX)</span>
+<span class="sd">        g_norm += (grads[i]**2).sum()</span>
+
+<span class="sd">    g_norm = T.sqrt(g_norm)</span>
+<span class="sd">    scaler = 5 / T.maximum(5, g_norm)</span>
+
+<span class="sd">    for i in xrange(len(grads)):</span>
+<span class="sd">        grads[i] *= scaler</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="n">gsup</span> <span class="o">=</span> <span class="p">[(</span><span class="n">gs</span><span class="p">,</span> <span class="n">g</span><span class="p">)</span> <span class="k">for</span> <span class="n">gs</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">gshared</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+
+    <span class="n">f_grad_shared</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span>
+        <span class="n">inp</span><span class="p">,</span> <span class="p">[</span><span class="n">cost</span><span class="p">]</span><span class="o">+</span><span class="n">extra_outs</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="n">gsup</span><span class="o">+</span><span class="n">extra_ups</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="n">b1</span> <span class="o">=</span> <span class="mf">0.9</span>
+    <span class="n">b2</span> <span class="o">=</span> <span class="mf">0.999</span>
+    <span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-8</span>
+
+    <span class="n">updates</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+
+    <span class="n">i</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">))</span>
+    <span class="n">i_t</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mf">1.</span>
+    <span class="n">fix1</span> <span class="o">=</span> <span class="n">b1</span><span class="o">**</span><span class="p">(</span><span class="n">i_t</span><span class="p">)</span>
+    <span class="n">fix2</span> <span class="o">=</span> <span class="n">b2</span><span class="o">**</span><span class="p">(</span><span class="n">i_t</span><span class="p">)</span>
+    <span class="n">lr_t</span> <span class="o">=</span> <span class="n">lr</span> <span class="o">*</span> <span class="n">T</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">fix2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="n">fix1</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tparams</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">gshared</span><span class="p">):</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="n">m_t</span> <span class="o">=</span> <span class="n">b1</span> <span class="o">*</span> <span class="n">m</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">b1</span><span class="p">)</span> <span class="o">*</span> <span class="n">g</span>
+        <span class="n">v_t</span> <span class="o">=</span> <span class="n">b2</span> <span class="o">*</span> <span class="n">v</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.</span> <span class="o">-</span> <span class="n">b2</span><span class="p">)</span> <span class="o">*</span> <span class="n">g</span><span class="o">**</span><span class="mi">2</span>
+        <span class="n">g_t</span> <span class="o">=</span> <span class="n">lr_t</span> <span class="o">*</span> <span class="n">m_t</span> <span class="o">/</span> <span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">v_t</span><span class="p">)</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span>
+        <span class="n">p_t</span> <span class="o">=</span> <span class="n">p</span> <span class="o">-</span> <span class="n">g_t</span>
+        <span class="n">updates</span><span class="p">[</span><span class="n">m</span><span class="p">]</span> <span class="o">=</span>  <span class="n">m_t</span>
+        <span class="n">updates</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">=</span>  <span class="n">v_t</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">exclude_params</span><span class="p">:</span>
+            <span class="n">updates</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="o">=</span> <span class="n">p_t</span>
+
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">updated_param</span> <span class="ow">in</span> <span class="n">updates</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="s1">&#39;W&#39;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">):</span>
+            <span class="n">col_norms</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">sqr</span><span class="p">(</span><span class="n">updated_param</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+            <span class="n">desired_norms</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">col_norms</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">1.9365</span><span class="p">)</span>
+            <span class="n">ratio</span> <span class="o">=</span> <span class="p">(</span><span class="n">desired_norms</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1e-8</span> <span class="o">+</span> <span class="n">col_norms</span><span class="p">))</span>
+            <span class="n">updates</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">updated_param</span> <span class="o">*</span> <span class="n">ratio</span>
+
+    <span class="n">updates</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">i_t</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span> <span class="n">lr</span> <span class="o">=</span> <span class="p">[</span><span class="n">lr</span><span class="p">]</span>
+    <span class="n">f_update</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="p">[],</span> <span class="n">updates</span><span class="o">=</span><span class="n">updates</span><span class="p">,</span>
+                               <span class="n">on_unused_input</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_update</span></div>
+
+<div class="viewcode-block" id="adadelta"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.op.adadelta">[docs]</a><span class="k">def</span> <span class="nf">adadelta</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">inp</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">extra_ups</span><span class="o">=</span><span class="p">[],</span> <span class="n">extra_outs</span><span class="o">=</span><span class="p">[],</span>
+             <span class="n">exclude_params</span><span class="o">=</span><span class="nb">set</span><span class="p">([])):</span>
+    <span class="sd">&#39;&#39;&#39;Adadelta&#39;&#39;&#39;</span>
+    <span class="n">zipped_grads</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_grad&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+    <span class="n">running_up2</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_rup2&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+                   <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+    <span class="n">running_grads2</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_rgrad2&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+                      <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+
+    <span class="n">zgup</span> <span class="o">=</span> <span class="p">[(</span><span class="n">zg</span><span class="p">,</span> <span class="n">g</span><span class="p">)</span> <span class="k">for</span> <span class="n">zg</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">zipped_grads</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+    <span class="n">rg2up</span> <span class="o">=</span> <span class="p">[(</span><span class="n">rg2</span><span class="p">,</span> <span class="mf">0.95</span> <span class="o">*</span> <span class="n">rg2</span> <span class="o">+</span> <span class="mf">0.05</span> <span class="o">*</span> <span class="p">(</span><span class="n">g</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">rg2</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">running_grads2</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+
+    <span class="n">f_grad_shared</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span>
+        <span class="n">inp</span><span class="p">,</span> <span class="p">[</span><span class="n">cost</span><span class="p">]</span><span class="o">+</span><span class="n">extra_outs</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="n">zgup</span><span class="o">+</span><span class="n">rg2up</span><span class="o">+</span><span class="n">extra_ups</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="n">updir</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="n">T</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">ru2</span> <span class="o">+</span> <span class="mf">1e-6</span><span class="p">)</span> <span class="o">/</span> <span class="n">T</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rg2</span> <span class="o">+</span> <span class="mf">1e-6</span><span class="p">)</span> <span class="o">*</span> <span class="n">zg</span>
+             <span class="k">for</span> <span class="n">zg</span><span class="p">,</span> <span class="n">ru2</span><span class="p">,</span> <span class="n">rg2</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">zipped_grads</span><span class="p">,</span> <span class="n">running_up2</span><span class="p">,</span> <span class="n">running_grads2</span><span class="p">)]</span>
+    <span class="n">ru2up</span> <span class="o">=</span> <span class="p">[(</span><span class="n">ru2</span><span class="p">,</span> <span class="mf">0.95</span> <span class="o">*</span> <span class="n">ru2</span> <span class="o">+</span> <span class="mf">0.05</span> <span class="o">*</span> <span class="p">(</span><span class="n">ud</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">ru2</span><span class="p">,</span> <span class="n">ud</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">running_up2</span><span class="p">,</span> <span class="n">updir</span><span class="p">)]</span>
+    <span class="n">param_up</span> <span class="o">=</span> <span class="p">[(</span><span class="n">p</span><span class="p">,</span> <span class="n">p</span> <span class="o">+</span> <span class="n">ud</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">ud</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tools</span><span class="o">.</span><span class="n">itemlist</span><span class="p">(</span><span class="n">tparams</span><span class="p">),</span> <span class="n">updir</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">exclude_params</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span> <span class="n">lr</span> <span class="o">=</span> <span class="p">[</span><span class="n">lr</span><span class="p">]</span>
+    <span class="n">f_update</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="p">[],</span> <span class="n">updates</span><span class="o">=</span><span class="n">ru2up</span><span class="o">+</span><span class="n">param_up</span><span class="p">,</span>
+        <span class="n">on_unused_input</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_update</span></div>
+
+<div class="viewcode-block" id="rmsprop"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.op.rmsprop">[docs]</a><span class="k">def</span> <span class="nf">rmsprop</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">inp</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">extra_ups</span><span class="o">=</span><span class="p">[],</span> <span class="n">extra_outs</span><span class="o">=</span><span class="p">[],</span>
+            <span class="n">exclude_params</span><span class="o">=</span><span class="nb">set</span><span class="p">([]),</span>
+            <span class="n">relaxation</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span> <span class="n">momentum</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">coefficient</span><span class="o">=</span><span class="mf">0.95</span>
+            <span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;RMSProp&#39;&#39;&#39;</span>
+    <span class="k">print</span> <span class="p">(</span><span class="s1">&#39;RMSprop with relaxation </span><span class="si">%.5f</span><span class="s1">, momentum </span><span class="si">%.2f</span><span class="s1">, and coeffient </span><span class="si">%.2f</span><span class="s1">&#39;</span>
+           <span class="o">%</span> <span class="p">(</span><span class="n">relaxation</span><span class="p">,</span> <span class="n">momentum</span><span class="p">,</span> <span class="n">coefficient</span><span class="p">))</span>
+    <span class="n">zipped_grads</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_grad&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+    <span class="n">running_grads</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_rgrad&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+                     <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+    <span class="n">running_grads2</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_rgrad2&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+                      <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+
+    <span class="n">zgup</span> <span class="o">=</span> <span class="p">[(</span><span class="n">zg</span><span class="p">,</span> <span class="n">g</span><span class="p">)</span> <span class="k">for</span> <span class="n">zg</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">zipped_grads</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+    <span class="n">rgup</span> <span class="o">=</span> <span class="p">[(</span><span class="n">rg</span><span class="p">,</span> <span class="n">coefficient</span> <span class="o">*</span> <span class="n">rg</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">coefficient</span><span class="p">)</span> <span class="o">*</span> <span class="n">g</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">rg</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">running_grads</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+    <span class="n">rg2up</span> <span class="o">=</span> <span class="p">[(</span><span class="n">rg2</span><span class="p">,</span> <span class="n">coefficient</span> <span class="o">*</span> <span class="n">rg2</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">coefficient</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">g</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">rg2</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">running_grads2</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+
+    <span class="n">f_grad_shared</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span>
+        <span class="n">inp</span><span class="p">,</span> <span class="p">[</span><span class="n">cost</span><span class="p">]</span><span class="o">+</span><span class="n">extra_outs</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="n">zgup</span><span class="o">+</span><span class="n">rgup</span><span class="o">+</span><span class="n">rg2up</span><span class="o">+</span><span class="n">extra_ups</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="n">updir</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_updir&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+             <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+    <span class="n">updir_new</span> <span class="o">=</span> <span class="p">[(</span><span class="n">ud</span><span class="p">,</span> <span class="n">momentum</span> <span class="o">*</span> <span class="n">ud</span> <span class="o">-</span> <span class="n">lr</span> <span class="o">*</span> <span class="n">zg</span> <span class="o">/</span> <span class="n">T</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rg2</span> <span class="o">-</span> <span class="n">rg</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">relaxation</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">ud</span><span class="p">,</span> <span class="n">zg</span><span class="p">,</span> <span class="n">rg</span><span class="p">,</span> <span class="n">rg2</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">updir</span><span class="p">,</span> <span class="n">zipped_grads</span><span class="p">,</span> <span class="n">running_grads</span><span class="p">,</span> <span class="n">running_grads2</span><span class="p">)]</span>
+    <span class="n">param_up</span> <span class="o">=</span> <span class="p">[(</span><span class="n">p</span><span class="p">,</span> <span class="n">p</span> <span class="o">+</span> <span class="n">udn</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">udn</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tools</span><span class="o">.</span><span class="n">itemlist</span><span class="p">(</span><span class="n">tparams</span><span class="p">),</span> <span class="n">updir_new</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">exclude_params</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span> <span class="n">lr</span> <span class="o">=</span> <span class="p">[</span><span class="n">lr</span><span class="p">]</span>
+    <span class="n">f_update</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span>
+        <span class="n">lr</span><span class="p">,</span> <span class="p">[],</span> <span class="n">updates</span><span class="o">=</span><span class="n">updir_new</span><span class="o">+</span><span class="n">param_up</span><span class="p">,</span> <span class="n">on_unused_input</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span>
+        <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_update</span></div>
+
+<div class="viewcode-block" id="sgd"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.op.sgd">[docs]</a><span class="k">def</span> <span class="nf">sgd</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">inp</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">extra_ups</span><span class="o">=</span><span class="p">[],</span> <span class="n">extra_outs</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">exclude_params</span><span class="o">=</span><span class="nb">set</span><span class="p">([])):</span>
+    <span class="sd">&#39;&#39;&#39;Stochastic gradient descent&#39;&#39;&#39;</span>
+    <span class="n">gshared</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="mf">0.</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_grad&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+               <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+
+    <span class="n">gsup</span> <span class="o">=</span> <span class="p">[(</span><span class="n">gs</span><span class="p">,</span> <span class="n">g</span><span class="p">)</span> <span class="k">for</span> <span class="n">gs</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">gshared</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+
+    <span class="n">f_grad_shared</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span>
+        <span class="n">inp</span><span class="p">,</span> <span class="p">[</span><span class="n">cost</span><span class="p">]</span><span class="o">+</span><span class="n">extra_outs</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="n">gsup</span><span class="o">+</span><span class="n">extra_ups</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="n">pup</span> <span class="o">=</span> <span class="p">[(</span><span class="n">p</span><span class="p">,</span> <span class="n">p</span> <span class="o">-</span> <span class="n">lr</span> <span class="o">*</span> <span class="n">g</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tools</span><span class="o">.</span><span class="n">itemlist</span><span class="p">(</span><span class="n">tparams</span><span class="p">),</span> <span class="n">gshared</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">exclude_params</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span> <span class="n">lr</span> <span class="o">=</span> <span class="p">[</span><span class="n">lr</span><span class="p">]</span>
+    <span class="n">f_update</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="p">[],</span> <span class="n">updates</span><span class="o">=</span><span class="n">pup</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_update</span></div>
+
+<div class="viewcode-block" id="rmsprop2"><a class="viewcode-back" href="../../../source/cortex.utils.html#cortex.utils.op.rmsprop2">[docs]</a><span class="k">def</span> <span class="nf">rmsprop2</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="n">tparams</span><span class="p">,</span> <span class="n">grads</span><span class="p">,</span> <span class="n">inp</span><span class="p">,</span> <span class="n">cost</span><span class="p">,</span> <span class="n">extra_ups</span><span class="o">=</span><span class="p">[],</span> <span class="n">extra_outs</span><span class="o">=</span><span class="p">[],</span>
+             <span class="n">exclude_params</span><span class="o">=</span><span class="nb">set</span><span class="p">([]),</span>
+            <span class="n">relaxation</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span> <span class="n">momentum</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">coefficient</span><span class="o">=</span><span class="mf">0.95</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;An alternative RMSProp&#39;&#39;&#39;</span>
+    <span class="k">print</span> <span class="s1">&#39;RMSprop with relaxation </span><span class="si">%.5f</span><span class="s1">, momentum </span><span class="si">%.2f</span><span class="s1">, and coeffient </span><span class="si">%.2f</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">relaxation</span><span class="p">,</span> <span class="n">momentum</span><span class="p">,</span> <span class="n">coefficient</span><span class="p">)</span>
+    <span class="n">zipped_grads</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_grad&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+    <span class="n">running_grads</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_rgrad&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+                     <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+    <span class="n">running_grads2</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_rgrad2&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+                      <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+
+    <span class="n">zgup</span> <span class="o">=</span> <span class="p">[(</span><span class="n">zg</span><span class="p">,</span> <span class="n">g</span><span class="p">)</span> <span class="k">for</span> <span class="n">zg</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">zipped_grads</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+    <span class="n">rgup</span> <span class="o">=</span> <span class="p">[(</span><span class="n">rg</span><span class="p">,</span> <span class="n">coefficient</span> <span class="o">*</span> <span class="n">rg</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">coefficient</span><span class="p">)</span> <span class="o">*</span> <span class="n">g</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">rg</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">running_grads</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+    <span class="n">rg2up</span> <span class="o">=</span> <span class="p">[(</span><span class="n">rg2</span><span class="p">,</span> <span class="n">coefficient</span> <span class="o">*</span> <span class="n">rg2</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">coefficient</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">g</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">rg2</span><span class="p">,</span> <span class="n">g</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">running_grads2</span><span class="p">,</span> <span class="n">grads</span><span class="p">)]</span>
+
+    <span class="n">f_grad_shared</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span>
+        <span class="n">inp</span><span class="p">,</span> <span class="p">[</span><span class="n">cost</span><span class="p">]</span><span class="o">+</span><span class="n">extra_outs</span><span class="p">,</span> <span class="n">updates</span><span class="o">=</span><span class="n">zgup</span><span class="o">+</span><span class="n">rgup</span><span class="o">+</span><span class="n">rg2up</span><span class="o">+</span><span class="n">extra_ups</span><span class="p">,</span> <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="n">updir</span> <span class="o">=</span> <span class="p">[</span><span class="n">theano</span><span class="o">.</span><span class="n">shared</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">get_value</span><span class="p">()</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">(</span><span class="mf">0.</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">_updir&#39;</span><span class="o">%</span><span class="n">k</span><span class="p">)</span>
+             <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">tparams</span><span class="o">.</span><span class="n">iteritems</span><span class="p">()]</span>
+    <span class="n">updir_temp</span> <span class="o">=</span> <span class="p">[</span><span class="n">momentum</span> <span class="o">*</span> <span class="n">ud</span> <span class="o">-</span> <span class="n">lr</span> <span class="o">*</span> <span class="n">zg</span> <span class="o">/</span> <span class="n">T</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">rg2</span> <span class="o">-</span> <span class="n">rg</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">relaxation</span><span class="p">)</span>
+                  <span class="k">for</span> <span class="n">ud</span><span class="p">,</span> <span class="n">zg</span><span class="p">,</span> <span class="n">rg</span><span class="p">,</span> <span class="n">rg2</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">updir</span><span class="p">,</span> <span class="n">zipped_grads</span><span class="p">,</span> <span class="n">running_grads</span><span class="p">,</span>
+                                             <span class="n">running_grads2</span><span class="p">)]</span>
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">updated_param</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">updir</span><span class="p">,</span> <span class="n">updir_temp</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="s1">&#39;W&#39;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">k</span><span class="p">):</span>
+            <span class="n">col_norms</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">sqr</span><span class="p">(</span><span class="n">updated_param</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+            <span class="n">desired_norms</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">col_norms</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">1.9365</span><span class="p">)</span>
+            <span class="n">ratio</span> <span class="o">=</span> <span class="p">(</span><span class="n">desired_norms</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1e-8</span> <span class="o">+</span> <span class="n">col_norms</span><span class="p">))</span>
+            <span class="n">updir_temp</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">updated_param</span> <span class="o">*</span> <span class="n">ratio</span>
+
+    <span class="c1">#updir_new = [(ud, momentum * ud - lr * zg / T.sqrt(rg2 - rg ** 2 + relaxation)) for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads, running_grads2)]</span>
+    <span class="n">updir_new</span> <span class="o">=</span> <span class="p">[(</span><span class="n">ud</span><span class="p">,</span> <span class="n">ud_new</span><span class="p">)</span> <span class="k">for</span> <span class="n">ud</span><span class="p">,</span> <span class="n">ud_new</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">updir</span><span class="p">,</span> <span class="n">updir_temp</span><span class="p">)]</span>
+    <span class="n">param_up</span> <span class="o">=</span> <span class="p">[(</span><span class="n">p</span><span class="p">,</span> <span class="n">p</span> <span class="o">+</span> <span class="n">udn</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">udn</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">tools</span><span class="o">.</span><span class="n">itemlist</span><span class="p">(</span><span class="n">tparams</span><span class="p">),</span> <span class="n">updir_new</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">exclude_params</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">lr</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span> <span class="n">lr</span> <span class="o">=</span> <span class="p">[</span><span class="n">lr</span><span class="p">]</span>
+    <span class="n">f_update</span> <span class="o">=</span> <span class="n">theano</span><span class="o">.</span><span class="n">function</span><span class="p">(</span>
+        <span class="n">lr</span><span class="p">,</span> <span class="p">[],</span> <span class="n">updates</span><span class="o">=</span><span class="n">updir_new</span><span class="o">+</span><span class="n">param_up</span><span class="p">,</span> <span class="n">on_unused_input</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span>
+        <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">f_grad_shared</span><span class="p">,</span> <span class="n">f_update</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

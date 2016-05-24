@@ -13,14 +13,13 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from . import Layer
 from .mlp import MLP
 from .rnn import RNN
-from ..utils import floatX
+from ..utils import floatX, pi
 from ..utils.tools import (
     concatenate,
     init_rngs,
     init_weights,
     norm_weight,
     ortho_weight,
-    pi,
     scan,
     _slice
 )

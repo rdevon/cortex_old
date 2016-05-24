@@ -1,0 +1,230 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.inference.air &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../index.html" />
+    <link rel="up" title="cortex.inference" href="../inference.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../inference.html" accesskey="U">cortex.inference</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.inference.air</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Adaptive importance sampling inference.</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">theano</span>
+<span class="kn">from</span> <span class="nn">theano</span> <span class="kn">import</span> <span class="n">tensor</span> <span class="k">as</span> <span class="n">T</span>
+
+<span class="kn">from</span> <span class="nn">.irvi</span> <span class="kn">import</span> <span class="n">IRVI</span><span class="p">,</span> <span class="n">DeepIRVI</span>
+<span class="kn">from</span> <span class="nn">..utils</span> <span class="kn">import</span> <span class="n">floatX</span>
+<span class="kn">from</span> <span class="nn">..utils.tools</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">get_w_tilde</span><span class="p">,</span>
+    <span class="n">scan</span><span class="p">,</span>
+    <span class="n">warn_kwargs</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="AIR"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.air.AIR">[docs]</a><span class="k">class</span> <span class="nc">AIR</span><span class="p">(</span><span class="n">IRVI</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">    Adaptive importance refinement (AIR).</span>
+<span class="sd">    </span>
+<span class="sd">    Inference procedure to refine the posterior using adaptive importance</span>
+<span class="sd">    sampling (AIS)</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">model</span><span class="p">,</span>
+                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;AIR&#39;</span><span class="p">,</span>
+                 <span class="n">pass_gradients</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Init function for AIR</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            model: Helmholtz object.</span>
+<span class="sd">            name: str</span>
+<span class="sd">            pass_gradients: bool (optional)</span>
+<span class="sd">            kwargs: dict, remaining IRVI arguments.</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+
+        <span class="nb">super</span><span class="p">(</span><span class="n">AIR</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                                  <span class="n">pass_gradients</span><span class="o">=</span><span class="n">pass_gradients</span><span class="p">,</span>
+                                  <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AIR.step_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.air.AIR.step_infer">[docs]</a>    <span class="k">def</span> <span class="nf">step_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Step inference function for IRVI.inference scan.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            r: theano randomstream variable</span>
+<span class="sd">            q: T.tensor. Current approximate posterior parameters</span>
+<span class="sd">            y: T.tensor. Data sample</span>
+<span class="sd">            params: list of shared variables</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            q: T.tensor. New approximate posterior parameters</span>
+<span class="sd">            cost: T.scalar float. Negative lower bound of current parameters</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="n">prior_params</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_prior_params</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+
+        <span class="n">h</span>        <span class="o">=</span> <span class="p">(</span><span class="n">r</span> <span class="o">&lt;=</span> <span class="n">q</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">py</span>       <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">p_y_given_h</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">log_py_h</span> <span class="o">=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">conditional</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">y</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:],</span> <span class="n">py</span><span class="p">)</span>
+        <span class="n">log_ph</span>   <span class="o">=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">prior</span><span class="o">.</span><span class="n">step_neg_log_prob</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="o">*</span><span class="n">prior_params</span><span class="p">)</span>
+        <span class="n">log_qh</span>   <span class="o">=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">posterior</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+        <span class="n">log_p</span>     <span class="o">=</span> <span class="n">log_py_h</span> <span class="o">+</span> <span class="n">log_ph</span> <span class="o">-</span> <span class="n">log_qh</span>
+        <span class="n">w_tilde</span> <span class="o">=</span> <span class="n">get_w_tilde</span><span class="p">(</span><span class="n">log_p</span><span class="p">)</span>
+        <span class="n">cost</span>    <span class="o">=</span> <span class="o">-</span><span class="n">log_p</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="n">q_</span> <span class="o">=</span> <span class="p">(</span><span class="n">w_tilde</span><span class="p">[:,</span> <span class="p">:,</span> <span class="bp">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">h</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">q</span>  <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference_rate</span> <span class="o">*</span> <span class="n">q_</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference_rate</span><span class="p">)</span> <span class="o">*</span> <span class="n">q</span>
+        <span class="k">return</span> <span class="n">q</span><span class="p">,</span> <span class="n">cost</span></div>
+
+<div class="viewcode-block" id="AIR.init_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.air.AIR.init_infer">[docs]</a>    <span class="k">def</span> <span class="nf">init_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[]</span></div>
+
+<div class="viewcode-block" id="AIR.unpack_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.air.AIR.unpack_infer">[docs]</a>    <span class="k">def</span> <span class="nf">unpack_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">outs</span></div>
+
+<div class="viewcode-block" id="AIR.params_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.air.AIR.params_infer">[docs]</a>    <span class="k">def</span> <span class="nf">params_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[]</span></div></div>
+
+
+<div class="viewcode-block" id="DeepAIR"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.air.DeepAIR">[docs]</a><span class="k">class</span> <span class="nc">DeepAIR</span><span class="p">(</span><span class="n">DeepIRVI</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+                 <span class="n">model</span><span class="p">,</span>
+                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;AIR&#39;</span><span class="p">,</span>
+                 <span class="n">pass_gradients</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+        <span class="nb">super</span><span class="p">(</span><span class="n">DeepAIR</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                                      <span class="n">pass_gradients</span><span class="o">=</span><span class="n">pass_gradients</span><span class="p">,</span>
+                                      <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+<div class="viewcode-block" id="DeepAIR.step_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.air.DeepAIR.step_infer">[docs]</a>    <span class="k">def</span> <span class="nf">step_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">):</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+
+        <span class="n">params</span>       <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+        <span class="n">rs</span>           <span class="o">=</span> <span class="n">params</span><span class="p">[:</span><span class="n">model</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]</span>
+        <span class="n">qs</span>           <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="n">model</span><span class="o">.</span><span class="n">n_layers</span><span class="p">:</span><span class="mi">2</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]</span>
+        <span class="n">y</span>            <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">2</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">n_layers</span><span class="p">]</span>
+        <span class="n">params</span>       <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="o">+</span><span class="mi">2</span><span class="o">*</span><span class="n">model</span><span class="o">.</span><span class="n">n_layers</span><span class="p">:]</span>
+        <span class="n">prior_params</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_prior_params</span><span class="p">(</span><span class="o">*</span><span class="n">params</span><span class="p">)</span>
+
+        <span class="n">hs</span>     <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">new_qs</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">l</span><span class="p">,</span> <span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">r</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">qs</span><span class="p">,</span> <span class="n">rs</span><span class="p">)):</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="p">(</span><span class="n">r</span> <span class="o">&lt;=</span> <span class="n">q</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+            <span class="n">hs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+
+        <span class="n">ys</span>   <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]]</span> <span class="o">+</span> <span class="n">hs</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">p_ys</span> <span class="o">=</span> <span class="p">[</span><span class="n">model</span><span class="o">.</span><span class="n">p_y_given_h</span><span class="p">(</span><span class="n">h</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="o">*</span><span class="n">params</span><span class="p">)</span> <span class="k">for</span> <span class="n">l</span><span class="p">,</span> <span class="n">h</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">hs</span><span class="p">)]</span>
+
+        <span class="n">log_ph</span> <span class="o">=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">prior</span><span class="o">.</span><span class="n">step_neg_log_prob</span><span class="p">(</span><span class="n">hs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="o">*</span><span class="n">prior_params</span><span class="p">)</span>
+        <span class="n">log_py_h</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="n">log_qh</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">constant</span><span class="p">(</span><span class="mf">0.</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">n_layers</span><span class="p">):</span>
+            <span class="n">log_py_h</span> <span class="o">+=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">conditionals</span><span class="p">[</span><span class="n">l</span><span class="p">]</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">ys</span><span class="p">[</span><span class="n">l</span><span class="p">],</span> <span class="n">p_ys</span><span class="p">[</span><span class="n">l</span><span class="p">])</span>
+            <span class="n">log_qh</span> <span class="o">+=</span> <span class="o">-</span><span class="n">model</span><span class="o">.</span><span class="n">posteriors</span><span class="p">[</span><span class="n">l</span><span class="p">]</span><span class="o">.</span><span class="n">neg_log_prob</span><span class="p">(</span><span class="n">hs</span><span class="p">[</span><span class="n">l</span><span class="p">],</span> <span class="n">qs</span><span class="p">[</span><span class="n">l</span><span class="p">][</span><span class="bp">None</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:])</span>
+
+        <span class="n">log_p</span>   <span class="o">=</span> <span class="n">log_py_h</span> <span class="o">+</span> <span class="n">log_ph</span> <span class="o">-</span> <span class="n">log_qh</span>
+        <span class="n">w_tilde</span> <span class="o">=</span> <span class="n">get_w_tilde</span><span class="p">(</span><span class="n">log_p</span><span class="p">)</span>
+        <span class="n">cost</span> <span class="o">=</span> <span class="o">-</span><span class="n">log_p</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">q</span><span class="p">,</span> <span class="n">h</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">qs</span><span class="p">,</span> <span class="n">hs</span><span class="p">):</span>
+            <span class="n">q_</span> <span class="o">=</span> <span class="p">(</span><span class="n">w_tilde</span><span class="p">[:,</span> <span class="p">:,</span> <span class="bp">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">h</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">new_qs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">inference_rate</span> <span class="o">*</span> <span class="n">q_</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">inference_rate</span><span class="p">)</span> <span class="o">*</span> <span class="n">q</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">new_qs</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">cost</span><span class="p">,)</span></div>
+
+<div class="viewcode-block" id="DeepAIR.init_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.air.DeepAIR.init_infer">[docs]</a>    <span class="k">def</span> <span class="nf">init_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[]</span></div>
+
+<div class="viewcode-block" id="DeepAIR.unpack_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.air.DeepAIR.unpack_infer">[docs]</a>    <span class="k">def</span> <span class="nf">unpack_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outs</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">outs</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">outs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="DeepAIR.params_infer"><a class="viewcode-back" href="../../../source/cortex.inference.html#cortex.inference.air.DeepAIR.params_infer">[docs]</a>    <span class="k">def</span> <span class="nf">params_infer</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[]</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../inference.html" >cortex.inference</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>

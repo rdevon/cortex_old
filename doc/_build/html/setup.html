@@ -25,6 +25,7 @@
     <script type="text/javascript" src="_static/doctools.js"></script>
     <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="cortex 0.1a documentation" href="index.html" />
+    <link rel="next" title="Demos" href="demos.html" />
     <link rel="prev" title="Cortex documentation" href="index.html" /> 
   </head>
   <body role="document">
@@ -37,6 +38,9 @@
         <li class="right" >
           <a href="py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
+        <li class="right" >
+          <a href="demos.html" title="Demos"
+             accesskey="N">next</a> |</li>
         <li class="right" >
           <a href="index.html" title="Cortex documentation"
              accesskey="P">previous</a> |</li>
@@ -55,8 +59,12 @@
 <div class="highlight-bash"><div class="highlight"><pre><span></span>$ pip install cortex
 </pre></div>
 </div>
+<p>To get the most up-to-date version, you can install from the <code class="docutils literal"><span class="pre">git</span></code> repository:</p>
+<div class="highlight-bash"><div class="highlight"><pre><span></span>$ pip install git+git://github.com/rdevon/cortex.git
+</pre></div>
+</div>
 <p>However, currently the demos give the best example of how to script using cortex.
-So it is recommended to clone from the github repository:</p>
+So, if this is your first time using cortex, it is recommended to clone from the github repository:</p>
 <div class="highlight-bash"><div class="highlight"><pre><span></span>$ git clone https://github.com/rdevon/cortex.git
 $ <span class="nb">cd</span> cortex
 $ python setup.py install
@@ -73,19 +81,30 @@ added to pull the latest version from GitHub.</p>
 <p>Follow the instructions; you will be asked to specify default data and out
 directories. These are necessary only for the demos, and can be customized in your
 ~/.cortexrc file.</p>
-<div class="section" id="requirements">
-<h2>Requirements<a class="headerlink" href="#requirements" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="basic-requirements">
+<h2>Basic Requirements<a class="headerlink" href="#basic-requirements" title="Permalink to this headline">¶</a></h2>
 <ul class="simple">
 <li><a class="reference external" href="http://deeplearning.net/software/theano/">Theano</a></li>
 <li><a class="reference external" href="http://pyyaml.org/wiki/PyYAML">PyYAML</a></li>
-<li><a class="reference external" href="http://nipy.org/">nipy</a></li>
-<li><a class="reference external" href="http://www.h5py.org/">h5py</a></li>
 </ul>
 </div>
+<div class="section" id="neuroimaging-requirements">
+<h2>Neuroimaging Requirements<a class="headerlink" href="#neuroimaging-requirements" title="Permalink to this headline">¶</a></h2>
+<blockquote>
+<div>These are not required for basic functionality, but are necessary for
+neuroimaging tools. <a class="reference external" href="http://afni.nimh.nih.gov">afni</a>, in particular, needs to be installed manually.</div></blockquote>
+<ul class="simple">
+<li><a class="reference external" href="http://nipy.org/">nipy</a></li>
+<li><a class="reference external" href="http://www.h5py.org/">h5py</a></li>
+<li><a class="reference external" href="http://afni.nimh.nih.gov">afni</a></li>
+<li><a class="reference external" href="http://http://nipy.org/nibabel/">nibabel</a></li>
+<li><a class="reference external" href="http://scikit-learn.org/stable/">sklearn</a></li>
+</ul>
 <div class="section" id="documentation">
-<h2>Documentation<a class="headerlink" href="#documentation" title="Permalink to this headline">¶</a></h2>
+<h3>Documentation<a class="headerlink" href="#documentation" title="Permalink to this headline">¶</a></h3>
 <p>If you want to build a local copy of the documentation, follow the instructions
 at the <span class="xref doc">documentation development guidelines</span>.</p>
+</div>
 </div>
 </div>
 
@@ -98,8 +117,11 @@ at the <span class="xref doc">documentation development guidelines</span>.</p>
   <h3><a href="index.html">Table Of Contents</a></h3>
   <ul>
 <li><a class="reference internal" href="#">Installation</a><ul>
-<li><a class="reference internal" href="#requirements">Requirements</a></li>
+<li><a class="reference internal" href="#basic-requirements">Basic Requirements</a></li>
+<li><a class="reference internal" href="#neuroimaging-requirements">Neuroimaging Requirements</a><ul>
 <li><a class="reference internal" href="#documentation">Documentation</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -107,6 +129,9 @@ at the <span class="xref doc">documentation development guidelines</span>.</p>
   <h4>Previous topic</h4>
   <p class="topless"><a href="index.html"
                         title="previous chapter">Cortex documentation</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="demos.html"
+                        title="next chapter">Demos</a></p>
   <div role="note" aria-label="source link">
     <h3>This Page</h3>
     <ul class="this-page-menu">
@@ -137,6 +162,9 @@ at the <span class="xref doc">documentation development guidelines</span>.</p>
         <li class="right" >
           <a href="py-modindex.html" title="Python Module Index"
              >modules</a> |</li>
+        <li class="right" >
+          <a href="demos.html" title="Demos"
+             >next</a> |</li>
         <li class="right" >
           <a href="index.html" title="Cortex documentation"
              >previous</a> |</li>

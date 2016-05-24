@@ -50,8 +50,20 @@ cmap = matplotlib.colors.LinearSegmentedColormap('my_colormap', cdict, 256)
 
 def save_image(nifti, anat, cluster_dict, out_path, f, image_threshold=2,
                texcol=1, bgcol=0, iscale=2, text=None, **kwargs):
-    '''
-    Saves a single nifti image.
+    '''Saves a single nifti image.
+
+    Args:
+        nifti (str or nipy.core.api.image.image.Image): nifti file to visualize.
+        anat (nipy.core.api.image.image.Image): anatomical nifti file.
+        cluster_dict (dict): dictionary of clusters.
+        f (int): index.
+        image_threshold (float): treshold for `plot_map`.
+        texcol (float): text color.
+        bgcol (float): background color.
+        iscale (float): image scale.
+        text (Optional[str]): text for figure.
+        **kwargs: extra keyword arguments
+
     '''
     if isinstance(nifti, str):
         nifti = load_image(nifti)
@@ -100,8 +112,17 @@ def save_helper(args):
     save_image(*args)
 
 def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
-    '''
-    Saves multiple nifti images using multiprocessing
+    '''Saves multiple nifti images using multiprocessing.
+
+    Uses `multiprocessing`.
+
+    Args:
+        nifti_files (list): list of nifti file paths.
+        anat (nipy.core.api.image.image.Image): anatomical image.
+        roi_dict (dict): dictionary of cluster dictionaries.
+        out_dir (str): output directory path.
+        **kwargs: extra keyword arguments.
+
     '''
     p = mp.Pool(30)
     idx = [int(f.split('/')[-1].split('.')[0]) for f in nifti_files]
@@ -118,8 +139,17 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
 def montage(nifti, anat, roi_dict, thr=2,
             fig=None, out_file=None,
             order=None, stats=dict()):
-    '''
-    Saves a montage of nifti images.
+    '''Saves a montage of nifti images.
+
+    Args:
+        nifti (list or nipy.core.api.image.image.Image): 4d nifti or list of \
+            3D niftis.
+        anat (nipy.core.api.image.image.Image): anatomical nifti image.
+        roi_dict (dict): dictionary of cluster dictionaries.
+        out_file (str): output file path.
+        order (list): List of integers. Order of montage.
+        stats (Optional[dict]): extra statistics to print on montage as text.
+
     '''
     if isinstance(anat, str):
         anat = load_image(anat)
@@ -216,9 +246,8 @@ def montage(nifti, anat, roi_dict, thr=2,
         plt.draw()
 
 def make_argument_parser():
-    '''
-    Creates an ArgumentParser to read the options for this script from
-    sys.argv
+    '''Creates an ArgumentParser to read the options for this script from sys.argv
+
     '''
     parser = argparse.ArgumentParser()
     parser.add_argument('nifti', help='Nifti file to be processed.')
@@ -229,8 +258,15 @@ def make_argument_parser():
     return parser
 
 def main(nifti_file, anat_file, roi_file, out_file, thr=2):
-    '''
-    Main function for running as a script.
+    '''Main function for running as a script.
+
+    Args:
+        nifti (str): path to 4D nifti file.
+        anat (str): path to anatomical nifti file.
+        roi_file (str): path to pickled roi dictionary file.
+        out_file (str): path to output file.
+        thr (float): threshold for `nipy.labs.viz.plot_map`
+
     '''
     iscale = 2
     nifti = load_image(nifti_file)

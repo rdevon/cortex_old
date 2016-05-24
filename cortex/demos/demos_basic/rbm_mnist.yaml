@@ -14,6 +14,6 @@
   test_every: 10,
   dataset_args: {
     dataset: 'mnist',
-    source: '$data/mnist_binarized_salakhutdinov.pkl.gz'
+    source: '$data/basic/mnist_binarized_salakhutdinov.pkl.gz'
   }
 }

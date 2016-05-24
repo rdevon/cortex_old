@@ -1,0 +1,399 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>cortex.datasets.neuroimaging.mri &mdash; cortex 0.1a documentation</title>
+    
+    <link rel="stylesheet" href="../../../../_static/classic.css" type="text/css" />
+    <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../../',
+        VERSION:     '0.1a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="cortex 0.1a documentation" href="../../../../index.html" />
+    <link rel="up" title="cortex.datasets.neuroimaging" href="../neuroimaging.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../../datasets.html" >cortex.datasets</a> &raquo;</li>
+          <li class="nav-item nav-item-4"><a href="../neuroimaging.html" accesskey="U">cortex.datasets.neuroimaging</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for cortex.datasets.neuroimaging.mri</h1><div class="highlight"><pre>
+<span></span><span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">Module for the MRI dataset</span>
+<span class="sd">&#39;&#39;&#39;</span>
+
+<span class="kn">import</span> <span class="nn">cPickle</span>
+<span class="kn">import</span> <span class="nn">nipy</span>
+<span class="kn">from</span> <span class="nn">nipy.core.api</span> <span class="kn">import</span> <span class="n">Image</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span>
+<span class="kn">import</span> <span class="nn">pprint</span>
+<span class="kn">from</span> <span class="nn">sklearn.decomposition</span> <span class="kn">import</span> <span class="n">PCA</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">import</span> <span class="nn">yaml</span>
+
+<span class="kn">from</span> <span class="nn">...analysis.mri</span> <span class="kn">import</span> <span class="n">rois</span>
+<span class="kn">from</span> <span class="nn">..</span> <span class="kn">import</span> <span class="n">BasicDataset</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">nifti_viewer</span>
+<span class="kn">from</span> <span class="nn">...utils</span> <span class="kn">import</span> <span class="n">floatX</span>
+<span class="kn">from</span> <span class="nn">...utils.tools</span> <span class="kn">import</span> <span class="n">resolve_path</span>
+
+
+<span class="n">np</span><span class="o">.</span><span class="n">seterr</span><span class="p">(</span><span class="nb">all</span><span class="o">=</span><span class="s1">&#39;raise&#39;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="MRI"><a class="viewcode-back" href="../../../../source/cortex.datasets.neuroimaging.html#cortex.datasets.neuroimaging.mri.MRI">[docs]</a><span class="k">class</span> <span class="nc">MRI</span><span class="p">(</span><span class="n">BasicDataset</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Basic MRI dataset iterator.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        image_shape (tuple): shape of images for visualization.</span>
+<span class="sd">        pca (Optional[sklearn.decomposition.PCA]): If not None, PCA</span>
+<span class="sd">            decomposition of the data.</span>
+<span class="sd">        pca_components (Optional[int]): number of PCA components if self.pca</span>
+<span class="sd">            is not None</span>
+<span class="sd">        tmp_path (str): path for temporary niftis in visualization.</span>
+<span class="sd">        base_nifti_file (str): path for base nifti for forming niftis from arrays.</span>
+<span class="sd">        anat_file (str): path for anatomical nifti file for visualization.</span>
+<span class="sd">        sites (Optional[list]): list of sites where data was collected.</span>
+<span class="sd">        mask (numpy.array): mask</span>
+
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;mri&#39;</span><span class="p">,</span> <span class="n">idx</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                 <span class="n">pca_components</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">distribution</span><span class="o">=</span><span class="s1">&#39;gaussian&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Init function for MRI.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            source (str): path of the source.</span>
+<span class="sd">            name (str): name of the dataset.</span>
+<span class="sd">            idx (list): indices from the original dataset.</span>
+<span class="sd">            pca_components: (Optional[int]): if not 0, decompose the data</span>
+<span class="sd">                using PCA.</span>
+<span class="sd">            distribution (Optional[str]): distribution of the primary data.</span>
+<span class="sd">                See `models.distributions` for details.</span>
+<span class="sd">            **kwargs: extra keyword arguments passed to BasicDataset</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">print</span> <span class="s1">&#39;Loading </span><span class="si">%s</span><span class="s1"> from </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">source</span><span class="p">)</span>
+        <span class="n">source</span> <span class="o">=</span> <span class="n">resolve_path</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+        <span class="n">X</span><span class="p">,</span> <span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">image_shape</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pca_components</span> <span class="o">=</span> <span class="n">pca_components</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pca_components</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pca</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="k">print</span> <span class="s1">&#39;Forming PCA&#39;</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pca</span> <span class="o">=</span> <span class="n">PCA</span><span class="p">(</span><span class="n">pca_components</span><span class="p">)</span>
+                <span class="k">print</span> <span class="s1">&#39;Fitting PCA... (please wait)&#39;</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pca</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pca_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pca_file</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">pf</span><span class="p">:</span>
+                        <span class="n">cPickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pca</span><span class="p">,</span> <span class="n">pf</span><span class="p">)</span>
+            <span class="k">print</span> <span class="s1">&#39;Performing PCA&#39;</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pca</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">X</span><span class="p">,</span> <span class="s1">&#39;group&#39;</span><span class="p">:</span> <span class="n">Y</span><span class="p">}</span>
+        <span class="n">distributions</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">distribution</span><span class="p">,</span> <span class="s1">&#39;group&#39;</span><span class="p">:</span> <span class="s1">&#39;multinomial&#39;</span><span class="p">}</span>
+
+        <span class="nb">super</span><span class="p">(</span><span class="n">MRI</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">distributions</span><span class="o">=</span><span class="n">distributions</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+                                  <span class="n">labels</span><span class="o">=</span><span class="s1">&#39;group&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">distribution</span> <span class="o">==</span> <span class="s1">&#39;gaussian&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">X</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">X</span> <span class="o">/=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">std</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">distribution</span> <span class="ow">in</span> <span class="p">[</span><span class="s1">&#39;continuous_binomial&#39;</span><span class="p">,</span> <span class="s1">&#39;binomial&#39;</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">X</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">X</span> <span class="o">/=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">min</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">distribution</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">mean_image</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">X</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">Y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">Y</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+<div class="viewcode-block" id="MRI.get_data"><a class="viewcode-back" href="../../../../source/cortex.datasets.neuroimaging.html#cortex.datasets.neuroimaging.mri.MRI.get_data">[docs]</a>    <span class="k">def</span> <span class="nf">get_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Fetch the MRI dataset.</span>
+
+<span class="sd">        MRI dataset source is a yaml file.</span>
+<span class="sd">        An example format of said yaml is::</span>
+
+<span class="sd">            name: &#39;aod&#39;,</span>
+<span class="sd">            data: [</span>
+<span class="sd">                &#39;/Users/devon/Data/AOD/AOD_0.npy&#39;,</span>
+<span class="sd">                &#39;/Users/devon/Data/AOD/AOD_1.npy&#39;</span>
+<span class="sd">            ],</span>
+<span class="sd">            mask: &#39;/Users/devon/Data/AOD/AOD_mask.npy&#39;,</span>
+<span class="sd">            nifti: &#39;//Users/devon/Data/VBM/H000A.nii&#39;,</span>
+<span class="sd">            tmp_path: &#39;/Users/devon/Data/mri_tmp/&#39;,</span>
+<span class="sd">            anat_file: &#39;/Users/devon/Data/ch2better_whitebg_aligned2EPI_V4.nii&#39;,</span>
+<span class="sd">            sites: &#39;/Users/devon/Data/AOD/AOD_sites.npy&#39;</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">print</span><span class="p">(</span><span class="s1">&#39;Loading file locations from </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">source</span><span class="p">)</span>
+        <span class="n">source_dict</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">source</span><span class="p">))</span>
+        <span class="k">print</span><span class="p">(</span><span class="s1">&#39;Source locations: </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">pprint</span><span class="o">.</span><span class="n">pformat</span><span class="p">(</span><span class="n">source_dict</span><span class="p">))</span>
+
+        <span class="n">nifti_file</span> <span class="o">=</span> <span class="n">source_dict</span><span class="p">[</span><span class="s1">&#39;nifti&#39;</span><span class="p">]</span>
+        <span class="n">mask_file</span> <span class="o">=</span> <span class="n">source_dict</span><span class="p">[</span><span class="s1">&#39;mask&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tmp_path</span> <span class="o">=</span> <span class="n">source_dict</span><span class="p">[</span><span class="s1">&#39;tmp_path&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tmp_path</span><span class="p">):</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tmp_path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">anat_file</span> <span class="o">=</span> <span class="n">source_dict</span><span class="p">[</span><span class="s1">&#39;anat_file&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pca_file</span> <span class="o">=</span> <span class="n">source_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;pca&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pca_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">pca_file</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">pca</span> <span class="o">=</span> <span class="n">cPickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">IOError</span><span class="p">,</span> <span class="ne">EOFError</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">pca</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pca</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="n">data_files</span> <span class="o">=</span> <span class="n">source_dict</span><span class="p">[</span><span class="s1">&#39;data&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data_files</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">data_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">data_files</span><span class="p">]</span>
+
+        <span class="n">X</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">data_file</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">data_files</span><span class="p">):</span>
+            <span class="k">print</span> <span class="s1">&#39;Loading </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">data_file</span>
+            <span class="n">X_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">data_file</span><span class="p">)</span>
+            <span class="n">X</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">X_</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">))</span>
+            <span class="n">Y</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">X_</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],))</span> <span class="o">+</span> <span class="n">i</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">))</span>
+
+        <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">mask_file</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">bitwise_or</span><span class="p">(</span><span class="n">mask</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">mask</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Mask has incorrect values.&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_nifti_file</span> <span class="o">=</span> <span class="n">nifti_file</span>
+
+        <span class="k">if</span> <span class="s1">&#39;sites&#39;</span> <span class="ow">in</span> <span class="n">source_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">sites_file</span> <span class="o">=</span> <span class="n">source_dict</span><span class="p">[</span><span class="s1">&#39;sites&#39;</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sites</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">sites_file</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="n">n_sites</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sites</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+
+            <span class="k">if</span> <span class="n">n_sites</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">print</span> <span class="s1">&#39;Regressing out site&#39;</span>
+
+                <span class="k">for</span> <span class="n">site</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">n_sites</span><span class="p">):</span>
+                    <span class="n">idx</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sites</span><span class="p">)</span> <span class="k">if</span> <span class="n">s</span> <span class="o">==</span> <span class="n">site</span><span class="p">]</span>
+                    <span class="n">mi</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="n">X</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">-=</span> <span class="n">mi</span>
+
+        <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">Y</span></div>
+
+    <span class="k">def</span> <span class="nf">_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Mask the data.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            X (numpy.array): data to be masked</span>
+<span class="sd">            mask (Optional[numpy.array]): mask</span>
+
+<span class="sd">        Return:</span>
+<span class="sd">            numpy.array: masked array.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span>
+
+        <span class="k">if</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">():</span>
+            <span class="k">print</span> <span class="s1">&#39;Data already masked&#39;</span>
+            <span class="k">return</span> <span class="n">X</span>
+
+        <span class="k">if</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">!=</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">((</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+
+        <span class="n">mask_f</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="n">mask_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask_f</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="n">X_masked</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">X</span><span class="p">):</span>
+            <span class="n">X_masked</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">flatten</span><span class="p">()[</span><span class="n">mask_idx</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">X_masked</span>
+
+    <span class="k">def</span> <span class="nf">_unmask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X_masked</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Unmask data.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            X_masked (numpy.array): array to be unmasked.</span>
+<span class="sd">            mask (Optional[numpy.array]): mask</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            numpy.array: unmasked data.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mask</span>
+
+        <span class="k">if</span> <span class="n">X_masked</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Masked data does not fit mask </span><span class="si">%r</span><span class="s1"> vs </span><span class="si">%r</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">X_masked</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()))</span>
+
+        <span class="n">mask_f</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="n">mask_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">mask_f</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">X_masked</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_shape</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">floatX</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">x_m</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">X_masked</span><span class="p">):</span>
+            <span class="n">x_f</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="n">x_f</span><span class="p">[</span><span class="n">mask_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">x_m</span>
+            <span class="n">X</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">x_f</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">image_shape</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">X</span>
+
+<div class="viewcode-block" id="MRI.make_image"><a class="viewcode-back" href="../../../../source/cortex.datasets.neuroimaging.html#cortex.datasets.neuroimaging.mri.MRI.make_image">[docs]</a>    <span class="k">def</span> <span class="nf">make_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">base_nifti</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Create a nitfi image from array.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            X (numpy.array): array from which to make nifti image.</span>
+<span class="sd">            base_nifti (nipy.core.api.Image): nifti image template.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            nipy.core.api.Image</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">Image</span><span class="o">.</span><span class="n">from_image</span><span class="p">(</span><span class="n">base_nifti</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">X</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">image</span></div>
+
+<div class="viewcode-block" id="MRI.save_niftis"><a class="viewcode-back" href="../../../../source/cortex.datasets.neuroimaging.html#cortex.datasets.neuroimaging.mri.MRI.save_niftis">[docs]</a>    <span class="k">def</span> <span class="nf">save_niftis</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Save nifti files from array.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            X (numpy.array): array from which to make images.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list: list of nifti images.</span>
+<span class="sd">            list: list of output files for images.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+
+        <span class="n">base_nifti</span> <span class="o">=</span> <span class="n">nipy</span><span class="o">.</span><span class="n">load_image</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_nifti_file</span><span class="p">)</span>
+
+        <span class="n">images</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">out_files</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">X</span><span class="p">):</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">make_image</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">base_nifti</span><span class="p">)</span>
+            <span class="n">out_file</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tmp_path</span><span class="p">,</span> <span class="s1">&#39;tmp_image_</span><span class="si">%d</span><span class="s1">.nii.gz&#39;</span> <span class="o">%</span> <span class="n">i</span><span class="p">)</span>
+            <span class="n">nipy</span><span class="o">.</span><span class="n">save_image</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">out_file</span><span class="p">)</span>
+            <span class="n">images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+            <span class="n">out_files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">out_file</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">images</span><span class="p">,</span> <span class="n">out_files</span></div>
+
+<div class="viewcode-block" id="MRI.save_images"><a class="viewcode-back" href="../../../../source/cortex.datasets.neuroimaging.html#cortex.datasets.neuroimaging.mri.MRI.save_images">[docs]</a>    <span class="k">def</span> <span class="nf">save_images</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">out_file</span><span class="p">,</span> <span class="n">remove_niftis</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                    <span class="n">order</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">stats</span><span class="o">=</span><span class="nb">dict</span><span class="p">(),</span> <span class="n">x_limit</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&#39;&#39;&#39;Saves images from array.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            x (numpy.array): array from which to make images.</span>
+<span class="sd">            out_file (str): ouput file for image montage.</span>
+<span class="sd">            remove_niftis (bool): delete images after making montage.</span>
+<span class="sd">            order (Optional[list]): reorder the images in the montage.</span>
+<span class="sd">            stats (Optional[dict]): dictionary of statistics to add to</span>
+<span class="sd">                montage.</span>
+<span class="sd">            x_limit (Optional(int)): if not None, limit the number of images</span>
+<span class="sd">                along the x axis.</span>
+
+<span class="sd">        &#39;&#39;&#39;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pca</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">pca_components</span><span class="p">:</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pca</span><span class="o">.</span><span class="n">inverse_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">:]</span>
+
+        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unmask</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">images</span><span class="p">,</span> <span class="n">nifti_files</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_niftis</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">roi_dict</span> <span class="o">=</span> <span class="n">rois</span><span class="o">.</span><span class="n">main</span><span class="p">(</span><span class="n">nifti_files</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">remove_niftis</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">nifti_files</span><span class="p">:</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="n">nifti_viewer</span><span class="o">.</span><span class="n">montage</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">anat_file</span><span class="p">,</span> <span class="n">roi_dict</span><span class="p">,</span>
+                             <span class="n">out_file</span><span class="o">=</span><span class="n">out_file</span><span class="p">,</span>
+                             <span class="n">order</span><span class="o">=</span><span class="n">order</span><span class="p">,</span>
+                             <span class="n">stats</span><span class="o">=</span><span class="n">stats</span><span class="p">)</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../../index.html">cortex 0.1a documentation</a> &raquo;</li>
+          <li class="nav-item nav-item-1"><a href="../../../index.html" >Module code</a> &raquo;</li>
+          <li class="nav-item nav-item-2"><a href="../../../cortex.html" >cortex</a> &raquo;</li>
+          <li class="nav-item nav-item-3"><a href="../../datasets.html" >cortex.datasets</a> &raquo;</li>
+          <li class="nav-item nav-item-4"><a href="../neuroimaging.html" >cortex.datasets.neuroimaging</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &copy; Copyright 2016, Devon Hjelm.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.1.
+    </div>
+  </body>
+</html>
