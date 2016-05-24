@@ -528,6 +528,34 @@ def log_sum_exp(x, axis=None):
     y = T.sum(y, axis=axis)
     return y
 
+def split_int_into_closest_two(x):
+    '''Splits an integer into the closest 2 integers.
+
+    Args:
+        x (int).
+
+    Returns:
+        int.
+
+    Raises:
+        ValueError: if input is not an integer.
+
+    '''
+
+    if not isinstance(x, (int, long)):
+        raise ValueError('Input is not an integer.')
+
+    from math import sqrt, floor
+
+    n = floor(sqrt(x))
+    while True:
+        if n < 1:
+            raise ValueError
+        rem = x % n
+        if rem == 0:
+            return int(n), int(x / n)
+        n -= 1
+
 def concatenate(tensor_list, axis=0):
     '''Alternative implementation of `theano.T.concatenate`.
 
