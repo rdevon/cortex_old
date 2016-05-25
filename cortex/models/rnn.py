@@ -9,6 +9,7 @@ import theano
 from theano import tensor as T
 
 from . import Layer
+from .layers import Averager
 from .mlp import MLP
 from ..utils import floatX, pi, tools
 from ..utils.tools import (
@@ -82,6 +83,68 @@ def unpack(rnn_args, data_iter=None, **model_args):
     return models, model_args, None
 
 
+class RNN_initializer(Layer):
+    def __init__(self, dim_in, dim_outs, initialization='mlp', **kwargs):
+        self.initialization = initialization
+        self.dim_in = dim_in
+        self.dim_outs = dim_outs
+
+        kwargs = init_weights(self, **kwargs)
+        kwargs = init_rngs(self, **kwargs)
+
+        super(RNN_initializer, self).__init__(name='rnn_initializer')
+
+        self.layers = []
+        for dim_out in self.dim_outs:
+            if initialization == 'mlp':
+                layer = MLP(
+                    self.dim_in, dim_out,
+                    rng=self.rng, trng=self.trng,
+                    distribution='centered_binomial',
+                    name='rnn_initializer_mlp',
+                    **kwargs)
+            elif initialization == 'average':
+                layer = Averager((dim_out,), name='rnn_initializer_averager',
+                    **kwargs)
+            else:
+                raise ValueError()
+            self.layers.append(layer)
+
+    def set_tparams(self):
+        tparams = super(RNN_initializer, self).set_tparams()
+
+        for layer in self.layers:
+            if self.initialization in ['mlp', 'average']:
+                tparams.update(**layer.set_tparams())
+
+        return tparams
+
+    def __call__(self, X, hs):
+        hs = [h.copy() for h in hs]
+        cost = T.constant(0.).astype(floatX)
+        updates = theano.OrderedUpdates()
+        constants = hs
+
+        for i, layer in enumerate(self.layers):
+            if self.initialization == 'mlp':
+                p = layer.feed(X)
+                cost += layer.neg_log_prob(hs[i], p).mean()
+            elif self.initialization == 'average':
+                updates += layer(hs[i])
+            else:
+                raise ValueError()
+
+        return OrderedDict(cost=cost, p=p, hs=hs), updates, constants
+
+    def initialize(self, X):
+        if self.initialization == 'mlp':
+            return [layer.feed(X) for layer in self.layers]
+        elif self.initialization == 'average':
+            return [layer.m for layer in self.layers]
+        else:
+            raise ValueError()
+
+
 class RNN(Layer):
     '''RNN class.
 
@@ -101,7 +164,7 @@ class RNN(Layer):
 
     '''
 
-    def __init__(self, dim_in, dim_hs, dim_out=None,
+    def __init__(self, dim_in, dim_hs, dim_out=None, init_net=None,
                  conditional=None, input_net=None, output_net=None,
                  name='rnn', **kwargs):
         '''Init function for RNN.
@@ -128,6 +191,7 @@ class RNN(Layer):
         self.input_net = input_net
         self.output_net = output_net
         self.conditional = conditional
+        self.init_net = init_net
 
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
@@ -138,7 +202,8 @@ class RNN(Layer):
 
     @staticmethod
     def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
-                dim_hs=None, i_net=None, o_net=None, c_net=None, **kwargs):
+                dim_hs=None, i_net=None, o_net=None, c_net=None,
+                initialization=None, init_args=None, **kwargs):
         '''Factory for creating MLPs for RNN and returning .
 
         Convenience to quickly create MLPs from dictionaries, linking all
@@ -186,6 +251,13 @@ class RNN(Layer):
             conditional = MLP.factory(dim_out=dim_hs[0],
                                       name='conditional', **c_net)
             mlps['conditional'] = conditional
+
+        if initialization is not None:
+            if init_args is None: init_args = dict()
+            init_net = RNN_initializer(dim_in, dim_hs,
+                                       initialization=initialization,
+                                       **init_args)
+            mlps['init_net'] = init_net
 
         kwargs.update(**mlps)
 
@@ -248,6 +320,10 @@ class RNN(Layer):
 
         '''
         tparams = super(RNN, self).set_tparams()
+
+        if self.init_net is not None:
+            tparams.update(**self.init_net.set_tparams())
+            
         for net in self.inter_nets + self.nets:
             if net is not None:
                 tparams.update(**net.set_tparams())
@@ -259,6 +335,7 @@ class RNN(Layer):
             if net is not None:
                 accum += len(net.get_params())
             self.param_idx.append(accum)
+
         return tparams
 
     def get_params(self):
@@ -519,7 +596,12 @@ class RNN(Layer):
             theano.OrderedUpdates.
 
         '''
-        if h0s is None:
+        constants = []
+
+        if h0s is None and self.init_net is not None:
+            h0s = self.init_net.initialize(x[0])
+            constants += h0s
+        elif h0s is None:
             h0s = [T.alloc(0., x.shape[1], dim_h).astype(floatX) for dim_h in self.dim_hs]
 
         if m is None:
@@ -527,7 +609,9 @@ class RNN(Layer):
 
         params = self.get_sample_params()
 
-        return self.step_call(x, m, h0s, *params)
+        results, updates = self.step_call(x, m, h0s, *params)
+        results['h0s'] = h0s
+        return results, updates, constants
 
     def sample(self, x0=None, h0s=None, n_samples=10, n_steps=10,
                condition_on=None, debug=False):
@@ -550,7 +634,9 @@ class RNN(Layer):
                 p=T.constant(0.5).astype(floatX),
                 size=(n_samples, self.output_net.dim_out)).astype(floatX)
 
-        if h0s is None:
+        if h0s is None and self.init_net is not None:
+            h0s = self.init_net.initialize(x0)
+        elif h0s is None:
             h0s = [T.alloc(0., x.shape[1], dim_h).astype(floatX) for dim_h in self.dim_hs]
 
         seqs = []
@@ -589,7 +675,8 @@ class SimpleRNN(RNN):
 
     @staticmethod
     def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
-                    i_net=None, o_net=None, c_net=None, **kwargs):
+                    i_net=None, o_net=None, c_net=None,
+                    initialization=None, init_args=None, **kwargs):
         '''Convenience factory for SimpleRNN (see `RNN.factory`).
 
         '''
@@ -618,6 +705,13 @@ class SimpleRNN(RNN):
             conditional = MLP.factory(dim_out=dim_h,
                                       name='conditional', **c_net)
             mlps['conditional'] = conditional
+
+        if initialization is not None:
+            if init_args is None: init_args = dict()
+            init_net = RNN_initializer(dim_in, [dim_h],
+                                       initialization=initialization,
+                                       **init_args)
+            mlps['init_net'] = init_net
 
         kwargs.update(**mlps)
 

@@ -136,7 +136,7 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
     p.close()
     p.join()
 
-def montage(nifti, anat, roi_dict, thr=2,
+def montage(nifti, anat, roi_dict, thr=1,
             fig=None, out_file=None,
             order=None, stats=dict()):
     '''Saves a montage of nifti images.

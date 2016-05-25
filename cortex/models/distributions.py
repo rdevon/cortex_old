@@ -282,10 +282,10 @@ class CenteredBinomial(Binomial):
 
     '''
     def get_prob(self, z):
-        return T.nnet.sigmoid(2.0 * z) * 0.9999 + 0.000005
+        return T.tanh(z)
 
     def __call__(self, z):
-        return T.nnet.sigmoid(2.0 * z) * 0.9999 + 0.000005
+        return T.tanh(z)
 
     def step_sample(self, epsilon, p):
         return (2.0 * (epsilon <= p).astype(floatX) - 1.0)
@@ -311,6 +311,7 @@ class CenteredBinomial(Binomial):
         if p is None:
             p = self.get_prob(*self.get_params())
         x = 0.5 * (x + 1.0)
+        p = (0.5 * (p + 1.0)) * 0.9999 + 0.000005
         return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
 
 

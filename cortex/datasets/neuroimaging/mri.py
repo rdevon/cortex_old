@@ -64,6 +64,7 @@ class MRI(BasicDataset):
         self.pca_components = pca_components
 
         if self.pca_components:
+            X -= X.mean(axis=0)
             if self.pca is None:
                 print 'Forming PCA'
                 self.pca = PCA(pca_components)
@@ -82,8 +83,9 @@ class MRI(BasicDataset):
                                   labels='group', **kwargs)
 
         if distribution == 'gaussian':
-            self.X -= self.X.mean(axis=0)
-            self.X /= self.X.std()
+            if self.pca_components == 0:
+                self.X -= self.X.mean(axis=0)
+                self.X /= self.X.std()
         elif distribution in ['continuous_binomial', 'binomial']:
             self.X -= self.X.min()
             self.X /= (self.X.max() - self.X.min())
@@ -285,7 +287,7 @@ class MRI(BasicDataset):
 
         '''
         if self.pca is not None and self.pca_components:
-            X = self.pca.inverse_transform(X)
+            x = self.pca.inverse_transform(x)
 
         if len(x.shape) == 3:
             x = x[:, 0, :]

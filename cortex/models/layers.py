@@ -96,7 +96,7 @@ class Averager(Layer):
 
         new_m = ((1. - self.rate) * self.m + self.rate * m).astype(floatX)
         updates = [(self.m, new_m)]
-        return OrderedDict(m=new_m), updates
+        return updates
 
 
 class Baseline(Layer):

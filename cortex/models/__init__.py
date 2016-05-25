@@ -51,7 +51,7 @@ class Layer(object):
         '''Initialize the parameters.
 
         '''
-        raise NotImplementedError()
+        self.params = dict()
 
     def set_tparams(self):
         '''Sets the tensor parameters.
@@ -60,6 +60,7 @@ class Layer(object):
         if self.params is None:
             raise ValueError('Params not set yet')
         tparams = OrderedDict()
+
         for kk, pp in self.params.iteritems():
             tp = theano.shared(self.params[kk], name=kk)
             tparams[_p(self.name, kk)] = tp
