@@ -67,7 +67,7 @@ class MRI(BasicDataset):
             X -= X.mean(axis=0)
             if self.pca is None:
                 print 'Forming PCA'
-                self.pca = PCA(pca_components)
+                self.pca = PCA(pca_components, whiten=True)
                 print 'Fitting PCA... (please wait)'
                 self.pca.fit(X)
                 if self.pca_file is not None:
