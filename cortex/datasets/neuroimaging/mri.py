@@ -272,18 +272,16 @@ class MRI(BasicDataset):
         return images, out_files
 
     def save_images(self, x, out_file, remove_niftis=True,
-                    order=None, stats=dict(), x_limit=None):
+                    x_limit=None, roi_dict=None, **kwargs):
         '''Saves images from array.
 
         Args:
             x (numpy.array): array from which to make images.
             out_file (str): ouput file for image montage.
             remove_niftis (bool): delete images after making montage.
-            order (Optional[list]): reorder the images in the montage.
-            stats (Optional[dict]): dictionary of statistics to add to
-                montage.
             x_limit (Optional(int)): if not None, limit the number of images
                 along the x axis.
+            **kwargs: keywork arguments for montage.
 
         '''
         if self.pca is not None and self.pca_components:
@@ -294,12 +292,25 @@ class MRI(BasicDataset):
 
         x = self._unmask(x)
         images, nifti_files = self.save_niftis(x)
-        roi_dict = rois.main(nifti_files)
+        if roi_dict is None: roi_dict =dict()
+        roi_dict.update(**rois.main(nifti_files))
 
         if remove_niftis:
             for f in nifti_files:
                 os.remove(f)
         nifti_viewer.montage(images, self.anat_file, roi_dict,
-                             out_file=out_file,
-                             order=order,
-                             stats=stats)
+                             out_file=out_file, **kwargs)
+
+    def visualize_pca(self, out_file, **kwargs):
+        '''Saves the PCA component image.
+
+        Args:
+            out_file (str): ouput file for image montage.
+            **kwargs: keyword arguments for saving images.
+
+        '''
+        if self.pca is None:
+            raise ValueError('No PCA found.')
+        y = np.eye(self.pca_components).astype(floatX)
+
+        self.save_images(y, out_file, **kwargs)

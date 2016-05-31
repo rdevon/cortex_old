@@ -9,6 +9,10 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 
 
+conf = igraph.Configuration()
+conf['general.verbose'] = False
+
+
 def plot(fnc, idx=None, groups=None, transform=None, labels=None, out_file=None):
     if groups is None:
         groups = [range(fnc.shape[0])]
@@ -56,7 +60,7 @@ def plot(fnc, idx=None, groups=None, transform=None, labels=None, out_file=None)
         xtick_names = plt.setp(ax, xticklabels=labels)
         plt.setp(xtick_names, rotation=90)
         ytick_names = plt.setp(ax, yticklabels=labels)
-        plt.setp(ytick_names)
+        plt.setp(ytick_names, rotation=0)
     else:
         plt.axis('off')
 
@@ -105,6 +109,5 @@ def group(mat, thr=0.3, idx=None, labels=None, out_file=None):
 
     if out_file is not None:
         igraph.plot(g, out_file, weights=weights, edge_width=weights/10,
-                    vertex_label_size=8)
-
+               vertex_label_size=8)
     return clusters

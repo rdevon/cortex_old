@@ -6,22 +6,21 @@ import argparse
 import itertools
 import logging
 from math import ceil
-
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib.patches import FancyBboxPatch
 from matplotlib import pylab as plt, rc
 import multiprocessing as mp
-
 import nipy
 from nipy import load_image
 from nipy.core.api import xyz_affine
 from nipy.labs.viz import plot_map
-
 import numpy as np
 from os import path
 import pickle
 from sys import stdout
+
+from ...utils import floatX
 
 
 cdict = {'red': ((0.0, 0.0, 0.0),
@@ -136,9 +135,8 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
     p.close()
     p.join()
 
-def montage(nifti, anat, roi_dict, thr=2,
-            fig=None, out_file=None,
-            order=None, stats=dict()):
+def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
+            stats=None, time_courses=None):
     '''Saves a montage of nifti images.
 
     Args:
@@ -151,6 +149,7 @@ def montage(nifti, anat, roi_dict, thr=2,
         stats (Optional[dict]): extra statistics to print on montage as text.
 
     '''
+    if stats is None: stats = dict()
     if isinstance(anat, str):
         anat = load_image(anat)
     assert nifti is not None
@@ -159,18 +158,24 @@ def montage(nifti, anat, roi_dict, thr=2,
 
     texcol = 0
     bgcol = 1
-    iscale = 2
+    iscale = 2.5
     if isinstance(nifti, list):
-        weights = np.array([n.get_data() for n in nifti]).astype('float32')
+        weights = np.array([n.get_data() for n in nifti]).astype(floatX)
         weights = weights.transpose(1, 2, 3, 0)
         nifti = nifti[0]
     else:
-        weights = nifti.get_data(); #weights = weights / weights.std(axis=3)
+        weights = nifti.get_data()
     features = weights.shape[-1]
 
     indices = [0]
     y = 8
     x = int(ceil(1.0 * features / y))
+
+    if time_courses is not None:
+        assert len(time_courses) == features, ('Number of time courses must '
+                                               ' match features (%d vs %d).'
+                                               % (features, len(time_courses)))
+        x *= 2
 
     font = {'size': 8}
     rc('font',**font)
@@ -198,11 +203,13 @@ def montage(nifti, anat, roi_dict, thr=2,
         feat = feat / feat.std()
         imax = np.max(np.absolute(feat)); imin = -imax
         imshow_args = {'vmax': imax, 'vmin': imin}
-
         coords = ([-coords[0], -coords[1], coords[2]])
 
-        ax = fig.add_subplot(x, y, i + 1)
-        #plt.axis('off')
+        if time_courses is not None:
+            j = 2 * y * (i // y) + (i % y) + 1
+        else:
+            j = i + 1
+        ax = fig.add_subplot(x, y, j)
 
         try:
             plot_map(feat,
@@ -233,12 +240,17 @@ def montage(nifti, anat, roi_dict, thr=2,
 
         pos = [(0.05, 0.05), (0.4, 0.05), (0.8, 0.05)]
         colors = ['purple', 'blue', 'green']
-        for i, (k, vs) in enumerate(stats.iteritems()):
+        for j, (k, vs) in enumerate(stats.iteritems()):
             v = vs[f]
-            plt.text(pos[i][0], pos[i][1], '%s=%.2f' % (k, v),
+            plt.text(pos[j][0], pos[j][1], '%s=%.2f' % (k, v),
                      transform=ax.transAxes,
                      horizontalalignment='left',
-                     color=colors[i])
+                     color=colors[j])
+
+        if time_courses is not None:
+            j = y * (2 * (i // y) + 1) + (i % y) + 1
+            ax = fig.add_subplot(x, y, j)
+            ax.plot(time_courses[i])
 
     if out_file is not None:
         plt.savefig(out_file, transparent=True, facecolor=(bgcol, bgcol, bgcol))
