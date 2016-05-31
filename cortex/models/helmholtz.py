@@ -43,8 +43,23 @@ def unpack(dim_h=None,
     '''
     Function to unpack pretrained model into fresh Helmholtz class.
 
-    See `Helmholtz.factory` for details.
+    See `Helmholtz.factory` and `utils.load_model` for details.
+
+    Args:
+        dim_h (int): latent dimensionality.
+        prior (str): prior distribution (see `models.distributions for details`)
+        rec_args (dict): dictionary of recognition network keyword arguments.
+        gen_args (dict): dictionary of generation network keyword arguments.
+        data_iter (dataset.Dataset): dataset iterator.
+        **model_args: keyword arguments of saved parameters.
+
+    Returns:
+        list: list of models.
+        dict: keyword arguments of saved parameters.
+
     '''
+    if data_iter is None:
+        raise ValueError('Dataset iterator must be included in `unpack` function')
     models = []
 
     print 'Forming Helmholtz machine'
@@ -67,10 +82,11 @@ class Helmholtz(Layer):
     Use Helmholtz.factory for simple SBN.
 
     Attributes:
-        posterior: MLP, approximate posterior distribution network.
+        posterior (MLP): approximate posterior distribution network.
             (aka inference net or recognition net)
-        conditional: MLP, conditional network.
-        prior: Distribution, prior distribution of latent variables.
+        conditional (MLP): conditional network.
+        prior (Distribution): prior distribution of latent variables.
+
     '''
     def __init__(self, posterior, conditional, prior,
                  name=None, **kwargs):
@@ -79,8 +95,9 @@ class Helmholtz(Layer):
         Args:
             posterior: MLP, approximate posterior distribution network.
                 (aka inference net or recognition net)
-            conditional: MLP, conditional network.
-            prior: Distribution, prior distribution of latent variables.
+            conditional (MLP): conditional network.
+            prior (Distribution): prior distribution of latent variables.
+
         '''
 
         self.posterior = posterior
@@ -110,11 +127,13 @@ class Helmholtz(Layer):
         '''Factory for forming conditional, posterior, and prior.
 
         Args:
-            dim_h: int, latent dimension.
-            data_iter: Dataset class.
+            dim_h (int): latent dimension.
+            data_iter (Dataset).
             **kwargs: kwargs for mlp_factory
+
         Returns:
-            Helmholtz object.
+            Helmholtz.
+
         '''
 
         posterior, conditional, prior = Helmholtz.mlp_factory(
@@ -128,20 +147,22 @@ class Helmholtz(Layer):
         '''Factory for forming conditional, posterior, and prior.
 
         Args:
-            dim_h: int, latent dimension.
-            data_iter: Dataset class (optional). Must be provided if
-                distributions and dims are not
-            distributions: dict (optional). keys are data mode names,
+            dim_h (int): latent dimension.
+            data_iter (Optional[Dataset]): Must be provided if distributions \
+                and dims are not.
+            distributions (Optional[dict]): keys are data mode names,
                 values are str for distribution (see distributions.py)
-            dims: dict (optional). Keys are data mode names, values are int.
-            prior: str or Distribution object (optional), type (str) or instance of prior.
+            dims (Optional[dict]): Keys are data mode names, values are int.
+            prior (str or Distribution): type (str) or instance of prior.
                 See `distributions.py`.
-            rec_args: dict (optional), arguments for approximate posterior.
-            gen_args: dict (optional), arguments for conditional network.
+            rec_args (Optional[dict]): arguments for approximate posterior.
+            gen_args (Optional[dict]): arguments for conditional network.
+
         Returns:
-            conditional: MLP.
-            posterior: MLP.
-            prior: Distribution.
+            MLP: posterior.
+            MLP: conditional.
+            Distribution: prior.
+
         '''
 
         if data_iter is not None:
@@ -197,12 +218,21 @@ class Helmholtz(Layer):
         return posterior, conditional, prior_model
 
     def set_params(self):
+        '''Sets model parameters.
+
+        '''
         self.params = OrderedDict()
         self.prior.name = self.name + '_' + self.prior.name
         self.posterior.name = self.name + '_posterior'
         self.conditional.name = self.name + '_conditional'
 
     def set_tparams(self):
+        '''Sets tensor parameters.
+
+        Returns:
+            dict: tensor parameters.
+
+        '''
         tparams = super(Helmholtz, self).set_tparams()
         tparams.update(**self.posterior.set_tparams())
         tparams.update(**self.conditional.set_tparams())
@@ -212,19 +242,37 @@ class Helmholtz(Layer):
 
     # Fetch params -------------------------------------------------------------
     def get_params(self):
-        '''Get model parameters.'''
+        '''Get model parameters.
+
+        '''
         params = (self.prior.get_params()
                   + self.conditional.get_params()
                   + self.posterior.get_params())
         return params
 
     def get_prior_params(self, *params):
-        '''Get the prior params for scan.'''
+        '''Get the prior params for scan.
+
+        Args:
+            *params: list of parameters.
+
+        Returns:
+            list: prior parameters.
+
+        '''
         params = list(params)
         return params[:self.prior.n_params]
 
     def get_posterior_params(self, *params):
-        '''Get the posterior params for scan.'''
+        '''Get the posterior params for scan.
+
+        Args:
+            *params: list of parameters.
+
+        Returns:
+            list: posterior parameters.
+
+        '''
         params = list(params)
         start = self.prior.n_params + self.conditional.n_params
         stop = start + self.posterior.n_params
@@ -232,12 +280,29 @@ class Helmholtz(Layer):
 
     # Extra functions ----------------------------------------------------------
     def sample_from_prior(self, n_samples=100):
-        '''Samples from the prior distribution.'''
+        '''Samples from the prior distribution.
+
+        Args:
+            n_samples (int).
+
+        Returns:
+            T.tensor: samples.
+            theano.OrderedUpdates: updates.
+
+        '''
         h, updates = self.prior.sample(n_samples)
         return self.conditional.feed(h), updates
 
     def generate_from_latent(self, h):
-        '''Generates an image from a latent state.'''
+        '''Generates an image from a latent state.
+
+        Args:
+            h (T.tensor): latent variables.
+
+        Returns:
+            T.tensor: center of conditional distribution.
+
+        '''
         py = self.conditional.feed(h)
         center = self.conditional.get_center(py)
         return center
@@ -247,6 +312,10 @@ class Helmholtz(Layer):
 
         Takes the difference between "on" and "off" units (defined by prior).
         See `distributions.py` for details.
+
+        Returns:
+            T.tensor: conditional distribution.
+
         '''
         h0, h = self.prior.generate_latent_pair()
         p0 = self.conditional.feed(h0)
@@ -256,21 +325,31 @@ class Helmholtz(Layer):
 
     # Misc --------------------------------------------------------------------
     def get_center(self, p):
-        '''Returns the center of the conditional distribution.'''
+        '''Returns the center of the conditional distribution.
+
+        Args:
+            p (T.tensor): probability distribution.
+
+        Returns:
+            T.tensor: center of distribution.
+
+        '''
         return self.conditional.get_center(p)
 
     def log_marginal(self, y, h, py, q):
         '''Computes the approximate log marginal.
 
-        Uses \log \sum p / q - \log N
+        :math: `\log \\sum_i \\frac{p(x, h^{(i)})}{q(h^{(i)} | x)} - \log N`
 
         Args:
-            y: T.tensor, target values.
-            h: T.tensor, latent samples.
-            py: T.tesnor, conditional density p(y | h)
-            q: approximate posterior q(h | y)
+            y (T.tensor): target values.
+            h (T.tensor): latent samples.
+            py (T.tesnor): conditional density :math:`p(y | h)`.
+            q (T.tensor): approximate posterior :math:`q(h | y)`.
+
         Returns:
-            approximate log marginal.
+            T.tensor: approximate log marginal.
+
         '''
         log_py_h = -self.conditional.neg_log_prob(y, py)
         log_ph   = -self.prior.neg_log_prob(h)
@@ -284,7 +363,15 @@ class Helmholtz(Layer):
         return (T.log(w.mean(axis=0, keepdims=True)) + log_p_max).mean()
 
     def l2_decay(self, rate):
-        '''Get L2 decay costs.'''
+        '''Get L2 decay costs.
+
+        Args:
+            rate (float): decay rate.
+
+        Returns:
+            dict: costs.
+
+        '''
         rec_l2_cost = self.posterior.l2_decay(rate)
         gen_l2_cost = self.conditional.l2_decay(rate)
 
@@ -298,14 +385,31 @@ class Helmholtz(Layer):
 
     # --------------------------------------------------------------------
     def p_y_given_h(self, h, *params):
-        '''p(y | h) for scan.'''
+        ''':math:`p(y | h)` for scan.
+
+        Args:
+            h (T.tensor): latent states.
+            *params: parameters.
+
+        Returns:
+            T.tensor
+
+        '''
         start  = self.prior.n_params
         stop   = start + self.conditional.n_params
         params = params[start:stop]
         return self.conditional.step_feed(h, *params)
 
     def init_inference_samples(self, size):
-        '''Initializes the samples for inference.'''
+        '''Initializes the samples for inference.
+
+        Args:
+            size (tuple).
+
+        Returns:
+            T.tensor: samples.
+
+        '''
         return self.posterior.distribution.prototype_samples(size)
 
     def __call__(self, x, y, qk=None, n_posterior_samples=10,
@@ -318,21 +422,23 @@ class Helmholtz(Layer):
         final graph.
 
         Args:
-            x: T.tensor, input to recogntion network.
-            y: T.tensor, output from conditional.
-            qk: T.tensor (optional), approximate posterior parameters.
+            x (T.tensor): input to recogntion network.
+            y (T.tensor): output from conditional.
+            qk (Optional[T.tensor]): approximate posterior parameters.
                 If None, calculate from recognition network.
-            n_posterior_samples: int, number of samples to use for lower bound
+            n_posterior_samples (int): number of samples to use for lower bound
                 and log marginal estimates.
-            pass_gradients: bool, for priors with continuous distributions,
+            pass_gradients (bool): for priors with continuous distributions,
                 this can facilitate learning. Otherwise, q_k should be provided.
-            reweight: bool. If true, then reweight samples for estimates.
+            reweight (bool): If true, then reweight samples for estimates.
+
         Returns:
-            results: OrderedDict, float results.
-            samples: OrderedDict, array results
+            OrderedDict: float results.
+            OrderedDict: array results
                 (such as samples from conditional).
-            updates: OrderedUpdates.
-            constants: list, for omitting quantities from passing gradients.
+            OrderedUpdates: updates.
+            list: constants for omitting quantities from passing gradients.
+
         '''
         constants = []
         results = OrderedDict()

@@ -31,7 +31,7 @@ setup(
     ],
     keywords='deep learning neuroimaging',
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-    install_requires=['nibabel', 'nipy', 'sklearn'],
+    install_requires=['nibabel', 'nipy', 'sklearn', 'python-igraph'],
     entry_points={
         'console_scripts': [
             'cortex-setup=cortex:main',

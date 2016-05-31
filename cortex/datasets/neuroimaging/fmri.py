@@ -83,7 +83,8 @@ class FMRI_IID(MRI):
         else:
             self.pca = None
 
-        self.extras = dict((k, np.load(v)) for k, v in extras.iteritems())
+        self.extras = dict((k, np.load(v).astype(floatX))
+            for k, v in extras.iteritems())
 
         if isinstance(data_files, str):
             data_files = [data_files]
