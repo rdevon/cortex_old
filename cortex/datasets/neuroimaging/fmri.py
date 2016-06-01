@@ -53,9 +53,9 @@ class FMRI_IID(MRI):
             anat_file: '/Users/devon/Data/ch2better_whitebg_aligned2EPI_V4.nii',
 
         '''
-        print('Loading file locations from %s' % source)
+        self.logger.info('Loading file locations from %s' % source)
         source_dict = yaml.load(open(source))
-        print('Source locations: %s' % pprint.pformat(source_dict))
+        self.logger.info('Source locations: %s' % pprint.pformat(source_dict))
 
         def unpack_source(name=None, nifti=None, mask=None, anat_file=None,
                           tmp_path=None, pca=None, data=None, **kwargs):
@@ -91,15 +91,22 @@ class FMRI_IID(MRI):
         X = []
         Y = []
         for i, data_file in enumerate(data_files):
-            print 'Loading %s' % data_file
+            self.logger.info('Loading %s' % data_file)
             X_ = np.load(data_file)
             X.append(X_.astype(floatX))
             Y.append((np.zeros((X_.shape[0] * X_.shape[1],)) + i).astype(floatX))
 
         X = np.concatenate(X, axis=0)
         Y = np.concatenate(Y, axis=0)
+        X -= X.mean(axis=1, keepdims=True)
 
-        self.n_subjects, self.n_scans, _, _, _ = X.shape
+        if len(X.shape) == 3:
+            self.n_subjects, self.n_scans, _ = X.shape
+        elif len(X.shape) == 5:
+            self.n_subjects, self.n_scans, _, _, _ = X.shape
+        else:
+            raise ValueError('X has incorrect shape. Should be 3 or 5 (got %d)'
+                             % len(X.shape))
         X = X.reshape((X.shape[0] * X.shape[1],) + X.shape[2:])
 
         return X, Y

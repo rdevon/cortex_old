@@ -4,6 +4,7 @@ Base Layer class.
 
 from collections import OrderedDict
 import copy
+import logging
 import theano
 
 from cortex.utils.tools import (
@@ -33,6 +34,13 @@ class Layer(object):
             **kwargs: extra kwargs
 
         '''
+
+        self.logger = logging.getLogger(
+            '.'.join([self.__module__, self.__class__.__name__]))
+
+        self.logger.info('Forming layer %r with name %s' % (
+            self.__class__, name))
+
         self.name = name
         self.params = None
         self.excludes = excludes

@@ -3,6 +3,7 @@ Generic dataset class
 '''
 
 from collections import OrderedDict
+import logging
 import numpy as np
 import os
 from os import path
@@ -241,6 +242,12 @@ class Dataset(object):
             dict: leftover keyword arguments.
 
         '''
+        if not hasattr(self, 'logger'):
+            self.logger = logging.getLogger(
+                '.'.join([self.__module__, self.__class__.__name__]))
+        self.logger.info('Forming dataset %r with name %s' % (
+            self.__class__, name))
+
         if batch_size is None:
             raise ValueError('Batch size argument must be given')
 
@@ -377,7 +384,8 @@ class BasicDataset(Dataset):
             idx = np.where(label == 1)[0].tolist()
 
             dup_idx = [idx[j] for j in range(max_num - len(idx))]
-            print 'Balancing label %d by duplicating %d samples' % (i, len(dup_idx))
+            self.logger.info('Balancing label %d by duplicating %d samples'
+                             % (i, len(dup_idx)))
 
         dup_idx = np.unique(dup_idx)
 

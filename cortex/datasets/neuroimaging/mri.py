@@ -3,6 +3,7 @@ Module for the MRI dataset
 '''
 
 import cPickle
+import logging
 import nipy
 from nipy.core.api import Image
 import numpy as np
@@ -55,7 +56,10 @@ class MRI(BasicDataset):
             **kwargs: extra keyword arguments passed to BasicDataset
 
         '''
-        print 'Loading %s from %s' % (name, source)
+        self.logger = logging.getLogger(
+            '.'.join([self.__module__, self.__class__.__name__]))
+        self.logger.info('Loading %s from %s' % (name, source))
+
         source = resolve_path(source)
         X, Y = self.get_data(source)
 
@@ -66,14 +70,14 @@ class MRI(BasicDataset):
         if self.pca_components:
             X -= X.mean(axis=0)
             if self.pca is None:
-                print 'Forming PCA'
+                self.logger.info('Forming PCA')
                 self.pca = PCA(pca_components, whiten=True)
-                print 'Fitting PCA... (please wait)'
+                self.logger.info('Fitting PCA... (please wait)')
                 self.pca.fit(X)
                 if self.pca_file is not None:
                     with open(self.pca_file, 'wb') as pf:
                         cPickle.dump(self.pca, pf)
-            print 'Performing PCA'
+            self.logger.info('Performing PCA')
             X = self.pca.transform(X)
 
         data = {name: X, 'group': Y}
@@ -118,9 +122,9 @@ class MRI(BasicDataset):
             sites: '/Users/devon/Data/AOD/AOD_sites.npy'
 
         '''
-        print('Loading file locations from %s' % source)
+        self.logger.info('Loading file locations from %s' % source)
         source_dict = yaml.load(open(source))
-        print('Source locations: %s' % pprint.pformat(source_dict))
+        self.logger.info('Source locations: %s' % pprint.pformat(source_dict))
 
         nifti_file = source_dict['nifti']
         mask_file = source_dict['mask']
@@ -145,7 +149,7 @@ class MRI(BasicDataset):
         X = []
         Y = []
         for i, data_file in enumerate(data_files):
-            print 'Loading %s' % data_file
+            self.logger.info('Loading %s' % data_file)
             X_ = np.load(data_file)
             X.append(X_.astype(floatX))
             Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
@@ -166,7 +170,7 @@ class MRI(BasicDataset):
             n_sites = len(np.unique(self.sites).tolist())
 
             if n_sites > 1:
-                print 'Regressing out site'
+                self.logger.info('Regressing out site')
 
                 for site in xrange(n_sites):
                     idx = [i for i, s in enumerate(self.sites) if s == site]
@@ -190,7 +194,7 @@ class MRI(BasicDataset):
             mask = self.mask
 
         if X.shape[1] == mask.sum():
-            print 'Data already masked'
+            logger.debug('Data already masked')
             return X
 
         if X.shape[1:] != mask.shape:

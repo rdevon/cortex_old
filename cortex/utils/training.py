@@ -9,6 +9,7 @@ not as a basis for all training.
 import argparse
 from collections import OrderedDict
 from glob import glob
+import logging
 import numpy as np
 import os
 from os import path
@@ -25,6 +26,7 @@ import theano
 from theano import tensor as T
 import time
 
+from . import logger as cortex_logger
 from . import op
 from .learning_scheduler import Scheduler
 from .tools import (
@@ -37,6 +39,7 @@ from .tools import (
     warn_kwargs
 )
 
+logger = logging.getLogger(__name__)
 
 def make_argument_parser():
     '''Generic experiment parser.
@@ -56,6 +59,8 @@ def make_argument_parser():
     parser.add_argument('-r', '--load_last', action='store_true')
     parser.add_argument('-l', '--load_model', default=None)
     parser.add_argument('-n', '--name', default=None)
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Verbose output')
     return parser
 
 def make_argument_parser_test():
@@ -73,6 +78,8 @@ def make_argument_parser_test():
                         help='Dataset mode: valid, test, or train')
     parser.add_argument('-b', '--best', action='store_true',
                         help='Load best instead of last saved model.')
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help='Verbose output')
     return parser
 
 def set_experiment(args):
@@ -88,11 +95,13 @@ def set_experiment(args):
         dict: dictionary of experiment arguments.
 
     '''
-
     try:
         args = vars(args)
     except TypeError:
         pass
+
+    verbose = args.pop('verbose')
+    cortex_logger.set_stream_logger()
 
     if 'load_model' in args.keys():
         load_model = args.pop('load_model')
@@ -114,11 +123,15 @@ def set_experiment(args):
     exp_dict['out_path'] = path.join(exp_dict['out_path'], exp_dict['name'])
 
     out_path = exp_dict['out_path']
-    print 'Saving to %s' % out_path
+
     if path.isfile(out_path):
         raise ValueError()
     elif not path.isdir(out_path):
         os.mkdir(path.abspath(out_path))
+
+    cortex_logger.set_file_logger(path.join(out_path, exp_dict['name'] + '.log'))
+    logging.info('Starting experiment %s. Saving to %s'
+                 % (exp_dict['name'], out_path))
 
     experiment = exp_dict.pop('experiment')
     shutil.copy(path.abspath(experiment), path.abspath(out_path))
@@ -153,7 +166,7 @@ def reload_model(args):
 
     try:
         yaml = glob(path.join(exp_dir, '*.yaml'))[0]
-        print 'Found yaml %s' % yaml
+        logging.info('Found yaml %s' % yaml)
     except:
         raise ValueError('yaml file not found. Cannot reload experiment.')
 
@@ -166,13 +179,13 @@ def reload_model(args):
         else:
             tag = 'last'
         model_file = glob(path.join(exp_dir, '*%s*npz' % tag))[0]
-        print 'Found %s in %s' % (tag, model_file)
+        logging.info('Found %s in %s' % (tag, model_file))
     except:
         raise ValueError()
 
     params = np.load(model_file)
     try:
-        print 'Loading dataset arguments from saved model.'
+        logging.info('Loading dataset arguments from saved model.')
         dataset_args = params['dataset_args'].item()
         exp_dict.update(dataset_args=dataset_args)
     except KeyError:
@@ -249,8 +262,8 @@ def set_params(tparams, updates, excludes=[]):
         for k, v in tparams.iteritems()
         if (v not in updates.keys()) and (k not in excludes))
 
-    print 'Learned model params: %s' % tparams.keys()
-    print 'Saved params: %s' % all_params.keys()
+    logging.info('Learned model params: %s' % tparams.keys())
+    logging.info('Saved params: %s' % all_params.keys())
 
     return tparams, all_params
 
@@ -337,8 +350,8 @@ def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
         try:
             results[k] = np.mean(v)
         except Exception as e:
-            print k
-            print v
+            logging.error(k)
+            logging.error(v)
             raise e
 
     data_iter.reset()
@@ -478,7 +491,7 @@ def main_loop(train, valid, tparams,
                 if (test_every is None) or ((e + 1) % test_every == 0):
                     print
                     if f_extra is not None:
-                        print 'Performing initial evaluation function...'
+                        logging.info('Performing initial evaluation function...')
                         f_extra()
                     epoch_t1 = time.time()
                     dt_epoch = epoch_t1 - epoch_t0
@@ -547,10 +560,10 @@ def main_loop(train, valid, tparams,
             last_outfile = path.join(out_path, '{name}_last.npz'.format(name=name))
 
             if save is not None:
-                print 'Saving'
+                logging.info('Saving')
                 save(tparams, outfile)
                 save(tparams, last_outfile)
-                print 'Done saving.'
+                logging.info('Done saving.')
     except KeyboardInterrupt:
         print 'Saving interupted.'
 

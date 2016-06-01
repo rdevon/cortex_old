@@ -23,6 +23,7 @@ from sys import stdout
 from ...utils import floatX
 
 
+logger = logging.getLogger(__name__)
 cdict = {'red': ((0.0, 0.0, 0.0),
                  (0.25, 0.2, 0.2),
                  (0.45, 0.0, 0.0),
@@ -136,7 +137,7 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
     p.join()
 
 def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
-            stats=None, time_courses=None):
+            stats=None, time_courses=None, y=8):
     '''Saves a montage of nifti images.
 
     Args:
@@ -168,7 +169,6 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
     features = weights.shape[-1]
 
     indices = [0]
-    y = 8
     x = int(ceil(1.0 * features / y))
 
     if time_courses is not None:
@@ -225,7 +225,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
                       draw_cross=False,
                       **imshow_args)
         except Exception as e:
-            print e
+            logger.error(e)
             pass
 
         plt.text(0.05, 0.8, str(f),

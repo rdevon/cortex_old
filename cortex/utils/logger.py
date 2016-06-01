@@ -1,26 +1,29 @@
-'''
-Module for general logger.
+'''Module for general logger.
+
 '''
 
 import logging
 
-loggers = {}
 
-def setup_custom_logger(name, level):
-    global loggers
+logger = logging.getLogger('cortex')
+logger.setLevel(logging.DEBUG)
+logger.propagate = False
+file_formatter = logging.Formatter(
+    '%(asctime)s:%(name)s[%(levelname)s]:%(message)s')
+stream_formatter = logging.Formatter(
+    '[%(levelname)s]:%(message)s')
 
-    logger = loggers.get(name, None)
-    if logger is not None:
-        logger.setLevel(level)
-        return logger
-    formatter = logging.Formatter(fmt='%(asctime)s:%(levelname)s:'
-                                  '%(module)s:%(message)s')
+def set_stream_logger():
+    global logger
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    ch.setFormatter(stream_formatter)
+    logger.addHandler(ch)
 
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    logger.addHandler(handler)
-    loggers[name] = logger
-    return logger
+def set_file_logger(file_path):
+    global logger
+    fh = logging.FileHandler(file_path)
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(file_formatter)
+    logger.addHandler(fh)
+    logger.info('Saving logs to %s' % file_path)

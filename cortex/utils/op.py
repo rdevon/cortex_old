@@ -3,6 +3,8 @@ Optimization routines.
 
 Based (and copied) on Kyunghyun Cho's arctic repo.
 '''
+
+import logging
 import numpy as np
 import theano
 from theano import tensor as T
@@ -10,6 +12,7 @@ import tools
 from collections import OrderedDict
 
 
+logger = logging.getLogger(__name__)
 profile = False
 
 def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
@@ -218,7 +221,10 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
 
 def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
              exclude_params=set([])):
-    '''Adadelta'''
+    '''Adadelta.
+
+    '''
+    logger.info('AdaDelta with some generic parameters (TODO)')
     zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k)
                     for k, p in tparams.iteritems()]
     running_up2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rup2'%k)
@@ -250,8 +256,10 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
             exclude_params=set([]),
             relaxation=1e-4, momentum=0.9, coefficient=0.95
             ):
-    '''RMSProp'''
-    print ('RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f'
+    '''RMSProp.
+
+    '''
+    logger.info('RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f'
            % (relaxation, momentum, coefficient))
     zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k)
                     for k, p in tparams.iteritems()]
@@ -285,7 +293,10 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
 
 def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
         exclude_params=set([])):
-    '''Stochastic gradient descent'''
+    '''Stochastic gradient descent.
+
+    '''
+    logger.info('Stochastic gradient descent.')
     gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k)
                for k, p in tparams.iteritems()]
 

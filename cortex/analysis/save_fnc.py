@@ -20,6 +20,8 @@ def plot(fnc, idx=None, groups=None, transform=None, labels=None, out_file=None)
     if idx is None:
         idx = range(fnc.shape[0])
 
+    fnc = fnc * (1.0 - np.eye(fnc.shape[0]))
+
     n_components = len(idx)
 
     font = matplotlib.font_manager.FontProperties()

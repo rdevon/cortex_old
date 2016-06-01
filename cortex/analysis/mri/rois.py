@@ -56,6 +56,8 @@ CC = ['Inferior Temporal Gyrus','Insula','Inferior Frontal Gyrus','Inferior Pari
 DM = ['Precuneus','Superior Frontal Gyrus','Posterior Cingulate','Anterior Cingulate','Angular Gyrus']
 CB = ['Cerebellar Tonsil','Pyramis']
 
+logger = logging.getLogger(__name__)
+
 def lat_opposite(side):
     '''
     Returns the lateral opposite as defined by the keyword pair {"Right", "Left"}
@@ -294,8 +296,7 @@ def find_rois(fnifti, thr, test=False):
         dict: regions of interest
 
     '''
-    print
-    print('Finding clusters from niftis')
+    logger.info('Finding clusters from niftis')
 
     if isinstance(fnifti, str):
         nifti = load_image(fnifti)
@@ -322,7 +323,7 @@ def find_rois(fnifti, thr, test=False):
 
     roi_dict = dict((k, v) for k, v in roi_dict.iteritems() if len(v) > 0)
 
-    print('Finished. Found %d clusters' % len(roi_dict))
+    logger.info('Finished. Found %d clusters' % len(roi_dict))
     return roi_dict
 
 def save_roi_txt(roi_dict, out_file):

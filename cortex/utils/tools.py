@@ -4,6 +4,7 @@ Helper module for learning.
 
 from collections import OrderedDict
 from ConfigParser import ConfigParser
+import logging
 import numpy as np
 import os
 import pprint
@@ -26,6 +27,7 @@ import yaml
 from . import floatX
 
 
+logger = logging.getLogger(__name__)
 random_seed = random.randint(0, 10000)
 rng_ = np.random.RandomState(random_seed)
 profile = False
@@ -150,9 +152,10 @@ def print_profile(tparams):
         tparams (dict): parameters to print shape of.
 
     '''
-    print 'Print profile for tparams (name, shape)'
+    s = 'Printing profile for tparams (name, shape): \n'
     for (k, v) in tparams.iteritems():
-        print '\t', k, v.get_value().shape
+        s += '\t%s%s\n' % (k, v.get_value().shape)
+    logger.info(s)
 
 def shuffle_columns(x, srng):
     '''Shuffles a tensor along the second index.
@@ -317,9 +320,9 @@ def load_experiment(experiment_yaml):
         dict: extracted yaml.
 
     '''
-    print('Loading experiment from %s' % experiment_yaml)
+    logger.info('Loading experiment from %s' % experiment_yaml)
     exp_dict = yaml.load(open(experiment_yaml))
-    print('Experiment hyperparams: %s' % pprint.pformat(exp_dict))
+    logger.info('Experiment hyperparams: %s' % pprint.pformat(exp_dict))
     return exp_dict
 
 def load_model(model_file, f_unpack=None, strict=True, **extra_args):
@@ -344,7 +347,7 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
 
     '''
 
-    print 'Loading model from %s' % model_file
+    logger.info('Loading model from %s' % model_file)
     params = np.load(model_file)
     d = dict()
     for k in params.keys():
@@ -356,7 +359,7 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
     d.update(**extra_args)
     models, pretrained_kwargs, kwargs = f_unpack(**d)
 
-    print('Pretrained model(s) has the following parameters: \n%s'
+    logger.info('Pretrained model(s) has the following parameters: \n%s'
           % pprint.pformat(pretrained_kwargs.keys()))
 
     model_dict = OrderedDict()
@@ -364,12 +367,13 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
     for model in models:
         if model is None:
             continue
-        print '--- Loading params for %s' % model.name
+        logger.info('--- Loading params for %s' % model.name)
         for k, v in model.params.iteritems():
             try:
                 param_key = '{name}_{key}'.format(name=model.name, key=k)
                 pretrained_v = pretrained_kwargs.pop(param_key)
-                print 'Found %s for %s %s' % (k, model.name, pretrained_v.shape)
+                logger.info('Found %s for %s %s'
+                            % (k, model.name, pretrained_v.shape))
                 assert model.params[k].shape == pretrained_v.shape, (
                     'Sizes do not match: %s vs %s'
                     % (model.params[k].shape, pretrained_v.shape)
@@ -379,21 +383,21 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
                 try:
                     param_key = '{key}'.format(key=k)
                     pretrained_v = pretrained_kwargs[param_key]
-                    print 'Found %s, but name is ambiguous' % (k)
+                    logger.info('Found %s, but name is ambiguous' % k)
                     assert model.params[k].shape == pretrained_v.shape, (
                         'Sizes do not match: %s vs %s'
                         % (model.params[k].shape, pretrained_v.shape)
                     )
                     model.params[k] = pretrained_v
                 except KeyError:
-                    print '{} not found'.format(k)
+                    logger.info('{} not found'.format(k))
         model_dict[model.name] = model
 
     if len(pretrained_kwargs) > 0 and strict:
         raise ValueError('ERROR: Leftover params: %s' %
                          pprint.pformat(pretrained_kwargs.keys()))
     elif len(pretrained_kwargs) > 0:
-        warnings.warn('Leftover params: %s' %
+        logger.warn('Leftover params: %s' %
                       pprint.pformat(pretrained_kwargs.keys()))
 
     return model_dict, kwargs
@@ -405,10 +409,10 @@ def check_bad_nums(rvals, names):
     found = False
     for k, out in zip(names, rvals):
         if np.any(np.isnan(out)):
-            print 'Found nan num ', k, '(nan)'
+            logger.error('Found nan num ', k, '(nan)')
             found = True
         elif np.any(np.isinf(out)):
-            print 'Found inf ', k, '(inf)'
+            logger.error('Found inf ', k, '(inf)')
             found = True
     return found
 
