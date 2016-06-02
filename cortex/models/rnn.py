@@ -23,43 +23,38 @@ from ..utils.tools import (
 )
 
 
-def init_h(h_init, X, batch_size, models, **h_args):
-    '''Initializes the RNN hidden state.
+def resolve(c, simple=True):
+    from .gru import GRU, SimpleGRU
+    if simple:
+        c_dict = dict(
+            rnn=SimpleRNN,
+            gru=SimpleGRU
+        )
+    else:
+        c_dict = dict(
+            rnn=RNN,
+            gru=GRU
+        )
+    C = c_dict.get(c, None)
 
-    Args:
-        h_init (str): type of initialization.
-        X (T.tensor): input tensor for initialization through MLP.
-        batch_size (int)
-        models (list): list of Layer, pulls 'h_net' for initialization
-            (TODO change this).
-        **h_args: kwargs for different initializations.
+    if C is None:
+        raise ValueError('No RNN class `%s`' % c)
+    return C
 
-    Returns:
-        T.tensor: Full 3D tensor returned to train `h_net`.
+def factory(rnn_type=None, dim_h=None, dim_hs=None, **kwargs):
+    if dim_h is None:
+        simple = False
+        assert dim_hs is not None
+    else:
+        simple = True
+        assert dim_h is not None
 
-    '''
-    if h_init is None:
-        h0 = None
-    elif h_init == 'last':
-        print 'Initializing h0 from chain'
-        h0 = theano.shared(np.zeros((batch_size, rnn.dim_h)).astype(floatX))
-        h0s = h0[None, :, :]
-    elif h_init == 'noise':
-        noise_amount = h_args['noise_amount']
-        print 'Initializing h0 from noise'
-        h0 = trng.normal(avg=0, std=0.1, size=(batch_size, rnn.dim_h)).astype(floatX)
-        h0s = h0[None, :, :]
-    elif h_init == 'average':
-        print 'Initializing h0 from running average'
-        averager = models['averager']
-        h0 = (T.alloc(0., batch_size, rnn.dim_h) + averager.m[None, :]).astype(floatX)
-        h0s = h0[None, :, :]
-    elif h_init == 'mlp':
-        print 'Initializing h0 from MLP'
-        mlp = models['h_net']
-        h0s = mlp(X)
+    C = resolve(rnn_type, simple=simple)
 
-    return h0s
+    if simple:
+        return C.factory(dim_h=dim_h, **kwargs)
+    else:
+        return C.factory(dim_hs=dim_hs, **kwargs)
 
 def unpack(rnn_args, data_iter=None, **model_args):
     '''Unpacks a saved RNN.
@@ -85,7 +80,27 @@ def unpack(rnn_args, data_iter=None, **model_args):
 
 
 class RNN_initializer(Layer):
+    '''Initializer for RNNs.
+
+    Currently supports MLP intialization and averager.
+
+    Attributes:
+        initialization (str): intialization type.
+        dim_in (int): input dimension. For MLP.
+        dim_outs (list): hidden dimensions.
+        layers (list): layers for initialization of RNN layers.
+
+    '''
     def __init__(self, dim_in, dim_outs, initialization='mlp', **kwargs):
+        '''Initialization function for RNN_Initializer.
+
+        Args:
+            dim_in (int): input dimension. For MLP.
+            dim_outs (list): hidden dimensions.
+            initialization (str): intialization type.
+            **kwargs: keyword arguments for initialization.
+
+        '''
         self.initialization = initialization
         self.dim_in = dim_in
         self.dim_outs = dim_outs
@@ -96,13 +111,13 @@ class RNN_initializer(Layer):
         super(RNN_initializer, self).__init__(name='rnn_initializer')
 
         self.layers = []
-        for dim_out in self.dim_outs:
+        for i, dim_out in enumerate(self.dim_outs):
             if initialization == 'mlp':
                 layer = MLP(
                     self.dim_in, dim_out,
                     rng=self.rng, trng=self.trng,
                     distribution='centered_binomial',
-                    name='rnn_initializer_mlp',
+                    name='rnn_initializer_mlp_%d' % i,
                     **kwargs)
             elif initialization == 'average':
                 layer = Averager((dim_out,), name='rnn_initializer_averager',
@@ -120,7 +135,28 @@ class RNN_initializer(Layer):
 
         return tparams
 
+    def get_decay_params(self):
+        decay_params = OrderedDict()
+        if self.initialization == 'mlp':
+            for layer in self.layers:
+                decay_params.update(**layer.get_decay_params())
+        return decay_params
+
     def __call__(self, X, hs):
+        '''Call function for RNN_Initializer.
+
+        Updates the initializer or returns cost.
+
+        Args:
+            X (T.tensor): input
+            hs (list): hidden states
+
+        Returns:
+            OrderedDict: cost, mlp output, hs
+            theano.OrderedUpdates: updates
+            list: constants
+
+        '''
         hs = [h.copy() for h in hs]
         cost = T.constant(0.).astype(floatX)
         updates = theano.OrderedUpdates()
@@ -138,6 +174,15 @@ class RNN_initializer(Layer):
         return OrderedDict(cost=cost, p=p, hs=hs), updates, constants
 
     def initialize(self, X):
+        '''Initialize the hidden states.
+
+        Args:
+            X (T.tensor): input.
+
+        Returns:
+            list: initial states.
+
+        '''
         if self.initialization == 'mlp':
             return [layer.feed(X) for layer in self.layers]
         elif self.initialization == 'average':
@@ -200,39 +245,30 @@ class RNN(Layer):
         super(RNN, self).__init__(name=name, **kwargs)
 
     @staticmethod
-    def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
-                dim_hs=None, i_net=None, o_net=None, c_net=None,
-                initialization=None, init_args=None, **kwargs):
-        '''Factory for creating MLPs for RNN and returning .
-
-        Convenience to quickly create MLPs from dictionaries, linking all
-        relevent dimensions and distributions.
+    def mlp_factory(dim_in, dim_out, dim_hs, i_net=None, o_net=None, c_net=None,
+                    initialization=None, init_args=None, **kwargs):
+        '''Factory for creating MLPs for RNN.
 
         Args:
             dim_in (int): input dimention.
-            dim_h (Optional[int]): dimension of recurrent unit for single layer.
-            dim_hs (list): dimensions of recurrent units.
-            data_iter (Dataset): provides dimension and distribution info.
-            dim_out (Optional[int]): output dimension. If not provided, assumed
+            dim_out (int): output dimension. If not provided, assumed
                 to be dim_in.
+            dim_hs (list): dimensions of recurrent units.
             i_net (dict): input network args.
             o_net (dict): output network args.
             c_net (dict): conditional network args.
+            initialization (str): type of initialization.
+            init_args (dict): initialization keyword arguments.
+            **kwargs: extra keyword arguments.
 
         Returns:
-            RNN
+            dict: MLPs.
+            dict: extra keyword arguments.
 
         '''
-        logger.debug('Forming RNN from factory, got args: \n'
-                     '\tInput network: %s \n\tOutput network: %s \n'
-                     % (pprint.pformat(i_net), pprint.pformat(o_net)))
+        import logging
+        logger = logging.getLogger(__name__)
 
-        if dim_hs is None and dim_h is not None:
-            dim_hs = [dim_h]
-        if dim_in is None:
-            dim_in = data_iter.dims[data_iter.name]
-        if dim_out is None:
-            dim_out = dim_in
         if i_net is None: i_net = dict()
         if o_net is None: o_net = dict()
 
@@ -247,6 +283,10 @@ class RNN(Layer):
                                  name='output_net', **o_net)
         mlps.update(input_net=input_net, output_net=output_net)
 
+        logger.debug('Forming RNN from factory, got args: \n'
+            '\tInput network: %s \n\tOutput network: %s \n'
+            % (pprint.pformat(i_net), pprint.pformat(o_net)))
+
         if c_net is not None:
             if not c_net.get('dim_in', False):
                 c_net['dim_in'] = dim_in
@@ -260,6 +300,37 @@ class RNN(Layer):
                                        initialization=initialization,
                                        **init_args)
             mlps['init_net'] = init_net
+
+        return mlps, kwargs
+
+    @staticmethod
+    def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
+                dim_hs=None, **kwargs):
+        '''Factory for creating MLPs for RNN and returning .
+
+        Convenience to quickly create MLPs from dictionaries, linking all
+        relevent dimensions and distributions.
+
+        Args:
+            dim_in (int): input dimention.
+            dim_h (Optional[int]): dimension of recurrent unit for single layer.
+            dim_hs (list): dimensions of recurrent units.
+            data_iter (Dataset): provides dimension and distribution info.
+            dim_out (Optional[int]): output dimension. If not provided, assumed
+                to be dim_in.
+
+        Returns:
+            RNN
+
+        '''
+        if dim_hs is None and dim_h is not None:
+            dim_hs = [dim_h]
+        if dim_in is None:
+            dim_in = data_iter.dims[data_iter.name]
+        if dim_out is None:
+            dim_out = dim_in
+
+        mlps, kwargs = C.mlp_factory(dim_in, dim_out, dim_hs, **kwargs)
 
         kwargs.update(**mlps)
 
@@ -280,25 +351,11 @@ class RNN(Layer):
         '''Initialize MLP parameters.
 
         '''
-        if self.input_net is None:
-            self.input_net = MLP(
-                self.dim_in, self.dim_hs[0],
-                rng=self.rng, trng=self.trng,
-                distribution='centered_binomial',
-                name='input_net')
-        else:
-            assert self.input_net.dim_in == self.dim_in
-            assert self.input_net.dim_out == self.dim_hs[0]
+        assert self.input_net.dim_in == self.dim_in
+        assert self.input_net.dim_out == self.dim_hs[0]
         self.input_net.name = self.name + '_input_net'
 
-        if self.output_net is None:
-            self.output_net = MLP(
-                self.dim_hs[-1], self.dim_out,
-                rng=self.rng, trng=self.trng,
-                distribution='binomial',
-                name='output_net')
-        else:
-            assert self.output_net.dim_in == self.dim_hs[-1]
+        assert self.output_net.dim_in == self.dim_hs[-1]
         self.output_net.name = self.name + '_output_net'
 
         if self.conditional is not None:
@@ -314,8 +371,20 @@ class RNN(Layer):
                     rng=self.rng, trng=self.trng,
                     distribution='centered_binomial',
                     name='rnn_net%d' % i)
+            self.decay_params += n.decay_params
 
             self.inter_nets.append(n)
+
+    def get_decay_params(self):
+        decay_keys = self.params.keys()
+        decay_params = OrderedDict((self.name + '.' + k, self.__dict__[k])
+            for k in decay_keys)
+        for net in self.nets + self.inter_nets:
+            if net is not None:
+                decay_params.update(**net.get_decay_params())
+
+        decay_params.update(**self.init_net.get_decay_params())
+        return decay_params
 
     def set_tparams(self):
         '''Sets and returns theano parameters.
@@ -428,32 +497,6 @@ class RNN(Layer):
         '''
         return self.output_net.neg_log_prob(x, p)
 
-    def l2_decay(self, rate):
-        '''L2 decay.
-
-        Args:
-            rate (float): decay rate.
-
-        Returns:
-            dict: dictionary of l2 decay costs for each subnet.
-
-        '''
-        cost = sum([rate * (self.__dict__['Ur%d' % i] ** 2).sum()
-                    for i in range(self.n_layers)])
-        cost += sum([rate * (self.__dict__['W%d' % i] ** 2).sum()
-                     for i in range(self.n_layers - 1)])
-
-        for net in self.nets:
-            if net is None:
-                continue
-            cost += net.l2_decay(rate)
-
-        rval = OrderedDict(
-            cost = cost
-        )
-
-        return rval
-
     def step_sample_preact(self, *params):
         '''Returns preact for sampling step.
 
@@ -516,7 +559,7 @@ class RNN(Layer):
         return h
 
     def call_seqs(self, x, condition_on, level, *params):
-        '''Prepares the input for __call__
+        '''Prepares the input for `__call__`.
 
         Args:
             x (T.tensor): input
@@ -677,44 +720,16 @@ class SimpleRNN(RNN):
 
     @staticmethod
     def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
-                    i_net=None, o_net=None, c_net=None,
-                    initialization=None, init_args=None, **kwargs):
+                **kwargs):
         '''Convenience factory for SimpleRNN (see `RNN.factory`).
 
         '''
-
         if dim_in is None:
             dim_in = data_iter.dims[data_iter.name]
         if dim_out is None:
             dim_out = dim_in
-        if i_net is None: i_net = dict()
-        if o_net is None: o_net = dict()
 
-        mlps = {}
-
-        i_net['distribution'] = 'centered_binomial'
-        input_net = MLP.factory(dim_in=dim_in, dim_out=dim_h,
-                                name='input_net', **i_net)
-
-        o_net['distribution'] = data_iter.distributions[data_iter.name]
-        output_net = MLP.factory(dim_in=dim_h, dim_out=dim_out,
-                                 name='output_net', **o_net)
-        mlps.update(input_net=input_net, output_net=output_net)
-
-        if c_net is not None:
-            if not c_net.get('dim_in', False):
-                c_net['dim_in'] = dim_in
-            conditional = MLP.factory(dim_out=dim_h,
-                                      name='conditional', **c_net)
-            mlps['conditional'] = conditional
-
-        if initialization is not None:
-            if init_args is None: init_args = dict()
-            init_net = RNN_initializer(dim_in, [dim_h],
-                                       initialization=initialization,
-                                       **init_args)
-            mlps['init_net'] = init_net
-
+        mlps, kwargs = RNN.mlp_factory(dim_in, dim_out, [dim_h], **kwargs)
         kwargs.update(**mlps)
 
         return SimpleRNN(dim_in, dim_h, dim_out=dim_out, **kwargs)

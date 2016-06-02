@@ -319,7 +319,12 @@ def find_rois(fnifti, thr, test=False):
             p.close()
             p.join()
         except KeyboardInterrupt:
+            p.close()
             p.terminate()
+        except Exception as e:
+            p.close()
+            p.terminate()
+            raise e
         roi_dict = dict(roi_dict)
     else:
         raise NotImplementedError('Type %s not supported' % type(fnifti))

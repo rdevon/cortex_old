@@ -152,9 +152,9 @@ def print_profile(tparams):
         tparams (dict): parameters to print shape of.
 
     '''
-    s = 'Printing profile for tparams (name, shape): \n'
+    s = 'Printing profile for tparams (name, shape): '
     for (k, v) in tparams.iteritems():
-        s += '\t%s%s\n' % (k, v.get_value().shape)
+        s += '\n\t%s %s' % (k, v.get_value().shape)
     logger.info(s)
 
 def shuffle_columns(x, srng):

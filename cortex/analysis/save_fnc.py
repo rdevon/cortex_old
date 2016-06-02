@@ -95,7 +95,11 @@ def group(mat, thr=0.3, idx=None, labels=None, out_file=None):
         if x < y:
             edgelist.append((x, y))
             weights.append((mat[x, y]))
-    weights /= np.std(weights)
+
+    if len(weights) > 0:
+        weights /= np.std(weights)
+    else:
+        return [[i] for i in idx]
 
     g = igraph.Graph(edgelist, directed=False)
     g.vs['label'] = [i if labels is None else labels[i] for i in idx]

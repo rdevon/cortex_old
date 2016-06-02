@@ -32,67 +32,69 @@ class GRU(RNN):
         super(GRU, self).__init__(dim_in, dim_hs, name=name, **kwargs)
 
     @staticmethod
+    def mlp_factory(dim_in, dim_out, dim_hs, a_net=None, **kwargs):
+        '''Factory for creating MLPs for GRU.
+
+        Args:
+            dim_in (int): input dimention.
+            dim_out (int): output dimension.
+            dim_hs (list): dimensions of reccurent units.
+            a_net (Optional[dict]): auxiliary input network args.
+            **kwargs: extra keyword arguments.
+
+        Returns:
+            list: MLPs
+            dict: extra keyword arguments.
+
+        '''
+
+        mlps, kwargs = RNN.mlp_factory(dim_in, dim_out, dim_hs, **kwargs)
+
+        if a_net is None: a_net = dict()
+        a_net['distribution'] = 'centered_binomial'
+        input_net_aux = MLP.factory(dim_in=dim_in, dim_out=2*dim_hs[0],
+                                    name='input_net_aux', **a_net)
+
+        mlps.update(input_net_aux=input_net_aux)
+
+        return mlps, kwargs
+
+    @staticmethod
     def factory(data_iter=None, dim_in=None, dim_out=None, dim_hs=None,
-                i_net=None, a_net=None, o_net=None, c_net=None, **kwargs):
+                **kwargs):
         '''Factory for creating MLPs for GRU and returning instance.
 
         Convenience to quickly create MLPs from dictionaries, linking all
         relevent dimensions and distributions.
 
         Args:
-            dim_in: int, input dimention.
-            dim_hs: list of int, dimensions of reccurent units.
-            data_iter: Dataset object, provides dimension and distribution info.
-            dim_out: int (optional), output dimension. If not provided, assumed
+            dim_in (Optional[int]): input dimention.
+            dim_hs (Optional[list]): dimensions of reccurent units.
+            data_iter (Dataset): provides dimension and distribution info.
+            dim_out (Optional[int]): output dimension. If not provided, assumed
                 to be dim_in.
-            i_net: dict, input network args.
-            o_net: dict, output network args.
-            c_net: dict, conditional network args.
+            **kwargs: extra keyword arguments
 
         Returns:
             GRU: GRU object
+
         '''
 
         if dim_in is None:
             dim_in = data_iter.dims[data_iter.name]
         if dim_out is None:
             dim_out = dim_in
-        if i_net is None: i_net = dict()
-        if o_net is None: o_net = dict()
-        if a_net is None: a_net = dict()
 
-        mlps = {}
-
-        i_net['distribution'] = 'centered_binomial'
-        input_net = MLP.factory(dim_in=dim_in, dim_out=dim_hs[0],
-                                name='input_net', **i_net)
-
-        a_net['distribution'] = 'centered_binomial'
-        input_net_aux = MLP.factory(dim_in=dim_in, dim_out=2*dim_hs[0],
-                                    name='input_net_aux', **a_net)
-
-        if not o_net.get('distribution', False):
-            if data_iter is not None:
-                o_net['distribution'] = data_iter.distributions[data_iter.name]
-            else:
-                o_net['distribution'] = 'binomial'
-        output_net = MLP.factory(dim_in=dim_hs[-1], dim_out=dim_out,
-                                 name='output_net', **o_net)
-        mlps.update(input_net=input_net, output_net=output_net,
-                    input_net_aux=input_net_aux)
-
-        if c_net is not None:
-            if not c_net.get('dim_in', False):
-                c_net['dim_in'] = dim_in
-            conditional = MLP.factory(dim_out=dim_hs[0],
-                                      name='conditional', **c_net)
-            mlps['conditional'] = conditional
+        mlps, kwargs = GRU.mlp_factory(dim_in, dim_out, dim_hs, **kwargs)
 
         kwargs.update(**mlps)
 
         return GRU(dim_in, dim_hs, dim_out=dim_out, **kwargs)
 
     def set_tparams(self):
+        '''Sets and returns theano parameters.
+
+        '''
         tparams = super(GRU, self).set_tparams()
 
         self.param_idx = [2 * self.n_layers]
@@ -105,13 +107,24 @@ class GRU(RNN):
         return tparams
 
     def get_gates(self, x):
-        '''Split gates.'''
+        '''Split gates.
+
+        Args:
+            x (T.tensor): input
+
+        Returns:
+            T.tensor: reset gate.
+            T.tensor: update gate.
+
+        '''
         r = T.nnet.sigmoid(_slice(x, 0, x.shape[x.ndim-1] // 2))
         u = T.nnet.sigmoid(_slice(x, 1, x.shape[x.ndim-1] // 2))
         return r, u
 
     def set_params(self):
-        '''Initialize GRU parameters.'''
+        '''Initialize GRU parameters.
+
+        '''
         self.params = OrderedDict()
         for i, dim_h in enumerate(self.dim_hs):
             Ura = np.concatenate([ortho_weight(dim_h),
@@ -122,12 +135,14 @@ class GRU(RNN):
         self.set_net_params()
 
     def set_net_params(self):
-        '''Returns MLP parameters for scan.'''
+        '''Returns MLP parameters for scan.
+
+        '''
         super(GRU, self).set_net_params()
 
         if self.input_net_aux is None:
             self.input_net_aux = MLP(
-                self.dim_in, 2 * self.dim_h, 2 * self.dim_hs[0], 1,
+                self.dim_in, 2 * self.dim_hs[0], 2 * self.dim_hs[0], 1,
                 rng=self.rng, trng=self.trng,
                 h_act='T.nnet.sigmoid', out_act='T.tanh',
                 name='input_net_aux')
@@ -146,7 +161,9 @@ class GRU(RNN):
             self.inter_nets.append(n) #insert(2 * i + 1, n)
 
     def get_params(self):
-        '''Returns parameters for scan.'''
+        '''
+
+        Returns parameters for scan.'''
         params = []
         for i in range(self.n_layers):
             params += [self.__dict__['Ura%d' % i], self.__dict__['Urb%d' % i]]
@@ -155,23 +172,39 @@ class GRU(RNN):
         return params
 
     def get_inter_aux_args(self, level, *args):
+        '''Get the inter-aux network arguments for `scan`.
+
+        '''
         return args[self.param_idx[self.n_layers + level]:self.param_idx[self.n_layers + level + 1]]
 
     def get_input_args(self, *args):
+        '''Get the input arguments for `scan`.
+
+        '''
         return args[self.param_idx[2 * (self.n_layers - 1)]:self.param_idx[2 * (self.n_layers - 1) + 1]]
 
     def get_output_args(self, *args):
+        '''Get the output arguments for `scan`.
+
+        '''
         return args[self.param_idx[2 * (self.n_layers - 1) + 1]:self.param_idx[2 * (self.n_layers - 1) + 2]]
 
     def get_conditional_args(self, *args):
+        '''Get the conditional arguments for `scan`.
+
+        '''
         return args[self.param_idx[2 * (self.n_layers - 1) + 2]:self.param_idx[2 * (self.n_layers - 1) + 3]]
 
     def get_aux_args(self, *args):
+        '''Get the auxiliary arguments for `scan`.
+
+        '''
         return args[self.param_idx[2 * (self.n_layers - 1) + 3]:self.param_idx[2 * (self.n_layers - 1) + 4]]
 
     def step_sample_preact(self, *params):
-        '''Returns preact for sampling step.'''
+        '''Returns preact for sampling step.
 
+        '''
         params = list(params)
         hs_ = params[:self.n_layers]
         x = params[self.n_layers]
@@ -202,6 +235,20 @@ class GRU(RNN):
         return h, preact
 
     def _step(self, m, y_a, y_i, h_, Ura, Urb):
+        '''Step function for GRU call.
+
+        Args:
+            m (T.tensor): masks.
+            y_a (T.tensor): auxiliary inputs.
+            y_i (T.tensor): inputs
+            h_ (T.tensor): recurrent state.
+            Ura (theano.shared): recurrent connection.
+            Urb (theano.shared): recurrent connection.
+
+        Returns:
+            T.tensor: next recurrent state.
+
+        '''
         preact = T.dot(h_, Ura) + y_a
         r, u = self.get_gates(preact)
         preactx = T.dot(h_, Urb) * r + y_i
@@ -211,7 +258,18 @@ class GRU(RNN):
         return h
 
     def step_call(self, x, m, h0s, *params):
-        '''Step version of __call__ for scan'''
+        '''Step version of __call__ for scan
+
+        Args:
+            x (T.tensor): input.
+            m (T.tensor): mask.
+            h0s (list): list of recurrent initial states.
+            *params: list of theano.shared.
+
+        Returns:
+            OrderedDict: dictionary of results.
+
+        '''
         n_steps = x.shape[0]
         n_samples = x.shape[1]
         updates = theano.OrderedUpdates()
@@ -241,6 +299,18 @@ class GRU(RNN):
         return OrderedDict(hs=hs, p=p, z=preact), updates
 
     def call_seqs(self, x, condition_on, level, *params):
+        '''Prepares the input for `__call__`.
+
+        Args:
+            x (T.tensor): input
+            condtion_on (T.tensor or None): tensor to condition recurrence on.
+            level (int): reccurent level.
+            *params: list of theano.shared.
+
+        Returns:
+            list: list of scan inputs.
+
+        '''
         if level == 0:
             i_params = self.get_input_args(*params)
             a_params = self.get_aux_args(*params)
@@ -256,3 +326,62 @@ class GRU(RNN):
             i += condition_on
         seqs = [a, i]
         return seqs
+
+
+class SimpleGRU(GRU):
+    '''Simple GRU class, single hidden layer.
+
+    Wraps GRU but with a single hidden layer in __init__ instead of list.
+
+    '''
+    def __init__(self, dim_in, dim_h, **kwargs):
+        '''SimpleGRU init function.'''
+        super(SimpleGRU, self).__init__(dim_in, [dim_h], **kwargs)
+
+    @staticmethod
+    def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
+                **kwargs):
+        '''Convenience factory for SimpleGRU (see `GRU.factory`).
+
+        '''
+
+        if dim_in is None:
+            dim_in = data_iter.dims[data_iter.name]
+        if dim_out is None:
+            dim_out = dim_in
+
+        mlps, kwargs = GRU.mlp_factory(dim_in, dim_out, [dim_h], **kwargs)
+        kwargs.update(**mlps)
+
+        return SimpleGRU(dim_in, dim_h, dim_out=dim_out, **kwargs)
+
+    def energy(self, X, h0=None):
+        '''Energy function.
+
+        '''
+        if h0 is not None:
+            h0s = [h0]
+        else:
+            h0s = None
+        return super(SimpleGRU, self).energy(X, h0s=h0s)
+
+    def __call__(self, x, m=None, h0=None, condition_on=None):
+        '''Call function (see `GRU.__call__`).
+
+        '''
+        if h0 is not None:
+            h0s = [h0]
+        else:
+            h0s = None
+        return super(SimpleGRU, self).__call__(
+            x, m=m, h0s=h0s, condition_on=condition_on)
+
+    def sample(self, x0=None, h0=None, **kwargs):
+        '''Sample the SimpleGRU (see `GRU.sample`).
+
+        '''
+        if h0 is not None:
+            h0s = [h0]
+        else:
+            h0s = None
+        return super(SimpleGRU, self).sample(x0=x0, h0s=h0s, **kwargs)

@@ -520,6 +520,7 @@ def main_loop(train, valid, tparams,
                 if (save_images is not None
                     and out_path is not None
                     and (show_every is None or ((e + 1) % show_every == 0))):
+                    print('Saving images...')
                     save_images()
 
                 e += 1
@@ -543,6 +544,7 @@ def main_loop(train, valid, tparams,
                     print k, v
 
                 if save_images is not None and out_path is not None:
+                    print('Saving images...')
                     save_images()
             check_bad_nums(rval, extra_outs_keys)
             if check_bad_nums(rval[:1], extra_outs_keys[:1]):

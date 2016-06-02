@@ -99,6 +99,7 @@ class FMRI_IID(MRI):
         Y = []
         for i, data_file in enumerate(data_files):
             self.logger.info('Loading %s' % data_file)
+            self.update_progress(progress=False)
             X_ = np.load(data_file)
             X.append(X_.astype(floatX))
             Y.append((np.zeros((X_.shape[0] * X_.shape[1],)) + i).astype(floatX))
@@ -107,6 +108,7 @@ class FMRI_IID(MRI):
         X = np.concatenate(X, axis=0)
         Y = np.concatenate(Y, axis=0)
         X -= X.mean(axis=1, keepdims=True)
+        X /= X.std(axis=tuple(i for i in range(1, len(X.shape))), keepdims=True)
 
         if len(X.shape) == 3:
             self.n_subjects, self.n_scans, _ = X.shape

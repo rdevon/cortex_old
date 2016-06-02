@@ -32,7 +32,7 @@ np.seterr(all='raise')
 
 
 class MRI(BasicDataset):
-    _init_steps = 8
+    _init_steps = 9
 
     '''Basic MRI dataset iterator.
 
@@ -77,6 +77,7 @@ class MRI(BasicDataset):
 
         self.image_shape = self.mask.shape
         X = self._mask(X)
+        self.update_progress()
         self.pca_components = pca_components
 
         if self.pca_components:
@@ -220,6 +221,7 @@ class MRI(BasicDataset):
         Y = []
         for i, data_file in enumerate(data_files):
             self.logger.info('Loading %s' % data_file)
+            self.update_progress(progress=False)
             X_ = np.load(data_file)
             X.append(X_.astype(floatX))
             Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
@@ -252,8 +254,9 @@ class MRI(BasicDataset):
 
         return X, Y
 
-    def update_progress(self, finish=False):
-        self.progress += 1
+    def update_progress(self, finish=False, progress=True):
+        if progress:
+            self.progress += 1
         if finish:
             self.pbar.update(self._init_steps)
         else:

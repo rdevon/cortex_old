@@ -233,6 +233,12 @@ class MLP(Layer):
             params += [W, b]
         return params
 
+    def get_decay_params(self):
+        decay_keys = [k for k in self.params.keys() if 'b' not in k]
+        decay_params = OrderedDict((self.name + '.' + k, self.__dict__[k])
+            for k in decay_keys)
+        return decay_params
+
     def step_call(self, x, *params):
         '''Step feed forward MLP.
 
@@ -251,7 +257,8 @@ class MLP(Layer):
             b = params.pop(0)
 
             if self.weight_noise:
-                print 'Using weight noise in layer %d for MLP %s' % (l, self.name)
+                self.logger.debug(
+                    'Using weight noise in layer %d for MLP %s' % (l, self.name))
                 W += self.trng.normal(avg=0., std=self.weight_noise, size=W.shape)
 
             preact = T.dot(x, W) + b
@@ -269,8 +276,8 @@ class MLP(Layer):
                 outs['p'] = x
 
             if self.dropout and l != self.n_layers - 1:
-                print 'Adding dropout to layer {layer} for MLP "{name}"'.format(
-                    layer=l, name=self.name)
+                self.logger.debug('Adding dropout to layer {layer} for MLP "{name}"'.format(
+                    layer=l, name=self.name))
                 if self.h_act == 'T.tanh':
                     raise NotImplementedError('dropout for tanh units not implemented yet')
                 elif self.h_act in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
