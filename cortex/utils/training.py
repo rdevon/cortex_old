@@ -10,6 +10,7 @@ import argparse
 from collections import OrderedDict
 from glob import glob
 import logging
+import matplotlib
 import numpy as np
 import os
 from os import path
@@ -59,8 +60,8 @@ def make_argument_parser():
     parser.add_argument('-r', '--load_last', action='store_true')
     parser.add_argument('-l', '--load_model', default=None)
     parser.add_argument('-n', '--name', default=None)
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Verbose output')
+    parser.add_argument('-v', '--verbosity', type=int, default=1,
+                        help='Verbosity of the logging. (0, 1, 2)')
     return parser
 
 def make_argument_parser_test():
@@ -78,8 +79,8 @@ def make_argument_parser_test():
                         help='Dataset mode: valid, test, or train')
     parser.add_argument('-b', '--best', action='store_true',
                         help='Load best instead of last saved model.')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='Verbose output')
+    parser.add_argument('-v', '--verbosity', type=int, default=1,
+                        help='Verbosity of the logging. (0, 1, 2)')
     return parser
 
 def set_experiment(args):
@@ -100,8 +101,8 @@ def set_experiment(args):
     except TypeError:
         pass
 
-    verbose = args.pop('verbose')
-    cortex_logger.set_stream_logger()
+    verbosity = args.pop('verbosity')
+    cortex_logger.set_stream_logger(verbosity)
 
     if 'load_model' in args.keys():
         load_model = args.pop('load_model')
@@ -121,7 +122,6 @@ def set_experiment(args):
         exp_dict['out_path'] = resolve_path('$outs')
 
     exp_dict['out_path'] = path.join(exp_dict['out_path'], exp_dict['name'])
-
     out_path = exp_dict['out_path']
 
     if path.isfile(out_path):
@@ -381,7 +381,7 @@ def validate(tparams, results, best_valid, e, best_epoch,
         int: best epoch
 
     '''
-    warn_kwargs(None, **kwargs)
+    warn_kwargs(None, kwargs)
 
     valid_value = results[valid_key]
     if valid_sign == '-':

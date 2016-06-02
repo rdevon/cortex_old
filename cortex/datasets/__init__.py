@@ -245,7 +245,7 @@ class Dataset(object):
         if not hasattr(self, 'logger'):
             self.logger = logging.getLogger(
                 '.'.join([self.__module__, self.__class__.__name__]))
-        self.logger.info('Forming dataset %r with name %s' % (
+        self.logger.debug('Forming dataset %r with name %s' % (
             self.__class__, name))
 
         if batch_size is None:

@@ -296,7 +296,7 @@ def find_rois(fnifti, thr, test=False):
         dict: regions of interest
 
     '''
-    logger.info('Finding clusters from niftis')
+    logger.debug('Finding clusters from niftis')
 
     if isinstance(fnifti, str):
         nifti = load_image(fnifti)
@@ -314,16 +314,19 @@ def find_rois(fnifti, thr, test=False):
         args_iter = itertools.izip(fnifti,
                                    itertools.repeat(thr),
                                    itertools.repeat(roi_dict))
-        p.map(worker_helper, args_iter)
-        p.close()
-        p.join()
+        try:
+            p.map(worker_helper, args_iter)
+            p.close()
+            p.join()
+        except KeyboardInterrupt:
+            p.terminate()
         roi_dict = dict(roi_dict)
     else:
         raise NotImplementedError('Type %s not supported' % type(fnifti))
 
     roi_dict = dict((k, v) for k, v in roi_dict.iteritems() if len(v) > 0)
 
-    logger.info('Finished. Found %d clusters' % len(roi_dict))
+    logger.debug('Finished. Found %d clusters' % len(roi_dict))
     return roi_dict
 
 def save_roi_txt(roi_dict, out_file):

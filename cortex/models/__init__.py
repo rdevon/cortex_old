@@ -38,7 +38,7 @@ class Layer(object):
         self.logger = logging.getLogger(
             '.'.join([self.__module__, self.__class__.__name__]))
 
-        self.logger.info('Forming layer %r with name %s' % (
+        self.logger.debug('Forming layer %r with name %s' % (
             self.__class__, name))
 
         self.name = name
@@ -47,7 +47,7 @@ class Layer(object):
         self.learn = learn
         self.set_params()
         self.n_params = len(self.params)
-        warn_kwargs(kwargs)
+        warn_kwargs(self, kwargs)
 
     def copy(self):
         '''Copy the Layer.

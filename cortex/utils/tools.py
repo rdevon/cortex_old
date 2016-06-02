@@ -102,7 +102,7 @@ def get_trng():
     trng = RandomStreams(random.randint(0, 1000000))
     return trng
 
-def warn_kwargs(c, **kwargs):
+def warn_kwargs(c, kwargs):
     '''Warns of extra keyword arguments.
 
     Args:
@@ -111,8 +111,8 @@ def warn_kwargs(c, **kwargs):
 
     '''
     if len(kwargs) > 0:
-        warnings.warn('Class instance %s has leftover kwargs %s'
-                       % (type(c), kwargs), RuntimeWarning)
+        logger.warn('Class instance %s has leftover kwargs %s'
+                    % (type(c), kwargs))
 
 def update_dict_of_lists(d_to_update, **d):
     '''Updates a dict of list with kwargs.
@@ -322,7 +322,7 @@ def load_experiment(experiment_yaml):
     '''
     logger.info('Loading experiment from %s' % experiment_yaml)
     exp_dict = yaml.load(open(experiment_yaml))
-    logger.info('Experiment hyperparams: %s' % pprint.pformat(exp_dict))
+    logger.debug('Experiment hyperparams: \n%s' % pprint.pformat(exp_dict))
     return exp_dict
 
 def load_model(model_file, f_unpack=None, strict=True, **extra_args):

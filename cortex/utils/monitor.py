@@ -2,7 +2,6 @@
 Module for monitor class.
 '''
 import matplotlib
-matplotlib.use('Agg')
 from matplotlib import pylab as plt
 from collections import OrderedDict
 import cPickle as pkl
@@ -50,7 +49,7 @@ class SimpleMonitor(object):
 
     def display(self):
         '''Displays the stats.
-        
+
         This uses some basic heuristics to get stats into rows with validation
         (if exists) as well as difference from last step.
         '''
@@ -80,11 +79,11 @@ class SimpleMonitor(object):
 
     def save(self, out_path):
         '''Saves a figure for the monitor
-        
+
         Args:
             out_path: str
         '''
-        
+
         plt.clf()
         np.set_printoptions(precision=4)
         font = {
@@ -110,16 +109,16 @@ class SimpleMonitor(object):
 
     def save_stats(self, out_path):
         '''Saves the monitor dictionary.
-        
+
         Args:
             out_path: str
         '''
-        
+
         np.savez(out_path, **self.d)
 
     def save_stats_valid(self, out_path):
         '''Saves the valid monitor dictionary.
-        
+
         Args:
             out_path: str
         '''

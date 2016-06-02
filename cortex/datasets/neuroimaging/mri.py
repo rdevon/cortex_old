@@ -10,6 +10,11 @@ import numpy as np
 import os
 from os import path
 import pprint
+from progressbar import (
+    Bar,
+    ProgressBar,
+    Timer
+)
 from sklearn.decomposition import PCA
 import warnings
 import yaml
@@ -25,6 +30,8 @@ np.seterr(all='raise')
 
 
 class MRI(BasicDataset):
+    _init_steps = 8
+
     '''Basic MRI dataset iterator.
 
     Attributes:
@@ -56,6 +63,10 @@ class MRI(BasicDataset):
             **kwargs: extra keyword arguments passed to BasicDataset
 
         '''
+        widgets = ['Forming %s dataset: ' % name , ' (', Timer(), ')', Bar()]
+        self.pbar = ProgressBar(widgets=widgets, maxval=self._init_steps).start()
+        self.progress = 0
+
         self.logger = logging.getLogger(
             '.'.join([self.__module__, self.__class__.__name__]))
         self.logger.info('Loading %s from %s' % (name, source))
@@ -79,12 +90,14 @@ class MRI(BasicDataset):
                         cPickle.dump(self.pca, pf)
             self.logger.info('Performing PCA')
             X = self.pca.transform(X)
+        self.update_progress()
 
         data = {name: X, 'group': Y}
         distributions = {name: distribution, 'group': 'multinomial'}
 
         super(MRI, self).__init__(data, distributions=distributions, name=name,
                                   labels='group', **kwargs)
+        self.update_progress()
 
         if distribution == 'gaussian':
             if self.pca_components == 0:
@@ -97,12 +110,14 @@ class MRI(BasicDataset):
             raise ValueError(distribution)
 
         self.mean_image = self.X.mean(axis=0)
+        self.update_progress()
 
         if idx is not None:
             self.X = self.X[idx]
             self.Y = self.Y[idx]
 
         self.n = self.X.shape[0]
+        self.update_progress(finish=True)
 
     def get_data(self, source):
         '''Fetch the MRI dataset.
@@ -124,7 +139,9 @@ class MRI(BasicDataset):
         '''
         self.logger.info('Loading file locations from %s' % source)
         source_dict = yaml.load(open(source))
-        self.logger.info('Source locations: %s' % pprint.pformat(source_dict))
+        self.update_progress()
+
+        self.logger.debug('Source locations: \n%s' % pprint.pformat(source_dict))
 
         nifti_file = source_dict['nifti']
         mask_file = source_dict['mask']
@@ -141,6 +158,7 @@ class MRI(BasicDataset):
                 self.pca = None
         else:
             self.pca = None
+        self.update_progress()
 
         data_files = source_dict['data']
         if isinstance(data_files, str):
@@ -153,6 +171,7 @@ class MRI(BasicDataset):
             X_ = np.load(data_file)
             X.append(X_.astype(floatX))
             Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
+        self.update_progress()
 
         X = np.concatenate(X, axis=0)
         Y = np.concatenate(Y, axis=0)
@@ -160,6 +179,7 @@ class MRI(BasicDataset):
         mask = np.load(mask_file)
         if not np.all(np.bitwise_or(mask == 0, mask == 1)):
             raise ValueError("Mask has incorrect values.")
+        self.update_progress()
 
         self.mask = mask
         self.base_nifti_file = nifti_file
@@ -176,8 +196,16 @@ class MRI(BasicDataset):
                     idx = [i for i, s in enumerate(self.sites) if s == site]
                     mi = X[idx].mean(axis=0)
                     X[idx] -= mi
+        self.update_progress()
 
         return X, Y
+
+    def update_progress(self, finish=False):
+        self.progress += 1
+        if finish:
+            self.pbar.update(self._init_steps)
+        else:
+            self.pbar.update(self.progress)
 
     def _mask(self, X, mask=None):
         '''Mask the data.

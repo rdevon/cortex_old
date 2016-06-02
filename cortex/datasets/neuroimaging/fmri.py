@@ -55,7 +55,7 @@ class FMRI_IID(MRI):
         '''
         self.logger.info('Loading file locations from %s' % source)
         source_dict = yaml.load(open(source))
-        self.logger.info('Source locations: %s' % pprint.pformat(source_dict))
+        self.logger.debug('Source locations: \n%s' % pprint.pformat(source_dict))
 
         def unpack_source(name=None, nifti=None, mask=None, anat_file=None,
                           tmp_path=None, pca=None, data=None, **kwargs):
@@ -64,6 +64,7 @@ class FMRI_IID(MRI):
         (name, nifti_file, mask_file, self.anat_file,
          self.tmp_path, self.pca_file, data_files, extras) = unpack_source(
             **source_dict)
+        self.update_progress()
 
         self.base_nifti_file = nifti_file
         if not path.isdir(self.tmp_path):
@@ -73,6 +74,7 @@ class FMRI_IID(MRI):
         if not np.all(np.bitwise_or(mask == 0, mask == 1)):
             raise ValueError("Mask has incorrect values.")
         self.mask = mask
+        self.update_progress()
 
         if self.pca_file is not None:
             try:
@@ -82,6 +84,7 @@ class FMRI_IID(MRI):
                 self.pca = None
         else:
             self.pca = None
+        self.update_progress()
 
         self.extras = dict((k, np.load(v).astype(floatX))
             for k, v in extras.iteritems())
@@ -95,6 +98,7 @@ class FMRI_IID(MRI):
             X_ = np.load(data_file)
             X.append(X_.astype(floatX))
             Y.append((np.zeros((X_.shape[0] * X_.shape[1],)) + i).astype(floatX))
+        self.update_progress()
 
         X = np.concatenate(X, axis=0)
         Y = np.concatenate(Y, axis=0)
@@ -108,6 +112,7 @@ class FMRI_IID(MRI):
             raise ValueError('X has incorrect shape. Should be 3 or 5 (got %d)'
                              % len(X.shape))
         X = X.reshape((X.shape[0] * X.shape[1],) + X.shape[2:])
+        self.update_progress()
 
         return X, Y
 

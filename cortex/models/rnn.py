@@ -5,6 +5,7 @@ Module for RNN layers.
 import copy
 from collections import OrderedDict
 import numpy as np
+import pprint
 import theano
 from theano import tensor as T
 
@@ -196,9 +197,7 @@ class RNN(Layer):
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
-        if len(kwargs) > 0:
-            print 'Extra args found: %r' % kwargs
-        super(RNN, self).__init__(name=name)
+        super(RNN, self).__init__(name=name, **kwargs)
 
     @staticmethod
     def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
@@ -224,6 +223,9 @@ class RNN(Layer):
             RNN
 
         '''
+        logger.debug('Forming RNN from factory, got args: \n'
+                     '\tInput network: %s \n\tOutput network: %s \n'
+                     % (pprint.pformat(i_net), pprint.pformat(o_net)))
 
         if dim_hs is None and dim_h is not None:
             dim_hs = [dim_h]
@@ -323,7 +325,7 @@ class RNN(Layer):
 
         if self.init_net is not None:
             tparams.update(**self.init_net.set_tparams())
-            
+
         for net in self.inter_nets + self.nets:
             if net is not None:
                 tparams.update(**net.set_tparams())

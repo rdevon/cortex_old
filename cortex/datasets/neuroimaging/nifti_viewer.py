@@ -7,7 +7,6 @@ import itertools
 import logging
 from math import ceil
 import matplotlib
-matplotlib.use('Agg')
 from matplotlib.patches import FancyBboxPatch
 from matplotlib import pylab as plt, rc
 import multiprocessing as mp
