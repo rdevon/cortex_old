@@ -3,6 +3,7 @@ Generic dataset class
 '''
 
 from collections import OrderedDict
+import copy
 import logging
 import numpy as np
 import os
@@ -146,6 +147,22 @@ def load_data_split(C, idx=None, dataset=None, **dataset_args):
     '''
     train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
+
+def dataset_factory(C, split=[0.7, 0.2, 0.1], idx=None,
+                    train_batch_size=None,
+                    valid_batch_size=None,
+                    test_batch_size=None,
+                    **dataset_args):
+    if not hasattr(C, 'factory'):
+        return make_datasets(C, split=split, idx=idx,
+                             train_batch_size=train_batch_size,
+                             valid_batch_size=valid_batch_size,
+                             test_batch_size=test_batch_size,
+                             **dataset_args)
+
+    return C.factory(
+        split=split, idx=idx, batch_sizes=[train_batch_size, valid_batch_size,
+        test_batch_size], **dataset_args)
 
 def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
                   train_batch_size=None,
@@ -366,8 +383,11 @@ class BasicDataset(Dataset):
 
         self.X = self.data[self.name]
         self.mean_image = self.X.mean(axis=0)
-        if labels in self.data.keys():
+        if self.labels in self.data.keys():
             self.Y = self.data[labels]
+
+    def copy(self):
+        return copy.deepcopy(self)
 
     def balance_labels(self):
         '''Balanced the dataset.

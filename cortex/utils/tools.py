@@ -409,10 +409,10 @@ def check_bad_nums(rvals, names):
     found = False
     for k, out in zip(names, rvals):
         if np.any(np.isnan(out)):
-            logger.error('Found nan num ', k, '(nan)')
+            logger.error('Found nan num ' + k + '(nan)')
             found = True
         elif np.any(np.isinf(out)):
-            logger.error('Found inf ', k, '(inf)')
+            logger.error('Found inf ' + k + '(inf)')
             found = True
     return found
 

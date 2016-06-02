@@ -12,9 +12,11 @@ from os import path
 import pprint
 from progressbar import (
     Bar,
+    Percentage,
     ProgressBar,
     Timer
 )
+import random
 from sklearn.decomposition import PCA
 import warnings
 import yaml
@@ -48,14 +50,13 @@ class MRI(BasicDataset):
 
     '''
 
-    def __init__(self, source=None, name='mri', idx=None,
+    def __init__(self, source=None, name='mri',
                  pca_components=0, distribution='gaussian', **kwargs):
         '''Init function for MRI.
 
         Args:
             source (str): path of the source.
             name (str): name of the dataset.
-            idx (list): indices from the original dataset.
             pca_components: (Optional[int]): if not 0, decompose the data
                 using PCA.
             distribution (Optional[str]): distribution of the primary data.
@@ -63,13 +64,13 @@ class MRI(BasicDataset):
             **kwargs: extra keyword arguments passed to BasicDataset
 
         '''
-        widgets = ['Forming %s dataset: ' % name , ' (', Timer(), ')', Bar()]
-        self.pbar = ProgressBar(widgets=widgets, maxval=self._init_steps).start()
-        self.progress = 0
-
         self.logger = logging.getLogger(
             '.'.join([self.__module__, self.__class__.__name__]))
         self.logger.info('Loading %s from %s' % (name, source))
+
+        widgets = ['Forming %s dataset: ' % name , ' (', Timer(), ') [', Percentage(), ']']
+        self.pbar = ProgressBar(widgets=widgets, maxval=self._init_steps).start()
+        self.progress = 0
 
         source = resolve_path(source)
         X, Y = self.get_data(source)
@@ -112,12 +113,63 @@ class MRI(BasicDataset):
         self.mean_image = self.X.mean(axis=0)
         self.update_progress()
 
-        if idx is not None:
-            self.X = self.X[idx]
-            self.Y = self.Y[idx]
-
         self.n = self.X.shape[0]
         self.update_progress(finish=True)
+
+    def slice_data(self, idx):
+        for k, v in self.data.iteritems():
+            self.data[k] = v[idx]
+        self.X = self.data[self.name]
+        if self.labels in self.data.keys():
+            self.Y = self.data[self.labels]
+
+    @staticmethod
+    def factory(C=None, split=None, idx=None, batch_sizes=None, **kwargs):
+        if C is None:
+            C = MRI
+        mri = C(batch_size=10, **kwargs)
+        if hasattr(mri, 'pca'):
+            logger = mri.logger
+            mri.logger = None
+        else:
+            logger = None
+
+        if idx is None:
+            logger.info('Splitting dataset into ratios %r' % split)
+            if round(np.sum(split), 5) != 1. or len(split) != 3:
+                raise ValueError(split)
+            idx = range(mri.n_subjects)
+            random.shuffle(idx)
+            split_idx = []
+            accum = 0
+            for s in split:
+                s_i = int(s * mri.n_subjects + accum)
+                split_idx.append(s_i)
+                accum += s_i
+
+            train_idx = idx[:split_idx[0]]
+            valid_idx = idx[split_idx[0]:split_idx[1]]
+            test_idx = idx[split_idx[1]:]
+            idx = [train_idx, valid_idx, test_idx]
+        else:
+            logger.info('Splitting dataset into ratios %.2f / %.2f /%.2f'
+                             % tuple(len(idx[i]) / float(self.n_subjects)
+                                     for i in range(3)))
+
+        assert len(batch_sizes) == len(idx)
+
+        datasets = []
+        for i, bs in zip(idx, batch_sizes):
+            if bs is None:
+                dataset = None
+            else:
+                dataset = mri.copy()
+                dataset.slice_data(i)
+                dataset.batch_size = bs
+                dataset.logger = logger
+            datasets.append(dataset)
+
+        return datasets + [idx]
 
     def get_data(self, source):
         '''Fetch the MRI dataset.

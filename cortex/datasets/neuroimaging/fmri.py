@@ -36,6 +36,10 @@ class FMRI_IID(MRI):
     def __init__(self, name='fmri_iid', **kwargs):
         super(FMRI_IID, self).__init__(name=name, **kwargs)
 
+    @staticmethod
+    def factory(**kwargs):
+        return MRI.factory(C=FMRI_IID, **kwargs)
+
     def get_data(self, source):
         '''Fetch the fMRI dataset.
 
@@ -130,7 +134,7 @@ class FMRI(FMRI_IID):
 
     '''
 
-    def __init__(self, name='fmri', window=10, stride=1, idx=None, **kwargs):
+    def __init__(self, name='fmri', window=10, stride=1, **kwargs):
         '''Init function for fMRI.
 
         Args:
@@ -149,23 +153,30 @@ class FMRI(FMRI_IID):
         self.X = self.X.reshape((self.n_subjects, self.n_scans, self.X.shape[1]))
         self.Y = self.Y.reshape((self.n_subjects, self.n_scans, self.Y.shape[1]))
 
-        if idx is not None:
-            self.X = self.X[idx]
-            self.Y = self.Y[idx]
-            self.n_subjects = len(idx)
+        self.set_idx()
+        if self.shuffle:
+            self.randomize()
 
-        scan_idx = range(0, self.n_scans - window + 1, stride)
+    def set_idx(self):
+        scan_idx = range(0, self.n_scans - self.window + 1, self.stride)
         scan_idx_e = scan_idx * self.n_subjects
         subject_idx = range(self.n_subjects)
-        # Similar to np.repeat, but using list comprehension.
         subject_idx_e = [i for j in [[s] * len(scan_idx) for s in subject_idx]
                          for i in j]
-        # idx is list of (subject, scan)
         self.idx = zip(subject_idx_e, scan_idx_e)
         self.n = len(self.idx)
 
+    def slice_data(self, idx):
+        self.n_subjects = len(idx)
+        self.X = self.X[idx]
+        self.Y = self.Y[idx]
+        self.set_idx()
         if self.shuffle:
             self.randomize()
+
+    @staticmethod
+    def factory(**kwargs):
+        return MRI.factory(C=FMRI, **kwargs)
 
     def randomize(self):
         '''Randomize the fMRI dataset.

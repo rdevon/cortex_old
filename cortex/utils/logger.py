@@ -11,7 +11,7 @@ logger.propagate = False
 file_formatter = logging.Formatter(
     '%(asctime)s:%(name)s[%(levelname)s]:%(message)s')
 stream_formatter = logging.Formatter(
-    '[%(levelname)s]:%(message)s')
+    '[%(levelname)s]:%(message)s' + ' ' * 40)
 
 def set_stream_logger(verbosity):
     global logger
@@ -28,6 +28,7 @@ def set_stream_logger(verbosity):
     else:
         level = logging.INFO
         lstr = 'INFO'
+    logger.setLevel(level)
     ch = logging.StreamHandler()
     ch.setLevel(level)
     ch.setFormatter(stream_formatter)
