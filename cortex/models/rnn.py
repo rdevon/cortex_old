@@ -246,7 +246,8 @@ class RNN(Layer):
 
     @staticmethod
     def mlp_factory(dim_in, dim_out, dim_hs, i_net=None, o_net=None, c_net=None,
-                    initialization=None, init_args=None, **kwargs):
+                    data_distribution='binomial', initialization=None,
+                    init_args=None, **kwargs):
         '''Factory for creating MLPs for RNN.
 
         Args:
@@ -257,6 +258,7 @@ class RNN(Layer):
             i_net (dict): input network args.
             o_net (dict): output network args.
             c_net (dict): conditional network args.
+            data_distribution (str): distribution of the output.
             initialization (str): type of initialization.
             init_args (dict): initialization keyword arguments.
             **kwargs: extra keyword arguments.
@@ -269,33 +271,41 @@ class RNN(Layer):
         import logging
         logger = logging.getLogger(__name__)
 
-        if i_net is None: i_net = dict()
-        if o_net is None: o_net = dict()
-
         mlps = {}
-        i_net['distribution'] = 'centered_binomial'
-        input_net = MLP.factory(dim_in=dim_in, dim_out=dim_hs[0],
-                                name='input_net', **i_net)
 
+        # Input network
+        if i_net is None: i_net = dict()
+        i_net.update(dim_in=dim_in, dim_out=dim_hs[0], name='input_net',
+            distribution='centered_binomial')
+        logger.debug('Forming RNN with input network parameters %s'
+                     % pprint.pformat(i_net))
+        input_net = MLP.factory(**i_net)
+
+        # Output network
+        if o_net is None: o_net = dict()
         if not o_net.get('distribution', False):
-            o_net['distribution'] = data_iter.distributions[data_iter.name]
-        output_net = MLP.factory(dim_in=dim_hs[-1], dim_out=dim_out,
-                                 name='output_net', **o_net)
+            o_net['distribution'] = distribution
+        o_net.update(dim_in=dim_hs[-1], dim_out=dim_out, name='output_net')
+        logger.debug('Forming RNN with output network parameters %s'
+                     % pprint.pformat(o_net))
+        output_net = MLP.factory(**o_net)
         mlps.update(input_net=input_net, output_net=output_net)
 
-        logger.debug('Forming RNN from factory, got args: \n'
-            '\tInput network: %s \n\tOutput network: %s \n'
-            % (pprint.pformat(i_net), pprint.pformat(o_net)))
-
+        # Conditional network
         if c_net is not None:
             if not c_net.get('dim_in', False):
                 c_net['dim_in'] = dim_in
-            conditional = MLP.factory(dim_out=dim_hs[0],
-                                      name='conditional', **c_net)
+            c_net.update(dim_out=dim_hs[0], name='conditional')
+            logger.debug('Forming RNN with conditional network parameters %s'
+                % pprint.pformat(c_net))
+            conditional = MLP.factory(**c_net)
             mlps['conditional'] = conditional
 
+        # Intitialization
         if initialization is not None:
             if init_args is None: init_args = dict()
+            logger.debug('Initializing RNN with %s and parameters %s'
+                % (initialization, pprint.pformat(init_args)))
             init_net = RNN_initializer(dim_in, dim_hs,
                                        initialization=initialization,
                                        **init_args)
@@ -304,8 +314,7 @@ class RNN(Layer):
         return mlps, kwargs
 
     @staticmethod
-    def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
-                dim_hs=None, **kwargs):
+    def factory(dim_in=None, dim_out=None, dim_hs=None, **kwargs):
         '''Factory for creating MLPs for RNN and returning .
 
         Convenience to quickly create MLPs from dictionaries, linking all
@@ -313,9 +322,7 @@ class RNN(Layer):
 
         Args:
             dim_in (int): input dimention.
-            dim_h (Optional[int]): dimension of recurrent unit for single layer.
             dim_hs (list): dimensions of recurrent units.
-            data_iter (Dataset): provides dimension and distribution info.
             dim_out (Optional[int]): output dimension. If not provided, assumed
                 to be dim_in.
 
@@ -323,15 +330,10 @@ class RNN(Layer):
             RNN
 
         '''
-        if dim_hs is None and dim_h is not None:
-            dim_hs = [dim_h]
-        if dim_in is None:
-            dim_in = data_iter.dims[data_iter.name]
+        assert len(dim_hs) > 0
         if dim_out is None:
             dim_out = dim_in
-
-        mlps, kwargs = C.mlp_factory(dim_in, dim_out, dim_hs, **kwargs)
-
+        mlps, kwargs = RNN.mlp_factory(dim_in, dim_out, dim_hs, **kwargs)
         kwargs.update(**mlps)
 
         return RNN(dim_in, dim_hs, dim_out=dim_out, **kwargs)
@@ -467,7 +469,6 @@ class RNN(Layer):
         return args[self.param_idx[self.n_layers+1]:self.param_idx[self.n_layers+2]]
 
     # Extra functions ---------------------------------------------------------
-
     def energy(self, X, h0s=None):
         '''Negative log probability of data point.
 
@@ -719,13 +720,10 @@ class SimpleRNN(RNN):
         super(SimpleRNN, self).__init__(dim_in, [dim_h], **kwargs)
 
     @staticmethod
-    def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
-                **kwargs):
+    def factory(dim_in=None, dim_out=None, dim_h=None, **kwargs):
         '''Convenience factory for SimpleRNN (see `RNN.factory`).
 
         '''
-        if dim_in is None:
-            dim_in = data_iter.dims[data_iter.name]
         if dim_out is None:
             dim_out = dim_in
 

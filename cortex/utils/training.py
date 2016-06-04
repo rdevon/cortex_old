@@ -393,13 +393,13 @@ def validate(tparams, results, best_valid, e, best_epoch,
         best_epoch = e
         if save is not None and bestfile is not None:
             print 'Saving best to %s' % bestfile
-            save(tparams, bestfile)
+            save(bestfile)
     else:
         print 'Best (%.2f) at epoch %d' % (best_valid, best_epoch)
 
     return best_valid, best_epoch
 
-def main_loop(train, valid, tparams,
+def main_loop(train, valid,
               f_grad_shared, f_grad_updates, f_test, f_test_keys,
               input_keys=None,
               f_extra=None,
@@ -500,7 +500,6 @@ def main_loop(train, valid, tparams,
                                    n_samples=valid.n)
                     results_valid = test(valid, f_test, f_test_keys, input_keys)
                     best_valid, best_epoch = validate(
-                        tparams,
                         results_valid, best_valid, e, best_epoch,
                         bestfile=bestfile,
                         save=save, **validation_args)
@@ -548,13 +547,15 @@ def main_loop(train, valid, tparams,
                     save_images()
             check_bad_nums(rval, extra_outs_keys)
             if check_bad_nums(rval[:1], extra_outs_keys[:1]):
-                print 'Dying, found bad cost... Sorry (bleh)'
-                exit()
+                raise RuntimeError('Dying, found bad cost... Sorry (bleh)')
             f_grad_updates(*learning_rate)
             s += 1
 
     except KeyboardInterrupt:
         print 'Training interrupted.'
+    except:
+        logger.exception('Exception reached during training')
+        raise
 
     try:
         if out_path is not None:
@@ -563,8 +564,8 @@ def main_loop(train, valid, tparams,
 
             if save is not None:
                 logging.info('Saving')
-                save(tparams, outfile)
-                save(tparams, last_outfile)
+                save(outfile)
+                save(last_outfile)
                 logging.info('Done saving.')
     except KeyboardInterrupt:
         print 'Saving interupted.'

@@ -9,16 +9,12 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 
 
-conf = igraph.Configuration()
-conf['general.verbose'] = False
-
-
 def plot(fnc, idx=None, groups=None, transform=None, labels=None, out_file=None):
     if groups is None:
         groups = [range(fnc.shape[0])]
 
     if idx is None:
-        idx = range(fnc.shape[0])
+        idx = [i for idx in groups for i in idx]
 
     fnc = fnc * (1.0 - np.eye(fnc.shape[0]))
 

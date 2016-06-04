@@ -171,9 +171,9 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
     x = int(ceil(1.0 * features / y))
 
     if time_courses is not None:
-        assert len(time_courses) == features, ('Number of time courses must '
-                                               ' match features (%d vs %d).'
-                                               % (features, len(time_courses)))
+        assert len(time_courses) == features, (
+            'Number of time courses must match features (%d vs %d).'
+            % (features, len(time_courses)))
         x *= 2
 
     font = {'size': 8}
@@ -248,8 +248,13 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
 
         if time_courses is not None:
             j = y * (2 * (i // y) + 1) + (i % y) + 1
+            if not isinstance(time_courses[i], list):
+                tcs = [time_courses[f]]
+            else:
+                tcs = time_courses[f]
             ax = fig.add_subplot(x, y, j)
-            ax.plot(time_courses[i])
+            for tc in tcs:
+                ax.plot(tc)
 
     if out_file is not None:
         plt.savefig(out_file, transparent=True, facecolor=(bgcol, bgcol, bgcol))

@@ -43,7 +43,9 @@ def print_section(s):
         s (str): string of section
 
     '''
-    print ('-' * 3) + s + ('-' * (_columns - 3 - len(s)))
+    head = '[CORTEX]:'
+    h = head + s + ('-' * (_columns - len(head) - len(s)))
+    print h
 
 def get_paths():
     '''Pulls all paths from `~/.cortexrc` file.
@@ -473,7 +475,7 @@ def ortho_weight(ndim, rng=None):
         rng = rng_
     W = rng.randn(ndim, ndim)
     u, s, v = np.linalg.svd(W)
-    return u.astype('float32')
+    return u.astype(floatX)
 
 def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
     '''Make normal weight tensor.
@@ -487,7 +489,7 @@ def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
         W = ortho_weight(nin, rng=rng)
     else:
         W = scale * rng.randn(nin, nout)
-    return W.astype('float32')
+    return W.astype(floatX)
 
 def parzen_estimation(samples, tests, h=1.0):
     '''Estimate parzen window.

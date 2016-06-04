@@ -148,21 +148,22 @@ def load_data_split(C, idx=None, dataset=None, **dataset_args):
     train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
 
-def dataset_factory(C, split=[0.7, 0.2, 0.1], idx=None,
-                    train_batch_size=None,
-                    valid_batch_size=None,
-                    test_batch_size=None,
-                    **dataset_args):
-    if not hasattr(C, 'factory'):
-        return make_datasets(C, split=split, idx=idx,
-                             train_batch_size=train_batch_size,
-                             valid_batch_size=valid_batch_size,
-                             test_batch_size=test_batch_size,
-                             **dataset_args)
+def dataset_factory(resolve_dataset, dataset=None, split=[0.7, 0.2, 0.1],
+                    idx=None, train_batch_size=None, valid_batch_size=None,
+                    test_batch_size=None, **dataset_args):
+    C = resolve_dataset(dataset)
 
-    return C.factory(
+    if not hasattr(C, 'factory'):
+        train, valid, test, idx = make_datasets(
+            C, split=split, idx=idx, train_batch_size=train_batch_size,
+            valid_batch_size=valid_batch_size, test_batch_size=test_batch_size,
+            **dataset_args)
+
+    train, valid, test, idx =  C.factory(
         split=split, idx=idx, batch_sizes=[train_batch_size, valid_batch_size,
         test_batch_size], **dataset_args)
+
+    return OrderedDict(train=train, valid=valid, test=test, idx=idx)
 
 def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
                   train_batch_size=None,
@@ -241,7 +242,7 @@ class Dataset(object):
 
     '''
     def __init__(self, batch_size=None, shuffle=True, inf=False, name='dataset',
-                 mode=None, stop=None, balance=False, **kwargs):
+                 mode=None, stop=None, **kwargs):
         '''Init function for Dataset
 
         Args:
@@ -252,7 +253,6 @@ class Dataset(object):
             pos (int): current position of the iterator.
             stop (int): stop the dataset at this index when loading.
             mode (str): usually train, test, valid.
-            balance (bool): replicate samples to balance the dataset.
             **kwargs: keyword arguments not used
 
         Returns:
@@ -275,7 +275,6 @@ class Dataset(object):
         self.pos = 0
         self.stop = stop
         self.mode = mode
-        self.balance = balance
 
         return kwargs
 
@@ -320,10 +319,11 @@ class BasicDataset(Dataset):
         X (numpy.array): MRI data.
         Y (Optional[numpy.array]): If not None, lables.
         mean_image (numpy.array): mean image of primary data.
+        balance (bool): replicate samples to balance the dataset.
 
     '''
     def __init__(self, data, distributions=None, labels='label', name=None,
-                **kwargs):
+                balance=False, **kwargs):
         '''Init function for BasicDataset.
 
         Args:
@@ -333,6 +333,7 @@ class BasicDataset(Dataset):
             labels (str): key for the labels.
             name: (Optional[str]): Name of the dataset. Should be one of the
                 keys in data.
+            balance (bool): replicate samples to balance the dataset.
             **kwargs: extra arguments to pass to Dataset constructor.
 
         '''
@@ -345,6 +346,7 @@ class BasicDataset(Dataset):
         super(BasicDataset, self).__init__(name=name, **kwargs)
         self.data = data
         self.n = None
+        self.balance = balance
 
         self.dims = dict()
         if distributions is None:
@@ -390,9 +392,10 @@ class BasicDataset(Dataset):
         return copy.deepcopy(self)
 
     def balance_labels(self):
-        '''Balanced the dataset.
+        '''Balance the dataset.
 
         '''
+        self.logger.debug('Balancing dataset %s' % self.name)
         label_nums = self.data[self.labels].sum(axis=0)
         max_num = int(max(label_nums))
 
@@ -404,7 +407,7 @@ class BasicDataset(Dataset):
             idx = np.where(label == 1)[0].tolist()
 
             dup_idx = [idx[j] for j in range(max_num - len(idx))]
-            self.logger.info('Balancing label %d by duplicating %d samples'
+            self.logger.debug('Balancing label %d by duplicating %d samples'
                              % (i, len(dup_idx)))
 
         dup_idx = np.unique(dup_idx)

@@ -25,6 +25,9 @@ class Preprocessor(object):
         Args:
             proc_list: list.
         '''
+        if proc_list is None:
+            proc_list = []
+
         self.processes = OrderedDict()
         for proc in proc_list:
             if not isinstance(proc, list):

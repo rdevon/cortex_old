@@ -85,7 +85,8 @@ class Layer(object):
             tparams[_p(self.name, kk)] = tp
             self.__dict__[kk] = tp
 
-        return OrderedDict((k, v) for k, v in tparams.iteritems() if k not in [_p(self.name, e) for e in self.excludes])
+        return OrderedDict((k, v) for k, v in tparams.iteritems()
+            if k not in [_p(self.name, e) for e in self.excludes])
 
     def get_excludes(self):
         '''Fetches the excluded parameters.

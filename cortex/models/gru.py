@@ -60,8 +60,7 @@ class GRU(RNN):
         return mlps, kwargs
 
     @staticmethod
-    def factory(data_iter=None, dim_in=None, dim_out=None, dim_hs=None,
-                **kwargs):
+    def factory(dim_in=None, dim_out=None, dim_hs=None, **kwargs):
         '''Factory for creating MLPs for GRU and returning instance.
 
         Convenience to quickly create MLPs from dictionaries, linking all
@@ -70,7 +69,6 @@ class GRU(RNN):
         Args:
             dim_in (Optional[int]): input dimention.
             dim_hs (Optional[list]): dimensions of reccurent units.
-            data_iter (Dataset): provides dimension and distribution info.
             dim_out (Optional[int]): output dimension. If not provided, assumed
                 to be dim_in.
             **kwargs: extra keyword arguments
@@ -79,14 +77,9 @@ class GRU(RNN):
             GRU: GRU object
 
         '''
-
-        if dim_in is None:
-            dim_in = data_iter.dims[data_iter.name]
         if dim_out is None:
             dim_out = dim_in
-
         mlps, kwargs = GRU.mlp_factory(dim_in, dim_out, dim_hs, **kwargs)
-
         kwargs.update(**mlps)
 
         return GRU(dim_in, dim_hs, dim_out=dim_out, **kwargs)
@@ -339,17 +332,12 @@ class SimpleGRU(GRU):
         super(SimpleGRU, self).__init__(dim_in, [dim_h], **kwargs)
 
     @staticmethod
-    def factory(data_iter=None, dim_in=None, dim_out=None, dim_h=None,
-                **kwargs):
+    def factory(dim_in=None, dim_out=None, dim_h=None, **kwargs):
         '''Convenience factory for SimpleGRU (see `GRU.factory`).
 
         '''
-
-        if dim_in is None:
-            dim_in = data_iter.dims[data_iter.name]
         if dim_out is None:
             dim_out = dim_in
-
         mlps, kwargs = GRU.mlp_factory(dim_in, dim_out, [dim_h], **kwargs)
         kwargs.update(**mlps)
 
