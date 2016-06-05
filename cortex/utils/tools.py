@@ -404,17 +404,17 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
 
     return model_dict, kwargs
 
-def check_bad_nums(rvals, names):
+def check_bad_nums(rvals):
     '''Checks for nans and infs.
 
     '''
     found = False
-    for k, out in zip(names, rvals):
+    for out in rvals:
         if np.any(np.isnan(out)):
-            logger.error('Found nan num ' + k + '(nan)')
+            logger.error('Found nan num')
             found = True
         elif np.any(np.isinf(out)):
-            logger.error('Found inf ' + k + '(inf)')
+            logger.error('Found inf (inf)')
             found = True
     return found
 

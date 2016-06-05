@@ -195,7 +195,7 @@ def main(args=None):
     if args is None:
         args = sys.argv[1:]
 
-        parser = make_argument_parser()
+    parser = make_argument_parser()
     args = parser.parse_args()
 
     source_dir = path.abspath(args.source)

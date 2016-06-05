@@ -284,7 +284,7 @@ class RNN(Layer):
         # Output network
         if o_net is None: o_net = dict()
         if not o_net.get('distribution', False):
-            o_net['distribution'] = distribution
+            o_net['distribution'] = data_distribution
         o_net.update(dim_in=dim_hs[-1], dim_out=dim_out, name='output_net')
         logger.debug('Forming RNN with output network parameters %s'
                      % pprint.pformat(o_net))

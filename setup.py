@@ -35,6 +35,7 @@ setup(
     entry_points={
         'console_scripts': [
             'cortex-setup=cortex:main',
+            'cortex-run=cortex.utils.trainer:main',
             'cortex-classifier-demo=cortex.demos.basic:run_classifier_demo',
             'cortex-rbm-demo=cortex.demos.demos_basic:run_rbm_demo',
             'cortex-vae-demo=cortex.demos.demos_basic:run_vae_demo',

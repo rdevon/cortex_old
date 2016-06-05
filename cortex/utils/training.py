@@ -64,6 +64,29 @@ def make_argument_parser():
                         help='Verbosity of the logging. (0, 1, 2)')
     return parser
 
+def make_argument_parser_trainer():
+    '''Generic experiment parser for a trainer.
+
+    Generic parser takes the experiment yaml as the main argument, but has some
+    options for reloading, etc. This parser can be easily extended using a
+    wrapper method.
+
+    Returns:
+        argparse.parser
+
+    '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('module', default=None)
+    parser.add_argument('experiment', nargs='?', default=None)
+    parser.add_argument('-o', '--out_path', default=None,
+                        help='Output path for stuff')
+    parser.add_argument('-r', '--load_last', action='store_true')
+    parser.add_argument('-l', '--load_model', default=None)
+    parser.add_argument('-n', '--name', default=None)
+    parser.add_argument('-v', '--verbosity', type=int, default=1,
+                        help='Verbosity of the logging. (0, 1, 2)')
+    return parser
+
 def make_argument_parser_test():
     '''Generic experiment parser for testing.
 
@@ -115,11 +138,20 @@ def set_experiment(args):
         load_last = False
 
     args = OrderedDict((k, v) for k, v in args.iteritems() if v is not None)
-    exp_dict = load_experiment(path.abspath(args['experiment']))
+
+    try:
+        exp_dict = load_experiment(path.abspath(args['experiment']))
+    except KeyError:
+        logger.info('No experiment yaml found. Using defaults.')
+        exp_dict = dict()
     exp_dict.update(args)
 
-    if not 'out_path' in exp_dict.keys():
+    if not exp_dict.get('out_path', False):
         exp_dict['out_path'] = resolve_path('$outs')
+
+    if not exp_dict.get('name', False):
+        exp_dict['name'] = '.'.join(
+            exp_dict['module'].split('/')[-1].split('.')[:-1])
 
     exp_dict['out_path'] = path.join(exp_dict['out_path'], exp_dict['name'])
     out_path = exp_dict['out_path']
@@ -133,8 +165,10 @@ def set_experiment(args):
     logging.info('Starting experiment %s. Saving to %s'
                  % (exp_dict['name'], out_path))
 
-    experiment = exp_dict.pop('experiment')
-    shutil.copy(path.abspath(experiment), path.abspath(out_path))
+    if exp_dict.get('experiment', False):
+        experiment = exp_dict.pop('experiment')
+        shutil.copy(
+            path.abspath(experiment), path.abspath(out_path))
 
     if load_model is not None:
         model_to_load = load_model
@@ -334,7 +368,10 @@ def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
             if n_samples is not None:
                 inps = [x[:n_samples] for x in inps]
             r = f_test(*inps)
-            results_i = dict((k, v) for k, v in zip(f_test_keys, r))
+            if isinstance(r, dict):
+                results_i = r
+            else:
+                results_i = dict((k, v) for k, v in zip(f_test_keys, r))
             update_dict_of_lists(results, **results_i)
 
             if data_iter.pos == -1:
@@ -358,16 +395,13 @@ def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
 
     return results
 
-def validate(tparams, results, best_valid, e, best_epoch,
-             save=None, valid_key=None, valid_sign=None, bestfile=None,
-             **kwargs):
+def validate(results, best_valid, e, best_epoch, save=None, valid_key=None,
+             valid_sign=None, bestfile=None, **kwargs):
     '''Generic validation method.
 
     Compares the validation result against previous best.
 
     Args:
-        tparams (OrderedDict): dictionary of Theano shared variables.
-            For saving params.
         results (OrderedDict): dictionary of np.array results.
         best_valid (float): Best pervious value.
         e (int): Epoch
@@ -400,7 +434,8 @@ def validate(tparams, results, best_valid, e, best_epoch,
     return best_valid, best_epoch
 
 def main_loop(train, valid,
-              f_grad_shared, f_grad_updates, f_test, f_test_keys,
+              f_grad_shared, f_grad_updates, f_test,
+              f_test_keys=None,
               input_keys=None,
               f_extra=None,
               test_every=None,
@@ -414,7 +449,6 @@ def main_loop(train, valid,
               learning_rate_scheduler=None,
               monitor=None,
               out_path=None,
-              extra_outs_keys=None,
               **validation_args):
     '''Generic main loop.
 
@@ -423,12 +457,11 @@ def main_loop(train, valid,
     Args:
         train (Dataset): Training dataset.
         valid (Dataset): Validation dataset.
-        tparams (OrderedDict): dictionary of Theano.shared.
-            Parameters of the model.
         f_grad_shared (theano.function): Computes gradients.
         f_grad_updates (theano.function): Updates parameters.
         f_test (theano.function): Tests model are returns results.
-        f_test_keys (list): List of keys that go with `f_test`.
+        f_test_keys (Optional[list]): List of keys that go with `f_test` if
+            the output is a list, not a dictionary.
         input_keys (Optional[list]): If not None, used to extract
             multiple modes from dataset for `f_grad_shared`.
         f_extra (theano.function): Function that is run just prior to testing.
@@ -447,7 +480,6 @@ def main_loop(train, valid,
             rate.
         monitor (utils.monitor.Monitor).
         out_path (str): Director path for output files.
-        extra_outs_keys (list): Keys for extra outs of `f_grad_shared`.
         **validation_args: Arguments for test.
 
     '''
@@ -545,8 +577,7 @@ def main_loop(train, valid,
                 if save_images is not None and out_path is not None:
                     print('Saving images...')
                     save_images()
-            check_bad_nums(rval, extra_outs_keys)
-            if check_bad_nums(rval[:1], extra_outs_keys[:1]):
+            if check_bad_nums(rval):
                 raise RuntimeError('Dying, found bad cost... Sorry (bleh)')
             f_grad_updates(*learning_rate)
             s += 1

@@ -112,13 +112,15 @@ class Layer(object):
 
         cost = T.constant(0.).astype(floatX)
         rval = OrderedDict()
+        if rate <= 0:
+            return rval
 
         for k, v in decay_params.iteritems():
             if k in kwargs.keys():
                 r = kwargs[k]
             else:
                 r = rate
-            self.logger.debug('Adding %.2f L1 decay to parameter %s' % (r, k))
+            self.logger.debug('Adding %.5f L1 decay to parameter %s' % (r, k))
             p_cost = r * (abs(v)).sum()
             rval[k + '_l1_cost'] = p_cost
             cost += p_cost
@@ -144,13 +146,15 @@ class Layer(object):
 
         cost = T.constant(0.).astype(floatX)
         rval = OrderedDict()
+        if rate <= 0:
+            return rval
 
         for k, v in decay_params.iteritems():
             if k in kwargs.keys():
                 r = kwargs[k]
             else:
                 r = rate
-            self.logger.debug('Adding %.2f L2 decay to parameter %s' % (r, k))
+            self.logger.debug('Adding %.5f L2 decay to parameter %s' % (r, k))
             p_cost = r * (v ** 2).sum()
             rval[k + '_l2_cost'] = p_cost
             cost += p_cost
