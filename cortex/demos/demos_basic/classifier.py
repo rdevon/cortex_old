@@ -64,7 +64,7 @@ def init_learning_args(
     return locals()
 
 def train(
-    out_path=None, name='', model_to_load=None, test_every=None,
+    out_path=None, name='', model_to_load=None, test_every=None, show_every=None,
     classifier=None, preprocessing=None,
     learning_args=None,
     dataset_args=None):
@@ -140,9 +140,13 @@ def train(
     # ==========================================================================
     print_section('Getting cost')
     outs = model(X_i)
+    results = OrderedDict()
+
     p = outs['p']
     base_cost = model.neg_log_prob(Y, p).sum(axis=0)
     cost = base_cost
+    results['cost'] = base_cost
+    results['error'] = (Y * (1 - p)).sum(axis=1).mean()
 
     updates = theano.OrderedUpdates()
 
@@ -152,28 +156,18 @@ def train(
         l2_rval = model.l2_decay(l2_decay)
         l2_cost = l2_rval.pop('cost')
         cost += l2_cost
+        results['l2_cost'] = l2_cost
 
     constants = []
-    extra_outs = []
-    extra_outs_keys = ['cost']
-
     # ==========================================================================
     print_section('Test functions')
-    error = (Y * (1 - p)).sum(axis=1).mean()
-
-    f_test_keys = ['error', 'cost']
-    f_test_vals = [error, base_cost]
-
-    if l2_decay > 0.:
-        f_test_keys.append('L2 cost')
-        f_test_vals.append(l2_cost)
-    f_test = theano.function([X, Y], f_test_vals)
+    f_test = theano.function([X, Y], results)
 
      # ========================================================================
     print_section('Setting final tparams and save function')
     tparams, all_params = set_params(tparams, updates)
 
-    def save(tparams, outfile):
+    def save(outfile):
         d = dict((k, v.get_value()) for k, v in all_params.items())
         d.update(
             dim_in=dim_in,
@@ -185,22 +179,21 @@ def train(
     # ========================================================================
     print_section('Getting gradients and building optimizer.')
     f_grad_shared, f_grad_updates, learning_args = set_optimizer(
-        inps, cost, tparams, constants, updates, extra_outs, **learning_args)
+        inps, cost, tparams, constants, updates, [], **learning_args)
 
     # ========================================================================
     print_section('Actually running (main loop)')
     monitor = SimpleMonitor()
 
     main_loop(
-        train, valid, tparams,
-        f_grad_shared, f_grad_updates, f_test, f_test_keys,
+        train, valid,
+        f_grad_shared, f_grad_updates, f_test,
         input_keys=input_keys,
         test_every=test_every,
         save=save,
         monitor=monitor,
         out_path=out_path,
         name=name,
-        extra_outs_keys=extra_outs_keys,
         **learning_args)
 
 if __name__ == '__main__':

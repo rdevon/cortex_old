@@ -26,6 +26,8 @@ class Layer(object):
         n_params (int): number of parameters
 
     '''
+    _components = []
+
     def __init__(self, name='', excludes=[], learn=True, **kwargs):
         '''Init function for Layer.
 

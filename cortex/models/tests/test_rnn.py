@@ -15,7 +15,7 @@ from cortex.utils import floatX
 sigmoid = lambda x: (1. / (1 + np.exp(-x))) * 0.9999 + 0.000005
 
 def test_build(dim_in=13, dim_h=17):
-    rnn = RNN(dim_in, [dim_h])
+    rnn = RNN.factory(dim_in=dim_in, dim_hs=[dim_h])
     rnn.set_tparams()
 
     return rnn

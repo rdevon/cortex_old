@@ -88,6 +88,8 @@ class Helmholtz(Layer):
         prior (Distribution): prior distribution of latent variables.
 
     '''
+    _components = ['posterior', 'conditional', 'prior']
+
     def __init__(self, posterior, conditional, prior,
                  name=None, **kwargs):
         '''Init function for MLPs.
@@ -123,36 +125,39 @@ class Helmholtz(Layer):
         super(Helmholtz, self).__init__(name=name)
 
     @staticmethod
-    def factory(dim_h, data_iter=None, distributions=None, dims=None, **kwargs):
+    def factory(dim_in, dim_h, dim_out=None, data_distribution='binomial',
+                **kwargs):
         '''Factory for forming conditional, posterior, and prior.
 
         Args:
+            dim_in (int): input dimension.
             dim_h (int): latent dimension.
-            data_iter (Dataset).
+            dim_out (Optional[int]): output dimension. If None, then set to
+                dim_in.
+            data_distribution (Optional[str]): if None, then set to `binomial`.
             **kwargs: kwargs for mlp_factory
 
         Returns:
             Helmholtz.
 
         '''
+        if dim_out is None: dim_out = dim_in
 
         posterior, conditional, prior = Helmholtz.mlp_factory(
-            dim_h, data_iter=data_iter, distributions=distributions, dims=dims,
+            dim_in, dim_h, dim_out, data_distribution=data_distribution,
             **kwargs)
         return Helmholtz(posterior, conditional, prior)
 
     @staticmethod
-    def mlp_factory(dim_h, data_iter=None, distributions=None, dims=None,
-                    prior=None, rec_args=None, gen_args=None):
+    def mlp_factory(dim_in, dim_h, dim_out, data_distribution, prior=None,
+                    rec_args=None, gen_args=None):
         '''Factory for forming conditional, posterior, and prior.
 
         Args:
+            dim_in (int): input dimension.
             dim_h (int): latent dimension.
-            data_iter (Optional[Dataset]): Must be provided if distributions \
-                and dims are not.
-            distributions (Optional[dict]): keys are data mode names,
-                values are str for distribution (see distributions.py)
-            dims (Optional[dict]): Keys are data mode names, values are int.
+            dim_out (int): output dimention.
+            data_distribution (str): distribution of the output.
             prior (str or Distribution): type (str) or instance of prior.
                 See `distributions.py`.
             rec_args (Optional[dict]): arguments for approximate posterior.
@@ -165,15 +170,8 @@ class Helmholtz(Layer):
 
         '''
 
-        if data_iter is not None:
-            distributions = data_iter.distributions
-            dims = data_iter.dims
-        assert dims is not None and distributions is not None
-
-        if rec_args is None:
-            rec_args = dict(input_layer=data_iter.name)
-        if gen_args is None:
-            gen_args = dict(output=data_iter.name)
+        if rec_args is None: rec_args = dict()
+        if gen_args is None: gen_args = dict()
 
         # Forming the prior model.
         if prior is None:
@@ -192,7 +190,7 @@ class Helmholtz(Layer):
         input_name = rec_args.get('input_layer')
         if rec_args.get('distribution', None) is None:
             rec_args['distribution'] = prior
-        rec_args['dim_in'] = dims[input_name]
+        rec_args['dim_in'] = dim_in
         rec_args['dim_out'] = dim_h
         posterior = RC.factory(**rec_args)
 
@@ -208,11 +206,11 @@ class Helmholtz(Layer):
         if t == 'dag':
             for out in gen_args['graph']['outputs']:
                 gen_args['graph']['outs'][output_name] = dict(
-                    dim=dims[output_name],
-                    distribution=distributions[output_name])
+                    dim=dim_out,
+                    distribution=data_distribution)
         else:
-            gen_args['dim_out'] = dims[output_name]
-            gen_args['distribution'] = distributions[output_name]
+            gen_args['dim_out'] = dim_out
+            gen_args['distribution'] = data_distribution
         conditional = GC.factory(**gen_args)
 
         return posterior, conditional, prior_model
@@ -362,26 +360,12 @@ class Helmholtz(Layer):
 
         return (T.log(w.mean(axis=0, keepdims=True)) + log_p_max).mean()
 
-    def l2_decay(self, rate):
-        '''Get L2 decay costs.
+    def get_decay_params(self):
+        decay_params = OrderedDict()
+        for net in [self.posterior, self.conditional]:
+            decay_params.update(**net.get_decay_params())
 
-        Args:
-            rate (float): decay rate.
-
-        Returns:
-            dict: costs.
-
-        '''
-        rec_l2_cost = self.posterior.l2_decay(rate)
-        gen_l2_cost = self.conditional.l2_decay(rate)
-
-        rval = OrderedDict(
-            rec_l2_cost=rec_l2_cost,
-            gen_l2_cost=gen_l2_cost,
-            cost = rec_l2_cost + gen_l2_cost
-        )
-
-        return rval
+        return decay_params
 
     # --------------------------------------------------------------------
     def p_y_given_h(self, h, *params):

@@ -16,9 +16,7 @@ from cortex.utils.tools import print_profile, resolve_path
 def test_build_GBN(dim_in=17, dim_h=13):
     rec_args = dict(input_layer='input')
     gen_args = dict(output='input')
-    distributions = dict(input='gaussian')
-    dims = dict(input=dim_in)
-    gbn = Helmholtz.factory(dim_h, distributions=distributions, dims=dims,
+    gbn = Helmholtz.factory(dim_in, dim_h, data_distribution='gaussian',
                     rec_args=rec_args, gen_args=gen_args)
     tparams = gbn.set_tparams()
 

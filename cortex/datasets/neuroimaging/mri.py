@@ -42,6 +42,7 @@ class MRI(BasicDataset):
             decomposition of the data.
         pca_components (Optional[int]): number of PCA components if self.pca
             is not None
+        n_subjects (Optional[int]): number of subjects in dataset.
         tmp_path (str): path for temporary niftis in visualization.
         base_nifti_file (str): path for base nifti for forming niftis from arrays.
         anat_file (str): path for anatomical nifti file for visualization.
@@ -50,7 +51,7 @@ class MRI(BasicDataset):
 
     '''
 
-    def __init__(self, source=None, name='mri',
+    def __init__(self, source=None, name='mri', flip_signs=False,
                  pca_components=0, distribution='gaussian', **kwargs):
         '''Init function for MRI.
 
@@ -76,7 +77,6 @@ class MRI(BasicDataset):
         X, Y = self.get_data(source)
 
         self.image_shape = self.mask.shape
-        X = self._mask(X)
         self.update_progress()
         self.pca_components = pca_components
 
@@ -123,6 +123,8 @@ class MRI(BasicDataset):
         self.X = self.data[self.name]
         if self.labels in self.data.keys():
             self.Y = self.data[self.labels]
+        self.n_subjects = len(idx)
+        self.n = self.X.shape[0]
 
     @staticmethod
     def factory(C=None, split=None, idx=None, batch_sizes=None, **kwargs):
@@ -153,14 +155,16 @@ class MRI(BasicDataset):
             test_idx = idx[split_idx[1]:]
             idx = [train_idx, valid_idx, test_idx]
         else:
-            logger.info('Splitting dataset into ratios %.2f / %.2f /%.2f'
-                             % tuple(len(idx[i]) / float(self.n_subjects)
-                                     for i in range(3)))
+            logger.info('Splitting dataset into ratios %.2f / %.2f /%.2f '
+                        'using given indices'
+                        % tuple(len(idx[i]) / float(mri.n_subjects)
+                                for i in range(3)))
 
         assert len(batch_sizes) == len(idx)
 
         datasets = []
-        for i, bs in zip(idx, batch_sizes):
+        modes = ['train', 'valid', 'test']
+        for i, bs, mode in zip(idx, batch_sizes, modes):
             if bs is None:
                 dataset = None
             else:
@@ -168,6 +172,7 @@ class MRI(BasicDataset):
                 dataset.slice_data(i)
                 dataset.batch_size = bs
                 dataset.logger = logger
+                dataset.mode = mode
             datasets.append(dataset)
 
         return datasets + [idx]
@@ -251,6 +256,11 @@ class MRI(BasicDataset):
                     mi = X[idx].mean(axis=0)
                     X[idx] -= mi
         self.update_progress()
+        self.n_subjects = X.shape[0]
+
+        X = self._mask(X)
+        X -= X.mean(axis=0)
+        X /= X.std(axis=0)
 
         return X, Y
 
@@ -358,8 +368,8 @@ class MRI(BasicDataset):
 
         return images, out_files
 
-    def save_images(self, x, out_file, remove_niftis=True,
-                    x_limit=None, roi_dict=None, **kwargs):
+    def save_images(self, x, out_file=None, remove_niftis=True,
+                    x_limit=None, roi_dict=None, signs=None, **kwargs):
         '''Saves images from array.
 
         Args:
@@ -377,6 +387,9 @@ class MRI(BasicDataset):
         if len(x.shape) == 3:
             x = x[:, 0, :]
 
+        x_ = x.copy()
+        if signs is not None:
+            x *= signs[:, None]
         x = self._unmask(x)
         images, nifti_files = self.save_niftis(x)
         if roi_dict is None: roi_dict =dict()
@@ -387,6 +400,7 @@ class MRI(BasicDataset):
                 os.remove(f)
         nifti_viewer.montage(images, self.anat_file, roi_dict,
                              out_file=out_file, **kwargs)
+        return x_
 
     def visualize_pca(self, out_file, **kwargs):
         '''Saves the PCA component image.

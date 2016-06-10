@@ -739,7 +739,8 @@ def _neg_logistic_log_prob(x, p, sum_probs=True):
     dim = p.shape[p.ndim-1] // 2
     mu = _slice(p, 0, dim)
     log_s = _slice(p, 1, dim)
-    energy = -(x - mu) / T.exp(log_s) + log_s + 2 * T.log(1 + T.exp((x - mu) / T.exp(log_s)))
+    g = (x - mu) / T.exp(log_s)
+    energy = -g + log_s + 2 * T.log(1 + T.exp(g))
     if sum_probs:
         return energy.sum(axis=energy.ndim-1)
     else:

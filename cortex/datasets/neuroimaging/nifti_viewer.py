@@ -259,7 +259,8 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
     if out_file is not None:
         plt.savefig(out_file, transparent=True, facecolor=(bgcol, bgcol, bgcol))
     else:
-        plt.draw()
+        plt.show()
+    plt.clf()
 
 def make_argument_parser():
     '''Creates an ArgumentParser to read the options for this script from sys.argv

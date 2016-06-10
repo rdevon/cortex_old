@@ -1,30 +1,30 @@
-{
-  name: 'vae_mri_single_laplace',
-  prior: 'laplace',
-  dim_h: 60,
-  learning_args: {
-    batch_size: 10,
-    learning_rate: 0.0001,
-    optimizer: 'rmsprop',
-    epochs: 1200,
-    l2_decay: 0.0002,
-    excludes: []
-  },
-  rec_args: {
-    input_layer: 'mri',
-    dim_hs: [500],
-    h_act: 'T.tanh',
-    weight_scale: 0.00001
-  },
-  gen_args: {
-    dim_hs: [],
-    h_act: 'T.tanh',
-    output: 'mri',
-    weight_scale: 0.00001
-  },
-  dataset_args: {
-    dataset: 'mri',
-    distribution: 'gaussian',
-    source: '$data/neuroimaging/VBM/data.yaml',
-  }
+name: 'vae_mri_single_laplace'
+prior: 'laplace'
+dim_h: 60
+learning_args: {
+  batch_size: 10,
+  learning_rate: 0.0001,
+  optimizer: 'rmsprop',
+  epochs: 1200,
+  l2_decay: 0.0002,
+  excludes: []
 }
+rec_args: {
+  input_layer: 'mri',
+  dim_hs: [500],
+  h_act: 'T.tanh',
+  weight_scale: 0.00001
+}
+gen_args: {
+  dim_hs: [],
+  h_act: 'T.tanh',
+  output: 'mri',
+  weight_scale: 0.00001
+}
+dataset_args: {
+  dataset: 'mri',
+  distribution: 'gaussian',
+  source: '$data/neuroimaging/VBM/data.yaml',
+}
+show_every: 10
+test_every: 10

@@ -107,8 +107,6 @@ class FMRI_IID(MRI):
 
         X = np.concatenate(X, axis=0)
         Y = np.concatenate(Y, axis=0)
-        X -= X.mean(axis=1, keepdims=True)
-        X /= X.std(axis=tuple(i for i in range(1, len(X.shape))), keepdims=True)
 
         if len(X.shape) == 3:
             self.n_subjects, self.n_scans, _ = X.shape
@@ -118,6 +116,12 @@ class FMRI_IID(MRI):
             raise ValueError('X has incorrect shape. Should be 3 or 5 (got %d)'
                              % len(X.shape))
         X = X.reshape((X.shape[0] * X.shape[1],) + X.shape[2:])
+        X = self._mask(X)
+        X = X.reshape((self.n_subjects, self.n_scans, X.shape[1]))
+        X -= X.mean(axis=1, keepdims=True)
+        X /= X.std(axis=1, keepdims=True)
+        X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
+
         self.update_progress()
 
         return X, Y

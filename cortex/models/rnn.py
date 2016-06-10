@@ -49,7 +49,11 @@ def factory(rnn_type=None, dim_h=None, dim_hs=None, **kwargs):
         simple = True
         assert dim_h is not None
 
-    C = resolve(rnn_type, simple=simple)
+    if isinstance(rnn_type, type) and (rnn.__name__ == 'RNN'
+                                       or rnn.__base__ == RNN):
+        C = rnn_type
+    else:
+        C = resolve(rnn_type, simple=simple)
 
     if simple:
         return C.factory(dim_h=dim_h, **kwargs)
@@ -91,6 +95,8 @@ class RNN_initializer(Layer):
         layers (list): layers for initialization of RNN layers.
 
     '''
+    _components = ['layers']
+
     def __init__(self, dim_in, dim_outs, initialization='mlp', **kwargs):
         '''Initialization function for RNN_Initializer.
 
@@ -205,10 +211,12 @@ class RNN(Layer):
         output_net (MLP): MLP to read from recurrent layers.
         condtional (Optional[MLP]): MLP to condition output on previous
             output.
+        init_net (RNN_initializer): Initializer for RNN recurrent state.
         nets (list): list of networks. input network, output_net, conditional.
         inter_nets (list): list of inter-networks between recurrent layers.
 
     '''
+    _components = ['nets', 'inter_nets', 'init_net']
 
     def __init__(self, dim_in, dim_hs, dim_out=None, init_net=None,
                  conditional=None, input_net=None, output_net=None,
@@ -245,9 +253,9 @@ class RNN(Layer):
         super(RNN, self).__init__(name=name, **kwargs)
 
     @staticmethod
-    def mlp_factory(dim_in, dim_out, dim_hs, i_net=None, o_net=None, c_net=None,
-                    data_distribution='binomial', initialization=None,
-                    init_args=None, **kwargs):
+    def mlp_factory(dim_in, dim_out, dim_hs, o_dim_in=None, i_net=None,
+                    o_net=None, c_net=None, data_distribution='binomial',
+                    initialization=None, init_args=None, **kwargs):
         '''Factory for creating MLPs for RNN.
 
         Args:
@@ -255,6 +263,8 @@ class RNN(Layer):
             dim_out (int): output dimension. If not provided, assumed
                 to be dim_in.
             dim_hs (list): dimensions of recurrent units.
+            o_dim_in (Optional[int]): optional input dimension for output
+                net. If not provided, then use the last hidden dim.
             i_net (dict): input network args.
             o_net (dict): output network args.
             c_net (dict): conditional network args.
@@ -269,7 +279,7 @@ class RNN(Layer):
 
         '''
         import logging
-        logger = logging.getLogger(__name__)
+        logger = logging.getLogger('cortex')
 
         mlps = {}
 
@@ -282,10 +292,12 @@ class RNN(Layer):
         input_net = MLP.factory(**i_net)
 
         # Output network
+        if o_dim_in is None:
+            o_dim_in = dim_hs[-1]
         if o_net is None: o_net = dict()
         if not o_net.get('distribution', False):
             o_net['distribution'] = data_distribution
-        o_net.update(dim_in=dim_hs[-1], dim_out=dim_out, name='output_net')
+        o_net.update(dim_in=o_dim_in, dim_out=dim_out, name='output_net')
         logger.debug('Forming RNN with output network parameters %s'
                      % pprint.pformat(o_net))
         output_net = MLP.factory(**o_net)
@@ -454,19 +466,22 @@ class RNN(Layer):
         '''Get the input arguments for `scan`.
 
         '''
-        return args[self.param_idx[self.n_layers-1]:self.param_idx[self.n_layers]]
+        return args[self.param_idx[self.n_layers-1]
+                    :self.param_idx[self.n_layers]]
 
     def get_output_args(self, *args):
         '''Get the output arguments for `scan`.
 
         '''
-        return args[self.param_idx[self.n_layers]:self.param_idx[self.n_layers+1]]
+        return args[self.param_idx[self.n_layers]
+                    :self.param_idx[self.n_layers+1]]
 
     def get_conditional_args(self, *args):
         '''Get the conditional arguments for `scan`.
 
         '''
-        return args[self.param_idx[self.n_layers+1]:self.param_idx[self.n_layers+2]]
+        return args[self.param_idx[self.n_layers+1]
+                    :self.param_idx[self.n_layers+2]]
 
     # Extra functions ---------------------------------------------------------
     def energy(self, X, h0s=None):
@@ -498,6 +513,7 @@ class RNN(Layer):
         '''
         return self.output_net.neg_log_prob(x, p)
 
+    # Step functions -----------------------------------------------------------
     def step_sample_preact(self, *params):
         '''Returns preact for sampling step.
 

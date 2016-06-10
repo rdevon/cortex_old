@@ -1,24 +1,23 @@
-{
-  name: 'vae_mnist',
-  prior: 'gaussian',
-  dim_h: 200,
-  learning_args: {
-    epochs: 1000,
-    optimizer: 'rmsprop',
-    learning_rate: 0.0001,
-    reweight: True
-  },
-  rec_args: {
-    input_layer: 'mnist',
-    dim_hs: [500]
-  },
-  gen_args: {
-    output: 'mnist',
-    dim_hs: [500]
-  },
-  test_every: 1,
-  dataset_args: {
-    dataset: 'mnist',
-    source: '$data/basic/mnist_binarized_salakhutdinov.pkl.gz'
-  }
+name: 'vae_mnist'
+prior: 'gaussian'
+dim_h: 200
+learning_args: {
+  epochs: 1000,
+  optimizer: 'rmsprop',
+  learning_rate: 0.0001,
+  reweight: True
+}
+rec_args: {
+  input_layer: 'mnist',
+  dim_hs: [500]
+}
+gen_args: {
+  output: 'mnist',
+  dim_hs: [500]
+}
+test_every: 10
+show_every: 10
+dataset_args: {
+  dataset: 'mnist',
+  source: '$data/basic/mnist_binarized_salakhutdinov.pkl.gz'
 }

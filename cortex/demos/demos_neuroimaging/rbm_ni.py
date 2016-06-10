@@ -128,8 +128,6 @@ def train(
         updates += theano.OrderedUpdates([(H_p, samples['hs'][-1])])
 
     cost = results['cost']
-    extra_outs = [results['free_energy']]
-    extra_outs_keys = ['cost', 'free_energy']
 
     l1_decay = learning_args.pop('l1_decay')
     l2_decay = learning_args.pop('l2_decay')
@@ -139,15 +137,16 @@ def train(
         l1_cost = model.l1_decay(l1_decay)
         results.update(l1_cost=l1_cost)
         cost += l1_cost
+        results['l1 cost'] = l1_cost
     if l2_decay:
         l2_cost = model.l2_decay(l2_decay)
         results.update(l1_cost=l2_cost)
         cost += l2_cost
+        results['l2 cost'] = l2_cost
 
     # ==========================================================================
     print_section('Test functions')
-    f_test_keys = results.keys()
-    f_test = theano.function([X], results.values())
+    f_test = theano.function([X], results)
 
     try:
         _, z_updates = model.update_partition_function(K=1000)
@@ -165,7 +164,7 @@ def train(
     excludes = learning_args.pop('excludes')
     tparams, all_params = set_params(tparams, updates, excludes=excludes)
 
-    def save(tparams, outfile):
+    def save(outfile):
         d = dict((k, v.get_value()) for k, v in all_params.items())
         d.update(
             dim_in=dim_in,
@@ -181,15 +180,15 @@ def train(
     # ========================================================================
     print_section('Getting gradients and building optimizer.')
     f_grad_shared, f_grad_updates, learning_args = set_optimizer(
-        [X], cost, tparams, constants, updates, extra_outs, **learning_args)
+        [X], cost, tparams, constants, updates, [], **learning_args)
 
     # ========================================================================
     print_section('Actually running (main loop)')
     monitor = SimpleMonitor()
 
     main_loop(
-        train, valid, tparams,
-        f_grad_shared, f_grad_updates, f_test, f_test_keys,
+        train, valid,
+        f_grad_shared, f_grad_updates, f_test,
         f_extra=f_update_partition,
         test_every=test_every,
         show_every=show_every,
@@ -198,7 +197,6 @@ def train(
         monitor=monitor,
         out_path=out_path,
         name=name,
-        extra_outs_keys=extra_outs_keys,
         **learning_args)
 
 if __name__ == '__main__':

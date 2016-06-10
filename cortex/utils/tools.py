@@ -25,6 +25,7 @@ import warnings
 import yaml
 
 from . import floatX
+from . import logger
 
 
 logger = logging.getLogger(__name__)

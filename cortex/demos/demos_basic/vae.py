@@ -46,7 +46,7 @@ def init_learning_args(
 
 def train(
     out_path=None, name='', model_to_load=None, save_images=True, test_every=None,
-    dim_h=None, rec_args=None, gen_args=None, prior='gaussian',
+    show_every=None, dim_h=None, rec_args=None, gen_args=None, prior='gaussian',
     preprocessing=None,
     learning_args=None,
     dataset_args=None):
@@ -83,10 +83,14 @@ def train(
 
     # ========================================================================
     print_section('Loading model and forming graph')
+    dim_in = train.dims[train.name]
+    data_distribution = train.distributions[train.name]
 
     def create_model():
         model = Helmholtz.factory(
-            dim_h, train,
+            dim_in,
+            dim_h,
+            data_distribution=data_distribution,
             prior=prior,
             rec_args=rec_args,
             gen_args=gen_args)
@@ -115,21 +119,18 @@ def train(
         n_posterior_samples=n_posterior_samples, reweight=reweight)
 
     cost = results['cost']
-    extra_outs = []
-    extra_outs_keys = ['cost']
 
     l2_decay = learning_args.pop('l2_decay')
     if l2_decay is not False and l2_decay > 0.:
         print 'Adding %.5f L2 weight decay' % l2_decay
         l2_rval = model.l2_decay(l2_decay)
-        cost += l2_rval.pop('cost')
-        extra_outs += l2_rval.values()
-        extra_outs_keys += l2_rval.keys()
+        l2_cost = l2_rval.pop('cost')
+        cost += l2_cost
+        results['l2 cost'] = l2_cost
 
     # ==========================================================================
     print_section('Test functions')
-    f_test_keys = results.keys()
-    f_test = theano.function([X], results.values())
+    f_test = theano.function([X], results)
 
     prior_samples, p_updates = model.sample_from_prior()
     f_prior = theano.function([], prior_samples, updates=p_updates)
@@ -146,7 +147,7 @@ def train(
     tparams, all_params = set_params(
         tparams, updates, excludes=excludes)
 
-    def save(tparams, outfile):
+    def save(outfile):
         d = dict((k, v.get_value()) for k, v in all_params.items())
         d.update(
             dim_h=dim_h,
@@ -171,22 +172,21 @@ def train(
     # ========================================================================
     print_section('Getting gradients and building optimizer.')
     f_grad_shared, f_grad_updates, learning_args = set_optimizer(
-        inps, cost, tparams, constants, updates, extra_outs, **learning_args)
+        inps, cost, tparams, constants, updates, [], **learning_args)
 
     # ========================================================================
     print_section('Actually running (main loop)')
     monitor = SimpleMonitor()
 
     main_loop(
-        train, valid, tparams,
-        f_grad_shared, f_grad_updates, f_test, f_test_keys,
-        test_every=test_every,
+        train, valid,
+        f_grad_shared, f_grad_updates, f_test,
+        test_every=test_every, show_every=show_every,
         save=save,
         save_images=save_images,
         monitor=monitor,
         out_path=out_path,
         name=name,
-        extra_outs_keys=extra_outs_keys,
         **learning_args)
 
 if __name__ == '__main__':

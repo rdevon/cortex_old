@@ -20,6 +20,7 @@ from scipy import (
     argmax, sqrt, ceil, floor, sign,
     negative, linspace, double,
 )
+import signal
 import subprocess
 from sys import stdout
 
@@ -285,6 +286,9 @@ def cluster_worker(fnifti, thr, roi_dict):
 def worker_helper(args):
     cluster_worker(*args)
 
+def init_worker():
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
 def find_rois(fnifti, thr, test=False):
     '''Function for finding regions of interest from a nifti file.
 
@@ -310,7 +314,7 @@ def find_rois(fnifti, thr, test=False):
     elif isinstance(fnifti, list):
         num_features = len(fnifti)
         roi_dict = mp.Manager().dict()
-        p = mp.Pool(num_features)
+        p = mp.Pool(num_features, init_worker)
         args_iter = itertools.izip(fnifti,
                                    itertools.repeat(thr),
                                    itertools.repeat(roi_dict))
@@ -318,12 +322,15 @@ def find_rois(fnifti, thr, test=False):
             p.map(worker_helper, args_iter)
             p.close()
             p.join()
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as e:
             p.close()
             p.terminate()
+            p.join()
+            raise e
         except Exception as e:
             p.close()
             p.terminate()
+            p.join()
             raise e
         roi_dict = dict(roi_dict)
     else:

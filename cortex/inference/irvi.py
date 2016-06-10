@@ -65,7 +65,7 @@ class IRVI(object):
         self.pass_gradients = pass_gradients
         self.use_all_samples = use_all_samples
 
-        warn_kwargs(self, **kwargs)
+        warn_kwargs(self, kwargs)
 
     # Child-specific methods. These must be defined in child class.
     def step_infer(self, *params):

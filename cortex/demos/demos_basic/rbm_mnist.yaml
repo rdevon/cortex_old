@@ -1,19 +1,18 @@
-{
-  name: 'rbm_mnist',
-  learning_args: {
-    epochs: 1000,
-    optimizer: 'sgd',
-    learning_rate: 0.01
-  },
-  inference_args: {
-    n_chains: 10,
-    persistent: True,
-    n_steps: 1
-  },
-  dim_h: 200,
-  test_every: 10,
-  dataset_args: {
-    dataset: 'mnist',
-    source: '$data/basic/mnist_binarized_salakhutdinov.pkl.gz'
-  }
+name: 'rbm_mnist'
+learning_args: {
+  epochs: 1000,
+  optimizer: 'sgd',
+  learning_rate: 0.01
+}
+inference_args: {
+  n_chains: 10,
+  persistent: True,
+  n_steps: 1
+}
+dim_h: 200
+test_every: 10
+show_every: 10
+dataset_args: {
+  dataset: 'mnist',
+  source: '$data/basic/mnist_binarized_salakhutdinov.pkl.gz'
 }

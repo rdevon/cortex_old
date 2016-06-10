@@ -119,21 +119,18 @@ def train(
         n_posterior_samples=n_posterior_samples)
 
     cost = results['cost']
-    extra_outs = []
-    extra_outs_keys = ['cost']
 
     l2_decay = learning_args.pop('l2_decay')
     if l2_decay is not False and l2_decay > 0.:
         print 'Adding %.5f L2 weight decay' % l2_decay
         l2_rval = model.l2_decay(l2_decay)
-        cost += l2_rval.pop('cost')
-        extra_outs += l2_rval.values()
-        extra_outs_keys += l2_rval.keys()
+        l2_cost = l2_rval.pop('cost')
+        cost += l2_cost
+        results['l2 cost'] = l2_cost
 
     # ==========================================================================
     print_section('Test functions')
-    f_test_keys = results.keys()
-    f_test = theano.function([X], results.values())
+    f_test = theano.function([X], results)
 
     prior_samples, p_updates = model.sample_from_prior()
     f_prior = theano.function([], model.get_center(prior_samples), updates=p_updates)
@@ -172,22 +169,21 @@ def train(
     # ========================================================================
     print_section('Getting gradients and building optimizer.')
     f_grad_shared, f_grad_updates, learning_args = set_optimizer(
-        inps, cost, tparams, constants, updates, extra_outs, **learning_args)
+        inps, cost, tparams, constants, updates, [], **learning_args)
 
     # ========================================================================
     print_section('Actually running (main loop)')
     monitor = SimpleMonitor()
 
     main_loop(
-        train, valid, tparams,
-        f_grad_shared, f_grad_updates, f_test, f_test_keys,
+        train, valid,
+        f_grad_shared, f_grad_updates, f_test,
         test_every=test_every,
         save=save,
         save_images=save_images,
         monitor=monitor,
         out_path=out_path,
         name=name,
-        extra_outs_keys=extra_outs_keys,
         **learning_args)
 
 if __name__ == '__main__':

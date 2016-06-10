@@ -15,9 +15,12 @@ def plot(fnc, idx=None, groups=None, transform=None, labels=None, out_file=None)
 
     if idx is None:
         idx = [i for idx in groups for i in idx]
-
+    if labels is not None and len(labels) == len(idx):
+        labels = [labels[i] for i in idx]
+    else:
+        labels = None
+    fnc = fnc[idx][:, idx]
     fnc = fnc * (1.0 - np.eye(fnc.shape[0]))
-
     n_components = len(idx)
 
     font = matplotlib.font_manager.FontProperties()
@@ -72,7 +75,10 @@ def plot(fnc, idx=None, groups=None, transform=None, labels=None, out_file=None)
     cbar = plt.colorbar(imgplot, ticks=c_ticks, orientation='horizontal', cax=cax)
     cbar.ax.set_xticklabels(c_ticks_str, fontproperties=font)
 
-    plt.savefig(out_file)
+    if out_file is not None:
+        plt.savefig(out_file)
+    else:
+        plt.show()
     plt.close()
 
 def group(mat, thr=0.3, idx=None, labels=None, out_file=None):

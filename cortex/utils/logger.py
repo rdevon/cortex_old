@@ -5,6 +5,7 @@
 import logging
 
 
+logging.basicConfig()
 logger = logging.getLogger('cortex')
 logger.setLevel(logging.DEBUG)
 logger.propagate = False
