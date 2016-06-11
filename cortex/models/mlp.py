@@ -120,27 +120,6 @@ class MLP(Layer):
         '''
         return MLP(dim_in, dim_out, **kwargs)
 
-    def l2_decay(self, gamma, layers=None):
-        '''L2 decay cost.
-
-        Args:
-            gamma (float): l2 decay rate.
-            layers (Optional[list]): layer numbers to do l2 decay on.
-
-        Returns:
-            T.tensor: L2 cost.
-
-        '''
-        if layers is None:
-            layers = range(self.n_layers)
-
-        cost = T.constant(0.).astype(floatX)
-        for l in layers:
-            W = self.__dict__['W%d' % l]
-            cost += gamma * (W ** 2).sum()
-
-        return cost
-
     def sample(self, p, n_samples=1):
         '''Sample from the conditional distribution.
 

@@ -256,6 +256,8 @@ class Trainer(object):
 
 class Inspector(object):
     def __init__(self, module, model_to_load=None):
+        if isinstance(module, str):
+            module = load_module(module)
         self.module = module
         self.set()
 

@@ -509,7 +509,7 @@ def main_loop(train, valid,
     try:
         epoch_t0 = time.time()
         s = 0
-        e = 0
+        e = -1
 
         widgets = ['Epoch {epoch} (training {name}, '.format(epoch=e, name=name),
                    Timer(), '): ', Bar()]
@@ -517,6 +517,8 @@ def main_loop(train, valid,
         training_time = 0
         while True:
             try:
+                if e == -1: raise StopIteration
+                
                 outs = train.next()
                 inps = [outs[k] for k in input_keys]
                 if train.pos == -1:
