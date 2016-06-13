@@ -149,8 +149,8 @@ def load_data_split(C, idx=None, dataset=None, **dataset_args):
     return train, valid, test, idx
 
 def dataset_factory(resolve_dataset, dataset=None, split=[0.7, 0.2, 0.1],
-                    idx=None, train_batch_size=None, valid_batch_size=None,
-                    test_batch_size=None, **dataset_args):
+                    idx=None, train_batch_size=10, valid_batch_size=10,
+                    test_batch_size=10, **dataset_args):
     C = resolve_dataset(dataset)
 
     if not hasattr(C, 'factory'):
@@ -238,7 +238,6 @@ class Dataset(object):
         pos (int): current position of the iterator.
         stop (int): stop the dataset at this index when loading.
         mode (str): usually train, test, valid.
-        balance (bool): replicate samples to balance the dataset.
 
     '''
     def __init__(self, batch_size=None, shuffle=True, inf=False, name='dataset',

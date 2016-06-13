@@ -130,6 +130,7 @@ def set_cost(module):
                  % (results.keys(), updates.keys(), constants))
     inputs = OrderedDict((k, v) for k, v in module.inputs.iteritems()
         if k in used_inputs)
+    module.input_keys = used_inputs
     module.inputs = inputs
     return results, updates, constants, outputs
 
@@ -138,7 +139,6 @@ def set_test_function(module, results, outputs):
 
     '''
     if hasattr(module, 'test'):
-        print_section('Setting test function')
         f_test = module.test(results, outputs)
     else:
         f_test = theano.function(module.inputs.values(), results)
@@ -219,6 +219,7 @@ def train(module, cost, tparams, updates, constants, f_test=None, f_save=None,
         name=module.name,
         test_every=test_every,
         show_every=show_every,
+        input_keys=module.input_keys,
         **learning_args)
 
 

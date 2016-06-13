@@ -6,11 +6,15 @@ not as a basis for all training.
 
 '''
 
+import sys
+
 import argparse
 from collections import OrderedDict
 from glob import glob
 import logging
-import matplotlib
+if not 'matplotlib' in sys.modules:
+    import matplotlib
+    matplotlib.use('Agg')
 import numpy as np
 import os
 from os import path
@@ -518,7 +522,7 @@ def main_loop(train, valid,
         while True:
             try:
                 if e == -1: raise StopIteration
-                
+
                 outs = train.next()
                 inps = [outs[k] for k in input_keys]
                 if train.pos == -1:

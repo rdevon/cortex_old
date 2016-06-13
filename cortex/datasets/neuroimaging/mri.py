@@ -141,18 +141,37 @@ class MRI(BasicDataset):
             logger.info('Splitting dataset into ratios %r' % split)
             if round(np.sum(split), 5) != 1. or len(split) != 3:
                 raise ValueError(split)
-            idx = range(mri.n_subjects)
-            random.shuffle(idx)
-            split_idx = []
-            accum = 0
-            for s in split:
-                s_i = int(s * mri.n_subjects + accum)
-                split_idx.append(s_i)
-                accum += s_i
 
-            train_idx = idx[:split_idx[0]]
-            valid_idx = idx[split_idx[0]:split_idx[1]]
-            test_idx = idx[split_idx[1]:]
+            if mri.balance:
+                l_idx = [range(mri.Y[:, i].sum()) for i in range(mri.Y.shape[-1])]
+
+                train_idx = []
+                valid_idx = []
+                test_idx = []
+                for l in l_idx:
+                    random.shuffle(l)
+                    split_idx = []
+                    accum = 0
+                    for s in split:
+                        s_i = int(s * len(l) + accum)
+                        split_idx.append(s_i)
+                        accum += s_i
+                    train_idx += l[:split_idx[0]]
+                    valid_idx += l[:split_idx[1]]
+                    test_idx += l[:split_idx[2]]
+            else:
+                split_idx = []
+                accum = 0
+                for s in split:
+                    s_i = int(s * mri.n_subjects + accum)
+                    split_idx.append(s_i)
+                    accum += s_i
+                idx = range(mri.n_subjects)
+                random.shuffle(idx)
+
+                train_idx = idx[:split_idx[0]]
+                valid_idx = idx[split_idx[0]:split_idx[1]]
+                test_idx = idx[split_idx[1]:]
             idx = [train_idx, valid_idx, test_idx]
         else:
             logger.info('Splitting dataset into ratios %.2f / %.2f /%.2f '
@@ -287,7 +306,7 @@ class MRI(BasicDataset):
             mask = self.mask
 
         if X.shape[1] == mask.sum():
-            logger.debug('Data already masked')
+            self.logger.debug('Data already masked')
             return X
 
         if X.shape[1:] != mask.shape:

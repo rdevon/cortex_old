@@ -118,6 +118,9 @@ class MLP(Layer):
             **kwargs: construction keyword arguments.
 
         '''
+        if dim_in is None or dim_out is None:
+            raise TypeError('Both dim in (%r) and dim_out (%r) must be set'
+                            % (dim_in, dim_out))
         return MLP(dim_in, dim_out, **kwargs)
 
     def sample(self, p, n_samples=1):
@@ -255,11 +258,14 @@ class MLP(Layer):
                 outs['p'] = x
 
             if self.dropout and l != self.n_layers - 1:
-                self.logger.debug('Adding dropout to layer {layer} for MLP "{name}"'.format(
-                    layer=l, name=self.name))
+                self.logger.debug('Adding dropout to layer {layer} for MLP '
+                                  '`{name}`'.format(layer=l, name=self.name))
                 if self.h_act == 'T.tanh':
-                    raise NotImplementedError('dropout for tanh units not implemented yet')
-                elif self.h_act in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
+                    x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
+                                             dtype=x.dtype)
+                    x = 2. * (x_d * (x + 1.) / 2) / (1 - self.dropout) - 1
+                elif self.h_act in ['T.nnet.sigmoid', 'T.nnet.softplus',
+                                    'lambda x: x']:
                     x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
                                              dtype=x.dtype)
                     x = x * x_d / (1 - self.dropout)

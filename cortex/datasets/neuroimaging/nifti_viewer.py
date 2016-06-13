@@ -2,11 +2,17 @@
 Module to view nifti data.
 '''
 
+import sys
+
 import argparse
 import itertools
 import logging
 from math import ceil
-import matplotlib
+if not 'matplotlib' in sys.modules:
+    import matplotlib
+    matplotlib.use('Agg')
+else:
+    import matplotlib
 from matplotlib.patches import FancyBboxPatch
 from matplotlib import pylab as plt, rc
 import multiprocessing as mp

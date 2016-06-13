@@ -119,7 +119,11 @@ class FMRI_IID(MRI):
         X = self._mask(X)
         X = X.reshape((self.n_subjects, self.n_scans, X.shape[1]))
         X -= X.mean(axis=1, keepdims=True)
-        X /= X.std(axis=1, keepdims=True)
+        s = X.std(axis=1, keepdims=True)
+        if (s==0).sum() > 0:
+            self.logger.warn('0-std voxel found. Setting std to `1.')
+            s[s==0] = 1
+        X /= s
         X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
 
         self.update_progress()
