@@ -9,7 +9,8 @@ import urllib2
 from datasets import fetch_basic_data
 from datasets.neuroimaging import fetch_neuroimaging_data
 from utils.tools import get_paths
-from utils.extra import complete_path, query_yes_no, write_path_conf
+from utils.extra import (
+    complete_path, query_yes_no, write_default_theanorc, write_path_conf)
 
 
 def main():
@@ -42,7 +43,7 @@ def main():
             'Default output path: [%s] ' % path_dict['$outs']) or path_dict['$outs']
     else:
         out_path = raw_input('Default output path: ')
-    out_path = path.expanduser(data_path)
+    out_path = path.expanduser(out_path)
     if not path.isdir(out_path):
         raise ValueError('path %s does not exist. Please create it.' % out_path)
     write_path_conf(data_path, out_path)
@@ -70,3 +71,9 @@ def main():
             fetch_neuroimaging_data()
         except urllib2.HTTPError:
             print 'Error: neuroimaging dataset not found.'
+
+    home = path.expanduser('~')
+    trc = path.join(home, '.theanorc')
+    if not path.isfile(trc):
+        print 'No %s found, adding' % trc
+        write_default_theanorc()

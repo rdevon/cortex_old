@@ -94,6 +94,15 @@ def write_path_conf(data_path, out_path):
         f.write('$data: %s\n' % path.abspath(data_path))
         f.write('$outs: %s\n' % path.abspath(out_path))
 
+def write_default_theanorc():
+    '''Writes default .theanorc file.
+
+    '''
+    d = path.expanduser('~')
+    with open(path.join(d, '.theanorc'), 'w') as f:
+        f.write('[global]\n')
+        f.write('floatX = float32')
+
 def query_yes_no(question, default='yes'):
     '''Ask a yes/no question via raw_input() and return their answer.
 
