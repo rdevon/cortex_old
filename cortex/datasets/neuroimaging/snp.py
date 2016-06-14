@@ -6,7 +6,7 @@ from collections import OrderedDict
 import numpy as np
 from scipy.io import loadmat
 from .. import BasicDataset, Dataset
-from ...utils.tools import warn_kwargs
+from ...utils.tools import get_paths, warn_kwargs
 
 
 class SNP(BasicDataset):
@@ -59,7 +59,6 @@ class SNP(BasicDataset):
                 'labels' key for diagnosis }
 
         '''
-        from utils.tools import get_paths
         data_path = get_paths()['$snp_data']
         print('Loading genetic data from %s' % data_path)
         X = loadmat(data_path + '/' + source['snp'])

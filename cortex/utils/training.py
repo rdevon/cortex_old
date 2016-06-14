@@ -446,16 +446,11 @@ def main_loop(train, valid,
               f_grad_shared, f_grad_updates, f_test,
               f_test_keys=None,
               input_keys=None,
-              f_extra=None,
-              test_every=None,
-              show_every=None,
-              output_every=None,
+              f_extra=None, f_outs=None,
+              test_every=None, show_every=None, output_every=None,
               name=None,
-              save=None,
-              save_images=None,
-              epochs=None,
-              learning_rate=None,
-              learning_rate_scheduler=None,
+              save=None, save_images=None,
+              epochs=None, learning_rate=None, learning_rate_scheduler=None,
               monitor=None,
               out_path=None,
               **validation_args):
@@ -471,6 +466,7 @@ def main_loop(train, valid,
         f_test (theano.function): Tests model are returns results.
         f_test_keys (Optional[list]): List of keys that go with `f_test` if
             the output is a list, not a dictionary.
+        f_outs (Optional[theano.function]): Function for extra outputs.
         input_keys (Optional[list]): If not None, used to extract
             multiple modes from dataset for `f_grad_shared`.
         f_extra (theano.function): Function that is run just prior to testing.
@@ -588,7 +584,10 @@ def main_loop(train, valid,
                 if save_images is not None and out_path is not None:
                     print('Saving images...')
                     save_images()
-            if check_bad_nums(rval):
+            if check_bad_nums(dict(cost=rval)):
+                check_bad_nums(f_test(*inps))
+                if f_outs is not None:
+                    check_bad_nums(f_outs(*inps))
                 raise RuntimeError('Dying, found bad cost... Sorry (bleh)')
             f_grad_updates(*learning_rate)
             s += 1

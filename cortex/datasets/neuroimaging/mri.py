@@ -299,7 +299,7 @@ class MRI(BasicDataset):
 
         Return:
             numpy.array: masked array.
-
+            
         '''
         if mask is None:
             mask = self.mask

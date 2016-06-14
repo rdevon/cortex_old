@@ -144,6 +144,19 @@ def set_test_function(module, results, outputs):
         f_test = theano.function(module.inputs.values(), results)
     return f_test
 
+def set_out_function(module, results, outputs):
+    '''Sets function for outputs.
+    '''
+    outs = OrderedDict()
+    for k, v in outputs.iteritems():
+        if isinstance(v, list):
+            for i, _v in enumerate(v):
+                outs['%s_%d' % (k, i)] = _v
+        else:
+            outs[k] = v
+    f_outs = theano.function(module.inputs.values(), outs)
+    return f_outs
+
 def set_save_function(module, tparams):
     '''Sets the save function of a module.
 
@@ -197,7 +210,7 @@ def finish(module):
         module.finish()
 
 def train(module, cost, tparams, updates, constants, f_test=None, f_save=None,
-          f_viz=None, test_every=10, show_every=10):
+          f_viz=None, f_outs=None, test_every=10, show_every=10):
     print_section('Getting gradients and building optimizer.')
 
     excludes = module.learning_args.pop('excludes', [])
@@ -213,7 +226,7 @@ def train(module, cost, tparams, updates, constants, f_test=None, f_save=None,
     main_loop(
         module.dataset, module.valid_dataset,
         f_grad_shared, f_grad_updates, f_test,
-        save=f_save, save_images=f_viz,
+        save=f_save, save_images=f_viz, f_outs=f_outs,
         monitor=monitor,
         out_path=module.out_path,
         name=module.name,
@@ -242,6 +255,7 @@ class Trainer(object):
         f_test = set_test_function(module, results, outputs)
         f_save = set_save_function(module, tparams)
         f_viz = set_viz_function(module, results, outputs)
+        f_outs = set_out_function(module, results, outputs)
 
         check(module)
         finish(module)
