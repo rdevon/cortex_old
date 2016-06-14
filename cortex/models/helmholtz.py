@@ -34,23 +34,22 @@ from ..utils.tools import (
 )
 
 
-def unpack(dim_h=None,
-           prior=None,
-           rec_args=None,
-           gen_args=None,
-           data_iter=None,
-           **model_args):
+def unpack(
+    dim_in=None, dim_h=None, dim_out=None, prior=None, data_distribution=None,
+    rec_args=None, gen_args=None, **model_args):
     '''
     Function to unpack pretrained model into fresh Helmholtz class.
 
     See `Helmholtz.factory` and `utils.load_model` for details.
 
     Args:
+        dim_in (int): input dimensionality.
         dim_h (int): latent dimensionality.
+        dim_out (Optional[int]): output dimensionality.
         prior (str): prior distribution (see `models.distributions for details`)
+        dataset_distribution (str): distribution for modeling of the data.
         rec_args (dict): dictionary of recognition network keyword arguments.
         gen_args (dict): dictionary of generation network keyword arguments.
-        data_iter (dataset.Dataset): dataset iterator.
         **model_args: keyword arguments of saved parameters.
 
     Returns:
@@ -64,7 +63,9 @@ def unpack(dim_h=None,
 
     print 'Forming Helmholtz machine'
     model = Helmholtz.factory(
-        dim_h, data_iter=data_iter,
+        dim_in,
+        dim_h,
+        data_distribution=data_distribution,
         prior=prior,
         rec_args=rec_args,
         gen_args=gen_args)
