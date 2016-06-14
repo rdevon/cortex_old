@@ -33,16 +33,18 @@ def main():
             'Default data path: [%s] ' % path_dict['$data']) or path_dict['$data']
     else:
         data_path = raw_input('Default data path: ')
+    data_path = path.expanduser(data_path)
     if not path.isdir(data_path):
-        raise ValueError('path %s does not exist. Please create it.')
+        raise ValueError('path %s does not exist. Please create it.' % data_path)
 
     if '$outs' in path_dict:
         out_path = raw_input(
             'Default output path: [%s] ' % path_dict['$outs']) or path_dict['$outs']
     else:
         out_path = raw_input('Default output path: ')
-    if not path.isdir(data_path):
-        raise ValueError('path %s does not exist. Please create it.')
+    out_path = path.expanduser(data_path)
+    if not path.isdir(out_path):
+        raise ValueError('path %s does not exist. Please create it.' % out_path)
     write_path_conf(data_path, out_path)
 
     print ('Cortex demos require additional data that is not necessary for '
