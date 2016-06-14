@@ -208,8 +208,8 @@ class GRU(RNN):
         output_params = self.get_output_args(*params)
         aux_params = self.get_aux_args(*params)
 
-        y_aux = self.input_net_aux.preact(x, *aux_params)
-        y_input = self.input_net.preact(x, *input_params)
+        y_aux = self.input_net_aux.step_preact(x, *aux_params)
+        y_input = self.input_net.step_preact(x, *input_params)
 
         hs = []
         for i in xrange(self.n_layers):
@@ -224,7 +224,7 @@ class GRU(RNN):
                 y_aux = self.inter_nets[i].step_preact(h, *inter_params)
                 y_input = self.inter_nets[self.n_layers - 1 + i]
 
-        preact = self.output_net.preact(h, *output_params)
+        preact = self.output_net.step_preact(h, *output_params)
         return h, preact
 
     def _step(self, m, y_a, y_i, h_, Ura, Urb):

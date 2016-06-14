@@ -95,14 +95,14 @@ def get_srng():
     '''Shared Randomstream.
 
     '''
-    srng = SRandomStreams(random.randint(0, 1000000))
+    srng = SRandomStreams(random.randint(1, 1000000))
     return srng
 
 def get_trng():
     '''Normal Randomstream.
 
     '''
-    trng = RandomStreams(random.randint(0, 1000000))
+    trng = RandomStreams(random.randint(1, 1000000))
     return trng
 
 def warn_kwargs(c, kwargs):
