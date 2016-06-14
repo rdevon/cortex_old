@@ -20,6 +20,12 @@ def test_build(dim_in=13, dim_h=17):
 
     return rnn
 
+def test_sample(dim_in=13, dim_h=17, n_samples=107, n_steps=21):
+    rnn = test_build(dim_in, dim_h)
+    results, updates = rnn.sample(n_samples=107, n_steps=21)
+    f = theano.function([], results['p'], updates=updates)
+    f()
+
 def test_recurrent(dim_in=13, dim_h=17, n_samples=107, window=7):
     rnn = test_build(dim_in, dim_h)
 

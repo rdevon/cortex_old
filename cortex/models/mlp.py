@@ -136,7 +136,7 @@ class MLP(Layer):
 
         '''
         assert self.distribution is not None
-        return self.distribution.sample(p=p, n_samples=n_samples)
+        return self.distribution.sample(n_samples, p=p)
 
     def neg_log_prob(self, x, p, sum_probs=True):
         '''Negative log probability.

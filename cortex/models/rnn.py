@@ -697,13 +697,13 @@ class RNN(Layer):
         '''
         if x0 is None:
             x0, _ = self.output_net.sample(
-                p=T.constant(0.5).astype(floatX),
-                size=(n_samples, self.output_net.dim_out)).astype(floatX)
+                T.constant(0.5).astype(floatX), n_samples=n_samples)
 
         if h0s is None and self.init_net is not None:
             h0s = self.init_net.initialize(x0)
         elif h0s is None:
-            h0s = [T.alloc(0., x.shape[1], dim_h).astype(floatX) for dim_h in self.dim_hs]
+            h0s = [T.alloc(0., x0.shape[0], dim_h).astype(floatX)
+                   for dim_h in self.dim_hs]
 
         seqs = []
         outputs_info = h0s + [x0, None, None]

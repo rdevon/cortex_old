@@ -208,8 +208,8 @@ class GRU(RNN):
         output_params = self.get_output_args(*params)
         aux_params = self.get_aux_args(*params)
 
-        y_aux = self.input_net_aux.preact(x_, *aux_params)
-        y_input = self.input_net.preact(x_, *input_params)
+        y_aux = self.input_net_aux.preact(x, *aux_params)
+        y_input = self.input_net.preact(x, *input_params)
 
         hs = []
         for i in xrange(self.n_layers):

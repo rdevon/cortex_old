@@ -122,13 +122,17 @@ class Distribution(Layer):
         '''
         if p is None:
             p = self.get_prob(*self.get_params())
-        if p.ndim == 1:
+            size = None
+        elif p.ndim == 0:
+            p = T.zeros((self.dim,)).astype(floatX) + p
+            size = (n_samples, p.shape[0] // self.scale)
+        elif p.ndim == 1:
             size = (n_samples, p.shape[0] // self.scale)
         elif p.ndim == 2:
             size = (n_samples, p.shape[0], p.shape[1] // self.scale)
         elif p.ndim == 3:
             size = (n_samples, p.shape[0], p.shape[1], p.shape[2] // self.scale)
-        elif p.ndim == 4:
+        else:
             raise NotImplementedError('%d dim sampling not supported yet' % p.ndim)
 
         return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
