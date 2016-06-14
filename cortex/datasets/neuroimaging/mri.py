@@ -143,8 +143,7 @@ class MRI(BasicDataset):
                 raise ValueError(split)
 
             if mri.balance:
-                l_idx = [range(mri.Y[:, i].sum()) for i in range(mri.Y.shape[-1])]
-
+                l_idx = [np.where(label == 1)[0].tolist() for label in mri.Y[:, 0, :].T]
                 train_idx = []
                 valid_idx = []
                 test_idx = []
