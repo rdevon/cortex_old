@@ -68,8 +68,8 @@ def _cost(module):
     models = module.models
 
     X = module.inputs[module.dataset.name]
-    Y = module.inputs['label']
-    used_inputs = [X, Y]
+    Y = module.inputs[module.mlp_args['output']]
+    used_inputs = [module.dataset.name, module.mlp_args['output']]
 
     model = models['mlp']
     outputs = model(X)
