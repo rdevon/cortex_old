@@ -158,10 +158,11 @@ def dataset_factory(resolve_dataset, dataset=None, split=[0.7, 0.2, 0.1],
             C, split=split, idx=idx, train_batch_size=train_batch_size,
             valid_batch_size=valid_batch_size, test_batch_size=test_batch_size,
             **dataset_args)
-
-    train, valid, test, idx =  C.factory(
-        split=split, idx=idx, batch_sizes=[train_batch_size, valid_batch_size,
-        test_batch_size], **dataset_args)
+    else:
+        train, valid, test, idx =  C.factory(
+            split=split, idx=idx,
+            batch_sizes=[train_batch_size, valid_batch_size, test_batch_size],
+            **dataset_args)
 
     return OrderedDict(train=train, valid=valid, test=test, idx=idx)
 
