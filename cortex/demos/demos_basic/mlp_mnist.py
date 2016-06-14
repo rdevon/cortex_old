@@ -78,8 +78,6 @@ def _cost(module):
     p = outputs['p']
     base_cost = model.neg_log_prob(Y, p).sum(axis=0)
     cost = base_cost
-    results['cost'] = base_cost
-    results['error'] = (Y * (1 - p)).sum(axis=1).mean()
 
     updates = theano.OrderedUpdates()
     constants = []
@@ -92,5 +90,9 @@ def _cost(module):
         l2_cost = l2_rval.pop('cost')
         cost += l2_cost
         results['l2_cost'] = l2_cost
+
+    results['error'] = (Y * (1 - p)).sum(axis=1).mean()
+    results['base cost'] = base_cost
+    results['cost'] = cost
 
     return used_inputs, results, updates, constants, outputs
