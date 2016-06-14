@@ -252,6 +252,7 @@ class Attention(Layer):
                  **kwargs):
         if mlp is None:
             mlp = MLP.factory(dim_in=dim_a+dim_b, dim_out=dim_out,
+                              name=name + '_mlp',
                               distribution='centered_binomial')
         self.mlp = mlp
         self.dim_out = dim_out

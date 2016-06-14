@@ -156,8 +156,8 @@ class MRI(BasicDataset):
                         split_idx.append(s_i)
                         accum += s_i
                     train_idx += l[:split_idx[0]]
-                    valid_idx += l[:split_idx[1]]
-                    test_idx += l[:split_idx[2]]
+                    valid_idx += l[split_idx[0]:split_idx[1]]
+                    test_idx += l[split_idx[1]:]
             else:
                 split_idx = []
                 accum = 0
