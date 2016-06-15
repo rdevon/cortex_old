@@ -50,12 +50,13 @@ mlp_args = dict(
 
 extra_arg_keys = ['mlp_args']
 
+
 def _build(module):
     models = OrderedDict()
     dataset = module.dataset
     mlp_args = module.mlp_args
     dim_in = dataset.dims[dataset.name]
-    dim_out = dataset.dims[dataset.name]
+    dim_out = dataset.dims['label']
     distribution = dataset.distributions[mlp_args['output']]
 
     model = MLP.factory(dim_in=dim_in, dim_out=dim_out, distribution=distribution, **mlp_args)
