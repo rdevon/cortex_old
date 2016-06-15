@@ -29,7 +29,7 @@ from . import logger
 
 
 logger = logging.getLogger(__name__)
-random_seed = random.randint(0, 10000)
+random_seed = random.randint(1, 10000)
 rng_ = np.random.RandomState(random_seed)
 profile = False
 
@@ -243,7 +243,7 @@ def init_rngs(model, rng=None, trng=None, **kwargs):
         rng = rng_
     model.rng = rng
     if trng is None:
-        model.trng = RandomStreams(random.randint(0, 10000))
+        model.trng = RandomStreams(random.randint(1, 10000))
     else:
         model.trng = trng
     return kwargs

@@ -80,8 +80,9 @@ class MLP(Layer):
         else:
             self.distribution = None
 
+        self.dim_out = dim_out
         if self.distribution is not None:
-            self.dim_out = dim_out * self.distribution.scale
+            self.dim_out *= self.distribution.scale
 
         if dim_h is None:
             if dim_hs is None:
