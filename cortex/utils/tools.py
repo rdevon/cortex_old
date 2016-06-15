@@ -378,8 +378,8 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
                 logger.info('Found %s for %s %s'
                             % (k, model.name, pretrained_v.shape))
                 assert model.params[k].shape == pretrained_v.shape, (
-                    'Sizes do not match: %s vs %s'
-                    % (model.params[k].shape, pretrained_v.shape)
+                    'Sizes do not match for model %s, parameter %s: %s vs %s'
+                    % (model.name, k, model.params[k].shape, pretrained_v.shape)
                 )
                 model.params[k] = pretrained_v
             except KeyError:
@@ -388,8 +388,8 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
                     pretrained_v = pretrained_kwargs[param_key]
                     logger.info('Found %s, but name is ambiguous' % k)
                     assert model.params[k].shape == pretrained_v.shape, (
-                        'Sizes do not match: %s vs %s'
-                        % (model.params[k].shape, pretrained_v.shape)
+                        'Sizes do not match: %s vs %sfor model %s, parameter %s: %s vs %s'
+                        % (model.name, k, model.params[k].shape, pretrained_v.shape)
                     )
                     model.params[k] = pretrained_v
                 except KeyError:
