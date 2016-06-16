@@ -83,10 +83,9 @@ def _cost(module):
     updates = theano.OrderedUpdates()
     constants = []
 
-    # l2_decay is likely wrong
     l2_decay = module.l2_decay
     if l2_decay is not False and l2_decay > 0.:
-        print 'Adding %.5f L2 weight decay' % l2_decay
+        module.logger.info('Adding %.5f L2 weight decay' % l2_decay)
         l2_rval = model.l2_decay(l2_decay)
         l2_cost = l2_rval.pop('cost')
         cost += l2_cost
