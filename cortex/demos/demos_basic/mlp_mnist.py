@@ -91,7 +91,7 @@ def _cost(module):
         cost += l2_cost
         results['l2_cost'] = l2_cost
 
-    results['error'] = (Y * (1 - p)).sum(axis=1).mean()
+    results['sum log p(x | y)'] = (Y * (1 - p)).sum(axis=1).mean()
     results['base cost'] = base_cost
     results['cost'] = cost
 
