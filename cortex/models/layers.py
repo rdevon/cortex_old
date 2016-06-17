@@ -249,11 +249,14 @@ class Attention(Layer):
     _components = ['mlp']
 
     def __init__(self, dim_a, dim_b, dim_out, mlp=None, name='attention',
-                 **kwargs):
+                 mlp_args=None, **kwargs):
         if mlp is None:
+            if mlp_args is None:
+                mlp_args = dict()
             mlp = MLP.factory(dim_in=dim_a+dim_b, dim_out=dim_out,
                               name=name + '_mlp',
-                              distribution='centered_binomial')
+                              distribution='centered_binomial',
+                              **mlp_args)
         self.mlp = mlp
         self.dim_out = dim_out
         kwargs = init_rngs(self, **kwargs)

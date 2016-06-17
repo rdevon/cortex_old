@@ -122,7 +122,7 @@ class Layer(object):
                 r = kwargs[k]
             else:
                 r = rate
-            self.logger.debug('Adding %.5f L1 decay to parameter %s' % (r, k))
+            self.logger.debug('Adding %.4g L1 decay to parameter %s' % (r, k))
             p_cost = r * (abs(v)).sum()
             rval[k + '_l1_cost'] = p_cost
             cost += p_cost
@@ -156,7 +156,7 @@ class Layer(object):
                 r = kwargs[k]
             else:
                 r = rate
-            self.logger.debug('Adding %.5f L2 decay to parameter %s' % (r, k))
+            self.logger.debug('Adding %.4g L2 decay to parameter %s' % (r, k))
             p_cost = r * (v ** 2).sum()
             rval[k + '_l2_cost'] = p_cost
             cost += p_cost
