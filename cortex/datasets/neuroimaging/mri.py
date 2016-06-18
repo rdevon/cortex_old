@@ -17,7 +17,7 @@ from progressbar import (
     Timer
 )
 import random
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, IncrementalPCA
 import warnings
 import yaml
 
@@ -52,14 +52,16 @@ class MRI(BasicDataset):
     '''
 
     def __init__(self, source=None, name='mri', flip_signs=False,
-                 pca_components=0, distribution='gaussian', **kwargs):
+                 pca_components=0, incremental_pca=False,
+                 distribution='gaussian', **kwargs):
         '''Init function for MRI.
 
         Args:
             source (str): path of the source.
             name (str): name of the dataset.
-            pca_components: (Optional[int]): if not 0, decompose the data
+            pca_components (Optional[int]): if not 0, decompose the data
                 using PCA.
+            incremental_pca (bool): Use incremental PCA instead of standard.
             distribution (Optional[str]): distribution of the primary data.
                 See `models.distributions` for details.
             **kwargs: extra keyword arguments passed to BasicDataset
@@ -83,8 +85,13 @@ class MRI(BasicDataset):
         if self.pca_components:
             X -= X.mean(axis=0)
             if self.pca is None:
-                self.logger.info('Forming PCA')
-                self.pca = PCA(pca_components, whiten=True)
+                if incremental_pca:
+                    self.logger.info('Using incremental PCA')
+                    PCAC = IncrementalPCA
+                else:
+                    self.logger.info('Using PCA')
+                    PCAC = PCA
+                self.pca = PCAC(pca_components, whiten=True)
                 self.logger.info('Fitting PCA... (please wait)')
                 self.pca.fit(X)
                 if self.pca_file is not None:
