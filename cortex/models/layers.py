@@ -249,9 +249,43 @@ class Attention(Layer):
     _components = ['mlp']
 
     def __init__(self, dim_a, dim_b, dim_out, mlp=None, name='attention',
+                 mlp_args=None, **kwargs):
+        if mlp is None:
+            if mlp_args is None:
+                mlp_args = dict()
+            mlp = MLP.factory(dim_in=dim_a+dim_b, dim_out=dim_out,
+                              name=name + '_mlp',
+                              distribution='centered_binomial',
+                              **mlp_args)
+        self.mlp = mlp
+        self.dim_out = dim_out
+        kwargs = init_rngs(self, **kwargs)
+        super(Attention, self).__init__(name=name, **kwargs)
+
+    def set_params(self):
+        v = self.rng.normal(size=(self.dim_out,)).astype(floatX)
+        self.params = OrderedDict(v=v)
+
+    def set_tparams(self):
+        tparams = super(Attention, self).set_tparams()
+        tparams.update(**self.mlp.set_tparams())
+        return tparams
+
+    def __call__(self, Xa, Xb, axis=0):
+        X = concatenate([Xa, Xb], axis=Xa.ndim-1)
+        Y = self.mlp.feed(X)
+        a = T.dot(Y, self.v)
+        e = a / a.sum(axis=axis)
+        return OrderedDict(a=a, e=e)
+
+
+class Attention2(Layer):
+    _components = ['mlp']
+
+    def __init__(self, dim_in, dim_out, mlp=None, name='attention',
                  **kwargs):
         if mlp is None:
-            mlp = MLP.factory(dim_in=dim_a+dim_b, dim_out=dim_out,
+            mlp = MLP.factory(dim_in=dim_in, dim_out=dim_out,
                               name=name + '_mlp',
                               distribution='centered_binomial')
         self.mlp = mlp

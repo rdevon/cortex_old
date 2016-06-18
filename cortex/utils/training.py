@@ -44,6 +44,7 @@ from .tools import (
     warn_kwargs
 )
 
+np.set_printoptions(threshold=np.nan)
 logger = logging.getLogger(__name__)
 
 def make_argument_parser():
@@ -87,6 +88,7 @@ def make_argument_parser_trainer():
     parser.add_argument('-r', '--load_last', action='store_true')
     parser.add_argument('-l', '--load_model', default=None)
     parser.add_argument('-n', '--name', default=None)
+    parser.add_argument('-g', '--monitor_gradients', action='store_true')
     parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help='Verbosity of the logging. (0, 1, 2)')
     return parser
@@ -331,8 +333,8 @@ def set_optimizer(inputs, cost, tparams, constants, updates, extra_outs,
 
     if optimizer_args is None:
         optimizer_args = dict()
-    grads = T.grad(cost, wrt=itemlist(tparams),
-                   consider_constant=constants)
+    grads = T.grad(cost, wrt=tparams.values(), consider_constant=constants)
+    grads = OrderedDict((k, g) for k, g in zip(tparams.keys(), grads))
 
     lr = T.scalar(name='lr')
     f_grad_shared, f_grad_updates = eval('op.' + optimizer)(
@@ -448,6 +450,7 @@ def main_loop(train, valid,
               input_keys=None,
               f_extra=None, f_outs=None,
               test_every=None, show_every=None, output_every=None,
+              monitor_gradients=False,
               name=None,
               save=None, save_images=None,
               epochs=None, learning_rate=None, learning_rate_scheduler=None,
@@ -476,6 +479,7 @@ def main_loop(train, valid,
             before saving images.
         output_every (Optional[int]): If not None, print rvals from
             `f_grad_shared` and save images.
+        monitor_grads (bool): If true, add gradients averages to monitor.
         name (str): Name of experiment.
         save (function): Saving function for parameters.
         save_images (Optional[function]): Function to save images.
@@ -515,6 +519,7 @@ def main_loop(train, valid,
                    Timer(), '): ', Bar()]
         epoch_pbar = ProgressBar(widgets=widgets, maxval=train.n).start()
         training_time = 0
+        rval = OrderedDict()
         while True:
             try:
                 if e == -1: raise StopIteration
@@ -542,9 +547,11 @@ def main_loop(train, valid,
                         results_valid, best_valid, e, best_epoch,
                         bestfile=bestfile,
                         save=save, **validation_args)
-
                     if monitor is not None:
                         monitor.update(**results)
+                        if monitor_gradients:
+                            rval.pop('cost', None)
+                            monitor.update(**rval)
                         monitor.update(dt_epoch=dt_epoch,
                                        training_time=training_time)
                         monitor.update_valid(**results_valid)
@@ -577,14 +584,8 @@ def main_loop(train, valid,
                 break
 
             rval = f_grad_shared(*inps)
-            if output_every is not None and s % output_every == 0:
-                for k, v in zip(rval, extra_outs_keys):
-                    print k, v
 
-                if save_images is not None and out_path is not None:
-                    print('Saving images...')
-                    save_images()
-            if check_bad_nums(dict(cost=rval)):
+            if check_bad_nums(rval):
                 check_bad_nums(f_test(*inps))
                 if f_outs is not None:
                     check_bad_nums(f_outs(*inps))

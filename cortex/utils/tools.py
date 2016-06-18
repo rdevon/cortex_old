@@ -29,7 +29,7 @@ from . import logger
 
 
 logger = logging.getLogger(__name__)
-random_seed = random.randint(0, 10000)
+random_seed = random.randint(1, 10000)
 rng_ = np.random.RandomState(random_seed)
 profile = False
 
@@ -243,7 +243,7 @@ def init_rngs(model, rng=None, trng=None, **kwargs):
         rng = rng_
     model.rng = rng
     if trng is None:
-        model.trng = RandomStreams(random.randint(0, 10000))
+        model.trng = RandomStreams(random.randint(1, 10000))
     else:
         model.trng = trng
     return kwargs
@@ -373,13 +373,13 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
         logger.info('--- Loading params for %s' % model.name)
         for k, v in model.params.iteritems():
             try:
-                param_key = '{name}_{key}'.format(name=model.name, key=k)
+                param_key = _p(model.name, k)
                 pretrained_v = pretrained_kwargs.pop(param_key)
                 logger.info('Found %s for %s %s'
                             % (k, model.name, pretrained_v.shape))
                 assert model.params[k].shape == pretrained_v.shape, (
-                    'Sizes do not match: %s vs %s'
-                    % (model.params[k].shape, pretrained_v.shape)
+                    'Sizes do not match for model %s, parameter %s: %s vs %s'
+                    % (model.name, k, model.params[k].shape, pretrained_v.shape)
                 )
                 model.params[k] = pretrained_v
             except KeyError:
@@ -388,8 +388,10 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
                     pretrained_v = pretrained_kwargs[param_key]
                     logger.info('Found %s, but name is ambiguous' % k)
                     assert model.params[k].shape == pretrained_v.shape, (
-                        'Sizes do not match: %s vs %s'
-                        % (model.params[k].shape, pretrained_v.shape)
+                        'Sizes do not match: %s vs %sfor model %s, parameter '
+                        '%s: %s vs %s'
+                        % (model.name, k, model.params[k].shape,
+                           pretrained_v.shape)
                     )
                     model.params[k] = pretrained_v
                 except KeyError:
@@ -472,7 +474,7 @@ def _p(pp, name):
 
     From Cho's arctic repo.
     '''
-    return '%s_%s'%(pp, name)
+    return '%s.%s'%(pp, name)
 
 def ortho_weight(ndim, rng=None):
     '''Make ortho weight tensor.

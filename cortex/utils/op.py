@@ -261,27 +261,40 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
     '''
     logger.info('RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f'
            % (relaxation, momentum, coefficient))
-    zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k)
+    zipped_grads = [theano.shared(p.get_value() * np.float32(0.),
+                                  name='%s_grad' % k)
                     for k, p in tparams.iteritems()]
-    running_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad'%k)
+    running_grads = [theano.shared(p.get_value() * np.float32(0.),
+                                   name='%s_rgrad' % k)
                      for k, p in tparams.iteritems()]
-    running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k)
+    running_grads2 = [theano.shared(p.get_value() * np.float32(0.),
+                                    name='%s_rgrad2' % k)
                       for k, p in tparams.iteritems()]
 
-    zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
+    zgup = [(zg, g) for zg, g in zip(zipped_grads, grads.values())]
     rgup = [(rg, coefficient * rg + (1.0 - coefficient) * g)
-        for rg, g in zip(running_grads, grads)]
+        for rg, g in zip(running_grads, grads.values())]
     rg2up = [(rg2, coefficient * rg2 + (1.0 - coefficient) * (g ** 2))
-        for rg2, g in zip(running_grads2, grads)]
+        for rg2, g in zip(running_grads2, grads.values())]
+
+    grad_dict = OrderedDict(('_grad_' + k, g.mean())
+        for k, g in grads.iteritems())
+    outs = OrderedDict(cost=cost)
+    outs.update(**grad_dict)
 
     f_grad_shared = theano.function(
-        inp, [cost]+extra_outs, updates=zgup+rgup+rg2up+extra_ups, profile=profile)
+        inp,
+        outs,
+        updates=zgup+rgup+rg2up+extra_ups,
+        profile=profile)
 
     updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k)
              for k, p in tparams.iteritems()]
     updir_new = [(ud, momentum * ud - lr * zg / T.sqrt(rg2 - rg ** 2 + relaxation))
-        for ud, zg, rg, rg2 in zip(updir, zipped_grads, running_grads, running_grads2)]
-    param_up = [(p, p + udn[1]) for p, udn in zip(tools.itemlist(tparams), updir_new)
+        for ud, zg, rg, rg2
+        in zip(updir, zipped_grads, running_grads, running_grads2)]
+    param_up = [(p, p + udn[1])
+        for p, udn in zip(tools.itemlist(tparams), updir_new)
         if p.name not in exclude_params]
 
     if not isinstance(lr, list): lr = [lr]
@@ -316,7 +329,9 @@ def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
 def rmsprop2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
              exclude_params=set([]),
             relaxation=1e-4, momentum=0.9, coefficient=0.95):
-    '''An alternative RMSProp'''
+    '''An alternative RMSProp
+
+    '''
     print 'RMSprop with relaxation %.5f, momentum %.2f, and coeffient %.2f' % (relaxation, momentum, coefficient)
     zipped_grads = [theano.shared(p.get_value() * np.float32(0.), name='%s_grad'%k)
                     for k, p in tparams.iteritems()]

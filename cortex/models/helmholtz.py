@@ -57,8 +57,6 @@ def unpack(
         dict: keyword arguments of saved parameters.
 
     '''
-    if data_iter is None:
-        raise ValueError('Dataset iterator must be included in `unpack` function')
     models = []
 
     print 'Forming Helmholtz machine'
@@ -213,6 +211,9 @@ class Helmholtz(Layer):
             gen_args['dim_out'] = dim_out
             gen_args['distribution'] = data_distribution
         conditional = GC.factory(**gen_args)
+
+        assert conditional.distribution is not None
+        assert posterior.distribution is not None
 
         return posterior, conditional, prior_model
 

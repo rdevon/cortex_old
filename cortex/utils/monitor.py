@@ -44,7 +44,7 @@ class SimpleMonitor(object):
         for k, vs in d.iteritems():
             s = '\t%s' % k
             s += ' ' * (length - len(s))
-            s += ' |\t%.4f' % vs
+            s += ' |\t%.4g' % vs
             print s
 
     def display(self):
@@ -70,11 +70,11 @@ class SimpleMonitor(object):
             if len(vs) > 1 and vs[1] is not None:
                 s += ' (train / valid)'
             s += ' ' * (length - len(s))
-            s += ' |\t%.4f' % vs[0]
+            s += ' |\t%.4g' % vs[0]
             if len(vs) > 1 and vs[1] is not None:
-                s += ' / %.4f  ' % vs[1]
+                s += ' / %.4g  ' % vs[1]
             if len(vs) > 2:
-                s += '\t' + unichr(0x394).encode('utf-8') + '=%.4f' % vs[2]
+                s += '\t' + unichr(0x394).encode('utf-8') + '=%.4g' % vs[2]
             print s
 
     def save(self, out_path):
