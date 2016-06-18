@@ -25,7 +25,7 @@ from os import path
 import pickle
 from sys import stdout
 
-from ...utils import floatX
+from ..utils import floatX
 
 
 logger = logging.getLogger(__name__)
@@ -244,13 +244,14 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
                      color=(0, 0, 0))
 
         pos = [(0.05, 0.05), (0.4, 0.05), (0.8, 0.05)]
-        colors = ['purple', 'blue', 'green']
+        colors = ['purple', 'blue', 'green', 'red']
         for j, (k, vs) in enumerate(stats.iteritems()):
             v = vs[f]
-            plt.text(pos[j][0], pos[j][1], '%s=%.2f' % (k, v),
-                     transform=ax.transAxes,
-                     horizontalalignment='left',
-                     color=colors[j])
+            if v is not None:
+                plt.text(pos[j][0], pos[j][1], '%s=%.2f' % (k, v),
+                         transform=ax.transAxes,
+                         horizontalalignment='left',
+                         color=colors[j])
 
         if time_courses is not None:
             j = y * (2 * (i // y) + 1) + (i % y) + 1

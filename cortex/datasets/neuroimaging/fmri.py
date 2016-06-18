@@ -18,7 +18,7 @@ import yaml
 from ...analysis.mri import rois
 from .. import Dataset, make_one_hot
 from .mri import MRI
-from . import nifti_viewer
+from ...analysis import nifti_viewer
 from ...utils import floatX
 from ...utils.tools import resolve_path
 

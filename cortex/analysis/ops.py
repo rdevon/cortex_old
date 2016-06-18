@@ -5,6 +5,7 @@
 import numpy as np
 import theano
 import theano.tensor as T
+from theano.gof import Apply, Op
 
 from cortex.utils import floatX
 
@@ -56,3 +57,33 @@ class Detrender(theano.Op):
 
     def infer_shape(self, node, i0_shapes):
         return i0_shapes
+detrender = Detrender()
+
+
+class PCASign(Op):
+    '''Gets the sign of a feature that was preprocessed with PCA.
+
+    '''
+    __props__ = ()
+
+    def __init__(self, pca):
+        self.pca = pca
+        super(PCASign, self).__init__()
+
+    def make_node(self, x):
+        x = T.as_tensor_variable(x)
+        assert x.ndim == 2
+        o = T.vector(dtype=x.dtype)
+        return Apply(self, [x], [o])
+
+    def perform(self, node, inputs, output_storage):
+        '''Get signs
+
+        '''
+        (x,) = inputs
+        (z,) = output_storage
+        x = self.pca.inverse_transform(x)
+        x /= x.std(axis=1, keepdims=True)
+        x[abs(x) < 2] = 0
+        signs = 2 * (x.sum(axis=1) >= 0).astype(floatX) - 1
+        z[0] = signs

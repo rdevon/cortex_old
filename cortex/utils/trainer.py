@@ -20,7 +20,7 @@ from . import floatX, intX
 from ..models import Layer
 from .monitor import SimpleMonitor
 from .preprocessor import Preprocessor
-from .tools import load_model as _load_model, print_profile, print_section
+from .tools import _p, load_model as _load_model, print_profile, print_section
 from .training import (
     main_loop, make_argument_parser_trainer, set_experiment, set_model,
     set_optimizer, set_params)
@@ -471,7 +471,7 @@ def load_module(model_file, strict=True):
         logger.info('---Loading params for %s' % model.name)
         for k, v in model.params.iteritems():
             try:
-                param_key = '{name}_{key}'.format(name=model.name, key=k)
+                param_key = _p(model.name, k)
                 pretrained_v = pretrained_kwargs.pop(param_key)
                 logger.info('Found %s for %s %s'
                             % (k, model.name, pretrained_v.shape))

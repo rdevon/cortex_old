@@ -23,7 +23,7 @@ import yaml
 
 from ...analysis.mri import rois
 from .. import BasicDataset
-from . import nifti_viewer
+from ...analysis import nifti_viewer
 from ...utils import floatX
 from ...utils.tools import resolve_path
 
@@ -299,7 +299,7 @@ class MRI(BasicDataset):
 
         Return:
             numpy.array: masked array.
-            
+
         '''
         if mask is None:
             mask = self.mask
@@ -386,8 +386,14 @@ class MRI(BasicDataset):
 
         return images, out_files
 
+    def prepare_images(self, x):
+        if self.pca is not None and self.pca_components:
+            x = self.pca.inverse_transform(x)
+        return x
+
     def save_images(self, x, out_file=None, remove_niftis=True,
-                    x_limit=None, roi_dict=None, signs=None, **kwargs):
+                    x_limit=None, roi_dict=None, signs=None, stats=None,
+                    **kwargs):
         '''Saves images from array.
 
         Args:
@@ -396,29 +402,32 @@ class MRI(BasicDataset):
             remove_niftis (bool): delete images after making montage.
             x_limit (Optional(int)): if not None, limit the number of images
                 along the x axis.
+            stats (Optional(dict)): dictionary of statistics.
             **kwargs: keywork arguments for montage.
 
         '''
-        if self.pca is not None and self.pca_components:
-            x = self.pca.inverse_transform(x)
+        x = self.prepare_images(x)
 
         if len(x.shape) == 3:
             x = x[:, 0, :]
 
-        x_ = x.copy()
         if signs is not None:
             x *= signs[:, None]
+
         x = self._unmask(x)
         images, nifti_files = self.save_niftis(x)
-        if roi_dict is None: roi_dict =dict()
+
+        if roi_dict is None: roi_dict = dict()
         roi_dict.update(**rois.main(nifti_files))
+
+        if stats is None: stats = dict()
+        stats['gm'] = [roi_dict[i]['top_clust']['grey_value'] for i in roi_dict.keys()]
 
         if remove_niftis:
             for f in nifti_files:
                 os.remove(f)
         nifti_viewer.montage(images, self.anat_file, roi_dict,
-                             out_file=out_file, **kwargs)
-        return x_
+                             out_file=out_file, stats=stats, **kwargs)
 
     def visualize_pca(self, out_file, **kwargs):
         '''Saves the PCA component image.

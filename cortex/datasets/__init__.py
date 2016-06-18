@@ -323,7 +323,7 @@ class BasicDataset(Dataset):
 
     '''
     def __init__(self, data, distributions=None, labels='label', name=None,
-                balance=False, **kwargs):
+                balance=False, one_hot=True, **kwargs):
         '''Init function for BasicDataset.
 
         Args:
@@ -334,6 +334,7 @@ class BasicDataset(Dataset):
             name: (Optional[str]): Name of the dataset. Should be one of the
                 keys in data.
             balance (bool): replicate samples to balance the dataset.
+            one_hot (bool): convert labels to one-hot.
             **kwargs: extra arguments to pass to Dataset constructor.
 
         '''

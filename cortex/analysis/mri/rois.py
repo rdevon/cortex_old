@@ -175,7 +175,7 @@ def check_grey(coords):
     prob = double([m.group(1) for m in [patt.match(line) for line in lines] if m])
 
     if len(prob) == 0:
-        prob = [0.]
+        prob = [None]
     if len(prob) != 1:
         raise ValueError('Probility length incorrect: lines %r, prob %s'
                          % (lines, prob))
@@ -269,7 +269,7 @@ def get_cluster_info(clusters):
         cluster['int_prop'] = (cluster['mean_intensity'] * cluster['volume'] /
                                intensity_sum)
 
-        if cluster['int_prop'] > max_int_prop or np.isnan(cluster['int_prop']): # why nan?
+        if cluster['int_prop'] > max_int_prop or np.isnan(cluster['int_prop']):
             max_int_prop = cluster['int_prop']
             top_clust = cluster
 
@@ -304,7 +304,6 @@ def find_rois(fnifti, thr, test=False):
 
     '''
     logger.debug('Finding clusters from niftis')
-    test = True
 
     if isinstance(fnifti, str):
         nifti = load_image(fnifti)
