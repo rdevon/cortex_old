@@ -15,6 +15,20 @@ from collections import OrderedDict
 logger = logging.getLogger(__name__)
 profile = False
 
+def make_f_grad_shared(inp, cost, grads, updates):
+    grad_dict = OrderedDict(('_grad_' + k, g.mean())
+        for k, g in grads.iteritems())
+    outs = OrderedDict(cost=cost)
+    outs.update(**grad_dict)
+
+    f_grad_shared = theano.function(
+        inp,
+        outs,
+        updates=updates,
+        profile=profile)
+
+    return f_grad_shared
+
 def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
           exclude_params=set([])):
     gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k)
@@ -33,10 +47,9 @@ def adam3(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
     for i in xrange(len(grads)):
         grads[i] *= scaler
     '''
-    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
+    gsup = [(gs, g) for gs, g in zip(gshared, grads.values())]
 
-    f_grad_shared = theano.function(
-        inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
+    f_grad_shared = make_f_grad_shared(inp, cost, grads, updates=gsup+extra_ups)
 
     b1 = 0.9
     b2 = 0.999
@@ -232,12 +245,12 @@ def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
     running_grads2 = [theano.shared(p.get_value() * np.float32(0.), name='%s_rgrad2'%k)
                       for k, p in tparams.iteritems()]
 
-    zgup = [(zg, g) for zg, g in zip(zipped_grads, grads)]
+    zgup = [(zg, g) for zg, g in zip(zipped_grads, grads.values())]
     rg2up = [(rg2, 0.95 * rg2 + 0.05 * (g ** 2))
-        for rg2, g in zip(running_grads2, grads)]
+        for rg2, g in zip(running_grads2, grads.values())]
 
-    f_grad_shared = theano.function(
-        inp, [cost]+extra_outs, updates=zgup+rg2up+extra_ups, profile=profile)
+    f_grad_shared = make_f_grad_shared(
+        inp, cost, grads, updates=zgup+rg2up+extra_ups)
 
     updir = [-T.sqrt(ru2 + 1e-6) / T.sqrt(rg2 + 1e-6) * zg
              for zg, ru2, rg2 in zip(zipped_grads, running_up2, running_grads2)]
@@ -277,16 +290,8 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
     rg2up = [(rg2, coefficient * rg2 + (1.0 - coefficient) * (g ** 2))
         for rg2, g in zip(running_grads2, grads.values())]
 
-    grad_dict = OrderedDict(('_grad_' + k, g.mean())
-        for k, g in grads.iteritems())
-    outs = OrderedDict(cost=cost)
-    outs.update(**grad_dict)
-
-    f_grad_shared = theano.function(
-        inp,
-        outs,
-        updates=zgup+rgup+rg2up+extra_ups,
-        profile=profile)
+    f_grad_shared = make_f_grad_shared(
+        inp, cost, grads, updates=zgup+rgup+rg2up+extra_ups)
 
     updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k)
              for k, p in tparams.iteritems()]
@@ -313,10 +318,9 @@ def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
     gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k)
                for k, p in tparams.iteritems()]
 
-    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
+    gsup = [(gs, g) for gs, g in zip(gshared, grads.values())]
 
-    f_grad_shared = theano.function(
-        inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
+    f_grad_shared = make_f_grad_shared(inp, cost, grads, updates=gsup+extra_ups)
 
     pup = [(p, p - lr * g) for p, g in zip(tools.itemlist(tparams), gshared)
         if p.name not in exclude_params]

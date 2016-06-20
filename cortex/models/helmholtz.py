@@ -57,6 +57,9 @@ def unpack(
         dict: keyword arguments of saved parameters.
 
     '''
+    if data_distribution is None:
+        raise ValueError('`data_distribution` must be set. '
+                         'Pass `data_distribution` as a keyword argument.')
     models = []
 
     print 'Forming Helmholtz machine'
@@ -141,6 +144,7 @@ class Helmholtz(Layer):
 
         '''
         if dim_out is None: dim_out = dim_in
+        assert data_distribution is not None
 
         posterior, conditional, prior = Helmholtz.mlp_factory(
             dim_in, dim_h, dim_out, data_distribution=data_distribution,

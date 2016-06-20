@@ -172,7 +172,9 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
     else:
         weights = nifti.get_data()
     features = weights.shape[-1]
-    y = min(features, y)
+    if order is None:
+        order = range(features)
+    y = min(len(order), y)
 
     indices = [0]
     x = int(ceil(1.0 * features / y))
@@ -188,10 +190,8 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
 
     if fig is None:
         fig = plt.figure(figsize=[iscale * y, (1.5 * iscale) * x / 2.5])
+    fig.set_facecolor((bgcol, bgcol, bgcol))
     plt.subplots_adjust(left=0.01, right=0.99, bottom=0.05, top=0.99, wspace=0.05, hspace=0.5)
-
-    if order is None:
-        order = range(features)
 
     for i, f in enumerate(order):
         roi = roi_dict.get(f, None)
@@ -265,7 +265,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
                 ax.plot(tc)
 
     if out_file is not None:
-        plt.savefig(out_file, transparent=True, facecolor=(bgcol, bgcol, bgcol))
+        plt.savefig(out_file, facecolor=(bgcol, bgcol, bgcol))
     else:
         plt.show()
     plt.clf()
