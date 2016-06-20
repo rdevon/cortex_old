@@ -198,6 +198,8 @@ class MRI(BasicDataset):
                 dataset.batch_size = bs
                 dataset.logger = logger
                 dataset.mode = mode
+                logger.debug('%s dataset has %d subjects'
+                             % (dataset.mode, len(i)))
             datasets.append(dataset)
 
         return datasets + [idx]

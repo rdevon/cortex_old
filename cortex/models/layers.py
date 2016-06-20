@@ -248,12 +248,12 @@ class ScalingWithInput(Layer):
 class Attention(Layer):
     _components = ['mlp']
 
-    def __init__(self, dim_a, dim_b, dim_out, mlp=None, name='attention',
+    def __init__(self, dim_in, dim_out, mlp=None, name='attention',
                  mlp_args=None, **kwargs):
         if mlp is None:
             if mlp_args is None:
                 mlp_args = dict()
-            mlp = MLP.factory(dim_in=dim_a+dim_b, dim_out=dim_out,
+            mlp = MLP.factory(dim_in=dim_in, dim_out=dim_out,
                               name=name + '_mlp',
                               distribution='centered_binomial',
                               **mlp_args)
@@ -271,8 +271,8 @@ class Attention(Layer):
         tparams.update(**self.mlp.set_tparams())
         return tparams
 
-    def __call__(self, Xa, Xb, axis=0):
-        X = concatenate([Xa, Xb], axis=Xa.ndim-1)
+    def __call__(self, X, axis=0):
+        X = concatenate(X, axis=X.ndim-1)
         Y = self.mlp.feed(X)
         a = T.dot(Y, self.v)
         e = a / a.sum(axis=axis)

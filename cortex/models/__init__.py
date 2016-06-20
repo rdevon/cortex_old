@@ -72,7 +72,8 @@ class Layer(object):
             OrderedDict: dictionary of parameters.
 
         '''
-        return OrderedDict()
+        raise NotImplementedError('This layer (%s) does not implement decay'
+                                  % self.__class__)
 
     def set_tparams(self):
         '''Sets the tensor parameters.
@@ -150,7 +151,6 @@ class Layer(object):
         rval = OrderedDict()
         if rate <= 0:
             return rval
-
         for k, v in decay_params.iteritems():
             if k in kwargs.keys():
                 r = kwargs[k]

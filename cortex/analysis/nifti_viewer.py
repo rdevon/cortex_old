@@ -172,6 +172,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
     else:
         weights = nifti.get_data()
     features = weights.shape[-1]
+    y = min(features, y)
 
     indices = [0]
     x = int(ceil(1.0 * features / y))

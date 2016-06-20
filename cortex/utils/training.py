@@ -371,8 +371,6 @@ def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
         try:
             outs = data_iter.next()
             inps = [outs[k] for k in input_keys]
-            if n_samples is not None:
-                inps = [x[:n_samples] for x in inps]
             r = f_test(*inps)
             if isinstance(r, dict):
                 results_i = r
@@ -448,7 +446,7 @@ def main_loop(train, valid,
               f_grad_shared, f_grad_updates, f_test,
               f_test_keys=None,
               input_keys=None,
-              f_extra=None, f_outs=None,
+              f_extra=None, f_outs=None, f_profile=None,
               test_every=None, show_every=None, output_every=None,
               monitor_gradients=False,
               name=None,
@@ -470,6 +468,7 @@ def main_loop(train, valid,
         f_test_keys (Optional[list]): List of keys that go with `f_test` if
             the output is a list, not a dictionary.
         f_outs (Optional[theano.function]): Function for extra outputs.
+        f_profile (Optional[theano.function]): Profile function for parameters.
         input_keys (Optional[list]): If not None, used to extract
             multiple modes from dataset for `f_grad_shared`.
         f_extra (theano.function): Function that is run just prior to testing.
@@ -540,8 +539,7 @@ def main_loop(train, valid,
                     epoch_t1 = time.time()
                     dt_epoch = epoch_t1 - epoch_t0
                     training_time += dt_epoch
-                    results = test(train, f_test, f_test_keys, input_keys,
-                                   n_samples=valid.n)
+                    results = test(train, f_test, f_test_keys, input_keys)
                     results_valid = test(valid, f_test, f_test_keys, input_keys)
                     best_valid, best_epoch = validate(
                         results_valid, best_valid, e, best_epoch,
@@ -553,7 +551,8 @@ def main_loop(train, valid,
                             rval.pop('cost', None)
                             monitor.update(**rval)
                         monitor.update(dt_epoch=dt_epoch,
-                                       training_time=training_time)
+                                       training_time=training_time,
+                                       learning_rate=learning_rate[0])
                         monitor.update_valid(**results_valid)
                         monitor.display()
                         if out_path is not None:

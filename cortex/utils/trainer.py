@@ -194,6 +194,15 @@ def set_eval_functions(module, **kwargs):
     else:
         return OrderedDict()
 
+def set_profile_function(tparams):
+    results = OrderedDict()
+    for k, v in tparams.iteritems():
+        results[k + '_mean'] = v.mean()
+        results[k + '_min'] = v.min()
+        results[k + '_max'] = v.max()
+
+    return theano.function([], results)
+
 def check(module):
     '''Runs checks.
 
@@ -211,7 +220,7 @@ def finish(module):
         module.finish()
 
 def train(module, cost, tparams, updates, constants, f_test=None, f_save=None,
-          f_viz=None, f_outs=None, test_every=10, show_every=10,
+          f_viz=None, f_outs=None, f_profile=None, test_every=10, show_every=10,
           monitor_gradients=False):
     print_section('Getting gradients and building optimizer.')
 
@@ -227,7 +236,7 @@ def train(module, cost, tparams, updates, constants, f_test=None, f_save=None,
     main_loop(
         module.dataset, module.valid_dataset,
         f_grad_shared, f_grad_updates, f_test,
-        save=f_save, save_images=f_viz, f_outs=f_outs,
+        save=f_save, save_images=f_viz, f_outs=f_outs, f_profile=f_profile,
         monitor=monitor, monitor_gradients=monitor_gradients,
         out_path=module.out_path,
         name=module.name,
@@ -257,6 +266,7 @@ class Trainer(object):
         f_save = set_save_function(module, tparams)
         f_viz = set_viz_function(module, results, outputs)
         f_outs = set_out_function(module, results, outputs)
+        f_profile = set_profile_function(tparams)
 
         check(module)
         finish(module)
@@ -265,7 +275,8 @@ class Trainer(object):
             f_test=f_test,
             f_save=f_save,
             f_viz=f_viz,
-            f_outs=f_outs
+            f_outs=f_outs,
+            f_profile=f_profile
         )
 
         train(module, cost, tparams, updates, constants, **kwargs)
@@ -288,6 +299,20 @@ class Inspector(object):
     def show(self):
         for k in self.eval_keys:
             self.__dict__[k]()
+
+    def get_stat(self, stat, mode='train'):
+        if not hasattr(self, 'f_stats'):
+            raise NotImplementedError('f_stats was not loaded.')
+
+        stats = self.f_stats(mode=mode)
+        if not stat in stats.keys():
+            raise KeyError('Stat %s not found: (%s)' % (stat, stats.keys()))
+        return stats[stat]
+
+    def save_stat(self, stat, out_file, mode='train'):
+        stat = self.get_stat(stat, mode=mode)
+        np.save(out_file, stat)
+
 
 class ModuleContainer(object):
     __required_methods = ['_build', '_cost']

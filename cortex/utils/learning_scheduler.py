@@ -2,11 +2,14 @@
 '''
 
 from collections import OrderedDict
+import logging
 
 
 def unpack(learning_rate=None, decay_rate=None, schedule=None):
     return learning_rate, decay_rate, schedule
 
+
+logger = logging.getLogger(__name__)
 
 class Scheduler(object):
     '''Scheduler for learning rates.
@@ -15,7 +18,7 @@ class Scheduler(object):
         d (OrderedDict): dictionary of learning rates and decays, schedules.
 
     '''
-    def __init__(self, verbose=True, **kwargs):
+    def __init__(self, **kwargs):
         '''Init function of Scheduler.
 
         kwargs correspond to the model name and their respective schedules.
@@ -24,12 +27,14 @@ class Scheduler(object):
         rate and can have either a decay rate or a schedule.
 
         Args:
-            verbose (bool): sets verbosity.
             **kwargs: keyword args of the scheduled learning rates
 
         '''
         self.d = OrderedDict()
-        self.verbose = verbose
+        keys = kwargs.keys()
+        if set(keys) < set(['learning_rate', 'decay_rate', 'schedule']):
+            kwargs = dict(model=kwargs)
+
         for k, v in kwargs.iteritems():
             self.d[k] = OrderedDict()
             if isinstance(v, float):
@@ -67,12 +72,11 @@ class Scheduler(object):
         for k, v in self.d.iteritems():
             learning_rate, decay_rate, schedule = unpack(**v)
 
-            if decay_rate is None and schedule is None: continue
+            if decay_rate is None and schedule is None:
+                continue
             if decay_rate is not None:
                 self.d[k]['learning_rate'] *= decay_rate
             elif schedule is not None and e in schedule.keys():
                 self.d[k]['learning_rate'] = schedule[e]
-            if self.verbose:
-                print 'Changing learning rate for %s to %.5f' % (k, self.d[k]['learning_rate'])
 
         return [v['learning_rate'] for v in self.d.values()]

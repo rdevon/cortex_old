@@ -430,7 +430,7 @@ class RNN(Layer):
         params = [self.__dict__['Ur%d' % i] for i in range(self.n_layers)]
         if self.weight_noise:
             params = [p + self.trng.normal(
-                std=self.weight_nose, size=p.shape, dtype=p.dtype)
+                std=self.weight_noise, size=p.shape, dtype=p.dtype)
                       for p in params]
         for net in self.inter_nets:
             params += net.get_params()
