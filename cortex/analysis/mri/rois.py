@@ -166,7 +166,8 @@ def check_grey(coords):
     atlas = 'CA_N27_GW'
 
     # where am I command.
-    waicmd = "whereami -atlas %s -space MNI %d %d %d 2>/dev/null" % ((atlas, ) + tuple(coords))
+    waicmd = ('whereami -atlas %s -space MNI %d %d %d 2>/dev/null'
+              % ((atlas, ) + tuple(coords)))
     proc = subprocess.Popen(waicmd, stdout=subprocess.PIPE, shell=True)
     (out,err) = proc.communicate()
 

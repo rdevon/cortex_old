@@ -504,7 +504,7 @@ class RNN(Layer):
         energy = self.neg_log_prob(X[1:], p).sum(axis=0)
         return energy
 
-    def neg_log_prob(self, x, p):
+    def neg_log_prob(self, x, p, **kwargs):
         '''Negative log prob function.
 
         Args:
@@ -515,7 +515,7 @@ class RNN(Layer):
             T.tensor: negative log probabilities.
 
         '''
-        return self.output_net.neg_log_prob(x, p)
+        return self.output_net.neg_log_prob(x, p, **kwargs)
 
     # Step functions -----------------------------------------------------------
     def step_sample_preact(self, *params):

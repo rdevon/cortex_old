@@ -395,7 +395,7 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
                 )
                 model.params[k] = pretrained_v
                 warnings.warn('Old style parameter naming found',
-                              DeprecationWarning)
+                              FutureWarning)
             except KeyError:
                 pass
             try:
@@ -599,12 +599,12 @@ def concatenate(tensor_list, axis=0):
         >>> x, y = theano.tensor.matrices('x', 'y')
         >>> c = concatenate([x, y], axis=1)
 
-    Argsuments:
-        tensor_list: list, list of Theano tensor expressions that should be concatenated.
-        axis: int, the tensors will be joined along this axis.
+    Args:
+        tensor_list (list): list of Theano tensor expressions that should be concatenated.
+        axis (int): the tensors will be joined along this axis.
 
     Returns:
-        out: tensor, the concatenated tensor expression.
+        T.tensor: the concatenated tensor expression.
 
     From Cho's arctic repo.
 

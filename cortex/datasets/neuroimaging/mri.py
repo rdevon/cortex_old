@@ -400,21 +400,22 @@ class MRI(BasicDataset):
             x = self.pca.inverse_transform(x)
         return x
 
-    def save_images(self, x, out_file=None, remove_niftis=True,
-                    x_limit=None, roi_dict=None, signs=None, stats=None,
-                    **kwargs):
-        '''Saves images from array.
+    def make_images(self, x, roi_dict=None, update_rois=True):
+        '''Forms images.
 
         Args:
             x (numpy.array): array from which to make images.
-            out_file (str): ouput file for image montage.
-            remove_niftis (bool): delete images after making montage.
-            x_limit (Optional(int)): if not None, limit the number of images
-                along the x axis.
-            stats (Optional(dict)): dictionary of statistics.
-            **kwargs: keywork arguments for montage.
+            roi_dict (dict): roi dictionary.
+            update_rois (bool): If true, update roi dictionary.
+
+        Returns:
+            list: images.
+            list: paths to nifti files.
+            dict: roi dictionary.
 
         '''
+        if roi_dict is None: roi_dict = dict()
+
         x = self.prepare_images(x)
 
         if len(x.shape) == 3:
@@ -426,11 +427,33 @@ class MRI(BasicDataset):
         x = self._unmask(x)
         images, nifti_files = self.save_niftis(x)
 
-        if roi_dict is None: roi_dict = dict()
-        roi_dict.update(**rois.main(nifti_files))
+        if update_rois:
+            roi_dict.update(**rois.main(nifti_files))
+
+        return images, nifti_files, roi_dict
+
+    def save_images(self, x, out_file=None, remove_niftis=True,
+                    x_limit=None, roi_dict=None, stats=None,
+                    update_rois=True, **kwargs):
+        '''Saves images from array.
+
+        Args:
+            x (numpy.array): array from which to make images.
+            out_file (str): ouput file for image montage.
+            remove_niftis (bool): delete images after making montage.
+            x_limit (Optional(int)): if not None, limit the number of images
+                along the x axis.
+            roi_dict (dict): roi dictionary.
+            stats (Optional(dict)): dictionary of statistics.
+            update_rois (bool): If true, update roi dictionary.
+            **kwargs: keywork arguments for montage.
+
+        '''
+        images, nifti_files, roi_dict = self.make_images(
+            x, roi_dict=roi_dict, update_rois=update_rois)
 
         if stats is None: stats = dict()
-        stats['gm'] = [roi_dict[i]['top_clust']['grey_value'] for i in roi_dict.keys()]
+        stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]
 
         if remove_niftis:
             for f in nifti_files:
