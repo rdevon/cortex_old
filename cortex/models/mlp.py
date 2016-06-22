@@ -222,11 +222,25 @@ class MLP(Layer):
             for k in decay_keys)
         return decay_params
 
+    def dropout(x, act):
+        if self.h_act == 'T.tanh':
+            x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
+                                     dtype=x.dtype)
+            x = 2. * (x_d * (x + 1.) / 2) / (1 - self.dropout) - 1
+        elif self.h_act in ['T.nnet.sigmoid', 'T.nnet.softplus',
+                            'lambda x: x']:
+            x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
+                                     dtype=x.dtype)
+            x = x * x_d / (1 - self.dropout)
+        else:
+            raise NotImplementedError('No dropout for %s yet' % activ)
+
     def step_call(self, x, *params):
         '''Step feed forward MLP.
 
         Args:
             x (T.tensor): input.
+            use_noise (bool): use noise in call.
             *params: theano shared variables.
 
         Returns:
@@ -239,17 +253,23 @@ class MLP(Layer):
             W = params.pop(0)
             b = params.pop(0)
 
-            if self.weight_noise:
+            if self.weight_noise and self.noise_switch():
                 self.logger.debug(
                     'Using weight noise in layer %d for MLP %s' % (l, self.name))
-                W += self.trng.normal(avg=0., std=self.weight_noise, size=W.shape)
-
-            preact = T.dot(x, W) + b
+                W_n = W + self.trng.normal(
+                    avg=0., std=self.weight_noise, size=W.shape)
+                preact = T.dot(x, W_n) + b
+            else:
+                preact = T.dot(x, W) + b
 
             if l < self.n_layers - 1:
                 x = eval(self.h_act)(preact)
                 outs['preact_%d' % l] = preact
                 outs[l] = x
+                if self.dropout and self.noise_switch():
+                    self.logger.debug('Adding dropout to layer {layer} for MLP '
+                                  '`{name}`'.format(layer=l, name=self.name))
+                    x = self.dropout(x, self.h_act)
             else:
                 if self.distribution is not None:
                     x = self.distribution(preact)
@@ -257,21 +277,6 @@ class MLP(Layer):
                     x = eval(self.h_act)(preact)
                 outs['z'] = preact
                 outs['p'] = x
-
-            if self.dropout and l != self.n_layers - 1:
-                self.logger.debug('Adding dropout to layer {layer} for MLP '
-                                  '`{name}`'.format(layer=l, name=self.name))
-                if self.h_act == 'T.tanh':
-                    x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
-                                             dtype=x.dtype)
-                    x = 2. * (x_d * (x + 1.) / 2) / (1 - self.dropout) - 1
-                elif self.h_act in ['T.nnet.sigmoid', 'T.nnet.softplus',
-                                    'lambda x: x']:
-                    x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
-                                             dtype=x.dtype)
-                    x = x * x_d / (1 - self.dropout)
-                else:
-                    raise NotImplementedError('No dropout for %s yet' % activ)
 
         assert len(params) == 0, params
         return outs

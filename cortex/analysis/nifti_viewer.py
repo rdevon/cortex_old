@@ -177,7 +177,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
     y = min(len(order), y)
 
     indices = [0]
-    x = int(ceil(1.0 * features / y))
+    x = int(ceil(1.0 * len(order) / y))
 
     if time_courses is not None:
         assert len(time_courses) == features, (
@@ -268,7 +268,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
         plt.savefig(out_file, facecolor=(bgcol, bgcol, bgcol))
     else:
         plt.show()
-    plt.clf()
+    plt.close()
 
 def make_argument_parser():
     '''Creates an ArgumentParser to read the options for this script from sys.argv

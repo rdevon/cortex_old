@@ -31,9 +31,11 @@ class FMRI_IID(MRI):
 
     Attributes:
         extras (dict): dictionary of additional arrays for analysis.
+        clean_data (bool): remove subjects with 0-std voxels after masking.
 
     '''
-    def __init__(self, name='fmri_iid', **kwargs):
+    def __init__(self, name='fmri_iid', clean_data=False, **kwargs):
+        self.clean_data = clean_data
         super(FMRI_IID, self).__init__(name=name, **kwargs)
 
     @staticmethod
@@ -102,7 +104,7 @@ class FMRI_IID(MRI):
             self.update_progress(progress=False)
             X_ = np.load(data_file)
             X.append(X_.astype(floatX))
-            Y.append((np.zeros((X_.shape[0] * X_.shape[1],)) + i).astype(floatX))
+            Y.append((np.zeros((X_.shape[0], X_.shape[1])) + i).astype(floatX))
         self.update_progress()
 
         X = np.concatenate(X, axis=0)
@@ -115,16 +117,29 @@ class FMRI_IID(MRI):
         else:
             raise ValueError('X has incorrect shape. Should be 3 or 5 (got %d)'
                              % len(X.shape))
-        X = X.reshape((X.shape[0] * X.shape[1],) + X.shape[2:])
         X = self._mask(X)
-        X = X.reshape((self.n_subjects, self.n_scans, X.shape[1]))
         X -= X.mean(axis=1, keepdims=True)
-        s = X.std(axis=1, keepdims=True)
-        if (s==0).sum() > 0:
-            self.logger.warn('0-std voxel found. Setting std to `1.')
-            s[s==0] = 1
-        X /= s
+        s = X.std(axis=1)
+
+        if self.clean_data:
+            s_sums = (s==0).sum(axis=1)
+            clean_idx = np.where(s_sums == 0)[0].tolist()
+            if len(clean_idx) != self.n_subjects:
+                self.logger.warn('%d 0 std subjects found. Removing'
+                                 % (self.n_subjects - len(clean_idx)))
+                self.n_subjects = len(clean_idx)
+                X = X[clean_idx]
+                Y = Y[clean_idx]
+                s = s[clean_idx]
+        else:
+            if (s==0).sum() > 0:
+                self.logger.warn('%d 0-std voxels found. Setting std to 1.'
+                                 % (s==0).sum())
+                s[s==0] = 1
+
+        X /= s[:, None, :]
         X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
+        Y = Y.reshape((Y.shape[0] * Y.shape[1]))
 
         self.update_progress()
 

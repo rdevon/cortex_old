@@ -114,8 +114,6 @@ class RNN_initializer(Layer):
         kwargs = init_weights(self, **kwargs)
         kwargs = init_rngs(self, **kwargs)
 
-        super(RNN_initializer, self).__init__(name='rnn_initializer')
-
         self.layers = []
         for i, dim_out in enumerate(self.dim_outs):
             if initialization == 'mlp':
@@ -131,6 +129,8 @@ class RNN_initializer(Layer):
             else:
                 raise ValueError()
             self.layers.append(layer)
+
+        super(RNN_initializer, self).__init__(name='rnn_initializer')
 
     def set_tparams(self):
         tparams = super(RNN_initializer, self).set_tparams()
@@ -428,7 +428,7 @@ class RNN(Layer):
 
         '''
         params = [self.__dict__['Ur%d' % i] for i in range(self.n_layers)]
-        if self.weight_noise:
+        if self.weight_noise and self.noise_switch():
             params = [p + self.trng.normal(
                 std=self.weight_noise, size=p.shape, dtype=p.dtype)
                       for p in params]
@@ -622,6 +622,7 @@ class RNN(Layer):
 
         updates = theano.OrderedUpdates()
 
+        x_in = x
         hs = []
         for i, h0 in enumerate(h0s):
             seqs         = [m[:, :, None]] + self.call_seqs(x, None, i, *params)
@@ -642,8 +643,9 @@ class RNN(Layer):
         out_net_out = self.output_net.step_call(h, *o_params)
         preact      = out_net_out['z']
         p           = out_net_out['p']
+        error       = self.neg_log_prob(x_in[1:], p[:-1], sum_probs=False)
 
-        return OrderedDict(hs=hs, p=p, z=preact), updates
+        return OrderedDict(hs=hs, p=p, error=error, z=preact), updates
 
     def __call__(self, x, m=None, h0s=None, condition_on=None):
         '''Call function.
@@ -678,6 +680,23 @@ class RNN(Layer):
         results, updates = self.step_call(x, m, h0s, *params)
         results['h0s'] = h0s
         return results, updates, constants
+
+    def default_cost(self, X, outputs, diff=False):
+        '''Default cost for RNN.
+
+        Negative log likelihood.
+
+        '''
+        if diff:
+            self.logger.debug('Calculating RNN cost with difference')
+            dmu, scale = self.output_net.distribution.split_prob(p)
+            mu = X[:-1] + dmu
+            p = rnn.output_net.distribution.get_prob(mu, scale)
+
+        p = outputs['p'][:-1]
+
+        cost = self.neg_log_prob(X[1:], p).sum(axis=0).mean()
+        return cost
 
     def sample(self, x0=None, h0s=None, n_samples=10, n_steps=10,
                condition_on=None, debug=False):

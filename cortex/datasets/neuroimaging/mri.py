@@ -299,6 +299,31 @@ class MRI(BasicDataset):
         else:
             self.pbar.update(self.progress)
 
+    @staticmethod
+    def mask_image(X, mask):
+        if X.ndim == 5:
+            reshape = X.shape[:2]
+            X = X.reshape(
+                (X.shape[0] * X.shape[1], X.shape[2], X.shape[3], X.shape[4]))
+        else:
+            reshape = None
+
+        if X.shape[1:] != mask.shape:
+            raise ValueError((X.shape, mask.shape))
+
+        mask_f = mask.flatten()
+        mask_idx = np.where(mask_f == 1)[0].tolist()
+        X_masked = np.zeros((X.shape[0], int(mask.sum()))).astype(floatX)
+
+        for i, x in enumerate(X):
+            X_masked[i] = x.flatten()[mask_idx]
+
+        if reshape is not None:
+            X_masked = X_masked.reshape(
+                (reshape[0], reshape[1], X_masked.shape[1]))
+
+        return X_masked
+
     def _mask(self, X, mask=None):
         '''Mask the data.
 
@@ -317,17 +342,7 @@ class MRI(BasicDataset):
             self.logger.debug('Data already masked')
             return X
 
-        if X.shape[1:] != mask.shape:
-            raise ValueError((X.shape, mask.shape))
-
-        mask_f = mask.flatten()
-        mask_idx = np.where(mask_f == 1)[0].tolist()
-        X_masked = np.zeros((X.shape[0], int(mask.sum()))).astype(floatX)
-
-        for i, x in enumerate(X):
-            X_masked[i] = x.flatten()[mask_idx]
-
-        return X_masked
+        return MRI.mask_image(X, mask)
 
     def _unmask(self, X_masked, mask=None):
         '''Unmask data.
@@ -400,13 +415,14 @@ class MRI(BasicDataset):
             x = self.pca.inverse_transform(x)
         return x
 
-    def make_images(self, x, roi_dict=None, update_rois=True):
+    def make_images(self, x, roi_dict=None, update_rois=True, signs=None):
         '''Forms images.
 
         Args:
             x (numpy.array): array from which to make images.
             roi_dict (dict): roi dictionary.
             update_rois (bool): If true, update roi dictionary.
+            signs (np.array or list).
 
         Returns:
             list: images.
@@ -434,7 +450,7 @@ class MRI(BasicDataset):
 
     def save_images(self, x, out_file=None, remove_niftis=True,
                     x_limit=None, roi_dict=None, stats=None,
-                    update_rois=True, **kwargs):
+                    update_rois=True, signs=None, **kwargs):
         '''Saves images from array.
 
         Args:
@@ -450,7 +466,7 @@ class MRI(BasicDataset):
 
         '''
         images, nifti_files, roi_dict = self.make_images(
-            x, roi_dict=roi_dict, update_rois=update_rois)
+            x, roi_dict=roi_dict, update_rois=update_rois, signs=signs)
 
         if stats is None: stats = dict()
         stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]

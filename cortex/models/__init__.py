@@ -15,6 +15,25 @@ from cortex.utils.tools import (
 )
 
 
+class NoiseSwitch(object):
+    '''Object to control noise of model.
+
+    '''
+    def __init__(self):
+        self.noise = True
+
+    def switch(self, switch_to):
+        ons = ['on', 'On', 'ON']
+        offs = ['off', 'Off', 'OFF']
+        if switch_to in ons:
+            self.noise = True
+        elif switch_to in offs:
+            self.noise = False
+
+    def __call__(self):
+        return self.noise
+
+
 class Layer(object):
     '''Basic layer class.
 
@@ -28,13 +47,15 @@ class Layer(object):
     '''
     _components = []
 
-    def __init__(self, name='', excludes=[], learn=True, **kwargs):
+    def __init__(self, name='', excludes=[], learn=True, noise_switch=None,
+                 **kwargs):
         '''Init function for Layer.
 
         Args:
             name (str): name of layer.
             excludes (list): list of parameters to exclude from learning.
             learn (bool): if False, do not change params.
+            noise_switch (NoiseSwitch).
             **kwargs: extra kwargs
 
         '''
@@ -51,7 +72,29 @@ class Layer(object):
         self.learn = learn
         self.set_params()
         self.n_params = len(self.params)
+        if noise_switch is None:
+            noise_switch = NoiseSwitch()
+        self.noise_switch = noise_switch
         warn_kwargs(self, kwargs)
+
+        components = self.get_components()
+        for component in components:
+            component.noise_switch = self.noise_switch
+
+    def get_components(self):
+        components = []
+        for k in self._components:
+            component = getattr(self, k)
+            if isinstance(component, list):
+                components += [c for c in component if c is not None]
+            elif component is not None:
+                components.append(component)
+
+        c_components = []
+        for component in components:
+            c_components += component.get_components()
+        components += c_components
+        return components
 
     def copy(self):
         '''Copy the Layer.
@@ -64,6 +107,15 @@ class Layer(object):
 
         '''
         self.params = dict()
+
+    def default_cost(self, inputs, outputs):
+        '''Convenience default cost function for model.
+
+        Args:
+            inputs (list):
+        '''
+        raise NotImplementedError('%s does not implement a `default cost`'
+                                  % self.__class__)
 
     def get_decay_params():
         '''Return parameters used in L1 and L2 decay.

@@ -283,9 +283,9 @@ class Trainer(object):
 
 
 class Inspector(object):
-    def __init__(self, module, model_to_load=None):
+    def __init__(self, module, model_to_load=None, strict=True):
         if isinstance(module, str):
-            module = load_module(module)
+            module = load_module(module, strict=strict)
         self.module = module
         self.set()
 
@@ -317,7 +317,7 @@ class Inspector(object):
 class ModuleContainer(object):
     __required_methods = ['_build', '_cost']
     __optional_methods = ['_setup', '_data', '_test', '_save', '_viz', '_check',
-                          '_eval', '_finish', '_analysis']
+                          '_eval', '_finish', '_analysis', '_handle_deprecated']
     __required_arguments = ['_learning_args', '_dataset_args']
     _save_fields = ['name', 'preprocessing', 'module_path']
 
@@ -484,6 +484,7 @@ def load_module(model_file, strict=True):
     set_data(module)
     make_inputs(module)
     build(module)
+    module.handle_deprecated(pretrained_kwargs)
 
     logger.info('Pretrained model(s) has the following parameters: \n%s'
           % pprint.pformat(pretrained_kwargs.keys()))
