@@ -59,11 +59,17 @@ class SNP(BasicDataset):
                 'labels' key for diagnosis }
 
         '''
-        data_path = get_paths()['$snp_data']
+        data_path = get_paths()['$data']
         print('Loading genetic data from %s' % data_path)
         X = loadmat(data_path + '/' + source['snp'])
         Y = loadmat(data_path + '/' + source['label'])
-        X = np.float32(X[X.keys()[2]])
-        Y = np.float32(Y[Y.keys()[0]])
+        X_key = list(set(X.keys()) - set(['__header__', '__globals__', '__version__']))
+        Y_key = list(set(Y.keys()) - set(['__header__', '__globals__', '__version__']))
+        if len(X_key)!=1:
+            raise ValueError('Found unsufficient number of  header for SNP data')
+        if len(Y_key)!=1:
+            raise ValueError('Found unsufficient number of header for SNP data labels')
+        X = np.float32(X[X_key[0]])
+        Y = np.float32(Y[Y_key[0]])
         Y.resize(max(Y.shape,))
         return X, Y
