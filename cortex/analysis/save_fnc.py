@@ -34,15 +34,16 @@ def plot(fnc, idx=None, groups=None, transform=None, labels=None, out_file=None)
     grid = [0]
     for g in groups:
         grid.append(grid[-1] + len(g))
-
     for g in grid:
         x = [-10, n_components + 10]
-        y = [g - 0.45, g - 0.45]
+        y = [g - 0.4, g - 0.4]
         plt.plot(x, y, linewidth =2, color='black', ls='-')
     for g in grid:
-        x = [g - 0.4, g - 0.4]
+        x = [g - 0.45, g - 0.45]
         y = [-10, n_components + 10]
         plt.plot(x, y, linewidth =2, color='black', ls='-')
+    for i, j in enumerate(idx):
+        plt.text(i - 0.45, i + 0.4, '%d' % j, fontsize=6)
 
     cv = fnc.copy()
     if transform is None:
