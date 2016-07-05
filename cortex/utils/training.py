@@ -322,6 +322,11 @@ def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
                 inps = [x[:n_samples] for x in inps]
             r = f_test(*inps)
             results_i = dict((k, v) for k, v in zip(f_test_keys, r))
+
+            for k, v in results_i.iteritems():
+                if isinstance(v, theano.sandbox.cuda.CudaNdarray):
+                    results_i[k] = np.asarray(v)
+
             update_dict_of_lists(results, **results_i)
 
             if data_iter.pos == -1:
