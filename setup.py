@@ -41,7 +41,7 @@ setup(
             'cortex-rbm-vbm-demo=cortex.demos.demos_neuroimaging:run_rbm_vbm_demo',
             'cortex-rbm-olin-demo=cortex.demos.demos_neuroimaging:run_rbm_olin_demo',
             'cortex-read-mri=cortex.analysis.load_mri:main',
-            'cortex-read-fmri=cortex.analysis.load_fmri:main'
+            'cortex-read-fmri=cortex.analysis.read_fmri:main'
         ]
     },
     data_files=[
