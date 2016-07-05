@@ -15,7 +15,7 @@ def plot(fnc, idx=None, groups=None, transform=None, labels=None, out_file=None)
 
     if idx is None:
         idx = [i for idx in groups for i in idx]
-    if labels is not None and len(labels) == len(idx):
+    if labels is not None:
         labels = [labels[i] for i in idx]
     else:
         labels = None
@@ -88,6 +88,8 @@ def group(mat, thr=0.3, idx=None, labels=None, out_file=None):
 
     if idx is None:
         idx = range(mat.shape[0])
+    else:
+        mat = mat[idx][:, idx]
 
     wheres = np.where(mat > thr)
 
