@@ -34,7 +34,7 @@ def fetch_neuroimaging_data():
         yf.write(
             yaml.dump(
                 dict(
-                    anat_file=path.join(ni_dir, 'ch2better_whitebg_aligned2EPI_V4'),
+                    anat_file=path.join(ni_dir, 'ch2better_whitebg_aligned2EPI_V4.nii'),
                     data=[path.join(ni_dir, 'VBM_test', 'VBM_0.npy'),
                           path.join(ni_dir, 'VBM_test', 'VBM_1.npy')],
                     mask=path.join(ni_dir, 'VBM_test', 'VBM_mask.npy'),
