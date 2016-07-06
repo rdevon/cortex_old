@@ -154,12 +154,16 @@ class GRU(RNN):
             self.inter_nets.append(n) #insert(2 * i + 1, n)
 
     def get_params(self):
-        '''
+        '''Returns parameters for scan.
 
-        Returns parameters for scan.'''
+        '''
         params = []
         for i in range(self.n_layers):
             params += [self.__dict__['Ura%d' % i], self.__dict__['Urb%d' % i]]
+        if self.weight_noise and self.noise_switch():
+            params = [p + self.trng.normal(
+                std=self.weight_noise, size=p.shape, dtype=p.dtype)
+                      for p in params]
         for net in self.inter_nets:
             params += net.get_params()
         return params
@@ -267,6 +271,7 @@ class GRU(RNN):
         n_samples = x.shape[1]
         updates = theano.OrderedUpdates()
 
+        x_in = x
         hs = []
         for i, h0 in enumerate(h0s):
             seqs         = [m[:, :, None]] + self.call_seqs(x, None, i, *params)
@@ -288,8 +293,9 @@ class GRU(RNN):
         out_net_out = self.output_net.step_call(h, *o_params)
         preact      = out_net_out['z']
         p           = out_net_out['p']
+        error       = self.neg_log_prob(x_in[1:], p[:-1], sum_probs=False)
 
-        return OrderedDict(hs=hs, p=p, z=preact), updates
+        return OrderedDict(hs=hs, p=p, error=error, z=preact), updates
 
     def call_seqs(self, x, condition_on, level, *params):
         '''Prepares the input for `__call__`.
