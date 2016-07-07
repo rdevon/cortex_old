@@ -10,17 +10,10 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from . import Layer
-from .mlp import MLP
-from .rnn import RNN
-from ..utils import floatX
-from ..utils.tools import (
-    concatenate,
-    init_weights,
-    norm_weight,
-    ortho_weight,
-    _slice
-)
+from .. import ortho_weight
+from .. import mlp as mlp_module
+from . import RNN
+from ...utils import concatenate, floatX, _slice
 
 
 class GRU(RNN):
@@ -32,7 +25,7 @@ class GRU(RNN):
         super(GRU, self).__init__(dim_in, dim_hs, name=name, **kwargs)
 
     @staticmethod
-    def mlp_factory(dim_in, dim_out, dim_hs, a_net=None, **kwargs):
+    def mlp_factory(dim_in, dim_out, dim_hs, a_net=None):
         '''Factory for creating MLPs for GRU.
 
         Args:
@@ -48,41 +41,16 @@ class GRU(RNN):
 
         '''
 
-        mlps, kwargs = RNN.mlp_factory(dim_in, dim_out, dim_hs, **kwargs)
+        mlps = RNN.mlp_factory(dim_in, dim_out, dim_hs)
 
         if a_net is None: a_net = dict()
         a_net['distribution'] = 'centered_binomial'
-        input_net_aux = MLP.factory(dim_in=dim_in, dim_out=2*dim_hs[0],
+        input_net_aux = mlp_module.factory(dim_in=dim_in, dim_out=2*dim_hs[0],
                                     name='input_net_aux', **a_net)
 
         mlps.update(input_net_aux=input_net_aux)
 
-        return mlps, kwargs
-
-    @staticmethod
-    def factory(dim_in=None, dim_out=None, dim_hs=None, **kwargs):
-        '''Factory for creating MLPs for GRU and returning instance.
-
-        Convenience to quickly create MLPs from dictionaries, linking all
-        relevent dimensions and distributions.
-
-        Args:
-            dim_in (Optional[int]): input dimention.
-            dim_hs (Optional[list]): dimensions of reccurent units.
-            dim_out (Optional[int]): output dimension. If not provided, assumed
-                to be dim_in.
-            **kwargs: extra keyword arguments
-
-        Returns:
-            GRU: GRU object
-
-        '''
-        if dim_out is None:
-            dim_out = dim_in
-        mlps, kwargs = GRU.mlp_factory(dim_in, dim_out, dim_hs, **kwargs)
-        kwargs.update(**mlps)
-
-        return GRU(dim_in, dim_hs, dim_out=dim_out, **kwargs)
+        return mlps
 
     def set_tparams(self):
         '''Sets and returns theano parameters.
@@ -254,8 +222,8 @@ class GRU(RNN):
         h = m * h + (1 - m) * h_
         return h
 
-    def step_call(self, x, m, h0s, *params):
-        '''Step version of __call__ for scan
+    def step_feed(self, x, m, h0s, *params):
+        '''Step version of feed for scan
 
         Args:
             x (T.tensor): input.
@@ -274,7 +242,7 @@ class GRU(RNN):
         x_in = x
         hs = []
         for i, h0 in enumerate(h0s):
-            seqs         = [m[:, :, None]] + self.call_seqs(x, None, i, *params)
+            seqs         = [m[:, :, None]] + self.feed_seqs(x, None, i, *params)
             outputs_info = [h0]
             non_seqs     = self.get_recurrent_args(*params)[2*i:2*i+2]
 
@@ -297,8 +265,8 @@ class GRU(RNN):
 
         return OrderedDict(hs=hs, p=p, error=error, z=preact), updates
 
-    def call_seqs(self, x, condition_on, level, *params):
-        '''Prepares the input for `__call__`.
+    def feed_seqs(self, x, condition_on, level, *params):
+        '''Prepares the input for `feed`.
 
         Args:
             x (T.tensor): input
@@ -338,16 +306,8 @@ class SimpleGRU(GRU):
         super(SimpleGRU, self).__init__(dim_in, [dim_h], **kwargs)
 
     @staticmethod
-    def factory(dim_in=None, dim_out=None, dim_h=None, **kwargs):
-        '''Convenience factory for SimpleGRU (see `GRU.factory`).
-
-        '''
-        if dim_out is None:
-            dim_out = dim_in
-        mlps, kwargs = GRU.mlp_factory(dim_in, dim_out, [dim_h], **kwargs)
-        kwargs.update(**mlps)
-
-        return SimpleGRU(dim_in, dim_h, dim_out=dim_out, **kwargs)
+    def mlp_factory(dim_in, dim_out, dim_h, **kwargs):
+        return GRU.mlp_factory(dim_in, dim_out, [dim_h], **kwargs)
 
     def energy(self, X, h0=None):
         '''Energy function.
@@ -359,15 +319,15 @@ class SimpleGRU(GRU):
             h0s = None
         return super(SimpleGRU, self).energy(X, h0s=h0s)
 
-    def __call__(self, x, m=None, h0=None, condition_on=None):
-        '''Call function (see `GRU.__call__`).
+    def feed(self, x, m=None, h0=None, condition_on=None):
+        '''Feed function (see `GRU.feed`).
 
         '''
         if h0 is not None:
             h0s = [h0]
         else:
             h0s = None
-        return super(SimpleGRU, self).__call__(
+        return super(SimpleGRU, self).feed(
             x, m=m, h0s=h0s, condition_on=condition_on)
 
     def sample(self, x0=None, h0=None, **kwargs):

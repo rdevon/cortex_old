@@ -26,7 +26,12 @@ _learning_args = dict(
     excludes=[]
 )
 
-_dataset_args = dict(
+_model_args = dict(
+    l2_decay=None,
+)
+
+
+dataset = dict(
     train_batch_size=100,
     valid_batch_size=100,
     dataset='mnist',
@@ -34,21 +39,19 @@ _dataset_args = dict(
     source='$data/basic/mnist.pkl.gz'
 )
 
-_model_args = dict(
-    dim_h=None,
-    l2_decay=None,
-)
+layers = {
+    'classifier': dict(
+        model_type='MLP',
+        dim_hs=[200, 100],
+        h_act='T.nnet.sigmoid',
+        dropout=0.5
+    )
+}
 
-mlp_args = dict(
-    dim_hs=[200, 100],
-    n_layers=None,
-    h_act='T.nnet.sigmoid',
-    input_layer='mnist',
-    output='label',
-    dropout=None
-)
-
-extra_arg_keys = ['mlp_args']
+links = [
+    ('data.input', 'classifier.X'),
+    ('classifier.p', 'data.labels')
+]
 
 
 def _build(module):

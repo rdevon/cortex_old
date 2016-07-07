@@ -29,6 +29,7 @@ def reshape_image(img, shape, crop_image=True):
     new_img.paste(img, offset_tuple)
     return new_img
 
+
 class Horses(object):
     def __init__(self, batch_size=10, mode='train',
                  source=None, inf=False, stop=None, shuffle=True,
@@ -124,3 +125,5 @@ class Horses(object):
         return PIL.Image.fromarray(tile_raster_images(
             X=X, img_shape=fshape, tile_shape=tshape,
             tile_spacing=(1, 1)))
+
+_classes = {'horses': Horses}

@@ -18,18 +18,16 @@ import time
 import traceback
 
 from .. import BasicDataset, Dataset
-from ...utils.tools import (
-    concatenate,
-    init_rngs,
-    resolve_path,
-    rng_,
-    scan
-)
+from ...utils import concatenate, scan, _rng
+from ...utils.tools import resolve_path
 from ...utils.vis_utils import tile_raster_images
 
 
 class MNIST(BasicDataset):
     '''MNIST dataset iterator.
+
+    Attributes:
+        image_shape (tuple): dimensions of original images.
 
     '''
     def __init__(self, source=None, restrict_digits=None, mode='train',
@@ -68,10 +66,9 @@ class MNIST(BasicDataset):
                                     name=name, mode=mode, **kwargs)
 
         self.image_shape = (28, 28)
-        self.out_path = out_path
 
         if binarize:
-            self.data[name] = rng_.binomial(
+            self.data[name] = _rng.binomial(
                 p=self.data[name], size=self.data[name].shape, n=1).astype('float32')
 
         if self.shuffle:
@@ -150,5 +147,4 @@ class MNIST(BasicDataset):
             X=X, img_shape=fshape, tile_shape=tshape,
             tile_spacing=(1, 1)))
 
-    def translate(self, x):
-        return x
+_classes = {'mnist': MNIST}

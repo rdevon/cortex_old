@@ -7,45 +7,11 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from . import Layer
-from ..utils import e, floatX, pi
-from ..utils.tools import (
-    concatenate,
-    init_rngs,
-    init_weights,
-    _slice
-)
+from . import init_rngs, init_weights, Layer
+from ..utils import concatenate, e, floatX, pi, _slice
 
 
 _clip = 1e-7 # clipping for Guassian distributions.
-
-def resolve(c, conditional=False):
-    '''Resolves Distribution subclass from str.
-
-    Args:
-        c (str): distribution string.
-        conditional (Optional[bool]): if True, then use `Conditional` class.
-
-    Returns:
-        Distribution.
-
-    '''
-    resolve_dict = dict(
-        binomial=Binomial,
-        continuous_binomial=ContinuousBinomial,
-        centered_binomial=CenteredBinomial,
-        multinomial=Multinomial,
-        gaussian=Gaussian,
-        logistic=Logistic,
-        laplace=Laplace
-    )
-
-    C = resolve_dict.get(c, None)
-    if C is None:
-        raise ValueError(C)
-    if conditional:
-        C = make_conditional(C)
-    return C
 
 
 class Distribution(Layer):
@@ -88,6 +54,25 @@ class Distribution(Layer):
         kwargs = init_rngs(self, **kwargs)
 
         super(Distribution, self).__init__(name=name)
+
+    @classmethod
+    def factory(C, dim=None, conditional=False, **kwargs):
+        '''Resolves Distribution subclass from str.
+
+        Args:
+            layer_type (str): string id for distribution class.
+            conditional (Optional[bool]): if True, then use `Conditional` class.
+
+        Returns:
+            Distribution.
+
+        '''
+        if dim is None:
+            raise ValueError('`dim` must be provided for Distribution.')
+
+        if conditional:
+            C = make_conditional(C)
+        return C(dim, **kwargs)
 
     def set_params(self):
         raise NotImplementedError()
@@ -782,3 +767,7 @@ def _laplace_entropy(p):
     log_b = _slice(p, 1, dim)
     entropy = log_b + T.log(2.) + 1.0
     return entropy.sum(axis=entropy.ndim-1)
+
+_classes = {'binomial': Binomial, 'continuous_binomial': ContinuousBinomial,
+            'centered_binomial': CenteredBinomial, 'multinomial': Multinomial,
+            'gaussian': Gaussian, 'logistic': Logistic, 'laplace': Laplace}

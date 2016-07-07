@@ -9,22 +9,10 @@ import theano
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as T
 
-from . import Layer
-from .mlp import MLP
-from ..utils import tools
-from ..utils.tools import (
-    concatenate,
-    log_mean_exp,
-    init_rngs,
-    init_weights,
-    _slice,
-    _slice2
-)
-
-
-floatX = theano.config.floatX
-pi = theano.shared(np.pi).astype('float32')
-e = theano.shared(np.e).astype('float32')
+from . import init_rngs, init_weights, Layer
+from . import mlp as mlp_module
+from ..utils import concatenate, e, floatX, pi, _slice, _slice2
+from ..utils.maths import log_mean_exp
 
 
 # SOME MISC LAYERS ------------------------------------------------------------
@@ -253,7 +241,7 @@ class Attention(Layer):
         if mlp is None:
             if mlp_args is None:
                 mlp_args = dict()
-            mlp = MLP.factory(dim_in=dim_in, dim_out=dim_out,
+            mlp = mlp_module.factory(dim_in=dim_in, dim_out=dim_out,
                               name=name + '_mlp',
                               distribution='centered_binomial',
                               **mlp_args)
@@ -285,7 +273,7 @@ class Attention2(Layer):
     def __init__(self, dim_in, dim_out, mlp=None, name='attention',
                  **kwargs):
         if mlp is None:
-            mlp = MLP.factory(dim_in=dim_in, dim_out=dim_out,
+            mlp = mlp_module.factory(dim_in=dim_in, dim_out=dim_out,
                               name=name + '_mlp',
                               distribution='centered_binomial')
         self.mlp = mlp

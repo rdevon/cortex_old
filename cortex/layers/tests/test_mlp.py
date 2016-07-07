@@ -7,7 +7,8 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from cortex.models.mlp import MLP
+from cortex import layers
+from cortex.layers import mlp as module
 from cortex.utils import floatX
 
 
@@ -16,12 +17,24 @@ tanh = 'lambda x: np.tanh(x)'
 softplus = 'lambda x: np.log(1.0 + np.exp(x))'
 
 
+def test_fetch_class():
+    C = layers.resolve_class('MLP')
+    return C
+
 def test_make_mlp(dim_in=13, dim_h=17, dim_out=19, n_layers=2,
                   h_act='T.nnet.softplus', distribution='binomial'):
-    mlp = MLP(dim_in, dim_h, dim_out, n_layers, h_act=h_act,
-              distribution=distribution)
+    C = test_fetch_class()
+    mlp = C(dim_in, dim_h, dim_out, n_layers, h_act=h_act,
+            distribution=distribution)
     mlp.set_tparams()
     return mlp
+
+def test_mlp_factory(dim_in=13, dim_hs=[17, 23], dim_out=19,
+                     h_act='T.nnet.softplus', distribution='binomial'):
+    C = test_fetch_class()
+    return C.factory(
+        dim_in=dim_in, dim_hs=dim_hs, dim_out=dim_out, h_act=h_act,
+        distribution=distribution)
 
 def test_feed_forward(mlp=None, X=T.matrix('X', dtype=floatX), x=None, distribution='binomial'):
     if mlp is None:

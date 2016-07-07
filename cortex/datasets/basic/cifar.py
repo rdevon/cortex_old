@@ -1,35 +1,18 @@
 '''
-Module for cifar
+Module for CIFAR dataset.
 '''
 
 from collections import OrderedDict
 import cPickle
 import gzip
-import multiprocessing as mp
 import numpy as np
 from os import path
 import PIL
-import random
-import sys
-from sys import stdout
-import theano
-from theano import tensor as T
-import time
-import traceback
 
 from ...utils import floatX
-from ...utils.tools import (
-    concatenate,
-    init_rngs,
-    resolve_path,
-    rng_,
-    scan
-)
+from ...utils.tools import resolve_path
 from ...utils.vis_utils import tile_raster_images
 
-
-def get_iter(inf=False, batch_size=128):
-    return mnist_iterator(inf=inf, batch_size=batch_size)
 
 class CIFAR(object):
     '''CIFAR dataset.
@@ -202,3 +185,5 @@ class CIFAR(object):
 
     def translate(self, x):
         return x
+
+_classes = {'cifar': CIFAR}

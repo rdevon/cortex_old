@@ -8,28 +8,12 @@ import theano
 from theano import tensor as T
 import warnings
 
-from .distributions import Distribution, resolve as resolve_distribution
-from . import Layer
-from ..utils import floatX
-from ..utils.tools import (
+from . import distributions
+from . import init_rngs, init_weights, Layer, norm_weight, resolve_class
+from ..utils import (
     concatenate,
-    init_rngs,
-    init_weights,
-    norm_weight
+    floatX
 )
-
-
-def resolve(c):
-    '''Resolves the MLP subclass from str.
-
-    Note:
-        Currently, only one MLP supported. More in the future.
-
-    '''
-    if c == 'mlp' or c is None:
-        return MLP
-    else:
-        raise ValueError(c)
 
 
 class MLP(Layer):
@@ -47,6 +31,27 @@ class MLP(Layer):
 
     '''
     must_sample = False
+
+    _components = ['distribution']
+    _arg_map = {
+        'input': 'dim_in',
+        'X': 'dim_in',
+        'output': 'dim_out',
+        'P': 'dim_out',
+        'Z': 'dim_out',
+        'H_0': 'dim_hs[0]',
+        'H_N': 'dim_hs[-1]',
+        'G_0': 'dim_hs[0]',
+        'G_N': 'dim_hs[-1]'
+    }
+    _help = {
+        'X': 'Input tensor',
+        'P': 'Output distribution or output',
+        'Z': 'Output preactivation',
+        'H_{layer}': 'Output for hidden layer',
+        'G_{layer}': 'Preactivation for hidden layer'
+    }
+
     def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
                  h_act='T.nnet.sigmoid', distribution='binomial',
                  distribution_args=None, name='MLP', **kwargs):
@@ -71,12 +76,12 @@ class MLP(Layer):
         if distribution_args is None: distribution_args = dict()
         self.dim_in = dim_in
 
-        if isinstance(distribution, Distribution):
+        if isinstance(distribution, distributions.Distribution):
             self.distribution = distribution
         elif distribution is not None:
-            self.distribution = resolve_distribution(
-                distribution, conditional=True)(
-                dim_out, **distribution_args)
+            DC = resolve_class(distribution)
+            self.distribution = DC.factory(
+                dim=dim_out, conditional=True, **distribution_args)
         else:
             self.distribution = None
 
@@ -101,30 +106,33 @@ class MLP(Layer):
         assert self.n_layers > 0
 
         self.h_act = h_act
-
-        kwargs = init_weights(self, **kwargs)
-        kwargs = init_rngs(self, **kwargs)
         super(MLP, self).__init__(name=name, **kwargs)
 
-    @staticmethod
-    def factory(dim_in=None, dim_out=None,
-                **kwargs):
+    @classmethod
+    def factory(C, dim_in=None, dim_out=None, **kwargs):
         '''MLP factory.
 
         Convenience function for building MLPs.
 
+        Note::
+            Only `MLP` subclass is supported right now.
+
         Args:
+            layer_type (str): string identifies for MLP subclass.
             dim_in (int): input dimension.
             dim_out (int): output dimension.
             **kwargs: construction keyword arguments.
+
+        Returns:
+            MLP
 
         '''
         if dim_in is None or dim_out is None:
             raise TypeError('Both dim in (%r) and dim_out (%r) must be set'
                             % (dim_in, dim_out))
-        return MLP(dim_in, dim_out, **kwargs)
+        return C(dim_in, dim_out, **kwargs)
 
-    def sample(self, p, n_samples=1):
+    def sample(self, P, n_samples=1):
         '''Sample from the conditional distribution.
 
         Args:
@@ -137,14 +145,14 @@ class MLP(Layer):
 
         '''
         assert self.distribution is not None
-        return self.distribution.sample(n_samples, p=p)
+        return self.distribution.sample(n_samples, P=P)
 
-    def neg_log_prob(self, x, p, sum_probs=True):
+    def neg_log_prob(self, X, P, sum_probs=True):
         '''Negative log probability.
 
         Args:
-            x (T.tensor): sample.
-            p (T.tensor): probability.
+            X (T.tensor): sample.
+            P (T.tensor): probability.
             sum_probs (bool): whether to sum the last axis in neg log prob.
 
         Returns:
@@ -152,44 +160,44 @@ class MLP(Layer):
 
         '''
         assert self.distribution is not None
-        return self.distribution.neg_log_prob(x, p, sum_probs=sum_probs)
+        return self.distribution.neg_log_prob(X, P, sum_probs=sum_probs)
 
-    def entropy(self, p):
+    def entropy(self, P):
         '''Entropy function.
 
         Args:
-            p (T.tensor): probability.
+            P (T.tensor): probability.
 
         Returns:
             T.tensor: entropies.
 
         '''
         assert self.distribution is not None
-        return self.distribution.entropy(p)
+        return self.distribution.entropy(P)
 
-    def get_center(self, p):
+    def get_center(self, P):
         '''
         Args:
-            p (T.tensor): distribution tensor.
+            P (T.tensor): distribution tensor.
 
         Returns:
             T.tensor: center of distribution.
 
         '''
         assert self.distribution is not None
-        return self.distribution.get_center(p)
+        return self.distribution.get_center(P)
 
-    def split_prob(self, p):
+    def split_prob(self, P):
         '''
         Args:
-            p (T.tensor): distribution tensor.
+            P (T.tensor): distribution tensor.
 
         Returns:
             T.tuple: split distribution.
 
         '''
         assert self.distribution is not None
-        return self.distribution.split_prob(p)
+        return self.distribution.split_prob(P)
 
     def set_params(self):
         self.params = OrderedDict()
@@ -201,8 +209,8 @@ class MLP(Layer):
                 dim_in = self.dim_hs[l-1]
             dim_out = self.dim_hs[l]
 
-            W = norm_weight(dim_in, dim_out,
-                            scale=self.weight_scale, ortho=False)
+            W = norm_weight(dim_in, dim_out, scale=self.weight_scale,
+                            ortho=False)
             b = np.zeros((dim_out,)).astype(floatX)
 
             self.params['W%d' % l] = W
@@ -222,20 +230,19 @@ class MLP(Layer):
             for k in decay_keys)
         return decay_params
 
-    def dropout(x, act):
-        if self.h_act == 'T.tanh':
-            x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
+    def dropout(x, act, rate):
+        if act == 'T.tanh':
+            x_d = self.trng.binomial(x.shape, p=1-rate, n=1,
                                      dtype=x.dtype)
-            x = 2. * (x_d * (x + 1.) / 2) / (1 - self.dropout) - 1
-        elif self.h_act in ['T.nnet.sigmoid', 'T.nnet.softplus',
-                            'lambda x: x']:
-            x_d = self.trng.binomial(x.shape, p=1-self.dropout, n=1,
-                                     dtype=x.dtype)
-            x = x * x_d / (1 - self.dropout)
+            x = 2. * (x_d * (x + 1.) / 2) / (1 - rate) - 1
+        elif act in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
+            x_d = self.trng.binomial(x.shape, p=1-rate, n=1, dtype=x.dtype)
+            x = x * x_d / (1 - rate)
         else:
             raise NotImplementedError('No dropout for %s yet' % activ)
+        return x
 
-    def step_call(self, x, *params):
+    def step_call(self, X, *params):
         '''Step feed forward MLP.
 
         Args:
@@ -248,7 +255,8 @@ class MLP(Layer):
 
         '''
         params = list(params)
-        outs = OrderedDict(x=x)
+        outs = OrderedDict(X=X)
+        outs['input'] = X
         for l in xrange(self.n_layers):
             W = params.pop(0)
             b = params.pop(0)
@@ -258,89 +266,100 @@ class MLP(Layer):
                     'Using weight noise in layer %d for MLP %s' % (l, self.name))
                 W_n = W + self.trng.normal(
                     avg=0., std=self.weight_noise, size=W.shape)
-                preact = T.dot(x, W_n) + b
+                preact = T.dot(X, W_n) + b
             else:
-                preact = T.dot(x, W) + b
+                preact = T.dot(X, W) + b
 
             if l < self.n_layers - 1:
-                x = eval(self.h_act)(preact)
-                outs['preact_%d' % l] = preact
-                outs[l] = x
+                X = eval(self.h_act)(preact)
+                outs['G_%d' % l] = preact
+                outs['H_%d' % l] = X
                 if self.dropout and self.noise_switch():
                     self.logger.debug('Adding dropout to layer {layer} for MLP '
                                   '`{name}`'.format(layer=l, name=self.name))
-                    x = self.dropout(x, self.h_act)
+                    X = self.dropout(X, self.h_act, self.dropout)
             else:
                 if self.distribution is not None:
-                    x = self.distribution(preact)
+                    X = self.distribution(preact)
                 else:
-                    x = eval(self.h_act)(preact)
-                outs['z'] = preact
-                outs['p'] = x
+                    X = eval(self.h_act)(preact)
+                outs['Z'] = preact
+                outs['P'] = X
+                outs['output'] = X
 
         assert len(params) == 0, params
         return outs
 
-    def __call__(self, x):
+    def __call__(self, X):
         '''Call function.
 
         Args:
-            x (T.tensor): input.
+            X (T.tensor): input.
 
         Returns:
             OrderedDict: results at every layer.
 
         '''
         params = self.get_params()
-        outs = self.step_call(x, *params)
+        outs = self.step_call(X, *params)
         return outs
 
-    def feed(self, x):
+    def get_cost(self, X, P):
+        if self.distribution is None:
+            cost = ((X - P) ** 2).mean()
+        else:
+            cost = self.distribution.neg_log_prob(X, P).mean()
+        return cost
+
+    def feed(self, X):
         '''Simple feed function.
 
         Args:
-            x (T.tensor): input.
+            X (T.tensor): input.
 
         Returns:
             T.tensor: output
 
         '''
-        return self.__call__(x)['p']
+        return self.__call__(X)['P']
 
-    def step_feed(self, x, *params):
+    def step_feed(self, X, *params):
         '''Step feed function.
 
         Args:
-            x (T.tensor): input.
+            X (T.tensor): input.
             *params: theano shared variables.
 
         Returns:
             T.tensor: output
 
         '''
-        return self.step_call(x, *params)['p']
+        return self.step_call(X, *params)['P']
 
-    def preact(self, x):
+    def preact(self, X):
         '''Simple feed preactivation function.
 
         Args:
-            x (T.tensor): input.
+            X (T.tensor): input.
 
         Returns:
             T.tensor: preactivation
 
         '''
-        return self.__call__(x)['z']
+        return self.__call__(X)['Z']
 
-    def step_preact(self, x, *params):
+    def step_preact(self, X, *params):
         '''Step feed preactivation function.
 
         Args:
-            x (T.tensor): input.
+            X (T.tensor): input.
             *params: theano shared variables.
 
         Returns:
             T.tensor: preactivation
 
         '''
-        return self.step_call(x, *params)['z']
+        return self.step_call(X, *params)['Z']
+
+
+_classes = {'MLP': MLP}

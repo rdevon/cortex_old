@@ -31,10 +31,10 @@ import theano
 from theano import tensor as T
 import time
 
-from . import logger as cortex_logger
+from ..utils import logger as cortex_logger
 from . import op
-from .learning_scheduler import Scheduler
-from .tools import (
+from ..utils.learning_scheduler import Scheduler
+from ..utils.tools import (
     check_bad_nums,
     itemlist,
     load_experiment,

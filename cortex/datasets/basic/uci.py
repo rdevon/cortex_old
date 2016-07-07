@@ -6,12 +6,7 @@ import h5py
 import numpy as np
 
 from ...utils import floatX
-from ...utils.tools import (
-    concatenate,
-    init_rngs,
-    rng_,
-    scan
-)
+
 
 class UCI(object):
     def __init__(self, batch_size=100, source=None, mode='train', shuffle=True,

@@ -4,6 +4,7 @@ Helper module for learning.
 
 from collections import OrderedDict
 from ConfigParser import ConfigParser
+import importlib
 import logging
 import numpy as np
 import os
@@ -21,8 +22,6 @@ from . import logger
 
 
 logger = logging.getLogger(__name__)
-random_seed = random.randint(1, 10000)
-rng_ = np.random.RandomState(random_seed)
 profile = False
 
 # For getting terminal column width
@@ -152,158 +151,31 @@ def print_profile(tparams):
         s += '\n\t%s %s' % (k, v.get_value().shape)
     logger.info(s)
 
-def shuffle_columns(x, srng):
-    '''Shuffles a tensor along the second index.
-
-    Args:
-        x (T.tensor).
-        srng (sharedRandomstream).
+def get_subclasses(module):
+    '''Resolves the subclass from str.
 
     '''
-    def step_shuffle(m, perm):
-        return m[perm]
+    resolve_dict = dict()
 
-    perm_mat = srng.permutation(n=x.shape[0], size=(x.shape[1],))
-    y, _ = scan(
-        step_shuffle, [x.transpose(1, 0, 2), perm_mat], [None], [], x.shape[1],
-        name='shuffle', strict=False)
-    return y.transpose(1, 0, 2)
+    try:
+        classes = module._classes
+    except AttributeError:
+        classes = []
 
-def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan',
-         strict=False):
-    '''Convenience function for scan.
+    for c in classes:
+        resolve_dict[c] = getattr(module, c)
 
-    Args:
-        f_scan (function): scanning function.
-        seqs (list or tuple): list of sequence tensors.
-        outputs_info (list or tuple): list of scan outputs.
-        non_seqs (list or tuple): list of non-sequences.
-        n_steps (int): number of steps.
-        name (str): name of scanning procedure.
-        strict (bool).
+    try:
+        submodules = module._modules
+    except AttributeError:
+        submodules = []
 
-    Returns:
-        tuple: scan outputs.
-        theano.OrderedUpdates: updates.
+    for submodule in submodules:
+        submodule = importlib.import_module(module.__name__ + '.' + submodule)
+        resolve_dict.update(**resolve_subclasses(submodule))
 
-    '''
-    return theano.scan(
-        f_scan,
-        sequences=seqs,
-        outputs_info=outputs_info,
-        non_sequences=non_seqs,
-        name=name,
-        n_steps=n_steps,
-        profile=profile,
-        strict=strict
-    )
+    return resolve_dict
 
-def init_weights(model, weight_noise=False, weight_scale=0.001, dropout=False,
-                 **kwargs):
-    '''Inialization function for weights.
-
-    Args:
-        model (Layer).
-        weight_noise (bool): noise the weights.
-        weight_scale (float): scale for weight initialization.
-        dropout (bool): use dropout.
-        **kwargs: extra kwargs.
-
-    Returns:
-        dict: extra kwargs.
-
-    '''
-    model.weight_noise = weight_noise
-    model.weight_scale = weight_scale
-    model.dropout = dropout
-    return kwargs
-
-def init_rngs(model, rng=None, trng=None, **kwargs):
-    '''Initialization function for RNGs.
-
-    Args:
-        model (Layer).
-        rng (np.randomStreams).
-        trng (theano.randomStreams).
-        **kwargs: extra kwargs.
-
-    Returns:
-        dict: extra kwargs.
-
-    '''
-    if rng is None:
-        rng = rng_
-    model.rng = rng
-    if trng is None:
-        model.trng = RandomStreams(random.randint(1, 10000))
-    else:
-        model.trng = trng
-    return kwargs
-
-def logit(z):
-    '''Logit function.
-
-    :math:`\log \\frac{z}{1 - z}`
-
-    Args:
-        z (T.tensor).
-
-    Returns:
-        T.tensor.
-
-    '''
-    z = T.clip(z, 1e-7, 1.0 - 1e-7)
-    return T.log(z) - T.log(1 - z)
-
-def _slice(_x, n, dim):
-    '''Slice a tensor into 2 along last axis.
-
-    Extended from Cho's arctic repo.
-
-    Args:
-        _x (T.tensor).
-        n (int).
-        dim (int).
-
-    Returns:
-        T.tensor.
-
-    '''
-    if _x.ndim == 1:
-        return _x[n*dim:(n+1)*dim]
-    elif _x.ndim == 2:
-        return _x[:, n*dim:(n+1)*dim]
-    elif _x.ndim == 3:
-        return _x[:, :, n*dim:(n+1)*dim]
-    elif _x.ndim == 4:
-        return _x[:, :, :, n*dim:(n+1)*dim]
-    else:
-        raise ValueError('Number of dims (%d) not supported'
-                         ' (but can add easily here)' % _x.ndim)
-
-def _slice2(_x, start, end):
-    '''Slightly different slice function than above.
-
-    Args:
-        _x (T.tensor).
-        start (int).
-        end (int).
-
-    Returns:
-        T.tensor.
-
-    '''
-    if _x.ndim == 1:
-        return _x[start:end]
-    elif _x.ndim == 2:
-        return _x[:, start:end]
-    elif _x.ndim == 3:
-        return _x[:, :, start:end]
-    elif _x.ndim == 4:
-        return _x[:, :, :, start:end]
-    else:
-        raise ValueError('Number of dims (%d) not supported'
-                         ' (but can add easily here)' % _x.ndim)
 
 def load_experiment(experiment_yaml):
     '''Load an experiment from a yaml.
@@ -483,73 +355,6 @@ def _p(pp, name):
     '''
     return '%s.%s'%(pp, name)
 
-def ortho_weight(ndim, rng=None):
-    '''Make ortho weight tensor.
-
-    '''
-    if not rng:
-        rng = rng_
-    W = rng.randn(ndim, ndim)
-    u, s, v = np.linalg.svd(W)
-    return u.astype(floatX)
-
-def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
-    '''Make normal weight tensor.
-
-    '''
-    if not rng:
-        rng = rng_
-    if nout is None:
-        nout = nin
-    if nout == nin and ortho:
-        W = ortho_weight(nin, rng=rng)
-    else:
-        W = scale * rng.randn(nin, nout)
-    return W.astype(floatX)
-
-def parzen_estimation(samples, tests, h=1.0):
-    '''Estimate parzen window.
-
-    '''
-    log_p = 0.
-    d = samples.shape[-1]
-    z = d * np.log(h * np.sqrt(2 * np.pi))
-    for test in tests:
-        d_s = (samples - test[None, :]) / h
-        e = log_mean_exp((-.5 * d_s ** 2).sum(axis=1), as_numpy=True, axis=0)
-        log_p += e - z
-    return log_p / float(tests.shape[0])
-
-def get_w_tilde(log_factor):
-    '''Gets normalized weights.
-
-    '''
-    log_factor = log_factor - T.log(log_factor.shape[0]).astype(floatX)
-    w_norm   = log_sum_exp(log_factor, axis=0)
-    log_w    = log_factor - T.shape_padleft(w_norm)
-    w_tilde  = T.exp(log_w)
-    return w_tilde
-
-def log_mean_exp(x, axis=None, as_numpy=False):
-    '''Numerically stable log(exp(x).mean()).
-
-    '''
-    if as_numpy:
-        Te = np
-    else:
-        Te = T
-    x_max = Te.max(x, axis=axis, keepdims=True)
-    return Te.log(Te.mean(Te.exp(x - x_max), axis=axis, keepdims=True)) + x_max
-
-def log_sum_exp(x, axis=None):
-    '''Numerically stable log( sum( exp(A) ) ).
-
-    '''
-    x_max = T.max(x, axis=axis, keepdims=True)
-    y = T.log(T.sum(T.exp(x - x_max), axis=axis, keepdims=True)) + x_max
-    y = T.sum(y, axis=axis)
-    return y
-
 def split_int_into_closest_two(x):
     '''Splits an integer into the closest 2 integers.
 
@@ -577,50 +382,3 @@ def split_int_into_closest_two(x):
         if rem == 0:
             return int(n), int(x / n)
         n -= 1
-
-def concatenate(tensor_list, axis=0):
-    '''Alternative implementation of `theano.T.concatenate`.
-
-    This function does exactly the same thing, but contrary to Theano's own
-    implementation, the gradient is implemented on the GPU.
-    Backpropagating through `theano.tensor.concatenate` yields slowdowns
-    because the inverse operation (splitting) needs to be done on the CPU.
-    This implementation does not have that problem.
-
-    Examples:
-        >>> x, y = theano.tensor.matrices('x', 'y')
-        >>> c = concatenate([x, y], axis=1)
-
-    Args:
-        tensor_list (list): list of Theano tensor expressions that should be concatenated.
-        axis (int): the tensors will be joined along this axis.
-
-    Returns:
-        T.tensor: the concatenated tensor expression.
-
-    From Cho's arctic repo.
-
-    '''
-    concat_size = sum(tt.shape[axis] for tt in tensor_list)
-
-    output_shape = ()
-    for k in range(axis):
-        output_shape += (tensor_list[0].shape[k],)
-    output_shape += (concat_size,)
-    for k in range(axis + 1, tensor_list[0].ndim):
-        output_shape += (tensor_list[0].shape[k],)
-
-    out = T.zeros(output_shape)
-    offset = 0
-    for tt in tensor_list:
-        indices = ()
-        for k in range(axis):
-            indices += (slice(None),)
-        indices += (slice(offset, offset + tt.shape[axis]),)
-        for k in range(axis + 1, tensor_list[0].ndim):
-            indices += (slice(None),)
-
-        out = T.set_subtensor(out[indices], tt)
-        offset += tt.shape[axis]
-
-    return out

@@ -5,14 +5,97 @@ Base Layer class.
 from collections import OrderedDict
 import copy
 import logging
+import numpy as np
+from pprint import pprint
+import random
+import re
 import theano
 from theano import tensor as T
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from cortex.utils import floatX
-from cortex.utils.tools import (
-    warn_kwargs,
-    _p
-)
+from cortex.utils import floatX, _rng
+from cortex.utils.tools import warn_kwargs, _p
+
+
+logger = logging.getLogger(__name__)
+
+def resolve_class(layer_type):
+    try:
+        C = _classes[layer_type]
+    except KeyError:
+        raise KeyError('Unexpected layer subclass `%s`, '
+                       'available classes: %s' % (layer_type, _classes.keys()))
+    return C
+
+def build_layer(self, layer_type=None, **kwargs):
+        factory = _classes[layer_type].factory
+        return factory(**kwargs)
+
+def init_weights(model, weight_noise=False, weight_scale=0.001, dropout=False,
+                 **kwargs):
+    '''Inialization function for weights.
+
+    Args:
+        model (Layer).
+        weight_noise (bool): noise the weights.
+        weight_scale (float): scale for weight initialization.
+        dropout (bool): use dropout.
+        **kwargs: extra kwargs.
+
+    Returns:
+        dict: extra kwargs.
+
+    '''
+    model.weight_noise = weight_noise
+    model.weight_scale = weight_scale
+    model.dropout = dropout
+    return kwargs
+
+def init_rngs(model, rng=None, trng=None, **kwargs):
+    '''Initialization function for RNGs.
+
+    Args:
+        model (Layer).
+        rng (np.randomStreams).
+        trng (theano.randomStreams).
+        **kwargs: extra kwargs.
+
+    Returns:
+        dict: extra kwargs.
+
+    '''
+    if rng is None:
+        rng = _rng
+    model.rng = rng
+    if trng is None:
+        model.trng = RandomStreams(random.randint(1, 10000))
+    else:
+        model.trng = trng
+    return kwargs
+
+def ortho_weight(ndim, rng=None):
+    '''Make ortho weight tensor.
+
+    '''
+    if not rng:
+        rng = _rng
+    W = rng.randn(ndim, ndim)
+    u, s, v = np.linalg.svd(W)
+    return u.astype(floatX)
+
+def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
+    '''Make normal weight tensor.
+
+    '''
+    if not rng:
+        rng = _rng
+    if nout is None:
+        nout = nin
+    if nout == nin and ortho:
+        W = ortho_weight(nin, rng=rng)
+    else:
+        W = scale * rng.randn(nin, nout)
+    return W.astype(floatX)
 
 
 class NoiseSwitch(object):
@@ -46,6 +129,8 @@ class Layer(object):
 
     '''
     _components = []
+    _arg_map = {}
+    _help = {}
 
     def __init__(self, name='', excludes=[], learn=True, noise_switch=None,
                  **kwargs):
@@ -66,6 +151,9 @@ class Layer(object):
         self.logger.debug('Forming layer %r with name %s' % (
             self.__class__, name))
 
+        kwargs = init_weights(self, **kwargs)
+        kwargs = init_rngs(self, **kwargs)
+
         self.name = name
         self.params = None
         self.excludes = excludes
@@ -75,13 +163,19 @@ class Layer(object):
         if noise_switch is None:
             noise_switch = NoiseSwitch()
         self.noise_switch = noise_switch
+
         warn_kwargs(self, kwargs)
 
         components = self.get_components()
         for component in components:
             component.noise_switch = self.noise_switch
 
+        self.module = None
+
     def get_components(self):
+        '''Gets layer components.
+
+        '''
         components = []
         for k in self._components:
             component = getattr(self, k)
@@ -102,20 +196,17 @@ class Layer(object):
         '''
         return copy.deepcopy(self)
 
+    def set_module(self, module):
+        '''Sets layer module.
+
+        '''
+        self.module = module
+
     def set_params(self):
         '''Initialize the parameters.
 
         '''
         self.params = dict()
-
-    def default_cost(self, inputs, outputs):
-        '''Convenience default cost function for model.
-
-        Args:
-            inputs (list):
-        '''
-        raise NotImplementedError('%s does not implement a `default cost`'
-                                  % self.__class__)
 
     def get_decay_params():
         '''Return parameters used in L1 and L2 decay.
@@ -218,3 +309,45 @@ class Layer(object):
         )
 
         return rval
+
+    def help(self):
+        pprint(self._help)
+
+    @classmethod
+    def get_arg_reference(C, key, kwargs):
+        try:
+            k = C._arg_map[key]
+        except KeyError:
+            raise KeyError('Layer %s has no argument %s. Available arguments: '
+                           '%s' % (C, key, C._arg_map))
+        return kwargs[k]
+
+    def __str__(self):
+        attributes = self.__dict__
+        attributes['params'] = dict(
+            (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,))
+            for k, a in attributes['params'].iteritems())
+        for k in ['trng', 'rng', 'logger']:
+            attributes.pop(k, None)
+
+        attr_str = ''
+        for k, a in attributes.iteritems():
+            if k in self._components:
+                c_str = a.__str__()
+                new_str = '\n\t'
+                for i in range(0, len(c_str) - 1):
+                    new_str += c_str[i]
+                    if c_str[i] != '\t' and c_str[i + 1] == '\t':
+                        new_str += '\t'
+                new_str += c_str[-1]
+            else:
+                new_str = '\n\t%s: %s' % (k, a)
+            attr_str += new_str
+
+        s = ('<Layer %s: %s>' % (self.__class__.__name__, attr_str))
+        return s
+
+_classes = {'Layer': Layer}
+from . import mlp, rnn, distributions
+_modules = [mlp, rnn, distributions]
+for module in _modules: _classes.update(**module._classes)

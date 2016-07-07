@@ -6,8 +6,8 @@ from collections import OrderedDict
 import numpy as np
 
 from .. import Dataset
-from utils import floatX
-from utils.tools import warn_kwargs
+from ...utils import floatX
+from ...utils.tools import warn_kwargs
 
 
 class SimTB(Dataset):

@@ -2,6 +2,7 @@
 Neuroimaging data classes and utilities
 '''
 
+import logging
 import numpy as np
 import os
 from os import path
@@ -9,6 +10,9 @@ import yaml
 
 from ...utils.tools import resolve_path
 from ...utils.extra import download_data, unzip
+
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_neuroimaging_data():
@@ -45,7 +49,6 @@ def fetch_neuroimaging_data():
                     )
                 )
             )
-
 
     yaml_file = path.join(ni_dir, 'AOD_test', 'AOD.yaml')
     with open(yaml_file, 'w') as yf:
@@ -112,3 +115,18 @@ def medfilt(x, k):
         y[:-j, -(i+1)] = x[j:]
         y[-j:, -(i+1)] = x[-1]
     return np.median(y, axis=1)
+
+from . import fmri, mri, simTB
+_modules = [fmri, mri, simTB]
+_classes = dict()
+_factories = dict()
+for module in _modules:
+    if not hasattr(module, '_classes'):
+        logger.warn('Module %s does not specify `_classes`. Module classes '
+                    'will not be accessible from higher level resolve '
+                    'functions' % (module.__name__))
+    else:
+        _classes.update(**module._classes)
+        for k in module._classes.keys():
+            if hasattr(module, 'factory'):
+                _factories[k] = module.factory

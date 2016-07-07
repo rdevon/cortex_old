@@ -4,13 +4,13 @@ Caltech 101 Silhouettes dataset
 
 from scipy import io
 
-from .mnist import MNIST
+from . import mnist
 from ...utils import floatX
 
 
-class CALTECH(MNIST):
+class Caltech(mnist.MNIST):
     def __init__(self, name='caltech', **kwargs):
-        super(CALTECH, self).__init__(name=name, **kwargs)
+        super(Caltech, self).__init__(name=name, **kwargs)
 
     def get_data(self, source, mode):
         data_dict = io.loadmat(source)
@@ -28,3 +28,5 @@ class CALTECH(MNIST):
             raise ValueError()
 
         return X.astype(floatX), Y
+
+_classes = {'caltech': Caltech}

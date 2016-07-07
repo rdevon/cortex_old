@@ -10,19 +10,11 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from . import Layer
-from .mlp import MLP
-from .rnn import RNN
-from ..utils import floatX, pi
-from ..utils.tools import (
-    concatenate,
-    init_rngs,
-    init_weights,
-    norm_weight,
-    ortho_weight,
-    scan,
-    _slice
-)
+from . import RNN
+from .. import init_rngs, init_weights, norm_weight, ortho_weight
+from ..mlp import MLP
+from ...utils import concatenate, floatX, pi, scan, _slice
+
 
 class LSTM(RNN):
     def __init__(self, dim_in, dim_h, name='lstm', **kwargs):

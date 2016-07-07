@@ -15,24 +15,19 @@ import random
 import scipy
 
 from .. import Dataset
-from ...utils import floatX, intX, pi
-from ...utils.tools import init_rngs
+from ...utils import floatX, intX, pi, _rng
 
 
 class Euclidean(Dataset):
     def __init__(self, dims=2, n_samples=10000, **kwargs):
         super(Euclidean, self).__init__(**kwargs)
-        init_rngs(self, **kwargs)
 
         self.collection = None
-        self.X = self.get_data(n_samples, dims)
+        X = self.get_data(n_samples, dims)
         self.make_fibrous()
 
         self.n = self.X.shape[0]
-
-        self.dims = dict()
         self.dims[self.name] = dims
-        self.distributions = dict()
         self.distributions[self.name] = 'gaussian'
 
         self.mean_image = self.X.mean(axis=0)
@@ -81,16 +76,16 @@ class Euclidean(Dataset):
         self.collection = matplotlib.collections.LineCollection([spiral], colors='k')
 
     def make_ex(self):
-        x = self.rng.normal(loc=0.5, scale=0.05, size=self.X.shape).astype(floatX)
-        t1 = self.rng.uniform(low=-0.5, high=0.5, size=(self.X.shape[0] // 2,)).astype(floatX)
-        t2 = self.rng.uniform(low=-0.5, high=0.5, size=t1.shape).astype(floatX)
+        x = _rng.normal(loc=0.5, scale=0.05, size=self.X.shape).astype(floatX)
+        t1 = _rng.uniform(low=-0.5, high=0.5, size=(self.X.shape[0] // 2,)).astype(floatX)
+        t2 = _rng.uniform(low=-0.5, high=0.5, size=t1.shape).astype(floatX)
         self.X = np.concatenate([x[:x.shape[0]//2] + t1[:, None], x[x.shape[0]//2:] + t2[:, None] * np.array([1, -1])[None, :]]).astype(floatX)
 
         self.collection = matplotlib.collections.LineCollection([[(0, 0), (1, 1)], [(0, 1), (1, 0)]], colors='k')
 
     def make_modes(self, r=0.3, N=5, G=0.01):
         modes = [2 * np.pi * n / N for n in range(N)]
-        self.X = np.concatenate([self.rng.normal(
+        self.X = np.concatenate([_rng.normal(
             loc=0.5, scale=0.05, size=(self.X.shape[0] // N, self.X.shape[1])).astype(floatX)
                                  + np.array([(r * np.cos(mode)), (r * np.sin(mode))]).astype(floatX)[None, :]
                                  for mode in modes])
@@ -99,13 +94,13 @@ class Euclidean(Dataset):
         self.make_circle(r=r, G=G)
         self.X = np.concatenate(
             [self.X,
-             self.rng.normal(loc=0.5,
+             _rng.normal(loc=0.5,
                              scale=0.05,
                              size=(self.X.shape[0] // 10,
                                    self.X.shape[1]))]).astype(floatX)
 
     def make_fibrous(self, n_points=40):
-        y = self.rng.uniform(size=(n_points, self.X.shape[1])).astype(floatX)
+        y = _rng.uniform(size=(n_points, self.X.shape[1])).astype(floatX)
 
         for k in xrange(10):
             f = self.gravity(self.X, y)
@@ -117,7 +112,7 @@ class Euclidean(Dataset):
         self.X = self.X[rnd_idx, :]
 
     def get_data(self, n_points, dims):
-        x = self.rng.uniform(size=(n_points, dims)).astype(floatX)
+        x = _rng.uniform(size=(n_points, dims)).astype(floatX)
         return x
 
     def next(self, batch_size=None):
@@ -164,3 +159,5 @@ class Euclidean(Dataset):
 
         plt.savefig(imgfile)
         plt.close()
+
+_classes = {'euclidean': Euclidean}

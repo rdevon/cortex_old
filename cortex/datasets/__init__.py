@@ -165,10 +165,10 @@ def load_data_split(C, idx=None, dataset=None, **dataset_args):
     train, valid, test, idx = make_datasets(C, **dataset_args)
     return train, valid, test, idx
 
-def dataset_factory(resolve_dataset, dataset=None, split=[0.7, 0.2, 0.1],
-                    idx=None, train_batch_size=10, valid_batch_size=10,
-                    test_batch_size=10, **dataset_args):
-    C = resolve_dataset(dataset)
+def build_datasets(resolve_dataset, dataset=None, split=[0.7, 0.2, 0.1],
+                  idx=None, train_batch_size=10, valid_batch_size=10,
+                  test_batch_size=10, **dataset_args):
+    C = resolve_class(dataset, _classes, __name__)
 
     if not hasattr(C, 'factory'):
         train, valid, test, idx = make_datasets(
@@ -256,9 +256,12 @@ class Dataset(object):
         pos (int): current position of the iterator.
         stop (int): stop the dataset at this index when loading.
         mode (str): usually train, test, valid.
+        dims (dict): dictionary of data dimensions.
+        distributions (dict): dictionary of strings. See `models.distributions`
+            for details.
 
     '''
-    def __init__(self, batch_size=None, shuffle=True, inf=False, name='dataset',
+    def __init__(self, batch_size=10, shuffle=True, inf=False, name='dataset',
                  mode=None, stop=None, **kwargs):
         '''Init function for Dataset
 
@@ -282,9 +285,6 @@ class Dataset(object):
         self.logger.debug('Forming dataset %r with name %s' % (
             self.__class__, name))
 
-        if batch_size is None:
-            raise ValueError('Batch size argument must be given')
-
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.inf = inf
@@ -292,6 +292,8 @@ class Dataset(object):
         self.pos = 0
         self.stop = stop
         self.mode = mode
+        self.dims = dict()
+        self.distributions = dict()
 
         return kwargs
 
@@ -321,6 +323,27 @@ class Dataset(object):
         '''
         pass
 
+    def __str__(self):
+        attributes = self.__dict__
+        attributes = dict(
+            (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,)) if isinstance(a, np.ndarray)
+            else (k, a)
+            for k, a in attributes.iteritems())
+        attr_str = ''
+        for k, a in attributes.iteritems():
+            attr_str += '\n\t%s: %s' % (k, a)
+        s = ('<Dataset %s: %s>' % (self.__class__.__name__, attr_str))
+        return s
+
+    def get_dim(self, key):
+        dim_map = {
+            'input': self.dims[self.name]
+        }
+        dim_map.update(**self.dims)
+
+        return dim_map[key]
+
+
 class BasicDataset(Dataset):
     '''
     Dataset with numpy arrays as inputs. No visualization available.
@@ -329,11 +352,8 @@ class BasicDataset(Dataset):
 
     Attributes:
         data (dict): dictionary of numpy.array.
-        n (int): number of data samples.
-        dims (dict): dictionary of data dimensions.
-        distributions (dict): dictionary of strings. See `models.distributions`
-            for details.
-        X (numpy.array): MRI data.
+        n_samples (int): number of data samples.
+        X (numpy.array): primary data.
         Y (Optional[numpy.array]): If not None, lables.
         mean_image (numpy.array): mean image of primary data.
         balance (bool): replicate samples to balance the dataset.
@@ -363,14 +383,11 @@ class BasicDataset(Dataset):
 
         super(BasicDataset, self).__init__(name=name, **kwargs)
         self.data = data
-        self.n = None
+        self.n_samples = None
         self.balance = balance
 
-        self.dims = dict()
-        if distributions is None:
-            self.distributions = dict()
-        else:
-            self.distributions = distributions
+        if distributions is not None:
+            self.distributions.update(**distributions)
 
         if labels is None: labels = []
 
@@ -383,19 +400,19 @@ class BasicDataset(Dataset):
                 v = v[:self.stop]
             self.data[k] = v
 
-            if self.n is None:
-                self.n = v.shape[0]
+            if self.n_samples is None:
+                self.n_samples = v.shape[0]
             else:
-                if v.shape[0] != self.n:
+                if v.shape[0] != self.n_samples:
                     raise ValueError('All input arrays must have the same'
                                     'number of samples (shape[0]), '
-                                    '(%d vs %d)' % (self.n, v.shape[0]))
+                                    '(%d vs %d)' % (self.n_samples, v.shape[0]))
             self.dims[k] = v.shape[1]
             if not k in self.distributions.keys():
                 self.distributions[k] = 'binomial'
 
         self.label_nums = self.data[labels].sum(axis=0)
-        self.label_props = self.label_nums / float(self.n)
+        self.label_props = self.label_nums / float(self.n_samples)
 
         self.labels = labels
         if self.balance:
@@ -434,16 +451,16 @@ class BasicDataset(Dataset):
             for k, v in self.data.iteritems():
                 self.data[k] = np.concatenate([self.data[k], self.data[k][dup_idx]])
 
-        self.n += len(dup_idx)
+        self.n_samples += len(dup_idx)
 
         self.label_nums = self.data[self.labels].sum(axis=0)
-        self.label_props = self.label_nums / float(self.n)
+        self.label_props = self.label_nums / float(self.n_samples)
 
     def randomize(self):
         '''Randomizes the dataset
 
         '''
-        rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
+        rnd_idx = np.random.permutation(np.arange(0, self.n_samples, 1))
         for k in self.data.keys():
             self.data[k] = self.data[k][rnd_idx]
 
@@ -473,7 +490,28 @@ class BasicDataset(Dataset):
             rval[k] = v[self.pos:self.pos+batch_size]
 
         self.pos += batch_size
-        if self.pos + batch_size > self.n:
+        if self.pos + batch_size > self.n_samples:
             self.pos = -1
 
         return rval
+
+    def __str__(self):
+        attributes = self.__dict__
+        attributes = dict(
+            (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,)) if isinstance(a, np.ndarray)
+            else (k, a)
+            for k, a in attributes.iteritems())
+        attributes['data'] = dict(
+            (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,))
+            for k, a in attributes['data'].iteritems())
+        attr_str = ''
+        for k, a in attributes.iteritems():
+            attr_str += '\n\t%s: %s' % (k, a)
+        s = ('<Dataset %s: %s>' % (self.__class__.__name__, attr_str))
+        return s
+
+from . import basic, neuroimaging
+_modules = [basic, neuroimaging]
+_factories = dict()
+for module in _modules:
+    _factories.update(**module._factories)

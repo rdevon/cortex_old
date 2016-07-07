@@ -4,12 +4,13 @@ Optimization routines.
 Based (and copied) on Kyunghyun Cho's arctic repo.
 '''
 
+from collections import OrderedDict
 import logging
 import numpy as np
 import theano
 from theano import tensor as T
-import tools
-from collections import OrderedDict
+
+from ..utils import tools
 
 
 logger = logging.getLogger(__name__)

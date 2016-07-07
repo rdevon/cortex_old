@@ -17,13 +17,13 @@ import yaml
 
 from ...analysis.mri import rois
 from .. import Dataset, make_one_hot
-from .mri import MRI
+from . import mri as mri_module
 from ...analysis import nifti_viewer
 from ...utils import floatX
 from ...utils.tools import resolve_path
 
 
-class FMRI_IID(MRI):
+class FMRI_IID(mri_module.MRI):
     '''fMRI data treated as IID.
 
     Use this dataset if you plan to use a model that needs identical and
@@ -37,10 +37,6 @@ class FMRI_IID(MRI):
     def __init__(self, name='fmri_iid', clean_data=False, **kwargs):
         self.clean_data = clean_data
         super(FMRI_IID, self).__init__(name=name, **kwargs)
-
-    @staticmethod
-    def factory(**kwargs):
-        return MRI.factory(C=FMRI_IID, **kwargs)
 
     def get_data(self, source):
         '''Fetch the fMRI dataset.
@@ -182,6 +178,10 @@ class FMRI(FMRI_IID):
         if self.shuffle:
             self.randomize()
 
+    @staticmethod
+    def factory(**kwargs):
+        return mri_module.mri_factory(C=FMRI, **kwargs)
+
     def set_idx(self):
         scan_idx = range(0, self.n_scans - self.window + 1, self.stride)
         scan_idx_e = scan_idx * self.n_subjects
@@ -198,10 +198,6 @@ class FMRI(FMRI_IID):
         self.set_idx()
         if self.shuffle:
             self.randomize()
-
-    @staticmethod
-    def factory(**kwargs):
-        return MRI.factory(C=FMRI, **kwargs)
 
     def randomize(self):
         '''Randomize the fMRI dataset.
@@ -244,3 +240,5 @@ class FMRI(FMRI_IID):
         }
 
         return rval
+
+_classes = {'fmri_iid': FMRI_IID, 'fmri': FMRI}
