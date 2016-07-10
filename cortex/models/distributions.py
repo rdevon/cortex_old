@@ -7,14 +7,14 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from . import init_rngs, init_weights, Layer
+from . import init_rngs, Cell
 from ..utils import concatenate, e, floatX, pi, _slice
 
 
 _clip = 1e-7 # clipping for Guassian distributions.
 
 
-class Distribution(Layer):
+class Distribution(Cell):
     '''Distribution parent class.
 
     Not meant to be used alone, use subclass.
@@ -35,25 +35,25 @@ class Distribution(Layer):
     '''
     has_kl = False
     is_continuous = False
+    scale = 1
+    must_samples = False
+    _args = ['dim']
+    _required = ['dim']
+    _arg_map = {
+        'input': ['&scale * dim'],
+        'output': ['&scale * dim']
+    }
 
-    def __init__(self, dim, name='distribution', must_sample=False, scale=1,
-                 **kwargs):
+    def __init__(self, dim, name='distribution_proto', **kwargs):
         '''Init function for Distribution class.
 
         Args:
             dim (int): dimension of distribution.
-            must_sample (bool).
-            scale (int): scale for distribution tensor.
 
         '''
-        self.dim = dim
-        self.must_sample = must_sample
-        self.scale = scale
-
-        kwargs = init_weights(self, **kwargs)
-        kwargs = init_rngs(self, **kwargs)
-
         super(Distribution, self).__init__(name=name)
+        self.dim = dim
+        self.finish_setup()
 
     @classmethod
     def factory(C, dim=None, conditional=False, **kwargs):
@@ -74,7 +74,7 @@ class Distribution(Layer):
             C = make_conditional(C)
         return C(dim, **kwargs)
 
-    def set_params(self):
+    def init_params(self):
         raise NotImplementedError()
 
     def get_params(self):
@@ -91,12 +91,6 @@ class Distribution(Layer):
 
     def kl_divergence(self, q):
         '''KL divergence function.
-
-        '''
-        raise NotImplementedError()
-
-    def __call__(self, z):
-        '''Call function.
 
         '''
         raise NotImplementedError()
@@ -212,7 +206,7 @@ def make_conditional(C):
 
     '''
     class Conditional(C):
-        def set_params(self): self.params = OrderedDict()
+        def init_params(self): self.params = OrderedDict()
         def get_params(self): return []
     Conditional.__name__ = Conditional.__name__ + '_' + C.__name__
 
@@ -229,21 +223,21 @@ class Binomial(Distribution):
         self.f_entropy = _binary_entropy
         super(Binomial, self).__init__(dim, name=name, **kwargs)
 
-    def set_params(self):
+    def init_params(self):
         z = np.zeros((self.dim,)).astype(floatX)
         self.params = OrderedDict(z=z)
 
     def get_params(self):
         return [self.z]
 
+    def feed(self, z):
+        return T.nnet.sigmoid(z) * 0.9999 + 0.000005
+
     def get_prob(self, z):
         return T.nnet.sigmoid(z) * 0.9999 + 0.000005
 
     def split_prob(self, p):
         return p
-
-    def __call__(self, z):
-        return T.nnet.sigmoid(z) * 0.9999 + 0.000005
 
     def step_sample(self, epsilon, p):
         return (epsilon <= p).astype(floatX)
@@ -273,7 +267,7 @@ class CenteredBinomial(Binomial):
     def get_prob(self, z):
         return T.tanh(z)
 
-    def __call__(self, z):
+    def feed(self, z):
         return T.tanh(z)
 
     def step_sample(self, epsilon, p):
@@ -311,6 +305,8 @@ class ContinuousBinomial(Binomial):
         Doesn't sample.
 
     '''
+    is_continuous = True
+
     def sample(self, n_samples, p=None):
         if p is None:
             p = self.get_prob(*self.get_params())
@@ -327,14 +323,14 @@ class Multinomial(Distribution):
         self.f_entropy = _categorical_entropy
         super(Multinomial, self).__init__(dim, name=name, **kwargs)
 
-    def set_params(self):
+    def init_params(self):
         z = np.zeros((self.dim,)).astype(floatX)
         self.params = OrderedDict(z=z)
 
     def get_prob(self, z):
         return _softmax(z)
 
-    def __call__(self, z):
+    def feed(self, z):
         return _softmax(z)
 
 
@@ -344,15 +340,16 @@ class Gaussian(Distribution):
     '''
     has_kl = True
     is_continuous = True
+    scale = 2
 
     def __init__(self, dim, name='gaussian', clip=-10, **kwargs):
         self.f_sample = _normal
         self.f_neg_log_prob = _neg_normal_log_prob
         self.f_entropy = _normal_entropy
         self.clip = clip
-        super(Gaussian, self).__init__(dim, name=name, scale=2, **kwargs)
+        super(Gaussian, self).__init__(dim, name=name, **kwargs)
 
-    def set_params(self):
+    def init_params(self):
         mu = np.zeros((self.dim,)).astype(floatX)
         log_sigma = np.zeros((self.dim,)).astype(floatX)
 
@@ -365,7 +362,7 @@ class Gaussian(Distribution):
     def get_prob(self, mu, log_sigma):
         return concatenate([mu, log_sigma], axis=mu.ndim-1)
 
-    def __call__(self, z):
+    def feed(self, z):
         return z
 
     def get_center(self, p):
@@ -464,14 +461,15 @@ class Logistic(Distribution):
 
     '''
     is_continuous = True
+    scale = 2
 
     def __init__(self, dim, name='logistic', **kwargs):
         self.f_sample = _logistic
         self.f_neg_log_prob = _neg_logistic_log_prob
         self.f_entropy = _logistic_entropy
-        super(Logistic, self).__init__(dim, name=name, scale=2, **kwargs)
+        super(Logistic, self).__init__(dim, name=name, **kwargs)
 
-    def set_params(self):
+    def init_params(self):
         mu = np.zeros((self.dim,)).astype(floatX)
         log_s = np.zeros((self.dim,)).astype(floatX)
 
@@ -484,7 +482,7 @@ class Logistic(Distribution):
     def get_prob(self, mu, log_s):
         return concatenate([mu, log_s], axis=mu.ndim-1)
 
-    def __call__(self, z):
+    def feed(self, z):
         return z
 
     def get_center(self, p):
@@ -549,14 +547,15 @@ class Laplace(Distribution):
 
     '''
     is_continuous = True
+    scale = 2
 
     def __init__(self, dim, name='laplace', **kwargs):
         self.f_sample = _laplace
         self.f_neg_log_prob = _neg_laplace_log_prob
         self.f_entropy = _laplace_entropy
-        super(Laplace, self).__init__(dim, name=name, scale=2, **kwargs)
+        super(Laplace, self).__init__(dim, name=name, **kwargs)
 
-    def set_params(self):
+    def init_params(self):
         mu = np.zeros((self.dim,)).astype(floatX)
         log_b = np.zeros((self.dim,)).astype(floatX)
 
@@ -569,7 +568,7 @@ class Laplace(Distribution):
     def get_prob(self, mu, log_b):
         return concatenate([mu, log_b], axis=mu.ndim-1)
 
-    def __call__(self, z):
+    def feed(self, z):
         return z
 
     def get_center(self, p):
@@ -661,7 +660,7 @@ def _softmax(x):
 def _sample_multinomial(trng, p, size=None):
     if size is None:
         size = p.shape
-    return trng.multinomial(pvals=p, size=size).astype('float32')
+    return trng.multinomial(pvals=p, size=size).astype(floatX)
 
 def _categorical_cross_entropy(x, p, sum_probs=True):
     p = T.clip(p, _clip, 1.0 - _clip)
