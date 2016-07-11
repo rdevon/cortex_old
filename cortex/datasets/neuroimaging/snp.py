@@ -63,13 +63,28 @@ class SNP(BasicDataset):
         print('Loading genetic data from %s' % data_path)
         X = loadmat(data_path + '/' + source['snp'])
         Y = loadmat(data_path + '/' + source['label'])
+        Chr = loadmat(data_path + '/' + source['chrom_index'])
         X_key = list(set(X.keys()) - set(['__header__', '__globals__', '__version__']))
         Y_key = list(set(Y.keys()) - set(['__header__', '__globals__', '__version__']))
+        Chr_key = list(set(Chr.keys()) - set(['__header__', '__globals__', '__version__']))
         if len(X_key)!=1:
             raise ValueError('Found unsufficient number of  header for SNP data')
         if len(Y_key)!=1:
             raise ValueError('Found unsufficient number of header for SNP data labels')
+        if len(Chr_key)!=1:
+            raise ValueError('Found unsufficient number of header for SNP Chromosome Index')
         X = np.float32(X[X_key[0]])
         Y = np.float32(Y[Y_key[0]])
+        Chr = np.float32(Chr[Chr_key[0]])
+        try :
+            chromosomes = source['chromosomes']
+            if chromosomes!=None:
+                ind_ch = np.where(Chr==chromosomes)
+                X = X[: , ind_ch[0]]
+            else:
+                print('Using all chromosomes as Default option')
+        except:
+            print('Chromosomes Key is not found!!! Using all chromosomes')
+            pass
         Y.resize(max(Y.shape,))
         return X, Y
