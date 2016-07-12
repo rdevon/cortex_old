@@ -7,7 +7,7 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from . import init_rngs, Cell
+from . import init_rngs, Cell, _resolve
 from ..utils import concatenate, e, floatX, pi, _slice
 
 
@@ -39,9 +39,9 @@ class Distribution(Cell):
     must_samples = False
     _args = ['dim']
     _required = ['dim']
-    _arg_map = {
-        'input': ['&scale * dim'],
-        'output': ['&scale * dim']
+    _dim_map = {
+        'input': _resolve,
+        'output': _resolve
     }
 
     def __init__(self, dim, name='distribution_proto', **kwargs):
@@ -53,7 +53,18 @@ class Distribution(Cell):
         '''
         super(Distribution, self).__init__(name=name)
         self.dim = dim
+        self.effective_dim = dim * self.scale
         self.finish_setup()
+
+    @classmethod
+    def _infer_dim(C, key, dim=None, **kwargs):
+        if key in ['input', 'output']:
+            if dim is None:
+                raise ValueError('Cannot infer dimension of %s for cell_type %s '
+                                 'without knowing `%s`' % (key, C, 'dim'))
+            return C.scale * dim
+        else:
+            raise KeyError
 
     @classmethod
     def factory(C, dim=None, conditional=False, **kwargs):

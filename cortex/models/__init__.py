@@ -18,13 +18,16 @@ from cortex.utils.tools import warn_kwargs, _p
 
 
 logger = logging.getLogger(__name__)
+_resolve = '@resolve'
 
-def resolve_class(cell_type):
+def resolve_class(cell_type, classes=None):
+    if classes is None:
+        classes = _classes
     try:
-        C = _classes[cell_type]
+        C = classes[cell_type]
     except KeyError:
         raise KeyError('Unexpected cell subclass `%s`, '
-                       'available classes: %s' % (cell_type, _classes.keys()))
+                       'available classes: %s' % (cell_type, classes.keys()))
     return C
 
 def init_rngs(cell):
@@ -85,10 +88,9 @@ class CellManager(object):
         CellManager._instance = self
         self.cells = OrderedDict()
         self.cell_args = OrderedDict()
-        self.cell_classes = OrderedDict()
 
         self.links = []
-        self.class_maps = _classes
+        self.classes = _classes
         self.tparams = {}
 
     @staticmethod
@@ -98,8 +100,48 @@ class CellManager(object):
         arg = l[-1]
         return cell_id, arg
 
-    def add_class(self, key, value):
-        self.class_maps[key] = value
+    def resolve_class(self, cell_type):
+        return resolve_class(cell_type, self.classes)
+
+    def match_args(self, cell_name, **kwargs):
+        fail_on_mismatch = bool(cell_name in self.cells.keys())
+
+        if fail_on_mismatch and (cell_name not in self.cell_args):
+            raise KeyError('Cell args of %s not found but cell already set'
+                           % cell_name)
+        else:
+            self.cell_args[cell_name] = {}
+
+        args = self.cell_args[cell_name]
+        for k, v in kwargs.iteritems():
+            if k not in args.keys():
+                if fail_on_mismatch:
+                    raise KeyError('Requested key %s not found in %s and cell '
+                                    'already exists.' % (k, cell_name))
+                else:
+                    args[k] = v
+            if args[k] is not None and args[k] != v:
+                raise ValueError('Key %s already set and differs from '
+                                 'requested value (% vs %s)' % (k, args[k], v))
+
+    def build(self, name=None):
+        if name is not None and name not in self.cells:
+            build_cell(**self.cell_args[name])
+        for k, kwargs in self.cell_args.iteritems():
+            if k not in self.cells:
+                CellManager.build_cell(**kwargs)
+
+    def prepare(self, cell_type, requestor=None, name=None, **kwargs):
+        C = self.resolve_class(cell_type)
+
+        if name is None and requestor is None:
+            name = cell_type + '_cell'
+        elif name is None:
+            name = _p(requestor.name, cell_type)
+        elif name is not None and requestor is not None:
+            name = _p(requestor.name, name)
+
+        self.match_args(name, cell_type=cell_type, **kwargs)
 
     def register(self, name=None, cell_type=None, **layer_args):
         if name is None:
@@ -114,31 +156,74 @@ class CellManager(object):
             raise TypeError('`cell_type` must be provided. Got %s. Available: '
                             '%s' % (cell_type, self.classes))
 
-        if name in self.cell_args.keys():
-            self.cell_args[name].update(**cell_args)
-        else:
-            self.cell_args[name] = cell_args
+        self.cell_args[name] = cell_args
 
     def remove(self, key):
         del self.cells[key]
         del self.cell_args[key]
 
-    def build(self, key=None):
-        if key is not None and key not in self.cells:
-            build_cell(**self.cell_args[key])
-        for key, kwargs in self.cell_args.iteritems():
-            if key not in self.cells:
-                CellManager.build_cell(**kwargs)
+    def build(self, name):
+        self.resolve(name)
+        kwargs = self.cell_args[name]
+        C = kwargs['cell_type']
+        C.factory(**kwargs)
 
-    def build_cell(cell_type=None, **kwargs):
-        if cell_type is None:
-            raise TypeError('Argument `cell_type` not provided.')
-        try:
-            factory = self.classes[cell_type].factory
-        except KeyError:
-            raise KeyError('cell class %s not found. Available: %s'
-                           % (cell_type, self.classes))
-        factory(**kwargs)
+    def resolve(self, name):
+        kwargs = self.cell_args[name]
+        for k, v in kwargs.iteritems():
+            if isinstance(v, str) and '&' in v:
+                arg_list = v.split('.')
+                ref_name = '.'.join(arg_list[:-1])
+                arg_refed = arg_list[-1]
+                if ref_name[0] != '&' or '&' in ref_arg:
+                    raise ValueError('Reference character `&` must only be used'
+                                     ' before cell name.')
+
+                C = self.resolve_class(ref_args['cell_type'])
+                if hasattr(C, arg_refed):
+                    kwargs[k] = getattr(C, arg_refed)
+                elif arg_refed in ref_args.keys():
+                    ref_args = self.cell_args[ref_name]
+                    kwargs[k] = ref_args[arg_refed]
+                else:
+                    raise ValueError('Referenced argument %s of %s cannot be '
+                                     'resolved.' % v)
+
+    class Ptr(object):
+        def __init__(self):
+            self.value = None
+            self.refs = []
+
+    def add_link(self, t, f):
+        def split_arg(arg):
+            s = arg.split('.')
+            name = '.'.join(s[:-1])
+            arg = s[-1]
+            return name, arg
+
+        f_name, f_key = split_arg(f)
+        t_name, t_key = split_arg(t)
+
+        f_class = self.resolve_class(self.cell_args[f_name]['cell_type'])
+        t_class = self.resolve_class(self.cell_args[t_name]['cell_type'])
+
+        f_arg = f_class.resolve_argname(f_key)
+        t_arg = t_class.resolve_argname(t_key)
+
+        t_args = self.cell_args[t_name]
+        f_args = self.cell_args[f_name]
+
+        if f_arg != _resolve:
+            f_dim = f_args.get(f_arg, None)
+        else:
+            f_dim = _resolve
+        if t_arg != resolve:
+            t_dim = t_args.get(t_arg, None)
+        else:
+            t_dim = _resolve
+
+        if
+
 
     def __getitem__(self, key):
         return self.cells[key]
@@ -198,7 +283,7 @@ class Cell(object):
     _required = []      # Required arguments for __init__
     _args = ['name']    # Arguments necessary to uniquely id the cell. Used for
                         #   save.
-    _arg_map = {}       # Map of tensor variables to parameters.
+    _dim_map = {}       #
     _decay_params = []  # Parameters subject to decay.
 
     def __init__(self, name='layer_proto', **kwargs):
@@ -249,6 +334,25 @@ class Cell(object):
         return d
 
     @classmethod
+    def _infer_dim(C, key, **kwargs):
+        raise KeyError
+
+    @classmethod
+    def resolve_argname(C, key):
+        if key in C._dim_map.keys():
+            return C._dim_map[key]
+        else:
+            raise KeyError('Cell class %s has no argument %s' % (C, key))
+
+    @classmethod
+    def infer_dim(C, key, **kwargs):
+        if key in kwargs.keys():
+            return kwargs[key]
+
+        dim = C._infer_dim(key, **kwargs)
+        return dim
+
+    @classmethod
     def factory(C, **kwargs):
         '''Cell factory.
 
@@ -292,22 +396,6 @@ class Cell(object):
 
     def get_args(self):
         return dict((k, self.__dict__[k]) for k in self._args)
-
-    def get_component(self, name, cell_type=None, **kwargs):
-        name = self.name + '.' + name
-        try:
-            cell = self.cell_manager[name]
-        except KeyError:
-            if cell_type is None:
-                self.cell_manager.cells[name] = None
-            else:
-                if name in self._cell_manager.cell_args.keys():
-                    kwargs.update(self.layer_args[name])
-                self.set_links(name)
-                self.layers[name] = build_layer(layer_type, name=name, **kwargs)
-            cell = self._cell_manager
-
-        return cell
 
     def feed(self, *args):
         '''Basic feed method.
@@ -354,28 +442,6 @@ class Cell(object):
         components += c_components
         return components
 
-    def get_decay_params():
-        '''Return parameters used in L1 and L2 decay.
-
-        Returns:
-            OrderedDict: dictionary of parameters.
-
-        '''
-        params = dict((k, self.__dict__[k]) for k in self.params.keys())
-        decay_params = {}
-        for k in self._decay_params:
-            p = self.__dict__[k]
-            if isinstance(p, list):
-                for i in range(len(p)):
-                    kk = '%s[%d]' % (k, i)
-                    name = _p(self.name, kk)
-                    decay_params[name] = self.cell_manager.tparams[name]
-            else:
-                name = _p(self.name, k)
-                decay_params[name] = self.cell_manager.tparams[name]
-
-        return decay_params
-
     def set_tparams(self):
         '''Sets the tensor parameters.
 
@@ -398,73 +464,6 @@ class Cell(object):
                 tp = theano.shared(pp, name=name)
                 self.cell_manager.tparams[name] = tp
                 self.__dict__[k] = tp
-
-    def l1_decay(self, rate, **kwargs):
-        '''L1 decay.
-
-        Args:
-            rate (float): decay rate.
-            kwargs: keyword arguments of parameter name and rate.
-
-        Returns:
-            dict: dictionary of l1 decay costs for each parameter.
-
-        '''
-        decay_params = self.get_decay_params()
-
-        cost = T.constant(0.).astype(floatX)
-        rval = OrderedDict()
-        if rate <= 0:
-            return rval
-
-        for k, v in decay_params.iteritems():
-            if k in kwargs.keys():
-                r = kwargs[k]
-            else:
-                r = rate
-            self.logger.debug('Adding %.4g L1 decay to parameter %s' % (r, k))
-            p_cost = r * (abs(v)).sum()
-            rval[k + '_l1_cost'] = p_cost
-            cost += p_cost
-
-        rval = OrderedDict(
-            cost = cost
-        )
-
-        return rval
-
-    def l2_decay(self, rate, **kwargs):
-        '''L2 decay.
-
-        Args:
-            rate (float): decay rate.
-            kwargs: keyword arguments of parameter name and rate.
-
-        Returns:
-            dict: dictionary of l2 decay costs for each parameter.
-
-        '''
-        decay_params = self.get_decay_params()
-
-        cost = T.constant(0.).astype(floatX)
-        rval = OrderedDict()
-        if rate <= 0:
-            return rval
-        for k, v in decay_params.iteritems():
-            if k in kwargs.keys():
-                r = kwargs[k]
-            else:
-                r = rate
-            self.logger.debug('Adding %.4g L2 decay to parameter %s' % (r, k))
-            p_cost = r * (v ** 2).sum()
-            rval[k + '_l2_cost'] = p_cost
-            cost += p_cost
-
-        rval = OrderedDict(
-            cost = cost
-        )
-
-        return rval
 
     def help(self):
         pprint(self._help)

@@ -43,8 +43,8 @@ class MLP(Cell):
     '''
     _required = ['dim_in', 'dim_out']
     _options = {'dropout': False, 'weight_noise': False}
-    _args = ['dim_in', 'dim_out', 'n_layers', 'dim_hs', 'h_act', 'out_act']
-    _arg_map = {
+    _args = ['dim_in', 'dim_out', 'dim_hs', 'h_act', 'out_act']
+    _dim_map = {
         'X': 'dim_in',
         'input': 'dim_in',
         'Y': 'dim_out',
@@ -185,95 +185,60 @@ class DistributionMLP(Cell):
 
     '''
 
-    _required = ['dim_in', 'dim_out', 'distribution_type']
+    _required = ['dim_in', 'dim', 'distribution_type']
+    _passed = [('dim_out', 'mlp.dim_out'), ('dim_in', 'mlp.dim_in'),
+        ('dim', 'distribution.dim')]
     _components = {
         'mlp': {
             'cell_type': 'MLP',
-            '@required': {'out_dist': 'identity'},
-            '@passed': ['dim_h', 'n_layers', 'dim_hs', 'h_act']
+            '_required': {'out_dist': 'identity'},
+            '_passed': ['dim_in', 'dim_h', 'n_layers', 'dim_hs', 'h_act']
         },
         'distribution': {
             'cell_type': '&distribution_type',
-            '@required': {'conditional': True}
+            '_required': {'conditional': True},
+            '_passed': ['dim']
         },
     }
-    _links = [('mlp.output, dist.input')]
+    _links = [('mlp.output', 'distribution.input')]
 
-    def __init__(self, dim_in, dim_out, distribution_type, name=None, **kwargs):
+    def __init__(self, dim_in, distribution_type, name=None, **kwargs):
         if name is None:
             name = '%s_%s' % (distribution_type, 'MLP')
         self.dim_in = dim_in
-        self.dim_out = dim_out
         self.distribution_type = distribution_type
         super(DistributionMLP, self).__init__(name=name, **kwargs)
 
     def set_components(self, **kwargs):
         from ..utils.tools import _p
-        args = {}
-        classes = {}
+        print self.cell_manager.cell_args
 
         for k, v in self._components.iteritems():
-            name = _p(self.name, k)
-            required = v.get('@required', [])
-            passed = v.get('@passed', [])
-            cell_args = kwargs.get(k, dict())
+            args = {}
+            args.update(**v)
+            passed = args.pop('_passed', dict())
+            required = args.pop('_required', dict())
+            args.update(**required)
+            passed_args = dict((kk, kwargs[kk])
+                for kk in passed
+                if kk in kwargs.keys())
+            args.update(**passed_args)
+            final_args = {}
+            for kk, vv in args.iteritems():
+                if isinstance(vv, str) and vv.startswith('&'):
+                    final_args[kk] = self.__dict__[vv[1:]]
+                else:
+                    final_args[kk] = vv
+            self.cell_manager.prepare(name=k, requestor=self, **final_args)
 
-            if name in self.cell_manager.cells.keys():
-                cell = self.cell_manager[name]
-                C = cell.__class__
-                components[k] = component
-                for kk, vv in required.iteritems():
-                    if cell.__dict__[kk] != vv:
-                        raise TypeError(
-                            'Provided cell %s is a components of %s. %s '
-                            'should be %s but is %s'
-                            % (name, self.name, cell.__dict__[kk], vv))
-                for kk in passed:
-                    vv = kwargs.pop(kk, None)
-                    if vv is not None and cell.__dict__[kk] != vv:
-                        raise TypeError(
-                            'Provided cell %s is a components of %s. %s '
-                            'should be %s but is %s'
-                            % (name, self.name, cell.__dict__[kk], vv))
+        for f, t in self._links:
+            f = _p(self.name, f)
+            t = _p(self.name, t)
+            self.cell_manager.add_link(f, t)
 
-            else:
-                if name in self.cell_manager.cell_args.keys():
-                    cell_args.update(**self.cell_manager.cell_args[name])
-                for kk, vv in required.iteritems():
-                    cell_args[kk] = vv
-                for kk in passed:
-                    vv = kwargs.pop(kk, None)
-                    if vv is not None:
-                        cell_args[kk] = vv
+        print self.cell_manager.cell_args
 
-                c = cell_args.get('cell_type', v.get('cell_type', None))
-                if c.startswith('&'):
-                    c = eval('self.' + c[1:])
-                C = resolve_class(c)
-                if C is None:
-                    raise TypeError(
-                        '`cell_type` of %s must be provided, either in defaults'
-                        ' or in provided arguments.'
-                    )
-                args[k] = cell_args
-
-            classes[k] = C
-
-        print args
-        print classes
         assert False
-
-        for f, t in _links:
-            s_f = f.split('.')
-            f_name = '.'.join(s_f[:-1])
-            f_arg = s_f[-1]
-
-            s_t = t.split('.')
-            t_name = '.'.join(s_t[:-1])
-            t_arg = s_t[-1]
-
-            f_arg = classes[f_name]._arg_map.get(f_arg, f_arg)
-            t_arg = classes[t_name]._arg_map.get(t_arg, t_arg)
 
 
     def feed(self, X, *params):

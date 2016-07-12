@@ -31,9 +31,9 @@ def test_make_mlp(dim_in=13, dim_h=17, dim_out=19, n_layers=2,
     return mlp
 
 def test_make_distmlp(dim_in=13, dim_h=17, dim_out=19, n_layers=2,
-                      h_act='softplus', distribution_type='binomial'):
+                      h_act='softplus', distribution_type='logistic'):
     C = test_fetch_class('DistributionMLP')
-    mlp = C(dim_in, dim_out, distribution_type=distribution_type,
+    mlp = C(dim_in, dim=dim_out, distribution_type=distribution_type,
             dim_hs=[dim_h], h_act=h_act)
     mlp.set_tparams()
     return mlp
