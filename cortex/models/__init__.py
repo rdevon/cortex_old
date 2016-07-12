@@ -100,6 +100,12 @@ class CellManager(object):
         arg = l[-1]
         return cell_id, arg
 
+    def reset(self):
+        self.links = []
+        self.tparams = {}
+        self.cells = OrderedDict()
+        self.cell_args = OrderedDict()
+
     def resolve_class(self, cell_type):
         return resolve_class(cell_type, self.classes)
 
@@ -126,10 +132,23 @@ class CellManager(object):
 
     def build(self, name=None):
         if name is not None and name not in self.cells:
-            build_cell(**self.cell_args[name])
-        for k, kwargs in self.cell_args.iteritems():
-            if k not in self.cells:
-                CellManager.build_cell(**kwargs)
+            self.build_cell(name)
+        else:
+            for k, kwargs in self.cell_args.iteritems():
+                if k not in self.cells:
+                    self.build_cell(k)
+
+    def build_cell(self, name):
+        kwargs = self.cell_args[name]
+        C = self.resolve_class(kwargs['cell_type'])
+        self.resolve(name)
+
+        for k in kwargs.keys():
+            if isinstance(kwargs[k], CellManager.Link):
+                C.get_link_value(kwargs[k], k, kwargs)
+                kwargs.pop(k)
+
+        C.factory(name=name, **kwargs)
 
     def prepare(self, cell_type, requestor=None, name=None, **kwargs):
         C = self.resolve_class(cell_type)
@@ -162,68 +181,62 @@ class CellManager(object):
         del self.cells[key]
         del self.cell_args[key]
 
-    def build(self, name):
-        self.resolve(name)
-        kwargs = self.cell_args[name]
-        C = kwargs['cell_type']
-        C.factory(**kwargs)
-
     def resolve(self, name):
-        kwargs = self.cell_args[name]
-        for k, v in kwargs.iteritems():
-            if isinstance(v, str) and '&' in v:
-                arg_list = v.split('.')
-                ref_name = '.'.join(arg_list[:-1])
-                arg_refed = arg_list[-1]
-                if ref_name[0] != '&' or '&' in ref_arg:
-                    raise ValueError('Reference character `&` must only be used'
-                                     ' before cell name.')
+        for link in self.links:
+            if name in link.members:
+                link.resolve()
 
-                C = self.resolve_class(ref_args['cell_type'])
-                if hasattr(C, arg_refed):
-                    kwargs[k] = getattr(C, arg_refed)
-                elif arg_refed in ref_args.keys():
-                    ref_args = self.cell_args[ref_name]
-                    kwargs[k] = ref_args[arg_refed]
-                else:
-                    raise ValueError('Referenced argument %s of %s cannot be '
-                                     'resolved.' % v)
+    class Link(object):
+        class Node(object):
+            def __init__(self, name, C, key):
+                self.name = name
+                self.C = C
+                self.key = key
 
-    class Ptr(object):
-        def __init__(self):
+        def __init__(self, cm, f, t):
             self.value = None
-            self.refs = []
+            self.nodes = {}
+            self.cm = cm
 
-    def add_link(self, t, f):
-        def split_arg(arg):
-            s = arg.split('.')
-            name = '.'.join(s[:-1])
-            arg = s[-1]
-            return name, arg
+            def split_arg(arg):
+                s = arg.split('.')
+                name = '.'.join(s[:-1])
+                arg = s[-1]
+                return name, arg
 
-        f_name, f_key = split_arg(f)
-        t_name, t_key = split_arg(t)
+            f_name, f_key = split_arg(f)
+            t_name, t_key = split_arg(t)
 
-        f_class = self.resolve_class(self.cell_args[f_name]['cell_type'])
-        t_class = self.resolve_class(self.cell_args[t_name]['cell_type'])
+            f_class = self.cm.resolve_class(cm.cell_args[f_name]['cell_type'])
+            t_class = self.cm.resolve_class(cm.cell_args[t_name]['cell_type'])
 
-        f_arg = f_class.resolve_argname(f_key)
-        t_arg = t_class.resolve_argname(t_key)
+            self.nodes[f] = self.Node(f_name, f_class, f_key)
+            self.nodes[t] = self.Node(t_name, t_class, t_key)
+            self.members = [n.name for n in self.nodes.values()]
 
-        t_args = self.cell_args[t_name]
-        f_args = self.cell_args[f_name]
+        def resolve(self):
+            for node in self.nodes.values():
+                kwargs = self.cm.cell_args[node.name]
+                try:
+                    self.value = node.C.set_link_value(node.key, **kwargs)
+                except ValueError:
+                    pass
+            if self.value is None:
+                raise ValueError
 
-        if f_arg != _resolve:
-            f_dim = f_args.get(f_arg, None)
-        else:
-            f_dim = _resolve
-        if t_arg != resolve:
-            t_dim = t_args.get(t_arg, None)
-        else:
-            t_dim = _resolve
+        def __repr__(self):
+            if self.value is not None:
+                return '%s' % self.value
+            else:
+                keys = self.nodes.keys()
+                return ('<link>(%s, %s)' % (keys[0], keys[1]))
 
-        if
-
+    def add_link(self, f, t):
+        link = CellManager.Link(self, f, t)
+        self.links.append(link)
+        for node in link.nodes.values():
+            if self.cell_args[node.name].get(node.key, None) is None:
+                self.cell_args[node.name][node.key] = link
 
     def __getitem__(self, key):
         return self.cells[key]
@@ -239,6 +252,7 @@ class CellManager(object):
         else:
             raise TypeError('`cell` must be of type %s, got %s'
                             % (Cell, type(cell)))
+
 
 class NoiseSwitch(object):
     '''Object to control noise of model.
@@ -284,7 +298,7 @@ class Cell(object):
     _args = ['name']    # Arguments necessary to uniquely id the cell. Used for
                         #   save.
     _dim_map = {}       #
-    _decay_params = []  # Parameters subject to decay.
+    _links = []
 
     def __init__(self, name='layer_proto', **kwargs):
         '''Init function for Cell.
@@ -297,6 +311,7 @@ class Cell(object):
         self.cell_manager = get_cell_manager()
         self.noise_switch = get_noise_switch()
         self.name = name
+        self.passed = {}
         init_rngs(self)
 
         self.logger = logging.getLogger(
@@ -334,26 +349,28 @@ class Cell(object):
         return d
 
     @classmethod
-    def _infer_dim(C, key, **kwargs):
-        raise KeyError
-
-    @classmethod
-    def resolve_argname(C, key):
+    def set_link_value(C, key, **kwargs):
         if key in C._dim_map.keys():
-            return C._dim_map[key]
+            value = kwargs.get(key, None)
+            if not isinstance(value, CellManager.Link) and value is not None:
+                return value
+            else:
+                raise ValueError
         else:
-            raise KeyError('Cell class %s has no argument %s' % (C, key))
+            raise KeyError
 
     @classmethod
-    def infer_dim(C, key, **kwargs):
-        if key in kwargs.keys():
-            return kwargs[key]
-
-        dim = C._infer_dim(key, **kwargs)
-        return dim
+    def get_link_value(C, link, key, kwargs):
+        if key in C._dim_map.keys():
+            if link.value is None:
+                raise ValueError
+            else:
+                kwargs[C._dim_map[key]] = link.value
+        else:
+            raise KeyError
 
     @classmethod
-    def factory(C, **kwargs):
+    def factory(C, cell_type=None, **kwargs):
         '''Cell factory.
 
         Convenience function for building Cells.
@@ -380,6 +397,38 @@ class Cell(object):
         self.cell_manager[self.name] = self
 
     def set_components(self, **kwargs):
+        from ..utils.tools import _p
+
+        for k, v in self._components.iteritems():
+            args = {}
+            args.update(**v)
+            passed = args.pop('_passed', dict())
+            for p in passed:
+                self.passed[p] = k
+            required = args.pop('_required', dict())
+            args.update(**required)
+            passed_args = dict((kk, kwargs[kk])
+                for kk in passed
+                if kk in kwargs.keys())
+            kwargs = dict((kk, kwargs[kk]) for kk in kwargs.keys() if kk not in passed)
+            args.update(**passed_args)
+            final_args = {}
+            for kk, vv in args.iteritems():
+                if isinstance(vv, str) and vv.startswith('&'):
+                    final_args[kk] = self.__dict__[vv[1:]]
+                else:
+                    final_args[kk] = vv
+            self.cell_manager.prepare(name=k, requestor=self, **final_args)
+
+        for f, t in self._links:
+            f = _p(self.name, f)
+            t = _p(self.name, t)
+            self.cell_manager.add_link(f, t)
+
+        for k, v in self._components.iteritems():
+            self.cell_manager.build(_p(self.name, k))
+            self.__dict__[k] = self.cell_manager[_p(self.name, k)]
+
         return kwargs
 
     def copy(self):
@@ -476,6 +525,13 @@ class Cell(object):
             raise KeyError('cell %s has no argument %s. Available arguments: '
                            '%s' % (C, key, C._arg_map))
         return kwargs[k]
+
+    def __getattr__(self, key):
+        if hasattr(self, key) and key == 'passed':
+            return object.__getattr__(self, key)
+        if key in self.passed:
+            return self.__dict__[self.passed[key]].__getattribute__(key)
+        return object.__getattr__(self, key)
 
     def __str__(self):
         attributes = self.__dict__

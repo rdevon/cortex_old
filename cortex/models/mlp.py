@@ -185,13 +185,11 @@ class DistributionMLP(Cell):
 
     '''
 
-    _required = ['dim_in', 'dim', 'distribution_type']
-    _passed = [('dim_out', 'mlp.dim_out'), ('dim_in', 'mlp.dim_in'),
-        ('dim', 'distribution.dim')]
+    _required = ['distribution_type']
     _components = {
         'mlp': {
             'cell_type': 'MLP',
-            '_required': {'out_dist': 'identity'},
+            '_required': {'out_act': 'identity'},
             '_passed': ['dim_in', 'dim_h', 'n_layers', 'dim_hs', 'h_act']
         },
         'distribution': {
@@ -202,50 +200,19 @@ class DistributionMLP(Cell):
     }
     _links = [('mlp.output', 'distribution.input')]
 
-    def __init__(self, dim_in, distribution_type, name=None, **kwargs):
+    def __init__(self, distribution_type, name=None, **kwargs):
         if name is None:
             name = '%s_%s' % (distribution_type, 'MLP')
-        self.dim_in = dim_in
         self.distribution_type = distribution_type
         super(DistributionMLP, self).__init__(name=name, **kwargs)
-
-    def set_components(self, **kwargs):
-        from ..utils.tools import _p
-        print self.cell_manager.cell_args
-
-        for k, v in self._components.iteritems():
-            args = {}
-            args.update(**v)
-            passed = args.pop('_passed', dict())
-            required = args.pop('_required', dict())
-            args.update(**required)
-            passed_args = dict((kk, kwargs[kk])
-                for kk in passed
-                if kk in kwargs.keys())
-            args.update(**passed_args)
-            final_args = {}
-            for kk, vv in args.iteritems():
-                if isinstance(vv, str) and vv.startswith('&'):
-                    final_args[kk] = self.__dict__[vv[1:]]
-                else:
-                    final_args[kk] = vv
-            self.cell_manager.prepare(name=k, requestor=self, **final_args)
-
-        for f, t in self._links:
-            f = _p(self.name, f)
-            t = _p(self.name, t)
-            self.cell_manager.add_link(f, t)
-
-        print self.cell_manager.cell_args
-
-        assert False
-
 
     def feed(self, X, *params):
         outs = self.mlp.feed(X, *params)
         Y = outs['Y']
-        outs.update(**self.distribution(Y))
+        outs.update(P=self.distribution(Y))
         return outs
+
+    def get_params(self): return self.mlp.get_params()
 
     def sample(self, *args, **kwargs):
         assert self.distribution is not None

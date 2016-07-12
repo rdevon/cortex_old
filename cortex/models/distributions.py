@@ -39,10 +39,6 @@ class Distribution(Cell):
     must_samples = False
     _args = ['dim']
     _required = ['dim']
-    _dim_map = {
-        'input': _resolve,
-        'output': _resolve
-    }
 
     def __init__(self, dim, name='distribution_proto', **kwargs):
         '''Init function for Distribution class.
@@ -51,23 +47,30 @@ class Distribution(Cell):
             dim (int): dimension of distribution.
 
         '''
-        super(Distribution, self).__init__(name=name)
         self.dim = dim
-        self.effective_dim = dim * self.scale
-        self.finish_setup()
+        super(Distribution, self).__init__(name=name, **kwargs)
 
     @classmethod
-    def _infer_dim(C, key, dim=None, **kwargs):
-        if key in ['input', 'output']:
-            if dim is None:
-                raise ValueError('Cannot infer dimension of %s for cell_type %s '
-                                 'without knowing `%s`' % (key, C, 'dim'))
-            return C.scale * dim
-        else:
+    def set_link_value(C, key, dim=None, **kwargs):
+        if key not in ['input', 'output']:
             raise KeyError
 
+        if dim is not None:
+            return C.scale * dim
+        else:
+            raise ValueError
+
     @classmethod
-    def factory(C, dim=None, conditional=False, **kwargs):
+    def get_link_value(C, link, key, kwargs):
+        if key not in ['input', 'output']:
+            raise KeyError
+        if link.value is None:
+            raise ValueError
+        else:
+            kwargs['dim'] = link.value / C.scale
+
+    @classmethod
+    def factory(C, cell_type=None, conditional=False, **kwargs):
         '''Resolves Distribution subclass from str.
 
         Args:
@@ -78,12 +81,19 @@ class Distribution(Cell):
             Distribution.
 
         '''
-        if dim is None:
-            raise ValueError('`dim` must be provided for Distribution.')
+        reqs = OrderedDict(
+            (k, v) for k, v in kwargs.iteritems() if k in C._required)
+        options = dict((k, v) for k, v in kwargs.iteritems() if not k in C._required)
+
+        for req in C._required:
+            if req not in reqs.keys():
+                raise TypeError('Required argument %s not provided for '
+                                'constructor of %s' % (req, C))
 
         if conditional:
             C = make_conditional(C)
-        return C(dim, **kwargs)
+
+        return C(*reqs.values(), **options)
 
     def init_params(self):
         raise NotImplementedError()
