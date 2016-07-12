@@ -324,7 +324,7 @@ class Helmholtz(Layer):
         h0, h = self.prior.generate_latent_pair()
         p0 = self.conditional.feed(h0)
         p = self.conditional.feed(h)
-        py = self.conditional.distribution.visualize(p0, p)
+        py = self.conditional.distribution.visualize(p0[None, :], p)
         return py
 
     # Misc --------------------------------------------------------------------
