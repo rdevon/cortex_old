@@ -190,6 +190,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
 
     if fig is None:
         fig = plt.figure(figsize=[iscale * y, (1.5 * iscale) * x / 2.5])
+        #fig = plt.figure(figsize=[iscale * y, iscale * x / 2.5])
     fig.set_facecolor((bgcol, bgcol, bgcol))
     plt.subplots_adjust(left=0.01, right=0.99, bottom=0.05, top=0.99, wspace=0.05, hspace=0.5)
 
@@ -261,6 +262,8 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
             else:
                 tcs = time_courses[f]
             ax = fig.add_subplot(x, y, j)
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
             for tc in tcs:
                 ax.plot(tc)
 

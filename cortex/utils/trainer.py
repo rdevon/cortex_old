@@ -4,6 +4,9 @@ Does typical training work.
 
 '''
 
+import matplotlib
+matplotlib.use('Agg')
+
 from collections import OrderedDict
 import imp
 import inspect

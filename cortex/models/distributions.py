@@ -122,8 +122,8 @@ class Distribution(Layer):
         '''
         if p is None:
             p = self.get_prob(*self.get_params())
-            size = None
-        elif p.ndim == 0:
+
+        if p.ndim == 0:
             p = T.zeros((self.dim,)).astype(floatX) + p
             size = (n_samples, p.shape[0] // self.scale)
         elif p.ndim == 1:
