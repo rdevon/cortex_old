@@ -78,13 +78,19 @@ class SNP(BasicDataset):
         Chr = np.float32(Chr[Chr_key[0]])
         try :
             chromosomes = source['chromosomes']
-            if chromosomes!=None:
-                ind_ch = np.where(Chr==chromosomes)
-                X = X[: , ind_ch[0]]
+            if (chromosomes!=None):
+                if type(chromosomes)==int:
+                    chromosomes=[chromosomes]
+                if (len(chromosomes)!=0)&(type(chromosomes)==list):
+                    ind_ch = np.where(Chr==chromosomes)
+                    X = X[: , ind_ch[0]]
+                    print('Using chromosomes: %s' % chromosomes)
+                else:
+                    print('Chromosome index is not valid, Using all chromosomes as Default')
             else:
-                print('Using all chromosomes as Default option')
+                print('Chromosomes Index is either empty or None, Using all chromosomes as Default')
         except:
-            print('Chromosomes Key is not found!!! Using all chromosomes')
+            print(' "Chromosomes" variable cannot found!!!Using all chromosomes as Default')
             pass
         Y.resize(max(Y.shape,))
         return X, Y
