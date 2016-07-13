@@ -11,16 +11,15 @@ from theano import tensor as T
 import cortex
 from cortex import models
 from cortex.models import mlp as module
-from cortex.utils import floatX
-from cortex.utils import logger as cortex_logger
+from cortex.utils import floatX, logger as cortex_logger
 
 
 logger = logging.getLogger(__name__)
 _atol = 1e-7
-cell_manager = cortex.cell_manager
+manager = cortex.manager
 
 def test_fetch_class(c='MLP'):
-    C = models.resolve_class(c)
+    C = cortex.resolve_class(c)
     return C
 
 def test_make_mlp(dim_in=13, dim_h=17, dim_out=19, n_layers=2,
@@ -103,7 +102,7 @@ def test_feed_forward():
 
 def test_feed_forward_dmlp(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
                        distribution_type='binomial'):
-    cell_manager.reset()
+    manager.reset()
     if mlp is None:
         mlp = test_make_distmlp(distribution_type=distribution_type)
     outs = mlp(X)
@@ -164,6 +163,6 @@ def test_feed_forward_dmlp(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
                         % _atol)
 
 def test_make_stack():
-    cell_manager.prepare('MLP', name='mlp1', dim_hs=[5, 7])
-    cell_manager.prepare('MLP', name='mlp2', dim_in=13, dim_hs=[3, 11])
-    cell_manager.add_link('mlp1.output', 'mlp2.input')
+    manager.prepare('MLP', name='mlp1', dim_hs=[5, 7])
+    manager.prepare('MLP', name='mlp2', dim_in=13, dim_hs=[3, 11])
+    manager.add_link('mlp1.output', 'mlp2.input')

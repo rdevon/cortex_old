@@ -7,7 +7,7 @@ import numpy as np
 import theano
 from theano import tensor as T
 
-from . import init_rngs, Cell, _resolve
+from . import init_rngs, Cell
 from ..utils import concatenate, e, floatX, pi, _slice
 
 

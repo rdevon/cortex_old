@@ -8,12 +8,92 @@ import os
 from os import path
 import yaml
 
+from .. import BasicDataset
 from ...utils.tools import resolve_path
 from ...utils.extra import download_data, unzip
 
 
 logger = logging.getLogger(__name__)
 
+
+class NeuroimagingDataset(BasicDataset):
+    def slice_data(self, idx):
+        for k, v in self.data.iteritems():
+            self.data[k] = v[idx]
+        self.X = self.data[self.name]
+        if self.labels in self.data.keys():
+            self.Y = self.data[self.labels]
+        self.n_subjects = len(idx)
+        self.n = self.X.shape[0]
+
+    @classmethod
+    def factory(C, split=None, idx=None, batch_sizes=None, **kwargs):
+        data = C(batch_size=10, **kwargs)
+        if hasattr(data, 'logger'):
+            logger = data.logger
+            data.logger = None
+        else:
+            logger = None
+
+        if idx is None:
+            logger.info('Splitting dataset into ratios %r' % split)
+            if round(np.sum(split), 5) != 1. or len(split) != 3:
+                raise ValueError(split)
+
+            if data.balance:
+                l_idx = [np.where(label == 1)[0].tolist() for label in data.Y[:, 0, :].T]
+                train_idx = []
+                valid_idx = []
+                test_idx = []
+                for l in l_idx:
+                    random.shuffle(l)
+                    split_idx = []
+                    accum = 0
+                    for s in split:
+                        s_i = int(s * len(l) + accum)
+                        split_idx.append(s_i)
+                        accum += s_i
+                    train_idx += l[:split_idx[0]]
+                    valid_idx += l[split_idx[0]:split_idx[1]]
+                    test_idx += l[split_idx[1]:]
+            else:
+                split_idx = []
+                accum = 0
+                for s in split:
+                    s_i = int(s * data.n_subjects + accum)
+                    split_idx.append(s_i)
+                    accum += s_i
+                idx = range(data.n_subjects)
+                random.shuffle(idx)
+
+                train_idx = idx[:split_idx[0]]
+                valid_idx = idx[split_idx[0]:split_idx[1]]
+                test_idx = idx[split_idx[1]:]
+            idx = [train_idx, valid_idx, test_idx]
+        else:
+            logger.info('Splitting dataset into ratios %.2f / %.2f / %.2f '
+                        'using given indices'
+                        % tuple(len(idx[i]) / float(data.n_subjects)
+                                for i in range(3)))
+
+        assert len(batch_sizes) == len(idx)
+
+        datasets = []
+        modes = ['train', 'valid', 'test']
+        for i, bs, mode in zip(idx, batch_sizes, modes):
+            if bs is None:
+                dataset = None
+            else:
+                dataset = data.copy()
+                dataset.slice_data(i)
+                dataset.batch_size = bs
+                dataset.logger = logger
+                dataset.mode = mode
+                logger.debug('%s dataset has %d subjects'
+                             % (dataset.mode, len(i)))
+            datasets.append(dataset)
+
+        return datasets + [idx]
 
 def fetch_neuroimaging_data():
     '''Fetch the neuroimaging dataset for demos.

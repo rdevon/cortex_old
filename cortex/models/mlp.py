@@ -9,7 +9,7 @@ from theano import tensor as T
 import warnings
 
 from . import distributions
-from . import Cell, norm_weight, resolve_class
+from . import Cell, norm_weight
 from ..utils import concatenate, floatX
 
 

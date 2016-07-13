@@ -13,22 +13,13 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from cortex.utils import floatX, _rng
-from cortex.utils.tools import warn_kwargs, _p
+from .. import get_manager, Link
+from ..utils import floatX, _rng
+from ..utils.tools import warn_kwargs, _p
 
 
 logger = logging.getLogger(__name__)
-_resolve = '@resolve'
 
-def resolve_class(cell_type, classes=None):
-    if classes is None:
-        classes = _classes
-    try:
-        C = classes[cell_type]
-    except KeyError:
-        raise KeyError('Unexpected cell subclass `%s`, '
-                       'available classes: %s' % (cell_type, classes.keys()))
-    return C
 
 def init_rngs(cell):
     '''Initialization function for RNGs.
@@ -63,196 +54,6 @@ def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
     else:
         W = scale * rng.randn(nin, nout)
     return W.astype(floatX)
-
-def get_cell_manager():
-    if CellManager._instance is None:
-        return CellManager()
-    else:
-        return CellManager._instance
-
-
-class CellManager(object):
-    '''cortex Cell manager.
-
-    Ensures that connected objects have the right dimensionality as well as
-        manages passing the correct tensors as input and cost.
-
-    '''
-    _instance = None
-
-    def __init__(self):
-        self.logger = logging.getLogger(
-            '.'.join([self.__module__, self.__class__.__name__]))
-        if CellManager._instance is not None:
-            logger.warn('New `CellManager` instance. Old one will be lost.')
-        CellManager._instance = self
-        self.cells = OrderedDict()
-        self.cell_args = OrderedDict()
-
-        self.links = []
-        self.classes = _classes
-        self.tparams = {}
-
-    @staticmethod
-    def split_ref(ref):
-        l = ref.split('.')
-        cell_id = '.'.join(l[:-1])
-        arg = l[-1]
-        return cell_id, arg
-
-    def reset(self):
-        self.links = []
-        self.tparams = {}
-        self.cells = OrderedDict()
-        self.cell_args = OrderedDict()
-
-    def resolve_class(self, cell_type):
-        return resolve_class(cell_type, self.classes)
-
-    def match_args(self, cell_name, **kwargs):
-        fail_on_mismatch = bool(cell_name in self.cells.keys())
-
-        if fail_on_mismatch and (cell_name not in self.cell_args):
-            raise KeyError('Cell args of %s not found but cell already set'
-                           % cell_name)
-        else:
-            self.cell_args[cell_name] = {}
-
-        args = self.cell_args[cell_name]
-        for k, v in kwargs.iteritems():
-            if k not in args.keys():
-                if fail_on_mismatch:
-                    raise KeyError('Requested key %s not found in %s and cell '
-                                    'already exists.' % (k, cell_name))
-                else:
-                    args[k] = v
-            if args[k] is not None and args[k] != v:
-                raise ValueError('Key %s already set and differs from '
-                                 'requested value (% vs %s)' % (k, args[k], v))
-
-    def build(self, name=None):
-        if name is not None and name not in self.cells:
-            self.build_cell(name)
-        else:
-            for k, kwargs in self.cell_args.iteritems():
-                if k not in self.cells:
-                    self.build_cell(k)
-
-    def build_cell(self, name):
-        kwargs = self.cell_args[name]
-        C = self.resolve_class(kwargs['cell_type'])
-        self.resolve(name)
-
-        for k in kwargs.keys():
-            if isinstance(kwargs[k], CellManager.Link):
-                C.get_link_value(kwargs[k], k, kwargs)
-                kwargs.pop(k)
-
-        C.factory(name=name, **kwargs)
-
-    def prepare(self, cell_type, requestor=None, name=None, **kwargs):
-        C = self.resolve_class(cell_type)
-
-        if name is None and requestor is None:
-            name = cell_type + '_cell'
-        elif name is None:
-            name = _p(requestor.name, cell_type)
-        elif name is not None and requestor is not None:
-            name = _p(requestor.name, name)
-
-        self.match_args(name, cell_type=cell_type, **kwargs)
-
-    def register(self, name=None, cell_type=None, **layer_args):
-        if name is None:
-            name = cell_type
-        if name in self.cells.keys():
-            self.logger.warn(
-                'Cell with name `%s` already found: overwriting. '
-                'Use `cortex.cell_manager.remove` to avoid this warning' % key)
-        try:
-            self.cell_classes = self.classes[cell_type]
-        except KeyError:
-            raise TypeError('`cell_type` must be provided. Got %s. Available: '
-                            '%s' % (cell_type, self.classes))
-
-        self.cell_args[name] = cell_args
-
-    def remove(self, key):
-        del self.cells[key]
-        del self.cell_args[key]
-
-    def resolve(self, name):
-        for link in self.links:
-            if name in link.members:
-                link.resolve()
-
-    class Link(object):
-        class Node(object):
-            def __init__(self, name, C, key):
-                self.name = name
-                self.C = C
-                self.key = key
-
-        def __init__(self, cm, f, t):
-            self.value = None
-            self.nodes = {}
-            self.cm = cm
-
-            def split_arg(arg):
-                s = arg.split('.')
-                name = '.'.join(s[:-1])
-                arg = s[-1]
-                return name, arg
-
-            f_name, f_key = split_arg(f)
-            t_name, t_key = split_arg(t)
-
-            f_class = self.cm.resolve_class(cm.cell_args[f_name]['cell_type'])
-            t_class = self.cm.resolve_class(cm.cell_args[t_name]['cell_type'])
-
-            self.nodes[f] = self.Node(f_name, f_class, f_key)
-            self.nodes[t] = self.Node(t_name, t_class, t_key)
-            self.members = [n.name for n in self.nodes.values()]
-
-        def resolve(self):
-            for node in self.nodes.values():
-                kwargs = self.cm.cell_args[node.name]
-                try:
-                    self.value = node.C.set_link_value(node.key, **kwargs)
-                except ValueError:
-                    pass
-            if self.value is None:
-                raise ValueError
-
-        def __repr__(self):
-            if self.value is not None:
-                return '%s' % self.value
-            else:
-                keys = self.nodes.keys()
-                return ('<link>(%s, %s)' % (keys[0], keys[1]))
-
-    def add_link(self, f, t):
-        link = CellManager.Link(self, f, t)
-        self.links.append(link)
-        for node in link.nodes.values():
-            if self.cell_args[node.name].get(node.key, None) is None:
-                self.cell_args[node.name][node.key] = link
-
-    def __getitem__(self, key):
-        return self.cells[key]
-
-    def __setitem__(self, key, cell):
-        if key in self.cells.keys():
-            self.logger.warn(
-                'Cell with name `%s` already found: overwriting. '
-                'Use `cortex.cell_manager.remove` to avoid this warning' % key)
-        if isinstance(cell, Cell):
-            self.cells[key] = cell
-            self.cell_args[key] = cell.get_args()
-        else:
-            raise TypeError('`cell` must be of type %s, got %s'
-                            % (Cell, type(cell)))
-
 
 class NoiseSwitch(object):
     '''Object to control noise of model.
@@ -308,7 +109,7 @@ class Cell(object):
 
         '''
         kwargs = self.set_options(**kwargs)
-        self.cell_manager = get_cell_manager()
+        self.manager = get_manager()
         self.noise_switch = get_noise_switch()
         self.name = name
         self.passed = {}
@@ -352,7 +153,7 @@ class Cell(object):
     def set_link_value(C, key, **kwargs):
         if key in C._dim_map.keys():
             value = kwargs.get(key, None)
-            if not isinstance(value, CellManager.Link) and value is not None:
+            if not isinstance(value, Link) and value is not None:
                 return value
             else:
                 raise ValueError
@@ -394,7 +195,7 @@ class Cell(object):
         return C(*reqs.values(), **options)
 
     def register(self):
-        self.cell_manager[self.name] = self
+        self.manager[self.name] = self
 
     def set_components(self, **kwargs):
         from ..utils.tools import _p
@@ -418,16 +219,16 @@ class Cell(object):
                     final_args[kk] = self.__dict__[vv[1:]]
                 else:
                     final_args[kk] = vv
-            self.cell_manager.prepare(name=k, requestor=self, **final_args)
+            self.manager.prepare(name=k, requestor=self, **final_args)
 
         for f, t in self._links:
             f = _p(self.name, f)
             t = _p(self.name, t)
-            self.cell_manager.add_link(f, t)
+            self.manager.add_link(f, t)
 
         for k, v in self._components.iteritems():
-            self.cell_manager.build(_p(self.name, k))
-            self.__dict__[k] = self.cell_manager[_p(self.name, k)]
+            self.manager.build(_p(self.name, k))
+            self.__dict__[k] = self.manager[_p(self.name, k)]
 
         return kwargs
 
@@ -506,12 +307,12 @@ class Cell(object):
                     kk = '%s[%d]' % (k, i)
                     name = _p(self.name, kk)
                     tp = theano.shared(pp, name=name)
-                    self.cell_manager.tparams[name] = tp
+                    self.manager.tparams[name] = tp
                     self.__dict__[k].append(tp)
             else:
                 name = _p(self.name, k)
                 tp = theano.shared(pp, name=name)
-                self.cell_manager.tparams[name] = tp
+                self.manager.tparams[name] = tp
                 self.__dict__[k] = tp
 
     def help(self):

@@ -359,6 +359,7 @@ class BasicDataset(Dataset):
         balance (bool): replicate samples to balance the dataset.
 
     '''
+    _has_split = False
     def __init__(self, data, distributions=None, labels='label', name=None,
                 balance=False, one_hot=True, **kwargs):
         '''Init function for BasicDataset.
@@ -375,7 +376,6 @@ class BasicDataset(Dataset):
             **kwargs: extra arguments to pass to Dataset constructor.
 
         '''
-
         if not isinstance(data, dict):
             raise ValueError('array argument must be a dict.')
         if name is None:
@@ -510,8 +510,17 @@ class BasicDataset(Dataset):
         s = ('<Dataset %s: %s>' % (self.__class__.__name__, attr_str))
         return s
 
+    def set_link_value(self, key):
+        k_, name = key.split('.')
+        if name in self.data.keys():
+            if k_ == 'dim':
+                return self.dims[name]
+            elif k_ == 'distribution':
+                return self.distributions[name]
+            else:
+                raise KeyError
+        else:
+            raise KeyError
+
 from . import basic, neuroimaging
 _modules = [basic, neuroimaging]
-_factories = dict()
-for module in _modules:
-    _factories.update(**module._factories)
