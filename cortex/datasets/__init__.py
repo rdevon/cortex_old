@@ -381,6 +381,7 @@ class BasicDataset(Dataset):
         if name is None:
             name = data.keys()[0]
 
+        self.manager = get_manager()
         super(BasicDataset, self).__init__(name=name, **kwargs)
         self.data = data
         self.n_samples = None
@@ -389,10 +390,11 @@ class BasicDataset(Dataset):
         if distributions is not None:
             self.distributions.update(**distributions)
 
-        if labels is None: labels = []
+        if labels not in self.data.keys():
+            labels = None
 
         for k, v in self.data.iteritems():
-            if k == labels and len(v.shape) == 1:
+            if k == one_hot and labels and len(v.shape) == 1:
                 v = make_one_hot(v)
             elif len(v.shape) == 1:
                 v = v[:, None]
@@ -411,17 +413,33 @@ class BasicDataset(Dataset):
             if not k in self.distributions.keys():
                 self.distributions[k] = 'binomial'
 
-        self.label_nums = self.data[labels].sum(axis=0)
-        self.label_props = self.label_nums / float(self.n_samples)
-
-        self.labels = labels
-        if self.balance:
-            self.balance_labels()
-
         self.X = self.data[self.name]
         self.mean_image = self.X.mean(axis=0)
-        if self.labels in self.data.keys():
-            self.Y = self.data[labels]
+        self.labels = labels
+
+        if self.labels is not None:
+            self.label_nums = self.data[labels].sum(axis=0)
+            self.label_props = self.label_nums / float(self.n_samples)
+
+            if self.balance:
+                self.balance_labels()
+
+            if self.labels in self.data.keys():
+                self.Y = self.data[labels]
+
+        if self.shuffle:
+            self.randomize()
+
+        self.register()
+
+    def register(self):
+        if (self.name in self.manager.datasets.keys()
+            and self.mode in self.manager.datasets[self.name].keys()):
+            self.logger.warn(
+                'Dataset with name `%s` and mode `%s` already found: '
+                'overwriting. Use `cortex.manager.remove_dataset` to avoid '
+                'this warning' % (self.name, self.mode))
+        self.manager.datasets[self.name][self.mode] = self
 
     def copy(self):
         return copy.deepcopy(self)
@@ -522,5 +540,7 @@ class BasicDataset(Dataset):
         else:
             raise KeyError
 
+_classes = {'BasicDataset': BasicDataset}
 from . import basic, neuroimaging
 _modules = [basic, neuroimaging]
+for module in _modules: _classes.update(**module._classes)

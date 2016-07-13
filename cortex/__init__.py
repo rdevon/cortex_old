@@ -107,6 +107,7 @@ class Manager(object):
 
     def __init__(self):
         from models import _classes
+        from datasets import _classes as _dataset_classes
 
         self.logger = logging.getLogger(
             '.'.join([self.__module__, self.__class__.__name__]))
@@ -117,8 +118,15 @@ class Manager(object):
         self.cell_args = OrderedDict()
         self.links = []
         self.classes = _classes
+        self.dataset_classes = _dataset_classes
         self.tparams = {}
         self.data = {}
+
+    def add_cell_class(name, C):
+        self.classes[name] = C
+
+    def add_dataset_class(name, C):
+        self.dataset_classes[name] = C
 
     @staticmethod
     def split_ref(ref):
@@ -157,6 +165,10 @@ class Manager(object):
                 raise ValueError('Key %s already set and differs from '
                                  'requested value (% vs %s)' % (k, args[k], v))
 
+    def make_data(self, dataset, **kwargs):
+        C = resolve_class(dataset, self.dataset_classes)
+        C(**kwargs)
+
     def build(self, name=None):
         if name is not None and name not in self.cells:
             self.build_cell(name)
@@ -177,7 +189,7 @@ class Manager(object):
 
         C.factory(name=name, **kwargs)
 
-    def prepare(self, cell_type, requestor=None, name=None, **kwargs):
+    def prepare_cell(self, cell_type, requestor=None, name=None, **kwargs):
         C = self.resolve_class(cell_type)
 
         if name is None and requestor is None:
@@ -189,13 +201,13 @@ class Manager(object):
 
         self.match_args(name, cell_type=cell_type, **kwargs)
 
-    def register(self, name=None, cell_type=None, **layer_args):
+    def register_cell(self, name=None, cell_type=None, **layer_args):
         if name is None:
             name = cell_type
         if name in self.cells.keys():
             self.logger.warn(
                 'Cell with name `%s` already found: overwriting. '
-                'Use `cortex.manager.remove` to avoid this warning' % key)
+                'Use `cortex.manager.remove_cell` to avoid this warning' % key)
         try:
             self.cell_classes = self.classes[cell_type]
         except KeyError:
@@ -204,7 +216,7 @@ class Manager(object):
 
         self.cell_args[name] = cell_args
 
-    def remove(self, key):
+    def remove_cell(self, key):
         del self.cells[key]
         del self.cell_args[key]
 
@@ -228,7 +240,7 @@ class Manager(object):
         if key in self.cells.keys():
             self.logger.warn(
                 'Cell with name `%s` already found: overwriting. '
-                'Use `cortex.manager.remove` to avoid this warning' % key)
+                'Use `cortex.manager.remove_cell` to avoid this warning' % key)
         if isinstance(cell, Cell):
             self.cells[key] = cell
             self.cell_args[key] = cell.get_args()

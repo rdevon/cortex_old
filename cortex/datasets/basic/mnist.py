@@ -71,9 +71,6 @@ class MNIST(BasicDataset):
             self.data[name] = _rng.binomial(
                 p=self.data[name], size=self.data[name].shape, n=1).astype('float32')
 
-        if self.shuffle:
-            self.randomize()
-
     def get_data(self, source, mode):
         '''Fetch data from gzip pickle.
 

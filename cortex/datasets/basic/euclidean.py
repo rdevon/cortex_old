@@ -14,23 +14,36 @@ from progressbar import (
 import random
 import scipy
 
-from .. import Dataset
+from .. import BasicDataset
 from ...utils import floatX, intX, pi, _rng
 
 
-class Euclidean(Dataset):
-    def __init__(self, dims=2, n_samples=10000, **kwargs):
-        super(Euclidean, self).__init__(**kwargs)
+class Euclidean(BasicDataset):
+
+    def __init__(self, dims=2, n_samples=10000, method='fibrous', name=None,
+                 method_args=None, mode='train', **kwargs):
+        if name is None: name = method
+        if method_args is None: method_args = dict()
 
         self.collection = None
         X = self.get_data(n_samples, dims)
-        self.make_fibrous()
 
-        self.n = self.X.shape[0]
-        self.dims[self.name] = dims
-        self.distributions[self.name] = 'gaussian'
+        _method_dict = {
+            'fibrous': self.make_fibrous,
+            'circle': self.make_circle,
+            'sprial': self.make_spiral,
+            'X': self.make_ex,
+            'modes': self.make_modes,
+            'bullseye': self.make_bullseye
+        }
 
-        self.mean_image = self.X.mean(axis=0)
+        X = _method_dict[method](X, **method_args)
+
+        data = {name: X}
+        distributions = {name: 'gaussian'}
+
+        super(Euclidean, self).__init__(data, distributions=distributions,
+                                        name=name, mode=mode, **kwargs)
 
     def gravity(self, x, y, r=0.1, G=0.0001):
         d = np.sqrt(((y[:, None, :] - x[None, :, :]) ** 2).sum(axis=2))
@@ -45,28 +58,29 @@ class Euclidean(Dataset):
 
         return f
 
-    def make_circle(self, r=0.3, G=0.05):
+    def make_circle(self, X, r=0.3, G=0.05):
         for k in xrange(10):
-            x = self.X[:, 0] - 0.5
-            y = self.X[:, 1] - 0.5
+            x = X[:, 0] - 0.5
+            y = X[:, 1] - 0.5
             alpha = np.sqrt(x ** 2 + y ** 2) / r
             d = np.array([x * (1 - alpha), y * (1 - alpha)]).astype(floatX).T
             f = G * d
-            self.X += f
-            self.X = np.clip(self.X, 0, 1)
+            X += f
+            X = np.clip(X, 0, 1)
+        return X
 
-    def make_spiral(self, r=0.25, G=0.0001):
+    def make_spiral(self, X, r=0.25, G=0.0001):
         for k in range(10):
-            x = self.X[:, 0] - 0.5
-            y = self.X[:, 1] - 0.5
+            x = X[:, 0] - 0.5
+            y = X[:, 1] - 0.5
             theta = np.arctan2(x, y)
             ds = [r * (i + theta / (2 * np.pi)) for i in range(int(1 / r))]
             alphas = [np.sqrt(x ** 2 + y ** 2) / d for d in ds]
             for alpha in alphas:
                 d = np.concatenate([(x * (1 - alpha))[:, None], (y * (1 - alpha))[:, None]], axis=1)
                 f = -G * d / (d ** 2).sum(axis=1, keepdims=True)
-                self.X += f
-            self.X = np.clip(self.X, 0, 1)
+                X += f
+            X = np.clip(X, 0, 1)
 
         rs = np.arange(0, 0.7, 0.001)
         theta = 2 * np.pi * rs / r
@@ -74,67 +88,50 @@ class Euclidean(Dataset):
         x = -rs * np.cos(theta) + 0.5
         spiral = zip(x, y)
         self.collection = matplotlib.collections.LineCollection([spiral], colors='k')
+        return X
 
-    def make_ex(self):
-        x = _rng.normal(loc=0.5, scale=0.05, size=self.X.shape).astype(floatX)
-        t1 = _rng.uniform(low=-0.5, high=0.5, size=(self.X.shape[0] // 2,)).astype(floatX)
+    def make_ex(self, X):
+        x = _rng.normal(loc=0.5, scale=0.05, size=X.shape).astype(floatX)
+        t1 = _rng.uniform(low=-0.5, high=0.5, size=(X.shape[0] // 2,)).astype(floatX)
         t2 = _rng.uniform(low=-0.5, high=0.5, size=t1.shape).astype(floatX)
-        self.X = np.concatenate([x[:x.shape[0]//2] + t1[:, None], x[x.shape[0]//2:] + t2[:, None] * np.array([1, -1])[None, :]]).astype(floatX)
+        X = np.concatenate(
+            [x[:x.shape[0]//2] + t1[:, None],
+             x[x.shape[0]//2:] + t2[:, None] * np.array([1, -1])[None, :]]
+            ).astype(floatX)
 
-        self.collection = matplotlib.collections.LineCollection([[(0, 0), (1, 1)], [(0, 1), (1, 0)]], colors='k')
+        self.collection = matplotlib.collections.LineCollection(
+            [[(0, 0), (1, 1)], [(0, 1), (1, 0)]], colors='k')
+        return X
 
-    def make_modes(self, r=0.3, N=5, G=0.01):
+    def make_modes(self, X, r=0.3, N=5, G=0.01):
         modes = [2 * np.pi * n / N for n in range(N)]
-        self.X = np.concatenate([_rng.normal(
-            loc=0.5, scale=0.05, size=(self.X.shape[0] // N, self.X.shape[1])).astype(floatX)
-                                 + np.array([(r * np.cos(mode)), (r * np.sin(mode))]).astype(floatX)[None, :]
-                                 for mode in modes])
+        X = np.concatenate([_rng.normal(
+            loc=0.5, scale=0.05,
+            size=(X.shape[0] // N, X.shape[1])).astype(floatX) + np.array(
+            [(r * np.cos(mode)), (r * np.sin(mode))]).astype(floatX)[None, :]
+                            for mode in modes])
+        return X
 
-    def make_bullseye(self, r=0.3, G=0.08):
+    def make_bullseye(self, X, r=0.3, G=0.08):
         self.make_circle(r=r, G=G)
-        self.X = np.concatenate(
-            [self.X,
-             _rng.normal(loc=0.5,
-                             scale=0.05,
-                             size=(self.X.shape[0] // 10,
-                                   self.X.shape[1]))]).astype(floatX)
+        X = np.concatenate(
+            [X, _rng.normal(
+                loc=0.5, scale=0.05, size=(
+                    X.shape[0] // 10, X.shape[1]))]).astype(floatX)
+        return X
 
-    def make_fibrous(self, n_points=40):
-        y = _rng.uniform(size=(n_points, self.X.shape[1])).astype(floatX)
+    def make_fibrous(self, X, n_points=40):
+        y = _rng.uniform(size=(n_points, X.shape[1])).astype(floatX)
 
         for k in xrange(10):
-            f = self.gravity(self.X, y)
-            self.X += f
-            self.X = np.clip(self.X, 0, 1)
-
-    def randomize(self):
-        rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
-        self.X = self.X[rnd_idx, :]
+            f = self.gravity(X, y)
+            X += f
+            X = np.clip(X, 0, 1)
+        return X
 
     def get_data(self, n_points, dims):
         x = _rng.uniform(size=(n_points, dims)).astype(floatX)
         return x
-
-    def next(self, batch_size=None):
-        if batch_size is None:
-            batch_size = self.batch_size
-
-        if self.pos == -1:
-            self.reset()
-
-            if not self.inf:
-                raise StopIteration
-
-        x = self.X[self.pos:self.pos+batch_size]
-
-        self.pos += batch_size
-        if self.pos + batch_size > self.n:
-            self.pos = -1
-
-        outs = OrderedDict()
-        outs[self.name] = x
-
-        return outs
 
     def save_images(self, X, imgfile, density=False):
         ax = plt.axes()
