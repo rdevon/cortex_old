@@ -37,6 +37,11 @@ def test_snp_data(source, batch_size,true_num_subject, true_snp_lenght):
     return train
 
 if __name__ == '__main__':
+     #No Chromosome index data available
+    source = {'snp': 'SNP_large_NOTprocessed_byp_05/SNP_large_NOTprocessed_byp_05.mat',
+             'label': 'SNP_large_NOTprocessed_byp_05/pheno_large.mat',
+             }
+    train = test_snp_data(source, batch_size=6, true_num_subject=4737, true_snp_lenght=14136)
 
     #Variable is not entered at all
     source = {'snp': 'SNP_large_NOTprocessed_byp_05/SNP_large_NOTprocessed_byp_05.mat',
