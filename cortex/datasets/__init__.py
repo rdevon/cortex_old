@@ -10,6 +10,7 @@ import os
 from os import path
 import random
 
+from .. import get_manager
 from ..utils.tools import resolve_path
 from ..utils.extra import download_data, unzip
 
@@ -433,13 +434,16 @@ class BasicDataset(Dataset):
         self.register()
 
     def register(self):
-        if (self.name in self.manager.datasets.keys()
-            and self.mode in self.manager.datasets[self.name].keys()):
-            self.logger.warn(
-                'Dataset with name `%s` and mode `%s` already found: '
-                'overwriting. Use `cortex.manager.remove_dataset` to avoid '
-                'this warning' % (self.name, self.mode))
-        self.manager.datasets[self.name][self.mode] = self
+        if self.name in self.manager.datasets.keys():
+            if self.mode in self.manager.datasets[self.name].keys():
+                self.logger.warn(
+                    'Dataset with name `%s` and mode `%s` already found: '
+                    'overwriting. Use `cortex.manager.remove_dataset` to avoid '
+                    'this warning' % (self.name, self.mode))
+            self.manager.datasets[self.name][self.mode] = self
+        else:
+            d = {('%s' % self.mode):self}
+            self.manager.datasets[self.name] = d
 
     def copy(self):
         return copy.deepcopy(self)
@@ -530,6 +534,11 @@ class BasicDataset(Dataset):
 
     def set_link_value(self, key):
         k_, name = key.split('.')
+        if name == 'input':
+            name = self.name
+        elif name == 'output':
+            name = 'labels'
+        
         if name in self.data.keys():
             if k_ == 'dim':
                 return self.dims[name]

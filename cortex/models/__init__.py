@@ -152,7 +152,7 @@ class Cell(object):
     @classmethod
     def set_link_value(C, key, **kwargs):
         if key in C._dim_map.keys():
-            value = kwargs.get(key, None)
+            value = kwargs.get(C._dim_map[key], None)
             if not isinstance(value, Link) and value is not None:
                 return value
             else:

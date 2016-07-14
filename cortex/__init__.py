@@ -7,8 +7,6 @@ import readline, glob
 from os import path
 import urllib2
 
-from .datasets import fetch_basic_data
-from .datasets.neuroimaging import fetch_neuroimaging_data
 from .utils.tools import get_paths, _p
 from .utils.extra import (
     complete_path, query_yes_no, write_default_theanorc, write_path_conf)
@@ -50,22 +48,19 @@ class Link(object):
             arg = '.'.join(s[idx:])
             return name, arg
 
-        f_name, f_key = split_arg(f)
-        t_name, t_key = split_arg(t)
-
         def get_args(name):
-            if name in cm.cell_args.keys():
-                name_, key = split_arg(name)
-                C = self.cm.resolve_class(cm.cell_args[name_]['cell_type'])
-            elif name in cm.data.keys():
+            if name.split('.')[0] in cm.datasets.keys():
                 name_, key = split_arg(name, idx=-2)
                 C = None
+            elif '.'.join(name.split('.')[:-1]) in cm.cell_args.keys():
+                name_, key = split_arg(name)
+                C = self.cm.resolve_class(cm.cell_args[name_]['cell_type'])
             else:
                 raise KeyError('Cell or data %s not found' % name)
-            return name, key, C
+            return name_, key, C
 
-        f_name, f_key, f_class = get_class(f_name)
-        t_name, t_key, t_class = get_class(t_name)
+        f_name, f_key, f_class = get_args(f)
+        t_name, t_key, t_class = get_args(t)
 
         self.nodes[f] = self.Node(f_name, f_class, f_key)
         self.nodes[t] = self.Node(t_name, t_class, t_key)
@@ -78,11 +73,13 @@ class Link(object):
                 if node.name in self.cm.cell_args.keys():
                     kwargs = self.cm.cell_args[node.name]
                     self.value = node.C.set_link_value(node.key, **kwargs)
-                elif node.name in self.cm.data.keys():
-                    self.value = self.cm.data[node.name].set_link_value(node.key)
+                    break
+                elif node.name in self.cm.datasets.keys():
+                    data = self.cm.datasets[node.name].values()[0]
+                    self.value = data.set_link_value(node.key)
+                    break
                 else:
                     raise KeyError('Cell or data %s not found' % node.name)
-
             except ValueError:
                 pass
         if self.value is None:
@@ -120,7 +117,7 @@ class Manager(object):
         self.classes = _classes
         self.dataset_classes = _dataset_classes
         self.tparams = {}
-        self.data = {}
+        self.datasets = {}
 
     def add_cell_class(name, C):
         self.classes[name] = C
@@ -140,6 +137,7 @@ class Manager(object):
         self.tparams = {}
         self.cells = OrderedDict()
         self.cell_args = OrderedDict()
+        self.datasets = {}
 
     def resolve_class(self, cell_type):
         return resolve_class(cell_type, self.classes)
@@ -180,7 +178,13 @@ class Manager(object):
     def build_cell(self, name):
         kwargs = self.cell_args[name]
         C = self.resolve_class(kwargs['cell_type'])
-        self.resolve(name)
+
+        try:
+            self.resolve(name)
+        except ValueError:
+            print self.cell_args[name]
+            print self.cell_args
+            raise ValueError('Could not resolve links for %s' % name)
 
         for k in kwargs.keys():
             if isinstance(kwargs[k], Link):
@@ -228,7 +232,9 @@ class Manager(object):
     def add_link(self, f, t):
         link = Link(self, f, t)
         for node in link.nodes.values():
-            if self.cell_args[node.name].get(node.key, None) is None:
+            if node.name in self.datasets.keys():
+                pass
+            elif self.cell_args[node.name].get(node.key, None) is None:
                 self.cell_args[node.name][node.key] = link
 
     def __getitem__(self, key):
@@ -252,6 +258,9 @@ class Manager(object):
 manager = get_manager()
 
 def main():
+    from cortex.datasets import fetch_basic_data
+    from cortex.datasets.neuroimaging import fetch_neuroimaging_data
+
     readline.set_completer_delims(' \t\n;')
     readline.parse_and_bind('tab: complete')
     readline.set_completer(complete_path)

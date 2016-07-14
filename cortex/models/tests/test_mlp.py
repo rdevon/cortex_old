@@ -10,6 +10,7 @@ from theano import tensor as T
 
 import cortex
 from cortex import models
+from cortex.datasets.basic.euclidean import Euclidean
 from cortex.models import mlp as module
 from cortex.utils import floatX, logger as cortex_logger
 
@@ -162,7 +163,16 @@ def test_feed_forward_dmlp(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
     logger.debug('Expected value of MLP feed forward OK within %.2e'
                         % _atol)
 
-def test_make_stack():
-    manager.prepare('MLP', name='mlp1', dim_hs=[5, 7])
-    manager.prepare('MLP', name='mlp2', dim_in=13, dim_hs=[3, 11])
+def test_make_autoencoder():
+    manager.reset()
+    data_iter = Euclidean(batch_size=10)
+    manager.prepare_cell('MLP', name='mlp1', dim_hs=[5, 7])
+    manager.prepare_cell('MLP', name='mlp2', dim_in=13, dim_hs=[3, 11])
+    manager.add_link('fibrous.dim.input', 'mlp1.input')
     manager.add_link('mlp1.output', 'mlp2.input')
+    manager.add_link('mlp2.output', 'fibrous.dim.input')
+    try:
+        manager.build()
+    except Exception as e:
+        print manager.cell_args
+        raise e
