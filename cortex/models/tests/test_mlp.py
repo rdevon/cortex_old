@@ -5,6 +5,7 @@ Module for testing MLPs.
 from collections import OrderedDict
 import logging
 import numpy as np
+from pprint import pformat, pprint
 import theano
 from theano import tensor as T
 
@@ -16,6 +17,7 @@ from cortex.utils import floatX, logger as cortex_logger
 
 
 logger = logging.getLogger(__name__)
+cortex_logger.set_stream_logger(2)
 _atol = 1e-7
 manager = cortex.manager
 
@@ -163,16 +165,31 @@ def test_feed_forward_dmlp(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
     logger.debug('Expected value of MLP feed forward OK within %.2e'
                         % _atol)
 
-def test_make_autoencoder():
+def test_make_autoencoder(dim_in=13):
     manager.reset()
     data_iter = Euclidean(batch_size=10)
     manager.prepare_cell('MLP', name='mlp1', dim_hs=[5, 7])
-    manager.prepare_cell('MLP', name='mlp2', dim_in=13, dim_hs=[3, 11])
-    manager.add_link('fibrous.dim.input', 'mlp1.input')
+    manager.prepare_cell('MLP', name='mlp2', dim_in=dim_in, dim_hs=[3, 11])
+    manager.add_link('fibrous.input', 'mlp1.input')
     manager.add_link('mlp1.output', 'mlp2.input')
-    manager.add_link('mlp2.output', 'fibrous.dim.input')
+    manager.add_link('mlp2.output', 'fibrous.input')
+    manager.build()
+    if manager.cell_args['mlp1']['dim_out'] != dim_in:
+        raise ValueError('mlp1 dim out (%s) and mlp2 dim in (%d) do not '
+                         ' match'
+                         % (manager.cell_args['mlp1']['dim_out'], dim_in))
+
+
+def test_make_prob_autoencoder():
+    manager.reset()
+    data_iter = Euclidean(batch_size=10)
+    manager.prepare_cell('MLP', name='mlp1', dim_hs=[5, 7])
+    manager.prepare_cell('DistributionMLP', name='mlp2', dim_in=13, dim_hs=[3, 11])
+    manager.add_link('fibrous.input', 'mlp1.input')
+    manager.add_link('mlp1.output', 'mlp2.input')
+    manager.add_link('mlp2.output', 'fibrous.input')
     try:
         manager.build()
-    except Exception as e:
-        print manager.cell_args
+    except TypeError as e:
+        pprint(dict(manager.cell_args))
         raise e

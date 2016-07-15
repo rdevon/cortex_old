@@ -12,6 +12,8 @@ from .utils.extra import (
     complete_path, query_yes_no, write_default_theanorc, write_path_conf)
 
 
+logger = logging.getLogger(__name__)
+
 def get_manager():
     if Manager._instance is None:
         return Manager()
@@ -32,15 +34,20 @@ def resolve_class(cell_type, classes=None):
 
 class Link(object):
     class Node(object):
-        def __init__(self, name, C, key):
-            self.name = name
+        def __init__(self, C, key):
+            if key not in C._dim_map.keys():
+                raise TypeError('Class %s has no key `%s`' % (C, key))
             self.C = C
-            self.key = key
+            self.link_key = key
+            self.dim_key = C._dim_map[key]
+            self.dist_key = C._distribution
 
     def __init__(self, cm, f, t):
         self.value = None
+        self.distribution = None
         self.nodes = {}
         self.cm = cm
+        self.name = f + '->' + t
 
         def split_arg(arg, idx=-1):
             s = arg.split('.')
@@ -50,7 +57,7 @@ class Link(object):
 
         def get_args(name):
             if name.split('.')[0] in cm.datasets.keys():
-                name_, key = split_arg(name, idx=-2)
+                name_, key = split_arg(name)
                 C = None
             elif '.'.join(name.split('.')[:-1]) in cm.cell_args.keys():
                 name_, key = split_arg(name)
@@ -62,35 +69,69 @@ class Link(object):
         f_name, f_key, f_class = get_args(f)
         t_name, t_key, t_class = get_args(t)
 
-        self.nodes[f] = self.Node(f_name, f_class, f_key)
-        self.nodes[t] = self.Node(t_name, t_class, t_key)
-        self.members = [n.name for n in self.nodes.values()]
-        cm.links.append(self)
+        dataset_name = None
+        dataset_key = None
 
-    def resolve(self):
-        for node in self.nodes.values():
+        if f_name in cm.datasets.keys():
+            if t_name in cm.datasets.keys():
+                raise ValueError('Cannot link 2 datasets')
+            dataset_name = f_name
+            dataset_key = f_key
+        elif t_name in cm.datasets.keys():
+            dataset_name = t_name
+            dataset_key = t_key
+
+        if dataset_name is not None:
+            self.value = cm.datasets[dataset_name]['dims'][dataset_key]
+            self.distribution = cm.datasets[dataset_name]['distributions'][dataset_key]
+        else:
+            t_args = cm.cell_args[t_name]
+            f_args = cm.cell_args[f_name]
             try:
-                if node.name in self.cm.cell_args.keys():
-                    kwargs = self.cm.cell_args[node.name]
-                    self.value = node.C.set_link_value(node.key, **kwargs)
-                    break
-                elif node.name in self.cm.datasets.keys():
-                    data = self.cm.datasets[node.name].values()[0]
-                    self.value = data.set_link_value(node.key)
-                    break
-                else:
-                    raise KeyError('Cell or data %s not found' % node.name)
+                self.value = t_class.set_link_value(t_key, **t_args)
             except ValueError:
                 pass
+            try:
+                self.value = f_class.set_link_value(f_key, **f_args)
+            except ValueError:
+                pass
+            try:
+                self.distribution = t_class.set_link_distribution(**t_args)
+            except ValueError:
+                pass
+            try:
+                self.distribution = f_class.set_link_distribution(**f_args)
+            except ValueError:
+                pass
+
         if self.value is None:
-            raise ValueError
+            raise TypeError('Link between %s and %s requires a resolvable '
+                            'dimension' % (f, t))
+
+        if f_name != dataset_name:
+            self.nodes[f_name] = self.Node(f_class, f_key)
+        if t_name != dataset_name:
+            self.nodes[t_name] = self.Node(t_class, t_key)
+        cm.links.append(self)
+
+    def query(self, name, key):
+        if not name in self.nodes.keys():
+            raise KeyError('Link does not have node `%s`' % name)
+
+        node = self.nodes[name]
+        if key == node.dim_key:
+            (vk_, value) = node.C.get_link_value(self, node.link_key)
+            if value is None:
+                raise ValueError
+            return value
+        elif key == 'cell_type' or key == node.dist_key[1:]:
+            return self.distribution
+        else:
+            raise KeyError('Link with node `%s` does not support key `%s`'
+                           % (name, key))
 
     def __repr__(self):
-        if self.value is not None:
-            return '%s' % self.value
-        else:
-            keys = self.nodes.keys()
-            return ('<link>(%s, %s)' % (keys[0], keys[1]))
+        return ('<link>(%s)' % self.name)
 
 
 class Manager(object):
@@ -179,17 +220,11 @@ class Manager(object):
         kwargs = self.cell_args[name]
         C = self.resolve_class(kwargs['cell_type'])
 
-        try:
-            self.resolve(name)
-        except ValueError:
-            print self.cell_args[name]
-            print self.cell_args
-            raise ValueError('Could not resolve links for %s' % name)
-
         for k in kwargs.keys():
             if isinstance(kwargs[k], Link):
-                C.get_link_value(kwargs[k], k, kwargs)
-                kwargs.pop(k)
+                link = kwargs[k]
+                value = link.query(name, k)
+                kwargs[k] = value
 
         C.factory(name=name, **kwargs)
 
@@ -224,18 +259,32 @@ class Manager(object):
         del self.cells[key]
         del self.cell_args[key]
 
-    def resolve(self, name):
+    def resolve_links(self, name):
+        self.logger.debug('Resolving %s' % name)
         for link in self.links:
             if name in link.members:
+                self.logger.debug('Resolving link %s' % link)
                 link.resolve()
 
     def add_link(self, f, t):
         link = Link(self, f, t)
-        for node in link.nodes.values():
-            if node.name in self.datasets.keys():
+        for name, node in link.nodes.iteritems():
+            if name in self.datasets.keys():
                 pass
-            elif self.cell_args[node.name].get(node.key, None) is None:
-                self.cell_args[node.name][node.key] = link
+            else:
+                if self.cell_args[name].get(node.dim_key, None) is None:
+                    self.cell_args[name][node.dim_key] = link
+                dk = node.dist_key
+                if dk is None:
+                    pass
+                elif dk.startswith('&'):
+                    dk = dk[1:]
+                else:
+                    dk = 'cell_type'
+
+                if (self.cell_args[name].get(dk, None) is None
+                    and node.C._distribution is not None):
+                    self.cell_args[name][dk] = link
 
     def __getitem__(self, key):
         return self.cells[key]

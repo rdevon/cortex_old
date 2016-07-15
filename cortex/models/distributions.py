@@ -33,12 +33,15 @@ class Distribution(Cell):
         f_entropy (Optional[function]): entropy function.
 
     '''
+    _args = ['dim']
+    _required = ['dim']
+    _distribution = None
+    _dim_map = {'input': 'dim', 'output': 'dim', 'P': 'dim'}
+
     has_kl = False
     is_continuous = False
     scale = 1
     must_samples = False
-    _args = ['dim']
-    _required = ['dim']
 
     def __init__(self, dim, name='distribution_proto', **kwargs):
         '''Init function for Distribution class.
@@ -61,13 +64,13 @@ class Distribution(Cell):
             raise ValueError
 
     @classmethod
-    def get_link_value(C, link, key, kwargs):
+    def get_link_value(C, link, key):
         if key not in ['input', 'output']:
             raise KeyError
         if link.value is None:
             raise ValueError
         else:
-            kwargs['dim'] = link.value / C.scale
+            return ('dim', link.value / C.scale)
 
     @classmethod
     def factory(C, cell_type=None, conditional=False, **kwargs):
@@ -238,6 +241,8 @@ class Binomial(Distribution):
     '''Binomial distribution.
 
     '''
+    _distribution = 'binomial'
+
     def __init__(self, dim, name='binomial', **kwargs):
         self.f_sample = _binomial
         self.f_neg_log_prob = _cross_entropy
@@ -285,6 +290,8 @@ class CenteredBinomial(Binomial):
     '''Centered binomial.
 
     '''
+    _distribution = 'centered_binomial'
+
     def get_prob(self, z):
         return T.tanh(z)
 
@@ -326,6 +333,7 @@ class ContinuousBinomial(Binomial):
         Doesn't sample.
 
     '''
+    _distribution = 'continuous_binomial'
     is_continuous = True
 
     def sample(self, n_samples, p=None):
@@ -338,6 +346,7 @@ class Multinomial(Distribution):
     '''Multinomial distribuion.
 
     '''
+    _distribution = 'multinomial'
     def __init__(self, dim, name='multinomial', **kwargs):
         self.f_sample = _sample_multinomial
         self.f_neg_log_prob = _categorical_cross_entropy
@@ -359,6 +368,7 @@ class Gaussian(Distribution):
     '''Gaussian distribution.
 
     '''
+    _distribution = 'gaussian'
     has_kl = True
     is_continuous = True
     scale = 2
@@ -481,6 +491,7 @@ class Logistic(Distribution):
         Not to be confused with logistic function.
 
     '''
+    _distribution = 'logistic'
     is_continuous = True
     scale = 2
 
@@ -567,6 +578,7 @@ class Laplace(Distribution):
     :math:`p(x) = \\frac{1}{2 b} e^{-\\frac{|x - \mu|}{b}}`.
 
     '''
+    _distribution = 'laplace'
     is_continuous = True
     scale = 2
 

@@ -414,6 +414,11 @@ class BasicDataset(Dataset):
             if not k in self.distributions.keys():
                 self.distributions[k] = 'binomial'
 
+        for d in [self.dims, self.distributions, self.data]:
+            d['input'] = d[name]
+            if labels is not None:
+                d['output'] = d[labels]
+
         self.X = self.data[self.name]
         self.mean_image = self.X.mean(axis=0)
         self.labels = labels
@@ -444,6 +449,8 @@ class BasicDataset(Dataset):
         else:
             d = {('%s' % self.mode):self}
             self.manager.datasets[self.name] = d
+            self.manager.datasets[self.name]['dims'] = self.dims
+            self.manager.datasets[self.name]['distributions'] = self.distributions
 
     def copy(self):
         return copy.deepcopy(self)
@@ -538,7 +545,7 @@ class BasicDataset(Dataset):
             name = self.name
         elif name == 'output':
             name = 'labels'
-        
+
         if name in self.data.keys():
             if k_ == 'dim':
                 return self.dims[name]

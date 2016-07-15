@@ -100,6 +100,7 @@ class Cell(object):
                         #   save.
     _dim_map = {}       #
     _links = []
+    _distribution = None
 
     def __init__(self, name='layer_proto', **kwargs):
         '''Init function for Cell.
@@ -123,7 +124,7 @@ class Cell(object):
 
         kwargs = self.set_components(**kwargs)
         self.init_params(**kwargs)
-        self.logger.debug('Paramters and shapes: %s' % self.profile_params())
+        self.logger.debug('Parameters and shapes: %s' % self.profile_params())
         self.register()
 
         self.n_params = 0
@@ -151,6 +152,8 @@ class Cell(object):
 
     @classmethod
     def set_link_value(C, key, **kwargs):
+        logger.info('Setting link value for class _dim_map %s with key `%s` and'
+                    ' kwargs %s' % (C._dim_map, key, kwargs))
         if key in C._dim_map.keys():
             value = kwargs.get(C._dim_map[key], None)
             if not isinstance(value, Link) and value is not None:
@@ -161,14 +164,32 @@ class Cell(object):
             raise KeyError
 
     @classmethod
-    def get_link_value(C, link, key, kwargs):
+    def get_link_value(C, link, key):
+        logger.debug('Attempting to get link value for cell class %s from `%s` '
+                     'with key `%s`' % (C, link, key))
         if key in C._dim_map.keys():
             if link.value is None:
                 raise ValueError
             else:
-                kwargs[C._dim_map[key]] = link.value
+                return (C._dim_map[key], link.value)
+                logger.debug('Resulting kwargs: %s')
         else:
             raise KeyError
+
+    @classmethod
+    def set_link_distribution(C, **kwargs):
+        d_str = C._distribution
+        if d_str is None:
+            raise ValueError
+        if d_str.startswith('&'):
+            dist = kwargs.get(d_str[1:])
+        else:
+            dist = C._distribution
+
+        if not isinstance(dist, Link) and dist is not None:
+            return dist
+        else:
+            raise ValueError
 
     @classmethod
     def factory(C, cell_type=None, **kwargs):
@@ -184,13 +205,14 @@ class Cell(object):
 
         '''
         reqs = OrderedDict(
-            (k, v) for k, v in kwargs.iteritems() if k in C._required)
+            (k, kwargs[k]) for k in C._required if k in kwargs.keys())
+        logger.debug('Required args for %s found: %s' % (C, reqs))
         options = dict((k, v) for k, v in kwargs.iteritems() if not k in C._required)
 
         for req in C._required:
-            if req not in reqs.keys():
+            if req not in reqs.keys() or reqs[req] is None:
                 raise TypeError('Required argument %s not provided for '
-                                'constructor of %s' % (req, C))
+                                'constructor of %s or is `None`' % (req, C))
 
         return C(*reqs.values(), **options)
 
