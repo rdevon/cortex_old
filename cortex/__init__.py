@@ -40,7 +40,7 @@ class Link(object):
             self.C = C
             self.link_key = key
             self.dim_key = C._dim_map[key]
-            self.dist_key = C._distribution
+            self.dist_key = C._dist_map.get(key)
 
     def __init__(self, cm, f, t):
         self.value = None
@@ -96,12 +96,14 @@ class Link(object):
             except ValueError:
                 pass
             try:
-                self.distribution = t_class.set_link_distribution(**t_args)
-            except ValueError:
+                self.distribution = t_class.set_link_distribution(
+                    t_key, **t_args)
+            except KeyError:
                 pass
             try:
-                self.distribution = f_class.set_link_distribution(**f_args)
-            except ValueError:
+                self.distribution = f_class.set_link_distribution(
+                    f_key, **f_args)
+            except KeyError:
                 pass
 
         if self.value is None:
@@ -124,7 +126,9 @@ class Link(object):
             if value is None:
                 raise ValueError
             return value
-        elif key == 'cell_type' or key == node.dist_key[1:]:
+        elif key == node.dist_key:
+            if self.distribution is None:
+                raise ValueError
             return self.distribution
         else:
             raise KeyError('Link with node `%s` does not support key `%s`'
@@ -272,19 +276,13 @@ class Manager(object):
             if name in self.datasets.keys():
                 pass
             else:
-                if self.cell_args[name].get(node.dim_key, None) is None:
+                if (self.cell_args[name].get(node.dim_key, None) is None
+                    and node.C._dim_map.get(node.link_key, None) is not None):
                     self.cell_args[name][node.dim_key] = link
-                dk = node.dist_key
-                if dk is None:
-                    pass
-                elif dk.startswith('&'):
-                    dk = dk[1:]
-                else:
-                    dk = 'cell_type'
 
-                if (self.cell_args[name].get(dk, None) is None
-                    and node.C._distribution is not None):
-                    self.cell_args[name][dk] = link
+                if (self.cell_args[name].get(node.dist_key, None) is None
+                    and node.C._dist_map.get(node.link_key, None) is not None):
+                    self.cell_args[name][node.dist_key] = link
 
     def __getitem__(self, key):
         return self.cells[key]

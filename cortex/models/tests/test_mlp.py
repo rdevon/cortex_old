@@ -188,8 +188,9 @@ def test_make_prob_autoencoder():
     manager.add_link('fibrous.input', 'mlp1.input')
     manager.add_link('mlp1.output', 'mlp2.input')
     manager.add_link('mlp2.output', 'fibrous.input')
-    try:
-        manager.build()
-    except TypeError as e:
-        pprint(dict(manager.cell_args))
-        raise e
+    manager.build()
+    if manager.cell_args['mlp2.distribution']['cell_type'] != data_iter.distributions['input']:
+        raise ValueError('mlp2.distribution (%s) data distribution (%s) do not '
+                         ' match'
+                         % (manager.cell_args['mlp2.distribution']['cell_type'],
+                            data_iter.distributions['input']))

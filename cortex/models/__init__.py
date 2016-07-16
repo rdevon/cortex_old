@@ -100,7 +100,7 @@ class Cell(object):
                         #   save.
     _dim_map = {}       #
     _links = []
-    _distribution = None
+    _dist_map = {}
 
     def __init__(self, name='layer_proto', **kwargs):
         '''Init function for Cell.
@@ -177,19 +177,15 @@ class Cell(object):
             raise KeyError
 
     @classmethod
-    def set_link_distribution(C, **kwargs):
-        d_str = C._distribution
-        if d_str is None:
-            raise ValueError
-        if d_str.startswith('&'):
-            dist = kwargs.get(d_str[1:])
+    def set_link_distribution(C, key, **kwargs):
+        if key in C._dist_map.keys():
+            value = kwargs.get(C._dist_map[key], None)
+            if not isinstance(value, Link) and value is not None:
+                return value
+            else:
+                raise ValueError
         else:
-            dist = C._distribution
-
-        if not isinstance(dist, Link) and dist is not None:
-            return dist
-        else:
-            raise ValueError
+            raise KeyError
 
     @classmethod
     def factory(C, cell_type=None, **kwargs):
@@ -267,7 +263,11 @@ class Cell(object):
         self.params = OrderedDict()
 
     def get_args(self):
-        return dict((k, self.__dict__[k]) for k in self._args)
+        d = dict((k, self.__dict__[k]) for k in self._args)
+        c = next(c for c, v in self.manager.classes.iteritems()
+                 if isinstance(self, v))
+        d['cell_type'] = c
+        return d
 
     def feed(self, *args):
         '''Basic feed method.

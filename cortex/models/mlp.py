@@ -199,8 +199,14 @@ class DistributionMLP(Cell):
         },
     }
     _links = [('mlp.output', 'distribution.input')]
-    _dim_map = MLP._dim_map
-    _distribution = '&distribution_type'
+    _dim_map = {
+        'X': 'dim_in',
+        'input': 'dim_in',
+        'Y': 'dim',
+        'output': 'dim',
+        'Z': 'dim'
+    }
+    _dist_map = {'output': 'distribution_type'}
 
     def __init__(self, distribution_type, name=None, **kwargs):
         if name is None:

@@ -35,7 +35,7 @@ class Distribution(Cell):
     '''
     _args = ['dim']
     _required = ['dim']
-    _distribution = None
+    _dist_map = {'input': 'cell_type', 'output': 'cell_type'}
     _dim_map = {'input': 'dim', 'output': 'dim', 'P': 'dim'}
 
     has_kl = False
@@ -241,8 +241,6 @@ class Binomial(Distribution):
     '''Binomial distribution.
 
     '''
-    _distribution = 'binomial'
-
     def __init__(self, dim, name='binomial', **kwargs):
         self.f_sample = _binomial
         self.f_neg_log_prob = _cross_entropy
@@ -346,7 +344,6 @@ class Multinomial(Distribution):
     '''Multinomial distribuion.
 
     '''
-    _distribution = 'multinomial'
     def __init__(self, dim, name='multinomial', **kwargs):
         self.f_sample = _sample_multinomial
         self.f_neg_log_prob = _categorical_cross_entropy
@@ -368,7 +365,6 @@ class Gaussian(Distribution):
     '''Gaussian distribution.
 
     '''
-    _distribution = 'gaussian'
     has_kl = True
     is_continuous = True
     scale = 2
@@ -491,7 +487,6 @@ class Logistic(Distribution):
         Not to be confused with logistic function.
 
     '''
-    _distribution = 'logistic'
     is_continuous = True
     scale = 2
 
@@ -578,7 +573,6 @@ class Laplace(Distribution):
     :math:`p(x) = \\frac{1}{2 b} e^{-\\frac{|x - \mu|}{b}}`.
 
     '''
-    _distribution = 'laplace'
     is_continuous = True
     scale = 2
 
