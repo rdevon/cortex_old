@@ -170,27 +170,31 @@ def test_make_autoencoder(dim_in=13):
     data_iter = Euclidean(batch_size=10)
     manager.prepare_cell('MLP', name='mlp1', dim_hs=[5, 7])
     manager.prepare_cell('MLP', name='mlp2', dim_in=dim_in, dim_hs=[3, 11])
-    manager.add_link('fibrous.input', 'mlp1.input')
-    manager.add_link('mlp1.output', 'mlp2.input')
-    manager.add_link('mlp2.output', 'fibrous.input')
+    manager.add_step('mlp1', 'fibrous.input')
+    manager.add_step('mlp2', 'mlp1.output')
+    manager.match_dims('mlp2.output', 'fibrous.input')
     manager.build()
     if manager.cell_args['mlp1']['dim_out'] != dim_in:
         raise ValueError('mlp1 dim out (%s) and mlp2 dim in (%d) do not '
                          ' match'
                          % (manager.cell_args['mlp1']['dim_out'], dim_in))
 
-
 def test_make_prob_autoencoder():
     manager.reset()
     data_iter = Euclidean(batch_size=10)
     manager.prepare_cell('MLP', name='mlp1', dim_hs=[5, 7])
     manager.prepare_cell('DistributionMLP', name='mlp2', dim_in=13, dim_hs=[3, 11])
-    manager.add_link('fibrous.input', 'mlp1.input')
-    manager.add_link('mlp1.output', 'mlp2.input')
-    manager.add_link('mlp2.output', 'fibrous.input')
+    manager.add_step('mlp1', 'fibrous.input')
+    manager.add_step('mlp2', 'mlp1.output')
+    manager.match_dims('mlp2.output', 'fibrous.input')
     manager.build()
     if manager.cell_args['mlp2.distribution']['cell_type'] != data_iter.distributions['input']:
         raise ValueError('mlp2.distribution (%s) data distribution (%s) do not '
                          ' match'
                          % (manager.cell_args['mlp2.distribution']['cell_type'],
                             data_iter.distributions['input']))
+
+def test_autoencoder_graph():
+    manager.reset()
+    test_make_autoencoder()
+    manager.add_cost('squared_error', 'mlp2.output', 'fibrous.input')

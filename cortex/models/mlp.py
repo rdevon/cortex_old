@@ -51,7 +51,6 @@ class MLP(Cell):
         'output': 'dim_out',
         'Z': 'dim_out'
     }
-    _decay_params = ['weights']
 
     def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
                  h_act='sigmoid', out_act=None, name='MLP', **kwargs):
@@ -130,7 +129,7 @@ class MLP(Cell):
             raise NotImplementedError('No dropout for %s yet' % activ)
         return x
 
-    def feed(self, X, *params):
+    def _feed(self, X, *params):
         '''feed forward MLP.
 
         Args:
@@ -214,33 +213,13 @@ class DistributionMLP(Cell):
         self.distribution_type = distribution_type
         super(DistributionMLP, self).__init__(name=name, **kwargs)
 
-    def feed(self, X, *params):
-        outs = self.mlp.feed(X, *params)
+    def get_params(self): return self.mlp.get_params()
+
+    def _feed(self, X, *params):
+        outs = self.mlp._feed(X, *params)
         Y = outs['Y']
         outs.update(P=self.distribution(Y))
         return outs
-
-    def get_params(self): return self.mlp.get_params()
-
-    def sample(self, *args, **kwargs):
-        assert self.distribution is not None
-        return self.distribution.sample(*args, **kwargs)
-
-    def neg_log_prob(self, *args, **kwargs):
-        assert self.distribution is not None
-        return self.distribution.neg_log_prob(*args, **kwargs)
-
-    def entropy(self, *args, **kwargs):
-        assert self.distribution is not None
-        return self.distribution.entropy(*args, **kwargs)
-
-    def get_center(self, *args, **kwargs):
-        assert self.distribution is not None
-        return self.distribution.get_center(*args, **kwargs)
-
-    def split_prob(self, *args, **kwargs):
-        assert self.distribution is not None
-        return self.distribution.split_prob(*args, **kwargs)
 
 
 _classes = {'MLP': MLP, 'DistributionMLP': DistributionMLP}

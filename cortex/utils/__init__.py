@@ -5,6 +5,7 @@
 import numpy as np
 import random
 import theano
+from theano import tensor as T
 import warnings
 
 

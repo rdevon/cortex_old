@@ -10,7 +10,7 @@ import os
 from os import path
 import random
 
-from .. import get_manager
+from ..manager import get_manager
 from ..utils.tools import resolve_path
 from ..utils.extra import download_data, unzip
 

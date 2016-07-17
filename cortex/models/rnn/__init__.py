@@ -651,8 +651,7 @@ class RNN(Layer):
         cost = self.neg_log_prob(X[1:], p).sum(axis=0).mean()
         return cost
 
-    def sample(self, x0=None, h0s=None, n_samples=10, n_steps=10,
-               condition_on=None, debug=False):
+    def sample(self, x0=None, h0s=None, n_samples=10, n_steps=10):
         '''Samples from an initial state.
 
         Args:

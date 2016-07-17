@@ -8,7 +8,7 @@ import theano
 from theano import tensor as T
 
 from . import init_rngs, Cell
-from ..utils import concatenate, e, floatX, pi, _slice
+from ..utils import concatenate, e, floatX, pi, _slice, _slice2
 
 
 _clip = 1e-7 # clipping for Guassian distributions.
@@ -52,6 +52,9 @@ class Distribution(Cell):
         '''
         self.dim = dim
         super(Distribution, self).__init__(name=name, **kwargs)
+
+    def _act(self, X):
+        return X
 
     @classmethod
     def set_link_value(C, key, dim=None, **kwargs):
@@ -98,6 +101,9 @@ class Distribution(Cell):
 
         return C(*reqs.values(), **options)
 
+    def _feed(self, *args):
+        return self._act(concatenate(args))
+
     def init_params(self):
         raise NotImplementedError()
 
@@ -107,11 +113,30 @@ class Distribution(Cell):
         '''
         raise NotImplementedError()
 
-    def get_prob(self):
+    def get_prob(self, *args):
         '''Returns single tensory from params.
 
         '''
-        raise NotImplementedError()
+        return self._act(concatenate(args))
+
+    def split_prob(self, p):
+        '''Slices single tensor into constituent parts.
+
+        '''
+        slice_size = p.shape[p.ndim-1] // self.scale
+        slices = [_slice2(p, i * slice_size, (i + 1) * slice_size)
+                  for i in range(self.scale)]
+        return slices
+
+    def get_center(self, p):
+        '''Gets center of distribution.
+
+        Note ::
+            Assumed to be first parameter.
+
+        '''
+        slices = self.split_prob(p)
+        return slices[0]
 
     def kl_divergence(self, q):
         '''KL divergence function.
@@ -229,9 +254,24 @@ def make_conditional(C):
         Conditional.
 
     '''
+    if not issubclass(C, Distribution):
+        raise TypeError('Conditional distribution not possible with %s' % C)
+
     class Conditional(C):
         def init_params(self): self.params = OrderedDict()
+
         def get_params(self): return []
+
+        def sample(self, n_samples, p):
+            return super(Conditional, self).sample(n_samples, p=p)
+
+        def neg_log_prob(self, x, p, sum_probs=True):
+            return super(Conditional, self).neg_log_prob(
+                x, p=p, sum_probs=sum_probs)
+
+        def entropy(self, p):
+            return super(Conditional, self).entropy(p=p)
+
     Conditional.__name__ = Conditional.__name__ + '_' + C.__name__
 
     return Conditional
@@ -241,11 +281,17 @@ class Binomial(Distribution):
     '''Binomial distribution.
 
     '''
+    _act_slope = 1 - 1e-4
+    _act_incpt = 5e-6
+
     def __init__(self, dim, name='binomial', **kwargs):
         self.f_sample = _binomial
         self.f_neg_log_prob = _cross_entropy
         self.f_entropy = _binary_entropy
         super(Binomial, self).__init__(dim, name=name, **kwargs)
+
+    def _act(self, X):
+        return T.nnet.sigmoid(X) * self._act_slope + self._act_incpt
 
     def init_params(self):
         z = np.zeros((self.dim,)).astype(floatX)
@@ -253,15 +299,6 @@ class Binomial(Distribution):
 
     def get_params(self):
         return [self.z]
-
-    def feed(self, z):
-        return T.nnet.sigmoid(z) * 0.9999 + 0.000005
-
-    def get_prob(self, z):
-        return T.nnet.sigmoid(z) * 0.9999 + 0.000005
-
-    def split_prob(self, p):
-        return p
 
     def step_sample(self, epsilon, p):
         return (epsilon <= p).astype(floatX)
@@ -290,11 +327,8 @@ class CenteredBinomial(Binomial):
     '''
     _distribution = 'centered_binomial'
 
-    def get_prob(self, z):
-        return T.tanh(z)
-
-    def feed(self, z):
-        return T.tanh(z)
+    def _act(self, X):
+        return T.tanh(X)
 
     def step_sample(self, epsilon, p):
         return (2.0 * (epsilon <= p).astype(floatX) - 1.0)
@@ -385,21 +419,6 @@ class Gaussian(Distribution):
 
     def get_params(self):
         return [self.mu, self.log_sigma]
-
-    def get_prob(self, mu, log_sigma):
-        return concatenate([mu, log_sigma], axis=mu.ndim-1)
-
-    def feed(self, z):
-        return z
-
-    def get_center(self, p):
-        mu = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
-        return mu
-
-    def split_prob(self, p):
-        mu        = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
-        log_sigma = _slice(p, 1, p.shape[p.ndim-1] // self.scale)
-        return mu, log_sigma
 
     def step_kl_divergence(self, q, mu, log_sigma):
         mu_q = _slice(q, 0, self.dim)
@@ -506,21 +525,6 @@ class Logistic(Distribution):
     def get_params(self):
         return [self.mu, self.log_s]
 
-    def get_prob(self, mu, log_s):
-        return concatenate([mu, log_s], axis=mu.ndim-1)
-
-    def feed(self, z):
-        return z
-
-    def get_center(self, p):
-        mu = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
-        return mu
-
-    def split_prob(self, p):
-        mu    = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
-        log_s = _slice(p, 1, p.shape[p.ndim-1] // self.scale)
-        return mu, log_s
-
     def step_sample(self, epsilon, p):
         dim = p.shape[p.ndim-1] // self.scale
         mu = _slice(p, 0, dim)
@@ -591,21 +595,6 @@ class Laplace(Distribution):
 
     def get_params(self):
         return [self.mu, self.log_b]
-
-    def get_prob(self, mu, log_b):
-        return concatenate([mu, log_b], axis=mu.ndim-1)
-
-    def feed(self, z):
-        return z
-
-    def get_center(self, p):
-        mu = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
-        return mu
-
-    def split_prob(self, p):
-        mu    = _slice(p, 0, p.shape[p.ndim-1] // self.scale)
-        log_s = _slice(p, 1, p.shape[p.ndim-1] // self.scale)
-        return mu, log_s
 
     def step_sample(self, epsilon, p):
         dim = p.shape[p.ndim-1] // self.scale

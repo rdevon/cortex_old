@@ -13,7 +13,8 @@ import theano
 from theano import tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from .. import get_manager, Link
+from ..manager import get_manager
+from ..manager.link import Link
 from ..utils import floatX, _rng
 from ..utils.tools import warn_kwargs, _p
 
@@ -101,6 +102,7 @@ class Cell(object):
     _dim_map = {}       #
     _links = []
     _dist_map = {}
+    _call_args = ['input']
 
     def __init__(self, name='layer_proto', **kwargs):
         '''Init function for Cell.
@@ -242,10 +244,10 @@ class Cell(object):
         for f, t in self._links:
             f = _p(self.name, f)
             t = _p(self.name, t)
-            self.manager.add_link(f, t)
+            self.manager.match_dims(f, t)
 
         for k, v in self._components.iteritems():
-            self.manager.build(_p(self.name, k))
+            self.manager.build_cell(_p(self.name, k))
             self.__dict__[k] = self.manager[_p(self.name, k)]
 
         return kwargs
@@ -269,7 +271,7 @@ class Cell(object):
         d['cell_type'] = c
         return d
 
-    def feed(self, *args):
+    def _feed(self, *args):
         '''Basic feed method.
 
         This is the identity graph. Generally it is `scan` safe.
@@ -294,7 +296,7 @@ class Cell(object):
 
         '''
         params = tuple(self.get_params())
-        return self.feed(*(args + params))
+        return self._feed(*(args + params))
 
     def get_components(self):
         '''Gets cell components.
