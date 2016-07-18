@@ -59,8 +59,8 @@ class MNIST(BasicDataset):
             X = np.array([x for i, x in enumerate(X) if Y[i] in restrict_digits])
             Y = np.array([y for i, y in enumerate(Y) if Y[i] in restrict_digits])
 
-        data = {name: X, 'label': Y}
-        distributions = {name: 'binomial', 'label': 'multinomial'}
+        data = {'input': X, 'label': Y}
+        distributions = {'input': 'binomial', 'label': 'multinomial'}
 
         super(MNIST, self).__init__(data, distributions=distributions,
                                     name=name, mode=mode, **kwargs)

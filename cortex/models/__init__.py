@@ -360,9 +360,14 @@ class Cell(object):
 
     def __str__(self):
         attributes = self.__dict__
-        attributes['params'] = dict(
-            (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,))
-            for k, a in attributes['params'].iteritems())
+
+        params = attributes['params']
+        for k, v in params.iteritems():
+            if isinstance(v, np.ndarray):
+                params[k] = '<numpy.ndarray: {shape: %s}>' % (v.shape,)
+            elif isinstance(v, list):
+                params[k] = [
+                    '<numpy.ndarray: {shape: %s}>' % (a.shape,) for a in v]
         for k in ['trng', 'rng', 'logger']:
             attributes.pop(k, None)
 

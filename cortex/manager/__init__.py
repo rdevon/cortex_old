@@ -5,8 +5,10 @@
 from collections import OrderedDict
 import logging
 
-
 from ..utils.tools import _p
+
+
+_nll_keys = ['negative_log_likelihood', 'neg_log_like', 'nll']
 
 def get_manager():
     if Manager._instance is None:
@@ -40,59 +42,6 @@ def is_tensor_arg(arg):
     return (isinstance(arg, str) and '.' in arg)
 
 
-class Connection(object):
-    def __init__(self, f, t, manager=None, **kwargs):
-        if manager is None: manager = get_manager()
-        self.manager = manager
-        if isinstance(f, list):
-            f_name = []
-            f_key = []
-            for f_ in f:
-                n, k = resolve_tensor_arg(f_)
-                f_name.append(n)
-                f_key.append(k)
-        else:
-            f_name, f_key, _ = resolve_tensor_arg(f)
-            t_name, t_key, _ = resolve_tensor_arg(t)
-
-        self.f_name = f_name
-        self.f_key = f_key
-        self.t_name = t_name
-        self.t_key = t_key
-        self.kwargs = kwargs
-
-    def __call__(self):
-        session = self.manager._current_session
-        if isinstance(self.f_name, list):
-            f_args = ['.'.join([n, k]) for n, k in zip(self.f_name, self.f_key)]
-            args = [resolve_arg(a) for a in f_args]
-        elif isinstance(self.f_name, str):
-            args = [resolve_arg('.'.join([self.f_arg, self.f_key]))]
-
-class Operation(object):
-    def __init__(self, op, args, name, manager=None, **kwargs):
-        if manager is None: manager = get_manager()
-        self.op = op
-        self.args = args
-        self.name = name
-        self.kwargs = kwargs
-        self.manager = manager
-
-    def __call__(self):
-        session = self.manager._current_session
-        def resolve_arg(arg):
-            if isinstance(arg, (list, tuple)):
-                return type(arg)([resolve_arg(a) for a in arg])
-            elif isinstance(arg, str):
-                if arg in self.session.tensors.keys():
-                    return self.session.tensors[arg]
-                else:
-                    raise KeyError
-
-        args = resolve_arg(self.args)
-        return self.op(*args, **self.kwargs)
-
-
 class Manager(object):
     '''cortex manager.
 
@@ -106,6 +55,7 @@ class Manager(object):
     def __init__(self):
         from ..models import _classes
         from ..datasets import _classes as _dataset_classes
+        from ..costs import _costs
 
         if Manager._instance is not None:
             logger.warn('New `Manager` instance. Old one will be lost.')
@@ -115,13 +65,8 @@ class Manager(object):
             '.'.join([self.__module__, self.__class__.__name__]))
         self.classes = _classes
         self.dataset_classes = _dataset_classes
-
-        self.cells = OrderedDict()
-        self.cell_args = OrderedDict()
-        self.links = []
-        self.datasets = {}
-        self.steps = []
-        self.tparams = {}
+        self.cost_functions = _costs
+        self.reset()
 
     # General methods
     def add_cell_class(name, C):
@@ -129,6 +74,9 @@ class Manager(object):
 
     def add_dataset_class(name, C):
         self.dataset_classes[name] = C
+
+    def add_cost_function(name, f):
+        self.cost_functions[name] = f
 
     @staticmethod
     def split_ref(ref):
@@ -138,12 +86,14 @@ class Manager(object):
         return cell_id, arg
 
     def reset(self):
-        self.links = []
-        self.tparams = {}
         self.cells = OrderedDict()
         self.cell_args = OrderedDict()
+        self.links = []
         self.datasets = {}
+        self.steps = []
+        self.costs = []
         self.tparams = {}
+        self.reset_sessions()
 
     def resolve_class(self, cell_type):
         from .. import resolve_class
@@ -153,6 +103,21 @@ class Manager(object):
         for k, kwargs in self.cell_args.iteritems():
             if k not in self.cells:
                 self.build_cell(k)
+
+    def create_session(self):
+        from .session import Session
+        self._current_session = Session()
+
+    def build_session(self):
+        if self._current_session is None:
+            self.create_session()
+        self._current_session.build()
+        return self._current_session
+
+    def reset_sessions(self):
+        from .session import Session
+        Session._reset()
+        self._current_session = None
 
     # Data methods
     def make_data(self, dataset, **kwargs):
@@ -206,6 +171,25 @@ class Manager(object):
         del self.cell_args[key]
 
     # Methods for building graph
+    def test_op_args(self, op, args, kwargs):
+        if hasattr(op, '__call__'):
+            pass
+        else:
+            raise TypeError('Op must be callable '
+                            'or a string of form `cell_name` or '
+                            '`cell_name.op`')
+
+        for arg in list(args) + kwargs.values():
+            if is_tensor_arg(arg):
+                n, k, C = resolve_tensor_arg(arg)
+                if n in self.datasets.keys():
+                    if not k in self.datasets[n]['dims'].keys():
+                        raise KeyError('Dataset %s has no key `%s`' % (n, k))
+                elif n in self.cell_args.keys():
+                    pass
+                else:
+                    raise KeyError('No cell nor dataset with name `%s`' % n)
+
     def add_step(self, op, *args, **kwargs):
         if isinstance(op, str):
             op_s = op.split('.')
@@ -234,32 +218,38 @@ class Manager(object):
                     arg_keys = getattr(C, '_%s_args' % op_name)
                 if len(args) != len(arg_keys):
                     raise TypeError('%d operation (%s) args provided, but %d '
-                                    'arg_keys available.'
-                                    % (len(args), C, len(arg_keys)))
+                                    'arg_keys available. (%s given, %s needed)'
+                                    % (len(args), C, len(arg_keys),
+                                       args, arg_keys))
 
                 for arg, key in zip(args, arg_keys):
                     if (key in C._dim_map.keys() and is_tensor_arg(arg)):
                         self.match_dims(arg, '.'.join([cell_name, key]))
-
-        if hasattr(op, '__call__'):
-            pass
         else:
-            raise TypeError('Op must be callable '
-                            'or a string of form `cell_name` or '
-                            '`cell_name.op`')
+            cell_name = None
 
-        for arg in list(args) + kwargs.values():
-            if is_tensor_arg(arg):
-                n, k, C = resolve_tensor_arg(arg)
-                if n in self.datasets.keys():
-                    if not k in self.datasets[n]['dims'].keys():
-                        raise KeyError('Dataset %s has no key `%s`' % (n, k))
-                elif n in self.cell_args.keys():
-                    pass
-                else:
-                    raise KeyError('No cell nor dataset with name `%s`' % n)
+        self.test_op_args(op, args, kwargs)
 
         self.steps.append(dict(
+            cell_name=cell_name,
+            op=op,
+            args=args,
+            kwargs=kwargs))
+
+    def add_cost(self, op, *args, **kwargs):
+        if isinstance(op, str):
+            if op in _nll_keys:
+                cell_name = args[1]
+                if not cell_name in self.cell_args.keys():
+                    raise TypeError('Second argument to NLL must be cell name.')
+                cell_type = self.cell_args[cell_name]['cell_type']
+                C = self.resolve_class(cell_type)
+            elif op not in self.cost_functions.keys():
+                raise TypeError('Cost function `%s` not found.' % op)
+            op = self.cost_functions[op]
+
+        self.test_op_args(op, args, kwargs)
+        self.costs.append(dict(
             op=op,
             args=args,
             kwargs=kwargs))

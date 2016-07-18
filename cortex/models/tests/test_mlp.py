@@ -21,6 +21,11 @@ cortex_logger.set_stream_logger(2)
 _atol = 1e-7
 manager = cortex.manager
 
+sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))
+tanh = lambda x: np.tanh(x)
+softplus = lambda x: np.log(1.0 + np.exp(x))
+identity = lambda x: x
+
 def test_fetch_class(c='MLP'):
     C = cortex.resolve_class(c)
     return C
@@ -46,21 +51,21 @@ def test_mlp_factory(dim_in=13, dim_hs=[17, 23], dim_out=19,
         dim_in=dim_in, dim_hs=dim_hs, dim_out=dim_out, h_act=h_act,
         out_act=out_act)
 
-def _test_feed_forward(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
-                       out_act='sigmoid'):
-    if mlp is None:
-        mlp = test_make_mlp(out_act=out_act)
-    outs = mlp(X)
+def convert_t_act(activ):
+    if activ == T.nnet.sigmoid:
+        activ = sigmoid
+    elif activ == T.tanh:
+        activ = tanh
+    elif activ == T.nnet.softplus:
+        activ = softplus
+    elif activ(1234) == 1234:
+        pass
+    else:
+        raise ValueError(activ)
+    return activ
 
-    batch_size = 23
-    if x is None:
-        x = np.random.randint(0, 2, size=(batch_size, mlp.dim_in)).astype(floatX)
-
-    sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))
-    tanh = lambda x: np.tanh(x)
-    softplus = lambda x: np.log(1.0 + np.exp(x))
-    identity = lambda x: x
-
+def feed_numpy(mlp, x):
+    zs = []
     z = x
     for l in xrange(mlp.n_layers):
         W = mlp.params['weights'][l]
@@ -68,22 +73,29 @@ def _test_feed_forward(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
 
         z = np.dot(z, W) + b
         if l != mlp.n_layers - 1:
-            activ = mlp.h_act
-            if activ == T.nnet.sigmoid:
-                activ = sigmoid
-            elif activ == T.tanh:
-                activ = tanh
-            elif activ == T.nnet.softplus:
-                activ = softplus
-            elif activ == (lambda x: x):
-                pass
-            else:
-                raise ValueError(activ)
+            activ = convert_t_act(mlp.h_act)
             z = activ(z)
             assert not np.any(np.isnan(z))
+        elif mlp.out_act is not None:
+            activ = convert_t_act(mlp.out_act)
+            z = activ(z)
+        zs.append(z)
 
-    activ = eval(out_act)
-    y = activ(z)
+    return zs
+
+def _test_feed_forward(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
+                       out_act='sigmoid', batch_size=23):
+    logger.debug('Testing feed forward with out act %s' % out_act)
+    if mlp is None:
+        mlp = test_make_mlp(out_act=out_act)
+        print out_act, mlp.out_act
+    if x is None:
+        x = np.random.randint(0, 2, size=(batch_size, mlp.dim_in)).astype(floatX)
+
+    outs = mlp(X)
+    zs = feed_numpy(mlp, x)
+    y = zs[-1]
+
     assert not np.any(np.isnan(y))
     logger.debug('No nan values found in numpy test')
 
@@ -113,11 +125,6 @@ def test_feed_forward_dmlp(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
     if x is None:
         x = np.random.randint(0, 2, size=(batch_size, mlp.dim_in)).astype(floatX)
 
-    sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))
-    tanh = lambda x: np.tanh(x)
-    softplus = lambda x: np.log(1.0 + np.exp(x))
-    identity = lambda x: x
-
     z = x
     for l in xrange(mlp.n_layers):
         W = mlp.mlp.params['weights'][l]
@@ -127,17 +134,7 @@ def test_feed_forward_dmlp(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
         if l == mlp.n_layers - 1:
             Z = outs['Y']
         else:
-            activ = mlp.h_act
-            if activ == T.nnet.sigmoid:
-                activ = sigmoid
-            elif activ == T.tanh:
-                activ = tanh
-            elif activ == T.nnet.softplus:
-                activ = softplus
-            elif activ == (lambda x: x):
-                pass
-            else:
-                raise ValueError(activ)
+            activ = convert_t_act(mlp.h_act)
             z = activ(z)
             assert not np.any(np.isnan(z))
             Z = outs['H_%d' % l]
@@ -198,3 +195,13 @@ def test_autoencoder_graph():
     manager.reset()
     test_make_autoencoder()
     manager.add_cost('squared_error', 'mlp2.output', 'fibrous.input')
+    session = manager.build_session()
+
+    f = theano.function(session.inputs, sum(session.costs))
+    data = session.next(mode='train')
+    cost = f(*data)
+    y = feed_numpy(manager.cells['mlp1'], data[0])
+    y = feed_numpy(manager.cells['mlp2'], y[-1])
+    _cost = ((y[-1] - data[0]) ** 2).mean()
+    assert (abs(cost - _cost) <= _atol), abs(cost - _cost)
+    logger.debug('Expected value of autoencoder cost OK within %.2e' % _atol)

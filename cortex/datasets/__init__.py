@@ -9,8 +9,10 @@ import numpy as np
 import os
 from os import path
 import random
+from theano import tensor as T
 
 from ..manager import get_manager
+from ..utils import floatX, intX
 from ..utils.tools import resolve_path
 from ..utils.extra import download_data, unzip
 
@@ -414,12 +416,7 @@ class BasicDataset(Dataset):
             if not k in self.distributions.keys():
                 self.distributions[k] = 'binomial'
 
-        for d in [self.dims, self.distributions, self.data]:
-            d['input'] = d[name]
-            if labels is not None:
-                d['output'] = d[labels]
-
-        self.X = self.data[self.name]
+        self.X = self.data['input']
         self.mean_image = self.X.mean(axis=0)
         self.labels = labels
 
@@ -439,18 +436,20 @@ class BasicDataset(Dataset):
         self.register()
 
     def register(self):
-        if self.name in self.manager.datasets.keys():
-            if self.mode in self.manager.datasets[self.name].keys():
+        datasets = self.manager.datasets
+        if self.name in datasets.keys():
+            if self.mode in datasets[self.name].keys():
                 self.logger.warn(
                     'Dataset with name `%s` and mode `%s` already found: '
                     'overwriting. Use `cortex.manager.remove_dataset` to avoid '
                     'this warning' % (self.name, self.mode))
-            self.manager.datasets[self.name][self.mode] = self
+            datasets[self.name][self.mode] = self
         else:
             d = {('%s' % self.mode):self}
-            self.manager.datasets[self.name] = d
-            self.manager.datasets[self.name]['dims'] = self.dims
-            self.manager.datasets[self.name]['distributions'] = self.distributions
+            datasets[self.name] = d
+            datasets[self.name]['dims'] = self.dims
+            datasets[self.name]['distributions'] = self.distributions
+            datasets[self.name]['tensors'] = self.make_tensors()
 
     def copy(self):
         return copy.deepcopy(self)
@@ -541,10 +540,6 @@ class BasicDataset(Dataset):
 
     def set_link_value(self, key):
         k_, name = key.split('.')
-        if name == 'input':
-            name = self.name
-        elif name == 'output':
-            name = 'labels'
 
         if name in self.data.keys():
             if k_ == 'dim':
@@ -555,6 +550,38 @@ class BasicDataset(Dataset):
                 raise KeyError
         else:
             raise KeyError
+
+    def make_tensors(self):
+        '''Forms the tensors from the dataset
+
+        '''
+        self.logger.debug('Forming tensors for dataset %s' % self.name)
+        d = self.next()
+        tensors = OrderedDict()
+        for k, v in d.iteritems():
+            self.logger.debug('Data mode %s has batch shape %s.' % (k, v.shape))
+            if v.ndim == 1:
+                C = T.vector
+            elif v.ndim == 2:
+                C = T.matrix
+            elif v.ndim == 3:
+                C = T.tensor3
+            else:
+                raise ValueError('Data dim over 3 not supported.')
+
+            if v.dtype == floatX:
+                dtype = floatX
+            elif v.dtype == intX:
+                dtype = intX
+            else:
+                raise ValueError('dtype %s not supported' % v.dtype)
+
+            X = C(self.name + '.' + k, dtype=dtype)
+            tensors[k] = X
+        self.logger.debug('Dataset has the following tensors: %s with types %s'
+                          % (tensors, [inp.dtype for inp in tensors.values()]))
+        self.reset()
+        return tensors
 
 _classes = {'BasicDataset': BasicDataset}
 from . import basic, neuroimaging

@@ -39,8 +39,8 @@ class Euclidean(BasicDataset):
 
         X = _method_dict[method](X, **method_args)
 
-        data = {name: X}
-        distributions = {name: 'gaussian'}
+        data = {'input': X}
+        distributions = {'input': 'gaussian'}
 
         super(Euclidean, self).__init__(data, distributions=distributions,
                                         name=name, mode=mode, **kwargs)
