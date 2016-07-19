@@ -171,10 +171,6 @@ def test_make_autoencoder(dim_in=13):
     manager.add_step('mlp2', 'mlp1.output')
     manager.match_dims('mlp2.output', 'fibrous.input')
     manager.build()
-    if manager.cell_args['mlp1']['dim_out'] != dim_in:
-        raise ValueError('mlp1 dim out (%s) and mlp2 dim in (%d) do not '
-                         ' match'
-                         % (manager.cell_args['mlp1']['dim_out'], dim_in))
 
 def test_make_prob_autoencoder():
     manager.reset()
@@ -185,16 +181,11 @@ def test_make_prob_autoencoder():
     manager.add_step('mlp2', 'mlp1.output')
     manager.match_dims('mlp2.output', 'fibrous.input')
     manager.build()
-    if manager.cell_args['mlp2.distribution']['cell_type'] != data_iter.distributions['input']:
-        raise ValueError('mlp2.distribution (%s) data distribution (%s) do not '
-                         ' match'
-                         % (manager.cell_args['mlp2.distribution']['cell_type'],
-                            data_iter.distributions['input']))
 
 def test_autoencoder_graph():
     manager.reset()
     test_make_autoencoder()
-    manager.add_cost('squared_error', 'mlp2.output', 'fibrous.input')
+    manager.add_cost('squared_error', Y_hat='mlp2.output', Y='fibrous.input')
     session = manager.build_session()
 
     f = theano.function(session.inputs, sum(session.costs))
@@ -205,3 +196,22 @@ def test_autoencoder_graph():
     _cost = ((y[-1] - data[0]) ** 2).mean()
     assert (abs(cost - _cost) <= _atol), abs(cost - _cost)
     logger.debug('Expected value of autoencoder cost OK within %.2e' % _atol)
+
+def test_prob_autoencoder_graph():
+    manager.reset()
+    test_make_prob_autoencoder()
+    manager.add_cost('mlp2.negative_log_likelihood', X='fibrous.input')
+    session = manager.build_session()
+
+    f = theano.function(session.inputs, sum(session.costs))
+    data = session.next(mode='train')
+    cost = f(*data)
+    y = feed_numpy(manager.cells['mlp1'], data[0])
+    y = feed_numpy(manager.cells['mlp2.mlp'], y[-1])[-1]
+    mu = y[:, :2]
+    log_sigma = y[:, 2:]
+    _cost = 0.5 * (
+        (data[0] - mu)**2 / (np.exp(2 * log_sigma)) +
+        2 * log_sigma + np.log(2 * np.pi)).sum(axis=1).mean()
+    assert (abs(cost - _cost) <= _atol), abs(cost - _cost)
+    logger.debug('Expected value of probabilistic autoencoder cost OK within %.2e' % _atol)

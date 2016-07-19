@@ -103,6 +103,7 @@ class Cell(object):
     _links = []
     _dist_map = {}
     _call_args = ['input']
+    _costs = {}
 
     def __init__(self, name='layer_proto', **kwargs):
         '''Init function for Cell.
@@ -266,8 +267,18 @@ class Cell(object):
 
     def get_args(self):
         d = dict((k, self.__dict__[k]) for k in self._args)
-        c = next(c for c, v in self.manager.classes.iteritems()
-                 if isinstance(self, v))
+        try:
+            c = next(c for c, v in self.manager.classes.iteritems()
+                     if v == self.__class__)
+        except StopIteration:
+            print self.name
+            print type(self)
+            for k, v in self.manager.classes.iteritems():
+                print k, v
+                print type(self) == v
+                print isinstance(self, v)
+            raise
+
         d['cell_type'] = c
         return d
 

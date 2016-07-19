@@ -37,6 +37,10 @@ class Distribution(Cell):
     _required = ['dim']
     _dist_map = {'input': 'cell_type', 'output': 'cell_type'}
     _dim_map = {'input': 'dim', 'output': 'dim', 'P': 'dim'}
+    _costs = {
+        'nll': '_cost',
+        'negative_log_likelihood': '_cost'
+    }
 
     has_kl = False
     is_continuous = False
@@ -97,7 +101,7 @@ class Distribution(Cell):
                                 'constructor of %s' % (req, C))
 
         if conditional:
-            C = make_conditional(C)
+            C = _conditionals[C.__name__]
 
         return C(*reqs.values(), **options)
 
@@ -195,6 +199,11 @@ class Distribution(Cell):
             p = self.get_prob(*self.get_params())
         return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
 
+    def _cost(self, X=None, P=None):
+        if X is None:
+            raise TypeError('X (ground truth) must be provided.')
+        return self.neg_log_prob(X, p=P).mean()
+
     def entropy(self, p=None):
         '''Entropy function.
 
@@ -239,42 +248,6 @@ class Distribution(Cell):
 
         '''
         return x
-
-
-def make_conditional(C):
-    '''Conditional distribution.
-
-    Conditional distributions do not own their parameters, they are given,
-    such as from an MLP.
-
-    Args:
-        C (Distribution).
-
-    Returns:
-        Conditional.
-
-    '''
-    if not issubclass(C, Distribution):
-        raise TypeError('Conditional distribution not possible with %s' % C)
-
-    class Conditional(C):
-        def init_params(self): self.params = OrderedDict()
-
-        def get_params(self): return []
-
-        def sample(self, n_samples, p):
-            return super(Conditional, self).sample(n_samples, p=p)
-
-        def neg_log_prob(self, x, p, sum_probs=True):
-            return super(Conditional, self).neg_log_prob(
-                x, p=p, sum_probs=sum_probs)
-
-        def entropy(self, p):
-            return super(Conditional, self).entropy(p=p)
-
-    Conditional.__name__ = Conditional.__name__ + '_' + C.__name__
-
-    return Conditional
 
 
 class Binomial(Distribution):
@@ -786,3 +759,55 @@ def _laplace_entropy(p):
 _classes = {'binomial': Binomial, 'continuous_binomial': ContinuousBinomial,
             'centered_binomial': CenteredBinomial, 'multinomial': Multinomial,
             'gaussian': Gaussian, 'logistic': Logistic, 'laplace': Laplace}
+
+_conditionals = {}
+
+def make_conditional(C):
+    '''Conditional distribution.
+
+    Conditional distributions do not own their parameters, they are given,
+    such as from an MLP.
+
+    Args:
+        C (Distribution).
+
+    Returns:
+        Conditional.
+
+    '''
+    if not issubclass(C, Distribution):
+        raise TypeError('Conditional distribution not possible with %s' % C)
+
+    class Conditional(C):
+        def init_params(self): self.params = OrderedDict()
+
+        def get_params(self): return []
+
+        def sample(self, n_samples, p):
+            return super(Conditional, self).sample(n_samples, p=p)
+
+        def neg_log_prob(self, x, p, sum_probs=True):
+            return super(Conditional, self).neg_log_prob(
+                x, p=p, sum_probs=sum_probs)
+
+        def _cost(self, X=None, P=None):
+            if X is None:
+                raise TypeError('X (ground truth) must be provided.')
+            if P is None:
+                session = self.manager.get_session()
+                P = session.tensors[self.name + '.' + 'P']
+            return self.neg_log_prob(X, p=P).mean()
+
+        def entropy(self, p):
+            return super(Conditional, self).entropy(p=p)
+
+    Conditional.__name__ = Conditional.__name__ + '_' + C.__name__
+
+    return Conditional
+
+keys = _classes.keys()
+for k in keys:
+    v = _classes[k]
+    C = make_conditional(v)
+    _conditionals[v.__name__] = C
+    _classes['conditional_' + k] = C

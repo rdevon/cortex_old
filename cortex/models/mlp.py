@@ -206,6 +206,10 @@ class DistributionMLP(Cell):
         'Z': 'dim'
     }
     _dist_map = {'output': 'distribution_type'}
+    _costs = {
+        'nll': '_cost',
+        'negative_log_likelihood': '_cost'
+    }
 
     def __init__(self, distribution_type, name=None, **kwargs):
         if name is None:
@@ -213,7 +217,8 @@ class DistributionMLP(Cell):
         self.distribution_type = distribution_type
         super(DistributionMLP, self).__init__(name=name, **kwargs)
 
-    def get_params(self): return self.mlp.get_params()
+    def get_params(self):
+        return self.mlp.get_params()
 
     def _feed(self, X, *params):
         outs = self.mlp._feed(X, *params)
@@ -221,5 +226,10 @@ class DistributionMLP(Cell):
         outs.update(P=self.distribution(Y))
         return outs
 
+    def _cost(self, X=None, P=None):
+        if P is None:
+            session = self.manager.get_session()
+            P = session.tensors[self.name + '.' + 'P']
+        return self.distribution._cost(X=X, P=P)
 
 _classes = {'MLP': MLP, 'DistributionMLP': DistributionMLP}

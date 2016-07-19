@@ -8,8 +8,6 @@ import logging
 from ..utils.tools import _p
 
 
-_nll_keys = ['negative_log_likelihood', 'neg_log_like', 'nll']
-
 def get_manager():
     if Manager._instance is None:
         return Manager()
@@ -112,6 +110,9 @@ class Manager(object):
         if self._current_session is None:
             self.create_session()
         self._current_session.build()
+        return self._current_session
+
+    def get_session(self):
         return self._current_session
 
     def reset_sessions(self):
@@ -237,19 +238,24 @@ class Manager(object):
             kwargs=kwargs))
 
     def add_cost(self, op, *args, **kwargs):
+        cell_name = None
         if isinstance(op, str):
-            if op in _nll_keys:
-                cell_name = args[1]
-                if not cell_name in self.cell_args.keys():
-                    raise TypeError('Second argument to NLL must be cell name.')
+            if is_tensor_arg(op):
+                cell_name, cost_name = op.split('.')
                 cell_type = self.cell_args[cell_name]['cell_type']
                 C = self.resolve_class(cell_type)
-            elif op not in self.cost_functions.keys():
-                raise TypeError('Cost function `%s` not found.' % op)
-            op = self.cost_functions[op]
+                if not cost_name in C._costs.keys():
+                    raise AttributeError('cell type %s for cell `%s` has no '
+                                         'cost %s' % (C, cell_name, cost_name))
+                op = getattr(C, C._costs[cost_name])
+            else:
+                if op not in self.cost_functions.keys():
+                    raise TypeError('Cost function `%s` not found.' % op)
+                op = self.cost_functions[op]
 
         self.test_op_args(op, args, kwargs)
         self.costs.append(dict(
+            cell_name=cell_name,
             op=op,
             args=args,
             kwargs=kwargs))

@@ -60,9 +60,9 @@ class Session(object):
         new_kwargs = {}
         for key, arg in kwargs.iteritems():
             if is_tensor_arg(arg):
-                name, key, _ = resolve_tensor_args(arg)
+                name, key_, _ = resolve_tensor_arg(arg)
                 if name in manager.datasets.keys():
-                    tensors[arg] = manager.datasets[name]['tensors'][key]
+                    tensors[arg] = manager.datasets[name]['tensors'][key_]
 
                 if arg in tensors.keys():
                     new_kwargs[key] = tensors[arg]
@@ -79,26 +79,20 @@ class Session(object):
 
         for step in manager.steps:
             op = step['op']
+            args, kwargs = self.resolve_op_args(step['args'], step['kwargs'])
+
             cell_name = step['cell_name']
             if cell_name is not None:
                 cell = manager.cells[cell_name]
-            else:
-                cell = None
-                name = op.__name__
-
-            args, kwargs = self.resolve_op_args(step['args'], step['kwargs'])
-
-            if cell is None:
-                out = op(*args, **kwargs)
-            else:
                 out = op(cell, *args, **kwargs)
-            if isinstance(out, T.TensorVariable):
-                out = dict(output)
-
-            if cell is not None:
                 key_prefix = cell_name
             else:
+                name = op.__name__
+                out = op(*args, **kwargs)
                 key_prefix = name
+
+            if isinstance(out, T.TensorVariable):
+                out = dict(output)
 
             for k, v in out.iteritems():
                 key = key_prefix + '.' + k
@@ -110,7 +104,13 @@ class Session(object):
         for cost in manager.costs:
             op = cost['op']
             args, kwargs = self.resolve_op_args(cost['args'], cost['kwargs'])
-            out = op(*args, **kwargs)
+            cell_name = cost['cell_name']
+            if cell_name is not None:
+                cell = manager.cells[cell_name]
+                out = op(cell, *args, **kwargs)
+            else:
+                out = op(*args, **kwargs)
+
             self.costs.append(out)
 
     def next(self, mode=None, batch_size=None):

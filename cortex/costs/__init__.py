@@ -2,7 +2,11 @@
 
 '''
 
-def squared_error(Y_hat, Y):
+def squared_error(Y_hat=None, Y=None):
+    if Y_hat is None:
+        raise TypeError('Y_hat (estimate) must be provided')
+    if Y is None:
+        raise TypeError('Y (ground truth) must be provided')
     if Y_hat.ndim != Y.ndim:
         raise TypeError('Squared error inputs must have the same number of '
                         'dimensions.')
