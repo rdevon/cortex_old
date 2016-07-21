@@ -44,12 +44,16 @@ class RNN_initializer(Cell):
         initialization (str): intialization type.
         dim_in (int): input dimension. For MLP.
         dim_outs (list): hidden dimensions.
-        layers (list): layers for initialization of RNN layers.
 
     '''
-    _components = ['layers']
+    _required = ['dim_in', 'dim_out']
+    _components = ['init']
+    _dim_map = {
+        'input': 'dim_in',
+        'output': 'dim_out'
+    }
 
-    def __init__(self, dim_in, dim_outs, initialization='mlp', **kwargs):
+    def __init__(self, dim_in, dim_out, initialization='mlp', **kwargs):
         '''Initialization function for RNN_Initializer.
 
         Args:
@@ -61,80 +65,26 @@ class RNN_initializer(Cell):
         '''
         self.initialization = initialization
         self.dim_in = dim_in
-        self.dim_outs = dim_outs
+        self.dim_out = dim_out
 
-        kwargs = init_weights(self, **kwargs)
-        kwargs = init_rngs(self, **kwargs)
-
-        self.layers = []
-        for i, dim_out in enumerate(self.dim_outs):
-            if initialization == 'mlp':
-                layer = mlp_module.MLP(
-                    self.dim_in, dim_out,
-                    rng=self.rng, trng=self.trng,
-                    distribution='centered_binomial',
-                    name='rnn_initializer_mlp_%d' % i,
-                    **kwargs)
-            elif initialization == 'average':
-                layer = Averager((dim_out,), name='rnn_initializer_averager',
-                    **kwargs)
-            else:
-                raise ValueError()
-            self.layers.append(layer)
+        if initialization == 'mlp':
+            layer = mlp_module.MLP(
+                self.dim_in, self.dim_out,
+                rng=self.rng, trng=self.trng,
+                distribution='centered_binomial',
+                name='rnn_initializer_mlp_%d' % i,
+                **kwargs)
+        elif initialization == 'average':
+            layer = Averager((dim_out,), name='rnn_initializer_averager',
+                **kwargs)
+        else:
+            raise ValueError()
 
         super(RNN_initializer, self).__init__(name='rnn_initializer')
 
-    @classmethod
-    def factory(C, dim_in=None, dim_h=None, dim_hs=None, dim_out=None,
-            **kwargs):
-        '''Factory for RNN.
+    def set_components(self, initial**kwargs):
 
-        Args:
-            layer_type (str or type): type of RNN.
-            dim_in (int): input dimension.
-            dim_h (Optional[int]): single hidden layer units.
-            dim_hs (Optional[list]): list of hidden layer units. Use if single
-                layer units `dim_h` not provided.
-            dim_out (Optional[int]): output dimension. If not provided, set to
-                `dim_in`.
-            **kwargs: keyword arguments for mlp_factory.
-
-        Returns:
-            RNN subclass.
-
-        '''
-        if dim_h is None:
-            simple = False
-            assert dim_hs is not None
-        else:
-            simple = True
-            assert dim_h is not None
-
-        if simple: dim_hs = dim_h
-        if dim_out is None: dim_out = dim_in
-
-        mlps = C.mlp_factory(dim_in, dim_out, dim_hs)
-        kwargs.update(**mlps)
-
-        return C(dim_hs, dim_out=dim_out, **kwargs)
-
-    def set_tparams(self):
-        tparams = super(RNN_initializer, self).set_tparams()
-
-        for layer in self.layers:
-            if self.initialization in ['mlp', 'average']:
-                tparams.update(**layer.set_tparams())
-
-        return tparams
-
-    def get_decay_params(self):
-        decay_params = OrderedDict()
-        if self.initialization == 'mlp':
-            for layer in self.layers:
-                decay_params.update(**layer.get_decay_params())
-        return decay_params
-
-    def __call__(self, X, hs):
+    def _cost(self, X, hs):
         '''Call function for RNN_Initializer.
 
         Updates the initializer or returns cost.
@@ -154,18 +104,17 @@ class RNN_initializer(Cell):
         updates = theano.OrderedUpdates()
         constants = hs
 
-        for i, layer in enumerate(self.layers):
-            if self.initialization == 'mlp':
-                p = layer.feed(X)
-                cost += layer.neg_log_prob(hs[i], p).mean()
-            elif self.initialization == 'average':
-                updates += layer(hs[i])
-            else:
-                raise ValueError()
+        if self.initialization == 'mlp':
+            p = layer(X)['P']
+            cost += se.neg_log_prob(hs[i], p).mean()
+        elif self.initialization == 'average':
+            updates += layer(hs[i])
+        else:
+            raise ValueError()
 
         return OrderedDict(cost=cost, p=p, hs=hs), updates, constants
 
-    def initialize(self, X):
+    def _feed(self, X, *params):
         '''Initialize the hidden states.
 
         Args:
@@ -176,11 +125,68 @@ class RNN_initializer(Cell):
 
         '''
         if self.initialization == 'mlp':
-            return [layer.feed(X) for layer in self.layers]
+            return self.initializer._feed(X, *params)
         elif self.initialization == 'average':
-            return [layer.m for layer in self.layers]
+            return self.initializer.m
         else:
             raise ValueError()
+
+
+class RecurrentUnit(Cell):
+    _required = ['dim']
+    _options = {'weight_noise': False}
+    _args = ['dim']
+    _weights = ['W']
+    _dim_map = {
+        'input': 'dim',
+        'output': 'dim'
+    }
+
+    def __init__(self, dim, name='RU', **kwargs):
+        self.dim = dim
+        super(RecurrentUnit, self).__init__(name=name, **kwargs)
+
+    def init_params(self):
+        '''Initialize RNN parameters.
+
+        '''
+        self.params = OrderedDict()
+        W = ortho_weight(self.dim)
+        self.params['W'] = W
+
+    def _recurrence(self, m, y, h_, W):
+        '''Recurrence function.
+
+        Args:
+            m (T.tensor): masks.
+            y (T.tensor): inputs.
+            h_ (T.tensor): recurrent state.
+            W (theano.shared): recurrent weights.
+
+        Returns:
+            T.tensor: next recurrent state.
+
+        '''
+        preact = T.dot(h_, W) + y
+        h      = T.tanh(preact)
+        h      = m * h + (1 - m) * h_
+        return h
+
+    def _feed(self, X, M, H0, *params):
+        n_steps = X.shape[0]
+        seqs         = [M[:, :, None]] + X
+        outputs_info = [H0]
+        non_seqs     = params
+
+        h, updates = theano.scan(
+            self._recurrence,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=self.name + '_recurrent_steps_%d' % i,
+            n_steps=n_steps)
+
+        return OrderedDict(H=h, updates=updates)
 
 
 class RNN(Cell):
@@ -194,9 +200,6 @@ class RNN(Cell):
         dim_hs (list): dimenstions of recurrent units.
         n_layers (int): number of recurrent layers. Should match len(dim_hs).
         input_net (MLP): MLP to feed input into recurrent layers.
-        output_net (MLP): MLP to read from recurrent layers.
-        condtional (Optional[MLP]): MLP to condition output on previous
-            output.
         init_net (RNN_Initializer): Initializer for RNN recurrent state.
         nets (list): list of networks. input network, output_net, conditional.
         inter_nets (list): list of inter-networks between recurrent layers.
@@ -206,267 +209,45 @@ class RNN(Cell):
         'initializer': {
             'cell_type': 'RNNInitializer',
         },
-        'nets': {
-            'cell_type': 'MLP'
+        'RU': {
+            'cell_type': 'RecurrentUnit',
+            'dim': '&dim_h'
         },
-        'inter_nets',
-        'init_net'
+        'input_net': {
+            'cell_type': 'MLP',
+            '_required': {'out_act', 'tanh'},
+            '_passed': ['dim_in']
+        }
     }
+    _links = [
+        ('input_net.output', 'RU.input'),
+        ('initializer.output', 'RU.input')]
 
-    def __init__(self, dim_hs, name='rnn', **kwargs):
+    def __init__(self, name='RNN', **kwargs):
         '''Init function for RNN.
 
         Args:
-            dim_hs (list): dimensions of the recurrent layers.
-            initializer (Optional[RNNInitializer]): Cell for initializing
-                recurrent states.
+            **kwargs: additional keyword arguments.
 
         '''
-        if input_net is None or output_net is None:
-            raise TypeError('Both `input_net` and `output_net` must be set.')
-
-        self.dim_hs = dim_hs
-        self.n_layers = len(self.dim_hs)
-        if init_args is None: init_args = dict()
-            logger.debug('Initializing RNN with %s and parameters %s'
-                % (initialization, pprint.pformat(init_args)))
-            init_net = RNN_initializer(dim_in, dim_hs,
-                                       initialization=initialization,
-                                       **init_args)
         super(RNN, self).__init__(name=name, **kwargs)
 
-    @staticmethod
-    def mlp_factory(dim_in, dim_out, dim_hs, o_dim_in=None, i_net=None,
-                    o_net=None, c_net=None, data_distribution='binomial',
-                    initialization=None, init_args=None):
-        '''Factory for creating MLPs for RNN.
+    def init_args(self, X, M=None):
+        if M is None:
+            M = T.ones((X.shape[0], X.shape[1])).astype(floatX)
+        return (X, M)
 
-        Args:
-            dim_in (int): input dimention.
-            dim_out (int): output dimension. If not provided, assumed
-                to be dim_in.
-            dim_hs (list): dimensions of recurrent units.
-            o_dim_in (Optional[int]): optional input dimension for output
-                net. If not provided, then use the last hidden dim.
-            i_net (dict): input network args.
-            o_net (dict): output network args.
-            c_net (dict): conditional network args.
-            data_distribution (Optional[str]): distribution of the output.
-            initialization (str): type of initialization.
-            init_args (dict): initialization keyword arguments.
+    def _feed(self, X, M, *params):
+        ru_params = self.select_params('RU', *params)
+        input_params = self.select_params('input_net', *params)
+        initializer_params = self.select_params('initializer', *params)
 
-        Returns:
-            dict: MLPs.
-            dict: extra keyword arguments.
+        outs = self.input_net._feed(X, *input_params)
+        outs.update(H0=self.initializer._feed(X, *initializer_params))
+        outs.update(**self.RU(outs['Y'], M, outs['H0']))
+        return outs
 
-        '''
-        import logging
-        logger = logging.getLogger('cortex')
-
-        mlps = {}
-
-        # Input network
-        if i_net is None: i_net = dict()
-        i_net.update(dim_in=dim_in, dim_out=dim_hs[0], name='input_net',
-            distribution='centered_binomial')
-        logger.debug('Forming RNN with input network parameters %s'
-                     % pprint.pformat(i_net))
-        input_net = mlp_module.factory(**i_net)
-
-        # Output network
-        if o_dim_in is None:
-            o_dim_in = dim_hs[-1]
-        if o_net is None: o_net = dict()
-        if not o_net.get('distribution', False):
-            o_net['distribution'] = data_distribution
-        o_net.update(dim_in=o_dim_in, dim_out=dim_out, name='output_net')
-        logger.debug('Forming RNN with output network parameters %s'
-                     % pprint.pformat(o_net))
-        output_net = mlp_module.factory(**o_net)
-        mlps.update(input_net=input_net, output_net=output_net)
-
-        # Conditional network
-        if c_net is not None:
-            if not c_net.get('dim_in', False):
-                c_net['dim_in'] = dim_in
-            c_net.update(dim_out=dim_hs[0], name='conditional')
-            logger.debug('Forming RNN with conditional network parameters %s'
-                % pprint.pformat(c_net))
-            conditional = mlp_module.factory(**c_net)
-            mlps['conditional'] = conditional
-
-        # Intitialization
-        if initialization is not None:
-
-        return mlps
-
-    def set_params(self):
-        '''Initialize RNN parameters.
-
-        '''
-        self.params = OrderedDict()
-        for i, dim_h in enumerate(self.dim_hs):
-            Ur = ortho_weight(dim_h)
-            self.params['Ur%d' % i] = Ur
-
-        self.set_net_params()
-
-    def set_net_params(self):
-        '''Initialize MLP parameters.
-
-        '''
-        assert self.input_net.dim_in == self.dim_in
-        assert self.input_net.dim_out == self.dim_hs[0]
-        self.input_net.name = self.name + '_input_net'
-
-        assert self.output_net.dim_in == self.dim_hs[-1]
-        self.output_net.name = self.name + '_output_net'
-
-        if self.conditional is not None:
-            assert self.conditional.dim_out == self.dim_hs[0]
-            self.conditional.name = self.name + '_conditional'
-
-        self.nets = [self.input_net, self.output_net, self.conditional]
-
-        self.inter_nets = []
-
-        for i in xrange(self.n_layers - 1):
-            n = mlp_module.MLP(self.dim_hs[i], self.dim_hs[i+1],
-                    rng=self.rng, trng=self.trng,
-                    distribution='centered_binomial',
-                    name='rnn_net%d' % i)
-            self.decay_params += n.decay_params
-
-            self.inter_nets.append(n)
-
-    def get_decay_params(self):
-        decay_keys = self.params.keys()
-        decay_params = OrderedDict((self.name + '.' + k, self.__dict__[k])
-            for k in decay_keys)
-        for net in self.nets + self.inter_nets:
-            if net is not None:
-                decay_params.update(**net.get_decay_params())
-
-        decay_params.update(**self.init_net.get_decay_params())
-        return decay_params
-
-    def set_tparams(self):
-        '''Sets and returns theano parameters.
-
-        '''
-        tparams = super(RNN, self).set_tparams()
-
-        if self.init_net is not None:
-            tparams.update(**self.init_net.set_tparams())
-
-        for net in self.inter_nets + self.nets:
-            if net is not None:
-                tparams.update(**net.set_tparams())
-
-        self.param_idx = [self.n_layers]
-        accum = self.param_idx[0]
-
-        for net in self.inter_nets + self.nets:
-            if net is not None:
-                accum += len(net.get_params())
-            self.param_idx.append(accum)
-
-        return tparams
-
-    def get_params(self):
-        '''Returns parameters for scan.
-
-        '''
-        params = [self.__dict__['Ur%d' % i] for i in range(self.n_layers)]
-        if self.weight_noise and self.noise_switch():
-            params = [p + self.trng.normal(
-                std=self.weight_noise, size=p.shape, dtype=p.dtype)
-                      for p in params]
-        for net in self.inter_nets:
-            params += net.get_params()
-
-        return params
-
-    def get_net_params(self):
-        '''Returns MLP parameters for scan.
-
-        '''
-        params = []
-        for net in self.nets:
-            if net is not None:
-                params += net.get_params()
-        return params
-
-    def get_sample_params(self):
-        '''Returns parameters used for sampling.
-
-        '''
-        params = self.get_params() + self.get_net_params()
-        return params
-
-    def get_recurrent_args(self, *args):
-        '''Get the recurrent arguments for `scan`.
-
-        '''
-        return args[:self.param_idx[0]]
-
-    def get_inter_args(self, level, *args):
-        '''Get the inter-network arguments for `scan`.
-
-        '''
-        return args[self.param_idx[level]:self.param_idx[level+1]]
-
-    def get_input_args(self, *args):
-        '''Get the input arguments for `scan`.
-
-        '''
-        return args[self.param_idx[self.n_layers-1]
-                    :self.param_idx[self.n_layers]]
-
-    def get_output_args(self, *args):
-        '''Get the output arguments for `scan`.
-
-        '''
-        return args[self.param_idx[self.n_layers]
-                    :self.param_idx[self.n_layers+1]]
-
-    def get_conditional_args(self, *args):
-        '''Get the conditional arguments for `scan`.
-
-        '''
-        return args[self.param_idx[self.n_layers+1]
-                    :self.param_idx[self.n_layers+2]]
-
-    # Extra functions ---------------------------------------------------------
-    def energy(self, X, h0s=None):
-        '''Negative log probability of data point.
-
-        Args:
-            X (T.tensor): 3D tensor of samples.
-            h0s (list): List of initial hidden states.
-
-        Returns:
-            T.tensor: energies for each batch.
-
-        '''
-        outs, updates = self.__call__(X[:-1], h0s=h0s)
-        p = outs['p']
-        energy = self.neg_log_prob(X[1:], p).sum(axis=0)
-        return energy
-
-    def neg_log_prob(self, x, p, **kwargs):
-        '''Negative log prob function.
-
-        Args:
-            x (T.tensor): samples
-            p (T.tensor): probabilities
-
-        Returns:
-            T.tensor: negative log probabilities.
-
-        '''
-        return self.output_net.neg_log_prob(x, p, **kwargs)
-
+class GenRNN(Cell):
     # Step functions -----------------------------------------------------------
     def step_sample_preact(self, *params):
         '''Returns preact for sampling step.
@@ -511,126 +292,6 @@ class RNN(Cell):
         x      = x[0]
         return tuple(hs) + (x, p, preact)
 
-    def _step(self, m, y, h_, Ur):
-        '''Step function for RNN call.
-
-        Args:
-            m (T.tensor): masks.
-            y (T.tensor): inputs.
-            h_ (T.tensor): recurrent state.
-            Ur (theano.shared): recurrent connection.
-
-        Returns:
-            T.tensor: next recurrent state.
-
-        '''
-        preact = T.dot(h_, Ur) + y
-        h      = T.tanh(preact)
-        h      = m * h + (1 - m) * h_
-        return h
-
-    def feed_seqs(self, x, condition_on, level, *params):
-        '''Prepares the input for `__call__`.
-
-        Args:
-            x (T.tensor): input
-            condtion_on (T.tensor or None): tensor to condition recurrence on.
-            level (int): reccurent level.
-            *params: list of theano.shared.
-
-        Returns:
-            list: list of scan inputs.
-
-        '''
-        if level == 0:
-            i_params = self.get_input_args(*params)
-            a        = self.input_net.step_preact(x, *i_params)
-        else:
-            i_params = self.get_inter_args(level - 1, *params)
-            a        = self.inter_nets[level - 1].step_preact(x, *i_params)
-
-        if condition_on is not None:
-            a += condition_on
-
-        return [a]
-
-    def step_feed(self, x, m, h0s, *params):
-        '''Step version of feed for scan
-
-        Args:
-            x (T.tensor): input.
-            m (T.tensor): mask.
-            h0s (list): list of recurrent initial states.
-            *params: list of theano.shared.
-
-        Returns:
-            OrderedDict: dictionary of results.
-
-        '''
-        n_steps = x.shape[0]
-        n_samples = x.shape[1]
-
-        updates = theano.OrderedUpdates()
-
-        x_in = x
-        hs = []
-        for i, h0 in enumerate(h0s):
-            seqs         = [m[:, :, None]] + self.feed_seqs(x, None, i, *params)
-            outputs_info = [h0]
-            non_seqs     = [self.get_recurrent_args(*params)[i]]
-            h, updates_ = theano.scan(
-                self._step,
-                sequences=seqs,
-                outputs_info=outputs_info,
-                non_sequences=non_seqs,
-                name=self.name + '_recurrent_steps_%d' % i,
-                n_steps=n_steps)
-            hs.append(h)
-            x = h
-            updates += updates_
-
-        o_params    = self.get_output_args(*params)
-        out_net_out = self.output_net.step_call(h, *o_params)
-        preact      = out_net_out['z']
-        p           = out_net_out['p']
-        error       = self.neg_log_prob(x_in[1:], p[:-1], sum_probs=False)
-
-        return OrderedDict(hs=hs, p=p, error=error, z=preact), updates
-
-    def feed(self, x, m=None, h0s=None, condition_on=None):
-        '''Feed function.
-
-        For learning RNNs.
-
-        Args:
-            x (T.tensor): input sequence. window x batch x dim
-            m (T.tensor): mask. window x batch. For masking in recurrent steps.
-            h0s (Optional[list]): initial h0s.
-            condition_on (Optional[T.tensor]): conditional for recurrent step.
-
-        Returns:
-            OrderedDict: dictionary of results: hiddens, probabilities, and
-                preacts.
-            theano.OrderedUpdates.
-
-        '''
-        constants = []
-
-        if h0s is None and self.init_net is not None:
-            h0s = self.init_net.initialize(x[0])
-            constants += h0s
-        elif h0s is None:
-            h0s = [T.alloc(0., x.shape[1], dim_h).astype(floatX) for dim_h in self.dim_hs]
-
-        if m is None:
-            m = T.ones((x.shape[0], x.shape[1])).astype(floatX)
-
-        params = self.get_sample_params()
-
-        results, updates = self.step_feed(x, m, h0s, *params)
-        results['h0s'] = h0s
-        return results, updates, constants
-
     def __call__(self, X, outputs, diff=False):
         '''Default cost for RNN.
 
@@ -647,6 +308,39 @@ class RNN(Cell):
 
         cost = self.neg_log_prob(X[1:], p).sum(axis=0).mean()
         return cost
+
+    def _feed(self, x, m, h0s, *params):
+        '''Step version of feed for scan
+
+        Args:
+            x (T.tensor): input.
+            m (T.tensor): mask.
+            h0s (list): list of recurrent initial states.
+            *params: list of theano.shared.
+
+        Returns:
+            OrderedDict: dictionary of results.
+
+        '''
+        n_samples = x.shape[1]
+
+        updates = theano.OrderedUpdates()
+
+        x_in = x
+        hs = []
+        for i, h0 in enumerate(h0s):
+
+            hs.append(h)
+            x = h
+            updates += updates_
+
+        o_params    = self.get_output_args(*params)
+        out_net_out = self.output_net.step_call(h, *o_params)
+        preact      = out_net_out['z']
+        p           = out_net_out['p']
+        error       = self.neg_log_prob(x_in[1:], p[:-1], sum_probs=False)
+
+        return OrderedDict(hs=hs, p=p, error=error, z=preact), updates
 
     def sample(self, x0=None, h0s=None, n_samples=10, n_steps=10):
         '''Samples from an initial state.

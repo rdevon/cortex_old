@@ -51,6 +51,7 @@ class MLP(Cell):
         'output': 'dim_out',
         'Z': 'dim_out'
     }
+    _weight_keys = ['weights']
 
     def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
                  h_act='sigmoid', out_act=None, name='MLP', **kwargs):
@@ -115,7 +116,7 @@ class MLP(Cell):
     def get_params(self):
         params = zip(self.weights, self.biases)
         params = [i for sl in params for i in sl]
-        return params
+        return super(MLP, self).get_params(params=params)
 
     def dropout(x, act, rate):
         if act == 'T.tanh':

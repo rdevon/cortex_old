@@ -104,6 +104,7 @@ class Cell(object):
     _dist_map = {}
     _call_args = ['input']
     _costs = {}
+    _weight_keys = []
 
     def __init__(self, name='layer_proto', **kwargs):
         '''Init function for Cell.
@@ -218,22 +219,30 @@ class Cell(object):
     def register(self):
         self.manager[self.name] = self
 
-    def set_components(self, **kwargs):
+    def set_components(self, components=None, **kwargs):
         from ..utils.tools import _p
+        if components is None: components = self._components
 
-        for k, v in self._components.iteritems():
-            args = {}
+        for k, v in components.iteritems():
+            args = kwargs.pop(k, {})
             args.update(**v)
             passed = args.pop('_passed', dict())
             for p in passed:
                 self.passed[p] = k
+
+            # Required arguments
             required = args.pop('_required', dict())
             args.update(**required)
+
+            # Arguments passed as arguments to owner.
             passed_args = dict((kk, kwargs[kk])
                 for kk in passed
                 if kk in kwargs.keys())
-            kwargs = dict((kk, kwargs[kk]) for kk in kwargs.keys() if kk not in passed)
+            kwargs = dict((kk, kwargs[kk]) for kk in kwargs.keys()
+                if kk not in passed)
             args.update(**passed_args)
+
+            # Leading `&` indicates reference to owner attribute
             final_args = {}
             for kk, vv in args.iteritems():
                 if isinstance(vv, str) and vv.startswith('&'):
@@ -247,7 +256,7 @@ class Cell(object):
             t = _p(self.name, t)
             self.manager.match_dims(f, t)
 
-        for k, v in self._components.iteritems():
+        for k, v in components.iteritems():
             self.manager.build_cell(_p(self.name, k))
             self.__dict__[k] = self.manager[_p(self.name, k)]
 
@@ -264,6 +273,36 @@ class Cell(object):
 
         '''
         self.params = OrderedDict()
+
+    def set_tparams(self):
+        self.param_keys = []
+        '''Sets the tensor parameters.
+
+        '''
+        if self.params is None:
+            raise ValueError('Params not set yet')
+        tparams = OrderedDict()
+
+        for k, p in self.params.iteritems():
+            if isinstance(p, list):
+                self.__dict__[k] = []
+                for i, pp in enumerate(p):
+                    kk = '%s[%d]' % (k, i)
+                    name = _p(self.name, kk)
+                    tp = theano.shared(pp, name=name)
+                    self.manager.tparams[name] = tp
+                    self.__dict__[k].append(tp)
+                    self.param_keys.append(k)
+            else:
+                name = _p(self.name, k)
+                tp = theano.shared(pp, name=name)
+                self.manager.tparams[name] = tp
+                self.__dict__[k] = tp
+                self.param_keys.append(k)
+
+    def get_params(self, params=None):
+        if params is None:
+            params = [self.__dict__[k] for k in self.param_keys]
 
     def get_args(self):
         d = dict((k, self.__dict__[k]) for k in self._args)
@@ -296,6 +335,9 @@ class Cell(object):
         '''
         return OrderedDict(('X_%d' % i, args[i]) for i in range(len(args)))
 
+    def init_args(self, *args, **kwargs):
+        return args
+
     def __call__(self, *args, **kwargs):
         '''Call function.
 
@@ -307,6 +349,7 @@ class Cell(object):
 
         '''
         params = tuple(self.get_params())
+        args = self.init_args(*args, **kwargs)
         return self._feed(*(args + params))
 
     def get_components(self):
@@ -327,28 +370,6 @@ class Cell(object):
         components += c_components
         return components
 
-    def set_tparams(self):
-        '''Sets the tensor parameters.
-
-        '''
-        if self.params is None:
-            raise ValueError('Params not set yet')
-        tparams = OrderedDict()
-
-        for k, p in self.params.iteritems():
-            if isinstance(p, list):
-                self.__dict__[k] = []
-                for i, pp in enumerate(p):
-                    kk = '%s[%d]' % (k, i)
-                    name = _p(self.name, kk)
-                    tp = theano.shared(pp, name=name)
-                    self.manager.tparams[name] = tp
-                    self.__dict__[k].append(tp)
-            else:
-                name = _p(self.name, k)
-                tp = theano.shared(pp, name=name)
-                self.manager.tparams[name] = tp
-                self.__dict__[k] = tp
 
     def help(self):
         pprint(self._help)

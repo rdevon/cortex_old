@@ -244,10 +244,13 @@ class Manager(object):
                 cell_name, cost_name = op.split('.')
                 cell_type = self.cell_args[cell_name]['cell_type']
                 C = self.resolve_class(cell_type)
-                if not cost_name in C._costs.keys():
-                    raise AttributeError('cell type %s for cell `%s` has no '
-                                         'cost %s' % (C, cell_name, cost_name))
-                op = getattr(C, C._costs[cost_name])
+                if cost_name == 'cost' and hasattr(C, '_cost'):
+                    op = getattr(C, '_cost')
+                else:
+                    if not cost_name in C._costs.keys():
+                        raise AttributeError('cell type %s for cell `%s` has no '
+                                             'cost %s' % (C, cell_name, cost_name))
+                    op = getattr(C, C._costs[cost_name])
             else:
                 if op not in self.cost_functions.keys():
                     raise TypeError('Cost function `%s` not found.' % op)
