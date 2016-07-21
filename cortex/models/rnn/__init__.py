@@ -9,7 +9,7 @@ import pprint
 import theano
 from theano import tensor as T
 
-from .. import Layer, norm_weight, ortho_weight
+from .. import Cell, norm_weight, ortho_weight
 from ..extra_layers import Averager
 from .. import mlp as mlp_module
 from ...utils import concatenate, floatX, pi, scan
@@ -35,7 +35,7 @@ def unpack(rnn_args, **model_args):
     return models, model_args, None
 
 
-class RNN_initializer(Layer):
+class RNN_initializer(Cell):
     '''Initializer for RNNs.
 
     Currently supports MLP intialization and averager.
@@ -183,7 +183,7 @@ class RNN_initializer(Layer):
             raise ValueError()
 
 
-class RNN(Layer):
+class RNN(Cell):
     '''RNN class.
 
     Implements a generic multilayer RNN.
@@ -202,19 +202,23 @@ class RNN(Layer):
         inter_nets (list): list of inter-networks between recurrent layers.
 
     '''
-    _components = ['nets', 'inter_nets', 'init_net']
+    _components = {
+        'initializer': {
+            'cell_type': 'RNNInitializer',
+        },
+        'nets': {
+            'cell_type': 'MLP'
+        },
+        'inter_nets',
+        'init_net'
+    }
 
-    def __init__(self, dim_hs, input_net=None, output_net=None, init_net=None,
-                 conditional=None, name='rnn', **kwargs):
+    def __init__(self, dim_hs, name='rnn', **kwargs):
         '''Init function for RNN.
 
         Args:
             dim_hs (list): dimensions of the recurrent layers.
-            input_net (MLP): input network.
-            output_net (MLP): output network.
-            conditional (Optional[MLP]): conditional network for
-                :math:`p(x_t | x_{t-1})`
-            init_net (Optional[RNNInitializer]): Layer for initializing
+            initializer (Optional[RNNInitializer]): Cell for initializing
                 recurrent states.
 
         '''
@@ -223,12 +227,12 @@ class RNN(Layer):
 
         self.dim_hs = dim_hs
         self.n_layers = len(self.dim_hs)
-
-        self.input_net = input_net
-        self.output_net = output_net
-        self.conditional = conditional
-        self.init_net = init_net
-
+        if init_args is None: init_args = dict()
+            logger.debug('Initializing RNN with %s and parameters %s'
+                % (initialization, pprint.pformat(init_args)))
+            init_net = RNN_initializer(dim_in, dim_hs,
+                                       initialization=initialization,
+                                       **init_args)
         super(RNN, self).__init__(name=name, **kwargs)
 
     @staticmethod
@@ -293,13 +297,6 @@ class RNN(Layer):
 
         # Intitialization
         if initialization is not None:
-            if init_args is None: init_args = dict()
-            logger.debug('Initializing RNN with %s and parameters %s'
-                % (initialization, pprint.pformat(init_args)))
-            init_net = RNN_initializer(dim_in, dim_hs,
-                                       initialization=initialization,
-                                       **init_args)
-            mlps['init_net'] = init_net
 
         return mlps
 
