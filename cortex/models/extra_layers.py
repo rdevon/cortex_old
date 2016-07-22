@@ -9,7 +9,7 @@ import theano
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as T
 
-from . import init_rngs, init_weights, Layer
+from . import Cell
 from . import mlp as mlp_module
 from ..utils import concatenate, e, floatX, pi, _slice, _slice2
 from ..utils.maths import log_mean_exp
@@ -17,53 +17,8 @@ from ..utils.maths import log_mean_exp
 
 # SOME MISC LAYERS ------------------------------------------------------------
 
-class ParzenEstimator(Layer):
-    def __init__(self, dim, name='parzen'):
-        self.dim = dim
-        super(ParzenEstimator, self).__init__(name=name)
 
-    def set_params(self, samples, x):
-        sigma = self.get_sigma(samples, x).astype('float32')
-        self.params = OrderedDict(sigma=sigma)
-
-    def get_sigma(self, samples, xs):
-        sigma = np.zeros((samples.shape[-1],))
-        for x in xs:
-            dx = (samples - x[None, :]) ** 2
-            sigma += T.sqrt(dx / np.log(np.sqrt(2 * pi))).mean(axis=(0))
-        return sigma / float(xs.shape[0])
-
-    def __call__(self, samples, x):
-        z = T.log(self.sigma * T.sqrt(2 * pi)).sum()
-        d_s = (samples[:, None, :] - x[None, :, :]) / self.sigma[None, None, :]
-        e = log_mean_exp((-.5 * d_s ** 2).sum(axis=2), axis=0)
-        return (e - z).mean()
-
-
-class Scheduler(Layer):
-    '''
-    Class for tensor constant scheduling.
-    This can be used to schedule updates to tensor parameters, such as learning rates given
-    the epoch.
-    '''
-    def __init__(self, rate=1, method='lambda x: 2 * x', name='scheduler'):
-        self.rate = rate
-        self.method = method
-        super(Scheduler, self).__init__(name=name)
-
-    def set_params(self):
-        counter = 0
-        self.params = OrderedDict(counter=counter, switch=switch)
-
-    def __call__(self, x):
-        counter = T.switch(T.ge(self.counter, self.rate), 0, self.counter + 1)
-        switch = T.switch(T.ge(self.counter, 0), 1, 0)
-        x = T.switch(switch, eval(method)(x), x)
-
-        return OrderedDict(x=x), theano.OrderedUpdates([(self.counter, counter)])
-
-
-class Averager(Layer):
+class Averager(Cell):
     def __init__(self, shape, name='averager', rate=0.1):
         self.rate = np.float32(rate)
         self.shape = shape
@@ -88,7 +43,7 @@ class Averager(Layer):
         return updates
 
 
-class Baseline(Layer):
+class Baseline(Cell):
     def __init__(self, name='baseline', rate=0.1):
         self.rate = np.float32(rate)
         super(Baseline, self).__init__(name)
@@ -186,7 +141,7 @@ class BaselineWithInput(Baseline):
 
         return outs, updates
 
-class ScalingWithInput(Layer):
+class ScalingWithInput(Cell):
     def __init__(self, dims_in, dim_out, name='scaling_with_input'):
         if len(dims_in) < 1:
             raise ValueError('One or more dims_in needed, %d provided'
@@ -233,7 +188,7 @@ class ScalingWithInput(Layer):
         return outs, updates
 
 
-class Attention(Layer):
+class Attention(Cell):
     _components = ['mlp']
 
     def __init__(self, dim_in, dim_out, mlp=None, name='attention',
@@ -267,7 +222,7 @@ class Attention(Layer):
         return OrderedDict(a=a, e=e)
 
 
-class Attention2(Layer):
+class Attention2(Cell):
     _components = ['mlp']
 
     def __init__(self, dim_in, dim_out, mlp=None, name='attention',
@@ -296,3 +251,6 @@ class Attention2(Layer):
         a = T.dot(Y, self.v)
         e = a / a.sum(axis=axis)
         return OrderedDict(a=a, e=e)
+
+
+_classes = {'Averager': Averager}

@@ -12,6 +12,7 @@ from theano import tensor as T
 from .. import Cell, norm_weight, ortho_weight
 from ..extra_layers import Averager
 from .. import mlp as mlp_module
+from ...costs import squared_error
 from ...utils import concatenate, floatX, pi, scan
 
 
@@ -35,7 +36,7 @@ def unpack(rnn_args, **model_args):
     return models, model_args, None
 
 
-class RNN_initializer(Cell):
+class RNNInitializer(Cell):
     '''Initializer for RNNs.
 
     Currently supports MLP intialization and averager.
@@ -47,13 +48,13 @@ class RNN_initializer(Cell):
 
     '''
     _required = ['dim_in', 'dim_out']
-    _components = ['init']
     _dim_map = {
         'input': 'dim_in',
         'output': 'dim_out'
     }
 
-    def __init__(self, dim_in, dim_out, initialization='mlp', **kwargs):
+    def __init__(self, dim_in, dim_out, initialization='MLP',
+                 name='rnn_initializer', **kwargs):
         '''Initialization function for RNN_Initializer.
 
         Args:
@@ -67,24 +68,30 @@ class RNN_initializer(Cell):
         self.dim_in = dim_in
         self.dim_out = dim_out
 
-        if initialization == 'mlp':
-            layer = mlp_module.MLP(
-                self.dim_in, self.dim_out,
-                rng=self.rng, trng=self.trng,
-                distribution='centered_binomial',
-                name='rnn_initializer_mlp_%d' % i,
-                **kwargs)
-        elif initialization == 'average':
-            layer = Averager((dim_out,), name='rnn_initializer_averager',
-                **kwargs)
+        super(RNNInitializer, self).__init__(name=name)
+
+    def set_components(self, **kwargs):
+        if self.initialization is None:
+            init_args = None
+        elif self.initialization == 'MLP':
+            init_args = {
+                'cell_type': 'MLP',
+                'dim_in': self.dim_in,
+                'dim_out': self.dim_out,
+                '_passed': ['dim_h', 'dim_hs', 'n_layers', 'h_act'],
+                '_required': {'out_act': 'tanh'}
+            }
+        elif self.initialization == 'Averager':
+            init_args = {'dim_out': self.dim_out}
         else:
-            raise ValueError()
+            raise TypeError()
 
-        super(RNN_initializer, self).__init__(name='rnn_initializer')
+        components = {'initializer': init_args}
 
-    def set_components(self, initial**kwargs):
+        return super(RNNInitializer, self).set_components(
+            components=components, **kwargs)
 
-    def _cost(self, X, hs):
+    def _cost(self, X, H):
         '''Call function for RNN_Initializer.
 
         Updates the initializer or returns cost.
@@ -99,20 +106,16 @@ class RNN_initializer(Cell):
             list: constants
 
         '''
-        hs = [h.copy() for h in hs]
-        cost = T.constant(0.).astype(floatX)
-        updates = theano.OrderedUpdates()
-        constants = hs
+        H = H.copy()
+        constants = [H]
 
-        if self.initialization == 'mlp':
-            p = layer(X)['P']
-            cost += se.neg_log_prob(hs[i], p).mean()
-        elif self.initialization == 'average':
-            updates += layer(hs[i])
-        else:
-            raise ValueError()
-
-        return OrderedDict(cost=cost, p=p, hs=hs), updates, constants
+        if self.initialization == 'MLP':
+            Y = self.initializer(X)['Y']
+            cost = squared_error(H, Y)
+            return OrderedDict(cost=cost, constants=constants)
+        elif self.initialization == 'Averager':
+            updates = self.initializer(H)
+            return OrderedDict(updates=updates, constants=constants)
 
     def _feed(self, X, *params):
         '''Initialize the hidden states.
@@ -124,26 +127,24 @@ class RNN_initializer(Cell):
             list: initial states.
 
         '''
-        if self.initialization == 'mlp':
+        if self.initialization == 'MLP':
             return self.initializer._feed(X, *params)
-        elif self.initialization == 'average':
-            return self.initializer.m
-        else:
-            raise ValueError()
+        elif self.initialization == 'Averager':
+            return params[0]
 
 
 class RecurrentUnit(Cell):
-    _required = ['dim']
+    _required = ['dim_h']
     _options = {'weight_noise': False}
-    _args = ['dim']
+    _args = ['dim_h']
     _weights = ['W']
     _dim_map = {
-        'input': 'dim',
-        'output': 'dim'
+        'input': 'dim_h',
+        'output': 'dim_h'
     }
 
-    def __init__(self, dim, name='RU', **kwargs):
-        self.dim = dim
+    def __init__(self, dim_h, name='RU', **kwargs):
+        self.dim_h = dim_h
         super(RecurrentUnit, self).__init__(name=name, **kwargs)
 
     def init_params(self):
@@ -151,7 +152,7 @@ class RecurrentUnit(Cell):
 
         '''
         self.params = OrderedDict()
-        W = ortho_weight(self.dim)
+        W = ortho_weight(self.dim_h)
         self.params['W'] = W
 
     def _recurrence(self, m, y, h_, W):
@@ -174,7 +175,7 @@ class RecurrentUnit(Cell):
 
     def _feed(self, X, M, H0, *params):
         n_steps = X.shape[0]
-        seqs         = [M[:, :, None]] + X
+        seqs         = [M[:, :, None], X]
         outputs_info = [H0]
         non_seqs     = params
 
@@ -183,7 +184,7 @@ class RecurrentUnit(Cell):
             sequences=seqs,
             outputs_info=outputs_info,
             non_sequences=non_seqs,
-            name=self.name + '_recurrent_steps_%d' % i,
+            name=self.name + '_recurrent_steps',
             n_steps=n_steps)
 
         return OrderedDict(H=h, updates=updates)
@@ -208,20 +209,22 @@ class RNN(Cell):
     _components = {
         'initializer': {
             'cell_type': 'RNNInitializer',
+            '_passed': ['initialization']
         },
         'RU': {
             'cell_type': 'RecurrentUnit',
-            'dim': '&dim_h'
+            '_passed': ['dim_h']
         },
         'input_net': {
             'cell_type': 'MLP',
-            '_required': {'out_act', 'tanh'},
+            '_required': {'out_act': 'tanh'},
             '_passed': ['dim_in']
         }
     }
     _links = [
         ('input_net.output', 'RU.input'),
-        ('initializer.output', 'RU.input')]
+        ('initializer.output', 'RU.input'),
+        ('initializer.input', 'input_net.input')]
 
     def __init__(self, name='RNN', **kwargs):
         '''Init function for RNN.
@@ -243,7 +246,7 @@ class RNN(Cell):
         initializer_params = self.select_params('initializer', *params)
 
         outs = self.input_net._feed(X, *input_params)
-        outs.update(H0=self.initializer._feed(X, *initializer_params))
+        outs.update(H0=self.initializer._feed(X[0], *initializer_params))
         outs.update(**self.RU(outs['Y'], M, outs['H0']))
         return outs
 
@@ -436,7 +439,4 @@ class SimpleRNN(RNN):
             h0s = None
         return super(SimpleRNN, self).sample(x0=x0, h0s=h0s, **kwargs)
 
-from . import gru, lstm
-_classes = {'RNN': RNN, 'SimpleRNN': SimpleRNN,
-            'GRU': gru.GRU, 'SimpleGRU': gru.SimpleGRU,
-            'LSTM': lstm.LSTM}
+_classes = {'RNNInitializer': RNNInitializer, 'RecurrentUnit': RecurrentUnit, 'RNN': RNN}

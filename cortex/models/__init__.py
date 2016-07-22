@@ -222,6 +222,7 @@ class Cell(object):
     def set_components(self, components=None, **kwargs):
         from ..utils.tools import _p
         if components is None: components = self._components
+        self.component_keys = components.keys()
 
         for k, v in components.iteritems():
             args = kwargs.pop(k, {})
@@ -257,8 +258,10 @@ class Cell(object):
             self.manager.match_dims(f, t)
 
         for k, v in components.iteritems():
-            self.manager.build_cell(_p(self.name, k))
-            self.__dict__[k] = self.manager[_p(self.name, k)]
+            name = _p(self.name, k)
+            self.manager.build_cell(name)
+
+            self.__dict__[k] = self.manager[name]
 
         return kwargs
 
@@ -295,7 +298,7 @@ class Cell(object):
                     self.param_keys.append(k)
             else:
                 name = _p(self.name, k)
-                tp = theano.shared(pp, name=name)
+                tp = theano.shared(p, name=name)
                 self.manager.tparams[name] = tp
                 self.__dict__[k] = tp
                 self.param_keys.append(k)
@@ -303,6 +306,31 @@ class Cell(object):
     def get_params(self, params=None):
         if params is None:
             params = [self.__dict__[k] for k in self.param_keys]
+
+        for key in self.component_keys:
+            component = self.__dict__[key]
+            params += component.get_params()
+            print self.name, key, params
+
+        return params
+
+    def select_params(self, key, *params):
+        params = list(params)
+        start = 0
+        if key is None:
+            end = self.n_params
+        else:
+            start = self.n_params
+            if key not in self.component_keys:
+                raise KeyError('Component `%s` not found' % key)
+            for k in self.component_keys:
+                l = self.__dict__[k].n_params
+                if k == key:
+                    end = start + l
+                else:
+                    start = start + l
+
+        return params[start:end]
 
     def get_args(self):
         d = dict((k, self.__dict__[k]) for k in self._args)
@@ -421,6 +449,6 @@ class Cell(object):
         return s
 
 _classes = {'Cell': Cell}
-from . import mlp, distributions
-_modules = [mlp, distributions]
+from . import mlp, distributions, rnn
+_modules = [mlp, distributions, rnn]
 for module in _modules: _classes.update(**module._classes)

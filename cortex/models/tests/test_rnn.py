@@ -3,30 +3,98 @@ Tests for RNN
 '''
 
 from collections import OrderedDict
+import logging
 import numpy as np
 import theano
 from theano import tensor as T
 
+import cortex
 from cortex.datasets.basic.euclidean import Euclidean
-from cortex.models.rnn import RNN
-from cortex.utils import floatX
+from cortex.models import rnn as rnn_module
+from cortex.utils import floatX, logger as cortex_logger
 
 
-sigmoid = lambda x: (1. / (1 + np.exp(-x))) * 0.9999 + 0.000005
+logger = logging.getLogger(__name__)
+cortex_logger.set_stream_logger(2)
+_atol = 1e-7
+manager = cortex.manager
 
-def test_build(dim_in=13, dim_h=17):
-    rnn = RNN.factory(dim_in=dim_in, dim_hs=[dim_h])
-    rnn.set_tparams()
+sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))
+tanh = lambda x: np.tanh(x)
+softplus = lambda x: np.log(1.0 + np.exp(x))
+identity = lambda x: x
 
+def _test_fetch_class(c='RecurrentUnit'):
+    C = cortex.resolve_class(c)
+    return C
+
+def test_fetch_classes():
+    for c in ['RecurrentUnit', 'RNNInitializer', 'RNN']:
+        _test_fetch_class(c=c)
+
+def test_make_rnn(dim_in=13, dim_h=17, initialization='MLP'):
+    C = _test_fetch_class('RNN')
+    rnn = C(dim_in=dim_in, dim_h=dim_h, initialization=initialization)
     return rnn
 
-def test_sample(dim_in=13, dim_h=17, n_samples=107, n_steps=21):
+def convert_t_act(activ):
+    if activ == T.nnet.sigmoid:
+        activ = sigmoid
+    elif activ == T.tanh:
+        activ = tanh
+    elif activ == T.nnet.softplus:
+        activ = softplus
+    elif activ(1234) == 1234:
+        pass
+    else:
+        raise ValueError(activ)
+    return activ
+
+def feed_numpy(rnn, x, m=None):
+    if m is None: m = np.ones((x.shape[0], x.shape[1]))
+    from .test_mlp import feed_numpy as feed_numpy_mlp
+    y = feed_numpy_mlp(rnn.input_net, x)[-1]
+    h = feed_numpy_mlp(rnn.initializer.initializer, x[0])[-1]
+    W = rnn.RU.params['W']
+    for i in range(x.shape[0]):
+        h_ = h
+        preact = np.dot(h_, W) + y[i]
+        h = tanh(preact)
+        h = m[i][:, None] * h + (1 - m[i])[:, None] * h_
+
+    return h
+
+def test_feed(rnn=None, X=T.matrix('X', dtype=floatX), x=None, batch_size=23,
+              n_steps=17):
+    manager.reset()
+    logger.debug('Testing feed forward')
+    if rnn is None:
+        rnn = test_make_rnn()
+    if x is None:
+        x = np.random.randint(
+            0, 2, size=(n_steps, batch_size, rnn.dim_in)).astype(floatX)
+
+    h = feed_numpy(rnn, x)
+    outs = rnn(X)
+    f = theano.function([X], outs['H'], updates=outs['updates'])
+    h_test = f(x)
+    assert not np.any(np.isnan(h_test)), h_test
+    logger.debug('No nan values found in theano test')
+
+    assert h.shape == h_test.shape, (h.shape, h_test.shape)
+    logger.debug('Shapes match.')
+
+    assert np.allclose(h, h_test, atol=_atol), (np.max(np.abs(h - h_test)))
+    logger.debug('Expected value of RNN feed OK within %.2e'
+                 % _atol)
+
+def _test_sample(dim_in=13, dim_h=17, n_samples=107, n_steps=21):
     rnn = test_build(dim_in, dim_h)
     results, updates = rnn.sample(n_samples=107, n_steps=21)
     f = theano.function([], results['p'], updates=updates)
     f()
 
-def test_recurrent(dim_in=13, dim_h=17, n_samples=107, window=7):
+def _test_recurrent(dim_in=13, dim_h=17, n_samples=107, window=7):
     rnn = test_build(dim_in, dim_h)
 
     data_iter = Euclidean(n_samples=n_samples, dims=dim_in, batch_size=window)

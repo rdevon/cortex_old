@@ -88,7 +88,6 @@ def _test_feed_forward(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
     logger.debug('Testing feed forward with out act %s' % out_act)
     if mlp is None:
         mlp = test_make_mlp(out_act=out_act)
-        print out_act, mlp.out_act
     if x is None:
         x = np.random.randint(0, 2, size=(batch_size, mlp.dim_in)).astype(floatX)
 
@@ -116,7 +115,7 @@ def test_feed_forward():
         _test_feed_forward(out_act=out_act)
 
 def test_feed_forward_dmlp(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
-                       distribution_type='binomial'):
+                           distribution_type='binomial'):
     manager.reset()
     if mlp is None:
         mlp = test_make_distmlp(distribution_type=distribution_type)
