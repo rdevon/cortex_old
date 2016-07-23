@@ -137,6 +137,11 @@ class Cell(object):
                 self.n_params += len(param)
             else:
                 self.n_params += 1
+        self.n_component_params = 0
+        for key in self.component_keys:
+            component = self.__dict__[key]
+            self.n_component_params += component.total_params
+        self.total_params = self.n_params + self.n_component_params
         self.set_tparams()
 
     def set_options(self, **kwargs):
@@ -310,7 +315,6 @@ class Cell(object):
         for key in self.component_keys:
             component = self.__dict__[key]
             params += component.get_params()
-            print self.name, key, params
 
         return params
 
@@ -324,9 +328,10 @@ class Cell(object):
             if key not in self.component_keys:
                 raise KeyError('Component `%s` not found' % key)
             for k in self.component_keys:
-                l = self.__dict__[k].n_params
+                l = self.__dict__[k].total_params
                 if k == key:
                     end = start + l
+                    break
                 else:
                     start = start + l
 
@@ -338,12 +343,6 @@ class Cell(object):
             c = next(c for c, v in self.manager.classes.iteritems()
                      if v == self.__class__)
         except StopIteration:
-            print self.name
-            print type(self)
-            for k, v in self.manager.classes.iteritems():
-                print k, v
-                print type(self) == v
-                print isinstance(self, v)
             raise
 
         d['cell_type'] = c

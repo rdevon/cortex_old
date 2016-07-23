@@ -6,8 +6,8 @@ import logging
 
 
 logger = logging.getLogger(__name__)
-from . import caltech, cifar, euclidean, mnist, uci
-_modules = [caltech, cifar, euclidean, mnist, uci]
+from . import caltech, cifar, dummy, euclidean, mnist, uci
+_modules = [caltech, cifar, dummy, euclidean, mnist, uci]
 _classes = {}
 for module in _modules:
     if not hasattr(module, '_classes'):

@@ -14,7 +14,7 @@ from ..extra_layers import Averager
 from .. import mlp as mlp_module
 from ...costs import squared_error
 from ...utils import concatenate, floatX, pi, scan
-
+from ...utils.tools import _p
 
 def unpack(rnn_args, **model_args):
     '''Unpacks a saved RNN.
@@ -128,9 +128,11 @@ class RNNInitializer(Cell):
 
         '''
         if self.initialization == 'MLP':
-            return self.initializer._feed(X, *params)
+            outs = self.initializer._feed(X, *params)
+            outs['output'] = outs['Y']
         elif self.initialization == 'Averager':
-            return params[0]
+            outs = {'output': params[0]}
+        return outs
 
 
 class RecurrentUnit(Cell):
@@ -246,8 +248,10 @@ class RNN(Cell):
         initializer_params = self.select_params('initializer', *params)
 
         outs = self.input_net._feed(X, *input_params)
-        outs.update(H0=self.initializer._feed(X[0], *initializer_params))
-        outs.update(**self.RU(outs['Y'], M, outs['H0']))
+        outs_init = self.initializer._feed(X[0], *initializer_params)
+        outs.update(**dict((_p('initializer', k), v)
+            for k, v in outs_init.iteritems()))
+        outs.update(**self.RU(outs['Y'], M, outs_init['output']))
         return outs
 
 class GenRNN(Cell):
