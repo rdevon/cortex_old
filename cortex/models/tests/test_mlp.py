@@ -18,7 +18,7 @@ from cortex.utils import floatX, logger as cortex_logger
 
 logger = logging.getLogger(__name__)
 cortex_logger.set_stream_logger(2)
-_atol = 1e-7
+_atol = 1e-6
 manager = cortex.manager
 
 sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))
@@ -171,16 +171,6 @@ def test_make_autoencoder(dim_in=13):
     manager.match_dims('mlp2.output', 'fibrous.input')
     manager.build()
 
-def test_make_prob_autoencoder():
-    manager.reset()
-    data_iter = Euclidean(batch_size=10)
-    manager.prepare_cell('MLP', name='mlp1', dim_hs=[5, 7])
-    manager.prepare_cell('DistributionMLP', name='mlp2', dim_in=13, dim_hs=[3, 11])
-    manager.add_step('mlp1', 'fibrous.input')
-    manager.add_step('mlp2', 'mlp1.output')
-    manager.match_dims('mlp2.output', 'fibrous.input')
-    manager.build()
-
 def test_autoencoder_graph():
     manager.reset()
     test_make_autoencoder()
@@ -195,6 +185,16 @@ def test_autoencoder_graph():
     _cost = ((y[-1] - data[0]) ** 2).mean()
     assert (abs(cost - _cost) <= _atol), abs(cost - _cost)
     logger.debug('Expected value of autoencoder cost OK within %.2e' % _atol)
+
+def test_make_prob_autoencoder():
+    manager.reset()
+    data_iter = Euclidean(batch_size=10)
+    manager.prepare_cell('MLP', name='mlp1', dim_hs=[5, 7])
+    manager.prepare_cell('DistributionMLP', name='mlp2', dim_in=13, dim_hs=[3, 11])
+    manager.add_step('mlp1', 'fibrous.input')
+    manager.add_step('mlp2', 'mlp1.output')
+    manager.match_dims('mlp2.P', 'fibrous.input')
+    manager.build()
 
 def test_prob_autoencoder_graph():
     manager.reset()
@@ -214,3 +214,22 @@ def test_prob_autoencoder_graph():
         2 * log_sigma + np.log(2 * np.pi)).sum(axis=1).mean()
     assert (abs(cost - _cost) <= _atol), abs(cost - _cost)
     logger.debug('Expected value of probabilistic autoencoder cost OK within %.2e' % _atol)
+
+def test_vae():
+    manager.reset()
+    manager.prepare_data('dummy', name='data', batch_size=11, n_samples=103,
+                         data_shape=(13,))
+    manager.prepare_cell('DistributionMLP', name='approx_posterior',
+                         dim_hs=[27], h_act='softplus')
+    manager.prepare_cell('gaussian', name='prior', dim=5)
+    manager.prepare_cell('DistributionMLP', name='conditional',
+                         dim_hs=[23], h_act='softplus')
+    manager.match_dims('prior.P', 'approx_posterior.P')
+    manager.match_dims('conditional.P', 'data.input')
+    manager.add_step('approx_posterior', 'data.input')
+    manager.add_step('conditional', 'approx_posterior.samples')
+    manager.build()
+
+    manager.generate_samples('conditional', n_samples=7)
+    manager.add_cost('conditional.negative_log_likelihood', X='data.input')
+    manager.add_cost('prior.kl_divergence', Q='approx_posterior.P')

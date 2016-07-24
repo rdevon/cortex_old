@@ -106,10 +106,10 @@ class Manager(object):
         from .session import Session
         self._current_session = Session()
 
-    def build_session(self):
+    def build_session(self, test=False):
         if self._current_session is None:
             self.create_session()
-        self._current_session.build()
+        self._current_session.build(test=test)
         return self._current_session
 
     def get_session(self):
@@ -121,7 +121,7 @@ class Manager(object):
         self._current_session = None
 
     # Data methods
-    def make_data(self, dataset, **kwargs):
+    def prepare_data(self, dataset, **kwargs):
         from .. import resolve_class
         C = resolve_class(dataset, self.dataset_classes)
         C(**kwargs)

@@ -16,6 +16,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from ..manager import get_manager
 from ..manager.link import Link
 from ..utils import floatX, _rng
+from ..utils.logger import get_class_logger
 from ..utils.tools import warn_kwargs, _p
 
 
@@ -55,6 +56,7 @@ def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
     else:
         W = scale * rng.randn(nin, nout)
     return W.astype(floatX)
+
 
 class NoiseSwitch(object):
     '''Object to control noise of model.
@@ -105,6 +107,7 @@ class Cell(object):
     _call_args = ['input']
     _costs = {}
     _weight_keys = []
+    _test_order = None
 
     def __init__(self, name='layer_proto', **kwargs):
         '''Init function for Cell.
@@ -120,8 +123,7 @@ class Cell(object):
         self.passed = {}
         init_rngs(self)
 
-        self.logger = logging.getLogger(
-            '.'.join([self.__module__, self.__class__.__name__]))
+        self.logger = get_class_logger(self)
         self.logger.debug(
             'Forming model cell %r with name %s' % (self.__class__, name))
         self.logger.debug('Formation parameters: %s' % self.get_args())
@@ -161,12 +163,14 @@ class Cell(object):
 
     @classmethod
     def set_link_value(C, key, **kwargs):
-        logger.info('Setting link value for class _dim_map %s with key `%s` and'
+        logger.debug('Setting link value for class _dim_map %s with key `%s` and'
                     ' kwargs %s' % (C._dim_map, key, kwargs))
         if key in C._dim_map.keys():
             value = kwargs.get(C._dim_map[key], None)
             if not isinstance(value, Link) and value is not None:
                 return value
+            elif isinstance(value, Link) and value.value is not None:
+                return value.value
             else:
                 raise ValueError
         else:
@@ -187,6 +191,8 @@ class Cell(object):
 
     @classmethod
     def set_link_distribution(C, key, **kwargs):
+        logger.info('Setting link distribution for class _dist_map %s with key '
+                    '`%s` and kwargs %s' % (C._dist_map, key, kwargs))
         if key in C._dist_map.keys():
             value = kwargs.get(C._dist_map[key], None)
             if not isinstance(value, Link) and value is not None:
@@ -348,7 +354,7 @@ class Cell(object):
         d['cell_type'] = c
         return d
 
-    def _feed(self, *args):
+    def _feed(self, *args, **kwargs):
         '''Basic feed method.
 
         This is the identity graph. Generally it is `scan` safe.

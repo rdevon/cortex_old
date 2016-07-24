@@ -11,12 +11,13 @@ from theano import tensor as T
 import cortex
 from cortex.datasets.basic.dummy import Dummy
 from cortex.models import rnn as rnn_module
+from cortex.models.tests.test_mlp import feed_numpy as feed_numpy_mlp
 from cortex.utils import floatX, logger as cortex_logger
 
 
 logger = logging.getLogger(__name__)
-cortex_logger.set_stream_logger(2)
-_atol = 1e-7
+#cortex_logger.set_stream_logger(2)
+_atol = 1e-6
 manager = cortex.manager
 
 sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))
@@ -52,7 +53,6 @@ def convert_t_act(activ):
 
 def feed_numpy(rnn, x, m=None):
     if m is None: m = np.ones((x.shape[0], x.shape[1]))
-    from .test_mlp import feed_numpy as feed_numpy_mlp
     y = feed_numpy_mlp(rnn.input_net, x)[-1]
     h_ = feed_numpy_mlp(rnn.initializer.initializer, x[0])[-1]
     W = rnn.RU.params['W']
@@ -91,14 +91,34 @@ def test_feed(rnn=None, X=T.tensor3('X', dtype=floatX), x=None, batch_size=23,
 
 def test_make_rnn_graph():
     manager.reset()
-    manager.prepare_data('dummy', batch_size=10, n_samples=103, data_shape=(37, 2))
-    manager.prepare_data('dummy', batch_size=10, n_samples=103, data_shape=(2,),
+    manager.prepare_data('dummy', batch_size=11, n_samples=103, data_shape=(37, 2),
+                         transpose={'input': (1, 0, 2)})
+    manager.prepare_data('dummy', batch_size=11, n_samples=103, data_shape=(2,),
                          distribution='gaussian')
     manager.prepare_cell('RNN', name='rnn', dim_h=17, initialization='MLP')
     manager.prepare_cell('DistributionMLP', name='mlp')
     manager.add_step('rnn', 'dummy_binomial.input')
     manager.add_step('mlp', 'rnn.output')
     manager.match_dims('mlp.output', 'dummy_gaussian.input')
+    manager.build()
+
+def test_rnn_cost():
+    test_make_rnn_graph()
+    manager.add_cost('mlp.negative_log_likelihood', X='dummy_gaussian.input')
+    session = manager.build_session(test=True)
+
+    f = theano.function(session.inputs, sum(session.costs), updates=session.updates)
+    data = session.next(mode='train')
+    cost = f(*data)
+    hs = feed_numpy(manager.cells['rnn'], data[0])
+    y = feed_numpy_mlp(manager.cells['mlp'].mlp, hs[-1])[-1]
+    mu = y[:, :2]
+    log_sigma = y[:, 2:]
+    _cost = 0.5 * (
+        (data[1] - mu)**2 / (np.exp(2 * log_sigma)) +
+        2 * log_sigma + np.log(2 * np.pi)).sum(axis=1).mean()
+    assert (abs(cost - _cost) <= _atol), abs(cost - _cost)
+    logger.debug('Expected value of autoencoder cost OK within %.2e' % _atol)
 
 def _test_sample(dim_in=13, dim_h=17, n_samples=107, n_steps=21):
     rnn = test_build(dim_in, dim_h)
@@ -119,7 +139,6 @@ def _test_recurrent(dim_in=13, dim_h=17, n_samples=107, window=7):
     Y = rnn.call_seqs(X, None, 0, *rnn.get_sample_params())[0]
     y = np.dot(x, rnn.input_net.params['W0']) + rnn.input_net.params['b0']
     test_dict['RNN preact from data'] = (X, Y, x, y, theano.OrderedUpdates())
-
     H0 = T.alloc(0., X.shape[0], rnn.dim_hs[0]).astype(floatX)
     H = rnn._step(1, Y, H0, rnn.Ur0)
     h0 = np.zeros((x.shape[0], rnn.dim_hs[0])).astype(floatX)

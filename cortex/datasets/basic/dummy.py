@@ -10,10 +10,12 @@ from ...utils import floatX, intX
 class Dummy(BasicDataset):
     def __init__(self, n_samples, data_shape, distribution='binomial',
                  name=None, **kwargs):
+        shape = list((n_samples,) + data_shape)
         if distribution == 'binomial':
-            X = np.random.binomial(size=(n_samples,) + data_shape)
+            X = np.random.binomial(
+                p=0.5, size=shape, n=1).astype(floatX)
         elif distribution == 'gaussian':
-            X = np.random.normal(size=(n_samples,) + data_shape)
+            X = np.random.normal(size=shape).astype(floatX)
         else:
             raise TypeError()
         if name is None:
@@ -24,4 +26,4 @@ class Dummy(BasicDataset):
         super(Dummy, self).__init__(data, distributions, name=name,
                                     mode='train', **kwargs)
 
-_classes = {'dummy', Dummy}
+_classes = {'dummy': Dummy}

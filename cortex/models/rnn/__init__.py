@@ -227,6 +227,11 @@ class RNN(Cell):
         ('input_net.output', 'RU.input'),
         ('initializer.output', 'RU.input'),
         ('initializer.input', 'input_net.input')]
+    _dim_map = {
+        'input': 'dim_in',
+        'output': 'dim_h'
+    }
+    _test_order = ['Y', 'H0', 'H', 'output']
 
     def __init__(self, name='RNN', **kwargs):
         '''Init function for RNN.
@@ -251,10 +256,22 @@ class RNN(Cell):
         outs_init = self.initializer._feed(X[0], *initializer_params)
         outs.update(**dict((_p('initializer', k), v)
             for k, v in outs_init.iteritems()))
+        outs['H0'] = outs_init['output']
         outs.update(**self.RU(outs['Y'], M, outs_init['output']))
+        outs['output'] = outs['H'][-1]
         return outs
 
-class GenRNN(Cell):
+class GenRNN(RNN):
+    _components = RNN._components
+    _components.update(**
+        {
+            'output_net': {
+                'cell_type': 'DistributionMLP',
+                '_passed': ['distribution_type']
+            }
+        })
+    _links = RNN._links
+    _links += [('output_net.output', )]
     # Step functions -----------------------------------------------------------
     def step_sample_preact(self, *params):
         '''Returns preact for sampling step.

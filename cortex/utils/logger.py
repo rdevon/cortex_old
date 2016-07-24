@@ -14,6 +14,9 @@ file_formatter = logging.Formatter(
 stream_formatter = logging.Formatter(
     '[%(levelname)s]:%(message)s' + ' ' * 40)
 
+def get_class_logger(obj):
+    return logging.getLogger('.'.join([obj.__module__, obj.__class__.__name__]))
+
 def set_stream_logger(verbosity):
     global logger
 

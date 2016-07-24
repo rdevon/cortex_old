@@ -10,6 +10,7 @@ import warnings
 
 from . import distributions
 from . import Cell, norm_weight
+from ..manager import get_manager
 from ..utils import concatenate, floatX
 
 
@@ -200,13 +201,15 @@ class DistributionMLP(Cell):
     }
     _links = [('mlp.output', 'distribution.input')]
     _dim_map = {
-        'X': 'dim_in',
         'input': 'dim_in',
-        'Y': 'dim',
         'output': 'dim',
-        'Z': 'dim'
+        'P': 'dim',
+        'samples': 'dim',
+        'X': 'dim_in',
+        'Y': 'dim',
+        'Z': 'dim',
     }
-    _dist_map = {'output': 'distribution_type'}
+    _dist_map = {'P': 'distribution_type'}
     _costs = {
         'nll': '_cost',
         'negative_log_likelihood': '_cost'
@@ -218,13 +221,36 @@ class DistributionMLP(Cell):
         self.distribution_type = distribution_type
         super(DistributionMLP, self).__init__(name=name, **kwargs)
 
+    @classmethod
+    def set_link_value(C, key, distribution_type=None, **kwargs):
+        manager = get_manager()
+        if key != 'output':
+            return super(DistributionMLP, C).set_link_value(
+                key, distribution_type=distribution_type, **kwargs)
+
+        if distribution_type is None:
+            raise ValueError
+        DC = manager.resolve_class(distribution_type)
+        return DC.set_link_value(key, dim=dim, **kwargs)
+
+    @classmethod
+    def get_link_value(C, link, key):
+        manager = get_manager()
+        if key != 'output':
+            return super(DistributionMLP, C).get_link_value(link, key)
+        if link.distribution is None:
+            raise ValueError
+        DC = manager.resolve_class(link.distribution)
+        return DC.get_link_value(link, key)
+
     def get_params(self):
         return self.mlp.get_params()
 
     def _feed(self, X, *params):
         outs = self.mlp._feed(X, *params)
         Y = outs['Y']
-        outs.update(P=self.distribution(Y))
+        outs['output'] = self.distribution(Y)
+        outs['P'] = outs['output']
         return outs
 
     def _cost(self, X=None, P=None):

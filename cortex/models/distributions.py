@@ -35,17 +35,19 @@ class Distribution(Cell):
     '''
     _args = ['dim']
     _required = ['dim']
-    _dist_map = {'input': 'cell_type', 'output': 'cell_type'}
-    _dim_map = {'input': 'dim', 'output': 'dim', 'P': 'dim'}
+    _dist_map = {'input': 'cell_type', 'output': 'cell_type', 'P': 'cell_type',
+                 'samples': 'cell_type'}
+    _dim_map = {'input': 'dim', 'output': 'dim', 'P': 'dim', 'samples': 'dim'}
     _costs = {
         'nll': '_cost',
-        'negative_log_likelihood': '_cost'
+        'negative_log_likelihood': '_cost',
+        'kl_divergence': 'kl_divergence'
     }
 
     has_kl = False
     is_continuous = False
     scale = 1
-    must_samples = False
+    must_sample = False
 
     def __init__(self, dim, name='distribution_proto', **kwargs):
         '''Init function for Distribution class.
@@ -63,7 +65,7 @@ class Distribution(Cell):
     @classmethod
     def set_link_value(C, key, dim=None, **kwargs):
         if key not in ['input', 'output']:
-            raise KeyError
+            return super(Distribution, C).set_link_value(key, dim=dim, **kwargs)
 
         if dim is not None:
             return C.scale * dim
@@ -73,9 +75,11 @@ class Distribution(Cell):
     @classmethod
     def get_link_value(C, link, key):
         if key not in ['input', 'output']:
-            raise KeyError
+            return super(Distribution, C).get_link_value(link, key)
         if link.value is None:
             raise ValueError
+        if key == 'output':
+            return ('dim', link.value)
         else:
             return ('dim', link.value / C.scale)
 
@@ -104,9 +108,6 @@ class Distribution(Cell):
             C = _conditionals[C.__name__]
 
         return C(*reqs.values(), **options)
-
-    def _feed(self, *args):
-        return self._act(concatenate(args))
 
     def init_params(self):
         raise NotImplementedError()
@@ -142,13 +143,10 @@ class Distribution(Cell):
         slices = self.split_prob(p)
         return slices[0]
 
-    def kl_divergence(self, q):
-        '''KL divergence function.
+    def _feed(self, *args):
+        return self._act(concatenate(args))
 
-        '''
-        raise NotImplementedError()
-
-    def sample(self, n_samples, p=None):
+    def _sample(self, n_samples, p=None):
         '''Samples from distribution.
 
         '''
@@ -168,6 +166,12 @@ class Distribution(Cell):
             raise NotImplementedError('%d dim sampling not supported yet' % p.ndim)
 
         return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
+
+    def kl_divergence(self, Q=None):
+        '''KL divergence function.
+
+        '''
+        raise NotImplementedError()
 
     def step_neg_log_prob(self, x, *params):
         '''Step negative log probability for scan.
@@ -217,18 +221,6 @@ class Distribution(Cell):
         if p is None:
             p = self.get_prob(*self.get_params())
         return self.f_entropy(p)
-
-    def get_center(self, p):
-        '''Center of the distribution.
-
-        Args:
-            p (T.tensor): probability.
-
-        Returns:
-            T.tensor: center of distribution.
-
-        '''
-        return p
 
     def get_energy_bias(self, x, z):
         '''For use in RBMs and other energy based models.
@@ -393,9 +385,9 @@ class Gaussian(Distribution):
     def get_params(self):
         return [self.mu, self.log_sigma]
 
-    def step_kl_divergence(self, q, mu, log_sigma):
-        mu_q = _slice(q, 0, self.dim)
-        log_sigma_q = _slice(q, 1, self.dim)
+    def step_kl_divergence(self, Q, mu, log_sigma):
+        mu_q = _slice(Q, 0, self.dim)
+        log_sigma_q = _slice(Q, 1, self.dim)
         log_sigma_q = T.maximum(log_sigma_q, self.clip)
         log_sigma = T.maximum(log_sigma, self.clip)
 
@@ -405,8 +397,10 @@ class Gaussian(Distribution):
             - 1)
         return kl.sum(axis=kl.ndim-1)
 
-    def kl_divergence(self, q):
-        return self.step_kl_divergence(q, *self.get_params())
+    def kl_divergence(self, Q=None):
+        if Q is None:
+            raise TypeError
+        return self.step_kl_divergence(Q, *self.get_params())
 
     def step_sample(self, epsilon, p):
         dim = p.shape[p.ndim-1] // self.scale
@@ -415,11 +409,7 @@ class Gaussian(Distribution):
         return mu + epsilon * T.exp(log_sigma)
 
     def prototype_samples(self, size):
-        return self.trng.normal(
-            avg=0, std=1.0,
-            size=size,
-            dtype=floatX
-        )
+        return self.trng.normal(avg=0, std=1.0, size=size, dtype=floatX)
 
     def step_neg_log_prob(self, x, *params):
         p = self.get_prob(*params)

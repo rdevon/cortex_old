@@ -364,7 +364,7 @@ class BasicDataset(Dataset):
     '''
     _has_split = False
     def __init__(self, data, distributions=None, labels='label', name=None,
-                balance=False, one_hot=True, **kwargs):
+                balance=False, one_hot=True, transpose=None, **kwargs):
         '''Init function for BasicDataset.
 
         Args:
@@ -389,6 +389,7 @@ class BasicDataset(Dataset):
         self.data = data
         self.n_samples = None
         self.balance = balance
+        self.transpose = transpose
 
         if distributions is not None:
             self.distributions.update(**distributions)
@@ -412,7 +413,7 @@ class BasicDataset(Dataset):
                     raise ValueError('All input arrays must have the same'
                                     'number of samples (shape[0]), '
                                     '(%d vs %d)' % (self.n_samples, v.shape[0]))
-            self.dims[k] = v.shape[1]
+            self.dims[k] = v.shape[-1]
             if not k in self.distributions.keys():
                 self.distributions[k] = 'binomial'
 
@@ -515,7 +516,10 @@ class BasicDataset(Dataset):
         rval = OrderedDict()
 
         for k, v in self.data.iteritems():
-            rval[k] = v[self.pos:self.pos+batch_size]
+            v = v[self.pos:self.pos+batch_size]
+            if self.transpose is not None and k in self.transpose.keys():
+                v = v.transpose(self.transpose[k])
+            rval[k] = v
 
         self.pos += batch_size
         if self.pos + batch_size > self.n_samples:

@@ -2,6 +2,8 @@
 
 '''
 from collections import OrderedDict
+import logging
+import pprint
 import theano
 from theano import tensor as T
 
@@ -14,6 +16,8 @@ class Session(object):
 
     def __init__(self, manager=None):
         if manager is None: manager = get_manager()
+        self.logger = logging.getLogger(
+            '.'.join([self.__module__, self.__class__.__name__]))
         self.idx = self._idx
         self._idx += 1
         self.sessions.append(self)
@@ -62,7 +66,12 @@ class Session(object):
             if is_tensor_arg(arg):
                 name, key_, _ = resolve_tensor_arg(arg)
                 if name in manager.datasets.keys():
-                    tensors[arg] = manager.datasets[name]['tensors'][key_]
+                    if arg not in tensors.keys():
+                        dataset_tensor = manager.datasets[name]['tensors'][key_]
+                        tensors[arg] = dataset_tensor
+                        self.inputs.append(dataset_tensor)
+                        self.datasets.append(name)
+                        self.input_keys.append(key_)
 
                 if arg in tensors.keys():
                     new_kwargs[key] = tensors[arg]
@@ -73,11 +82,12 @@ class Session(object):
 
         return new_args, new_kwargs
 
-    def build(self):
+    def build(self, test=False):
         manager = self.manager
         tensors = self.tensors
 
         for step in manager.steps:
+            self.logger.debug('Adding step: %s' % pprint.pformat(dict(step)))
             op = step['op']
             args, kwargs = self.resolve_op_args(step['args'], step['kwargs'])
 
@@ -90,18 +100,54 @@ class Session(object):
                 name = op.__name__
                 out = op(*args, **kwargs)
                 key_prefix = name
+                cell = None
 
             if isinstance(out, T.TensorVariable):
                 out = dict(output)
 
             for k, v in out.iteritems():
-                key = key_prefix + '.' + k
-                if key in self.tensors.keys():
-                    raise KeyError('Cannot overwrite %s' % key)
+                if k == 'updates':
+                    self.updates += v
+                elif k == 'constants':
+                    self.constants += v
                 else:
-                    self.tensors[key] = v
+                    key = key_prefix + '.' + k
+                    if key in self.tensors.keys():
+                        raise KeyError('Cannot overwrite %s' % key)
+                    else:
+                        self.tensors[key] = v
+
+            if test:
+                data = self.next()
+
+                if cell is None or (cell is not None and cell._test_order is None):
+                    test_order = out.keys()
+                else:
+                    test_order = cell._test_order
+
+                for key in test_order:
+                    self.logger.info('Testing `%s` from step %s' % (key, key_prefix))
+                    t = out[key]
+                    f = theano.function(self.inputs, t, updates=self.updates)
+                    try:
+                        t_ = f(*data)
+                        self.logger.info('Tensor `%s` for `%s` has shape %s'
+                                         '(passes without error)'
+                                         % (key, key_prefix, t_.shape))
+                    except ValueError as e:
+                        self.logger.error(
+                            'Test function failed for tensor `%s` in `%s`'
+                            % (key, key_prefix))
+                        if cell is not None:
+                            self.logger.info('Cell: %s' % cell)
+
+                        for d in data:
+                            self.logger.info('Data shape: %s' % (d.shape,))
+
+                        raise e
 
         for cost in manager.costs:
+            self.logger.debug('Adding cost: %s' % pprint.pformat(dict(cost)))
             op = cost['op']
             args, kwargs = self.resolve_op_args(cost['args'], cost['kwargs'])
             cell_name = cost['cell_name']
@@ -112,6 +158,28 @@ class Session(object):
                 out = op(*args, **kwargs)
 
             self.costs.append(out)
+
+            if test:
+                self.logger.info('Testing cost')
+                data = self.next()
+
+                f = theano.function(self.inputs, out, updates=self.updates)
+                try:
+                    t_ = f(*data)
+                    self.logger.info('Tensor `%s` for `%s` has shape %s'
+                                     '(passes without error)'
+                                     % (key, key_prefix, t_.shape))
+                except ValueError as e:
+                    self.logger.error(
+                        'Test function failed for tensor `%s` in `%s`'
+                        % (key, key_prefix))
+                    if cell is not None:
+                        self.logger.info('Cell: %s' % cell)
+
+                    for d in data:
+                        self.logger.info('Data shape: %s' % (d.shape,))
+
+                    raise e
 
     def next(self, mode=None, batch_size=None):
         data = []
