@@ -1,5 +1,5 @@
-'''
-Module for testing MLPs.
+'''Module for testing MLPs.
+
 '''
 
 from collections import OrderedDict
@@ -80,6 +80,30 @@ def feed_numpy(mlp, x):
             activ = convert_t_act(mlp.out_act)
             z = activ(z)
         zs.append(z)
+
+    return zs
+
+def feed_numpy_d(dmlp, x):
+    mlp = dmlp.mlp
+    dist = dmlp.distribution
+    zs = []
+    z = x
+    for l in xrange(mlp.n_layers):
+        W = mlp.params['weights'][l]
+        b = mlp.params['biases'][l]
+
+        z = np.dot(z, W) + b
+        if l != mlp.n_layers - 1:
+            activ = convert_t_act(mlp.h_act)
+            z = activ(z)
+            assert not np.any(np.isnan(z))
+        elif mlp.out_act is not None:
+            activ = convert_t_act(mlp.out_act)
+            z = activ(z)
+        zs.append(z)
+
+    z = dist._act(z, as_numpy=True)
+    zs.append(z)
 
     return zs
 
@@ -196,6 +220,15 @@ def test_make_prob_autoencoder():
     manager.match_dims('mlp2.P', 'fibrous.input')
     manager.build()
 
+def gaussian_nll(x, mu, log_sigma):
+    return 0.5 * (
+        (x - mu)**2 / (np.exp(2 * log_sigma)) +
+        2 * log_sigma + np.log(2 * np.pi)).sum(axis=-1).mean()
+
+def logistic_nll(x, mu, log_s):
+    g = (x - mu) / np.exp(log_s)
+    return (-g + log_s + 2 * np.log(1 + np.exp(g))).sum(axis=-1).mean()
+
 def test_prob_autoencoder_graph():
     manager.reset()
     test_make_prob_autoencoder()
@@ -209,27 +242,69 @@ def test_prob_autoencoder_graph():
     y = feed_numpy(manager.cells['mlp2.mlp'], y[-1])[-1]
     mu = y[:, :2]
     log_sigma = y[:, 2:]
-    _cost = 0.5 * (
-        (data[0] - mu)**2 / (np.exp(2 * log_sigma)) +
-        2 * log_sigma + np.log(2 * np.pi)).sum(axis=1).mean()
+    _cost = gaussian_nll(data[0], mu, log_sigma)
     assert (abs(cost - _cost) <= _atol), abs(cost - _cost)
     logger.debug('Expected value of probabilistic autoencoder cost OK within %.2e' % _atol)
 
-def test_vae():
+def test_vae(prior='gaussian'):
     manager.reset()
     manager.prepare_data('dummy', name='data', batch_size=11, n_samples=103,
                          data_shape=(13,))
     manager.prepare_cell('DistributionMLP', name='approx_posterior',
                          dim_hs=[27], h_act='softplus')
-    manager.prepare_cell('gaussian', name='prior', dim=5)
+    manager.prepare_cell(prior, name='prior', dim=5)
     manager.prepare_cell('DistributionMLP', name='conditional',
                          dim_hs=[23], h_act='softplus')
     manager.match_dims('prior.P', 'approx_posterior.P')
     manager.match_dims('conditional.P', 'data.input')
     manager.add_step('approx_posterior', 'data.input')
     manager.add_step('conditional', 'approx_posterior.samples')
+    manager.prepare_samples('approx_posterior.P', 5)
     manager.build()
 
-    manager.generate_samples('conditional', n_samples=7)
     manager.add_cost('conditional.negative_log_likelihood', X='data.input')
-    manager.add_cost('prior.kl_divergence', Q='approx_posterior.P')
+    manager.add_cost('kl_divergence', P='approx_posterior.P', Q='prior',
+                     P_samples='approx_posterior.samples',
+                     cells=['approx_posterior.distribution', 'prior'])
+
+    session = manager.build_session(test=True)
+    f = theano.function(session.inputs, [
+        session.tensors['approx_posterior.samples'], sum(session.costs)] + session.costs)
+    data = session.next()
+    samples, cost, nll_term, kl_term = f(*data)
+
+    q = feed_numpy_d(manager.cells['approx_posterior'], data[0])[-1]
+    py_h = feed_numpy_d(manager.cells['conditional'], samples)[-1]
+    _nll_term = (-data[0][None, :, :] * np.log(py_h) -
+                 (1 - data[0]) * np.log(1. - py_h)).sum(axis=-1).mean()
+
+    if prior == 'gaussian':
+        mu_q = q[:, :5]
+        log_sigma_q = q[:, 5:]
+        mu_pr = manager.cells['prior'].mu.get_value()
+        log_sigma_pr = manager.cells['prior'].log_sigma.get_value()
+        _kl_term = (log_sigma_pr - log_sigma_q + 0.5 * (
+            (np.exp(2 * log_sigma_q) + (mu_pr[None, :] - mu_q) ** 2) /
+            np.exp(2 * log_sigma_pr[None, :])
+            - 1)).sum(axis=-1).mean()
+    elif prior == 'logistic':
+        mu_q = q[:, :5]
+        log_s_q = q[:, 5:]
+        mu_pr = manager.cells['prior'].mu.get_value()
+        log_s_pr = manager.cells['prior'].log_s.get_value()
+        neg_term = logistic_nll(samples, mu_q[None, :, :], log_s_q[None, :, :])
+        pos_term = logistic_nll(
+            samples, mu_pr[None, None, :], log_s_pr[None, None, :])
+        _kl_term = (pos_term - neg_term)
+
+    assert (abs(_nll_term - nll_term) <= 1e-5), (_nll_term - nll_term)
+    assert (abs(_kl_term - kl_term) <= 1e-5), (_kl_term - kl_term)
+
+    _cost = _nll_term + _kl_term
+
+    assert (abs(cost - _cost) <= 1e-5), (_cost - cost)
+    logger.debug('Expected value of VAE with prior %s cost OK within %.2e. '
+                 % (prior, 1e-5))
+
+def test_vae_logistic():
+    test_vae(prior='logistic')

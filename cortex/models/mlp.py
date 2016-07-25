@@ -196,7 +196,8 @@ class DistributionMLP(Cell):
         'distribution': {
             'cell_type': '&distribution_type',
             '_required': {'conditional': True},
-            '_passed': ['dim']
+            '_passed': [
+                'dim', 'has_kl', 'neg_log_prob', 'kl_divergence', 'simple_sample']
         },
     }
     _links = [('mlp.output', 'distribution.input')]
@@ -214,6 +215,7 @@ class DistributionMLP(Cell):
         'nll': '_cost',
         'negative_log_likelihood': '_cost'
     }
+    _sample_tensors = ['P']
 
     def __init__(self, distribution_type, name=None, **kwargs):
         if name is None:
@@ -258,5 +260,21 @@ class DistributionMLP(Cell):
             session = self.manager.get_session()
             P = session.tensors[self.name + '.' + 'P']
         return self.distribution._cost(X=X, P=P)
+
+    def generate_random_variables(self, shape, P=None):
+        if P is None:
+            session = self.manager.get_session()
+            P = session.tensors[self.name + '.' + 'P']
+
+        return self.distribution.generate_random_variables(shape, P=P)
+
+    def _sample(self, epsilon, P=None):
+        session = self.manager.get_session()
+        if P is None:
+            if _p(self.name, 'P') not in session.tensors.keys():
+                raise TypeError('%s.P not found in graph nor provided'
+                                % self.name)
+            P = session.tensors[_p(self.name, 'P')]
+        return self.distribution._sample(epsilon, P=P)
 
 _classes = {'MLP': MLP, 'DistributionMLP': DistributionMLP}

@@ -108,6 +108,7 @@ class Cell(object):
     _costs = {}
     _weight_keys = []
     _test_order = None
+    _sample_tensors = []
 
     def __init__(self, name='layer_proto', **kwargs):
         '''Init function for Cell.
@@ -421,7 +422,10 @@ class Cell(object):
             return object.__getattr__(self, key)
         if key in self.passed:
             return self.__dict__[self.passed[key]].__getattribute__(key)
-        return object.__getattr__(self, key)
+        try:
+            return object.__getattr__(self, key)
+        except AttributeError:
+            raise AttributeError(key)
 
     def __str__(self):
         attributes = self.__dict__

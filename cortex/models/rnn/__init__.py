@@ -231,7 +231,7 @@ class RNN(Cell):
         'input': 'dim_in',
         'output': 'dim_h'
     }
-    _test_order = ['Y', 'H0', 'H', 'output']
+    _test_order = ['input_net.Y', 'H0', 'H', 'output']
 
     def __init__(self, name='RNN', **kwargs):
         '''Init function for RNN.
@@ -253,120 +253,79 @@ class RNN(Cell):
         initializer_params = self.select_params('initializer', *params)
 
         outs = self.input_net._feed(X, *input_params)
+        outs = OrderedDict((_p('input_net', k), v)
+            for k, v in outs.iteritems())
         outs_init = self.initializer._feed(X[0], *initializer_params)
         outs.update(**dict((_p('initializer', k), v)
             for k, v in outs_init.iteritems()))
         outs['H0'] = outs_init['output']
-        outs.update(**self.RU(outs['Y'], M, outs_init['output']))
+        outs.update(**self.RU(outs[_p('input_net', 'Y')], M, outs['H0']))
         outs['output'] = outs['H'][-1]
         return outs
 
 class GenRNN(RNN):
-    _components = RNN._components
+    _components = copy.deepcopy(RNN._components)
     _components.update(**
         {
             'output_net': {
                 'cell_type': 'DistributionMLP',
-                '_passed': ['distribution_type']
+                'distribution_type': '&distribution_type'
             }
         })
-    _links = RNN._links
-    _links += [('output_net.output', )]
+    _links = RNN._links[:]
+    _links += [
+        ('output_net.samples', 'input_net.input'),
+        ('output_net.input', 'RU.output')]
+    _dim_map = copy.deepcopy(RNN._dim_map)
+    _dim_map.update(**{
+        'output': 'dim_in',
+        'P': 'dim_in',
+        'samples': 'dim_in'
+    })
+    _dist_map = {'P': 'distribution_type'}
+    _costs = {
+        'nll': '_cost',
+        'negative_log_likelihood': '_cost'}
+
+    def __init__(self, distribution_type, name='GenRNN', **kwargs):
+        self.distribution_type = distribution_type
+        super(GenRNN, self).__init__(name=name, **kwargs)
+
+    def _feed(self, X, M, *params):
+        outs = super(GenRNN, self)._feed(X, M, *params)
+        H = outs['H']
+        output_params = self.select_params('output_net', *params)
+        outs_out_net = self.output_net._feed(H, *output_params)
+        outs.update(
+            **dict((_p('output_net', k), v)
+                for k, v in outs_out_net.iteritems()))
+        outs['P'] = outs[_p('output_net', 'P')]
+        return outs
+
+    def _cost(self, X=None, P=None):
+        if P is None:
+            session = self.manager.get_session()
+            P = session.tensors[_p(self.name, 'P')]
+        nll = self.output_net.distribution.neg_log_prob(X[1:], P=P[:-1])
+        return nll.sum(axis=0).mean()
+
     # Step functions -----------------------------------------------------------
-    def step_sample_preact(self, *params):
+    def _step_sample(self, X, H, epsilon, *params):
         '''Returns preact for sampling step.
 
         '''
-        params = list(params)
-        hs_ = params[:self.n_layers]
-        x = params[self.n_layers]
-        params = params[self.n_layers+1:]
+        ru_params = self.select_params('RU', *params)
+        input_params = self.select_params('input_net', *params)
+        initializer_params = self.select_params('initializer', *params)
 
-        Urs           = self.get_recurrent_args(*params)
-        input_params  = self.get_input_args(*params)
-        output_params = self.get_output_args(*params)
-        y             = self.input_net.step_preact(x, *input_params)
+        Y = self.input_net._feed(X, *input_params)['output']
+        H = self.ru._recurrence(1, Y, H, Ur, *ru_params)
+        P_ = self.output_net._feed(H, *output_params)
+        X_ = self.output_net._sample(epsilon, P=P_)
 
-        hs = []
-        for i in xrange(self.n_layers):
-            h_ = hs_[i]
-            Ur = Urs[i]
-            h = self._step(1, y, h_, Ur)
-            hs.append(h)
+        return H, X_, P_
 
-            if i < self.n_layers - 1:
-                inter_params = self.get_inter_args(i, *params)
-                y = self.inter_nets[i].step_preact(h, *inter_params)
-
-        preact = self.output_net.step_preact(h, *output_params)
-        return tuple(hs) + (preact,)
-
-    def step_sample(self, *params):
-        '''RNN step sample function for scan.
-
-        A convenience function for scan, this method samples the output given
-        the input, returning the current states and sample.
-
-        '''
-        outs   = self.step_sample_preact(*params)
-        hs     = outs[:self.n_layers]
-        preact = outs[-1]
-        p      = self.output_net.distribution(preact)
-        x, _   = self.output_net.sample(p, n_samples=1)
-        x      = x[0]
-        return tuple(hs) + (x, p, preact)
-
-    def __call__(self, X, outputs, diff=False):
-        '''Default cost for RNN.
-
-        Negative log likelihood.
-
-        '''
-        if diff:
-            self.logger.debug('Calculating RNN cost with difference')
-            dmu, scale = self.output_net.distribution.split_prob(p)
-            mu = X[:-1] + dmu
-            p = rnn.output_net.distribution.get_prob(mu, scale)
-
-        p = outputs['p'][:-1]
-
-        cost = self.neg_log_prob(X[1:], p).sum(axis=0).mean()
-        return cost
-
-    def _feed(self, x, m, h0s, *params):
-        '''Step version of feed for scan
-
-        Args:
-            x (T.tensor): input.
-            m (T.tensor): mask.
-            h0s (list): list of recurrent initial states.
-            *params: list of theano.shared.
-
-        Returns:
-            OrderedDict: dictionary of results.
-
-        '''
-        n_samples = x.shape[1]
-
-        updates = theano.OrderedUpdates()
-
-        x_in = x
-        hs = []
-        for i, h0 in enumerate(h0s):
-
-            hs.append(h)
-            x = h
-            updates += updates_
-
-        o_params    = self.get_output_args(*params)
-        out_net_out = self.output_net.step_call(h, *o_params)
-        preact      = out_net_out['z']
-        p           = out_net_out['p']
-        error       = self.neg_log_prob(x_in[1:], p[:-1], sum_probs=False)
-
-        return OrderedDict(hs=hs, p=p, error=error, z=preact), updates
-
-    def sample(self, x0=None, h0s=None, n_samples=10, n_steps=10):
+    def _sample(self, X0=None, H0=None, n_samples=10, n_steps=10):
         '''Samples from an initial state.
 
         Args:
@@ -381,83 +340,31 @@ class GenRNN(RNN):
             theano.OrderedUpdates: updates.
 
         '''
-        if x0 is None:
-            x0, _ = self.output_net.sample(
-                T.constant(0.5).astype(floatX), n_samples=n_samples)
+        if X0 is None: X0 = self.output_net.simple_sample(n_samples, P=0.5)
+        if H0 is None: H0 = self.init_net(X0)['output']
+        epsilon = self.output_net.generate_random_variables(
+            (n_steps, n_samples), P=X0)
 
-        if h0s is None and self.init_net is not None:
-            h0s = self.init_net.initialize(x0)
-        elif h0s is None:
-            h0s = [T.alloc(0., x0.shape[0], dim_h).astype(floatX)
-                   for dim_h in self.dim_hs]
-
-        seqs = []
-        outputs_info = h0s + [x0, None, None]
-        non_seqs = []
-        non_seqs += self.get_sample_params()
+        seqs = [epsilon]
+        outputs_info = [X0, H0, None]
+        non_seqs = self.get_params()
 
         if n_steps == 1:
-            inps = outputs_info[:-2] + non_seqs
-            outs = self.step_sample(*inps)
+            inps = outputs_info[:-1] + non_seqs
+            H, X, P = self.step_sample(*inps)
             updates = theano.OrderedUpdates()
-            hs = outs[:self.n_layers]
-            x, p, z = outs[-3:]
-            x = T.shape_padleft(x)
-            p = T.shape_padleft(p)
-            z = T.shape_padleft(z)
-            hs = [T.shape_padleft(h) for h in hs]
+            H = T.shape_padleft(H)
+            X = T.shape_padleft(X)
+            P = T.shape_padleft(P)
         else:
-            outs, updates = scan(self.step_sample, seqs, outputs_info, non_seqs,
-                                 n_steps, name=self.name+'_sampling', strict=False)
-            hs = outs[:self.n_layers]
-            x, p, z = outs[-3:]
+            (H, X, P), updates = scan(
+                self.step_sample, seqs, outputs_info, non_seqs, n_steps,
+                name=self.name+'_sampling')
 
-        return OrderedDict(x=x, p=p, z=z, hs=hs), updates
+        return OrderedDict(samples=X, P=P, H=H, updates=updates)
 
 
-class SimpleRNN(RNN):
-    '''Simple RNN class, single hidden layer.
-
-    Wraps RNN but with a single hidden layer in __init__ instead of list.
-
-    '''
-    def __init__(self, dim_in, dim_h, **kwargs):
-        '''SimpleRNN init function.'''
-        super(SimpleRNN, self).__init__(dim_in, [dim_h], **kwargs)
-
-    @staticmethod
-    def mlp_factory(dim_in, dim_out, dim_h, **kwargs):
-        return RNN.mlp_factory(dim_in, dim_out, [dim_h], **kwargs)
-
-    def energy(self, X, h0=None):
-        '''Energy function.
-
-        '''
-        if h0 is not None:
-            h0s = [h0]
-        else:
-            h0s = None
-        return super(SimpleRNN, self).energy(X, h0s=h0s)
-
-    def feed(self, x, m=None, h0=None, condition_on=None):
-        '''Feed function (see `RNN.feed`).
-
-        '''
-        if h0 is not None:
-            h0s = [h0]
-        else:
-            h0s = None
-        return super(SimpleRNN, self).feed(
-            x, m=m, h0s=h0s, condition_on=condition_on)
-
-    def sample(self, x0=None, h0=None, **kwargs):
-        '''Sample the SimpleRNN (see `RNN.sample`).
-
-        '''
-        if h0 is not None:
-            h0s = [h0]
-        else:
-            h0s = None
-        return super(SimpleRNN, self).sample(x0=x0, h0s=h0s, **kwargs)
-
-_classes = {'RNNInitializer': RNNInitializer, 'RecurrentUnit': RecurrentUnit, 'RNN': RNN}
+_classes = {'RNNInitializer': RNNInitializer,
+            'RecurrentUnit': RecurrentUnit,
+            'RNN': RNN,
+            'GenRNN': GenRNN}

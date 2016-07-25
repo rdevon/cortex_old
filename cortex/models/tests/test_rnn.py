@@ -11,7 +11,7 @@ from theano import tensor as T
 import cortex
 from cortex.datasets.basic.dummy import Dummy
 from cortex.models import rnn as rnn_module
-from cortex.models.tests.test_mlp import feed_numpy as feed_numpy_mlp
+from cortex.models.tests.test_mlp import feed_numpy as feed_numpy_mlp, feed_numpy_d as feed_numpy_dmlp
 from cortex.utils import floatX, logger as cortex_logger
 
 
@@ -30,7 +30,7 @@ def _test_fetch_class(c='RecurrentUnit'):
     return C
 
 def test_fetch_classes():
-    for c in ['RecurrentUnit', 'RNNInitializer', 'RNN']:
+    for c in ['RecurrentUnit', 'RNNInitializer', 'RNN', 'GenRNN']:
         _test_fetch_class(c=c)
 
 def test_make_rnn(dim_in=13, dim_h=17, initialization='MLP'):
@@ -64,6 +64,22 @@ def feed_numpy(rnn, x, m=None):
         hs.append(h_)
 
     return np.array(hs)
+
+def feed_numpy_genrnn(rnn, x, m=None):
+    if m is None: m = np.ones((x.shape[0], x.shape[1]))
+    y = feed_numpy_mlp(rnn.input_net, x)[-1]
+    h_ = feed_numpy_mlp(rnn.initializer.initializer, x[0])[-1]
+    W = rnn.RU.params['W']
+    hs = []
+    for i in range(x.shape[0]):
+        preact = np.dot(h_, W) + y[i]
+        h = tanh(preact)
+        h_ = m[i][:, None] * h + (1 - m[i])[:, None] * h_
+        hs.append(h_)
+
+    hs = np.array(hs)
+    ps = feed_numpy_dmlp(rnn.output_net, hs)[-1]
+    return ps
 
 def test_feed(rnn=None, X=T.tensor3('X', dtype=floatX), x=None, batch_size=23,
               n_steps=7):
@@ -99,7 +115,7 @@ def test_make_rnn_graph():
     manager.prepare_cell('DistributionMLP', name='mlp')
     manager.add_step('rnn', 'dummy_binomial.input')
     manager.add_step('mlp', 'rnn.output')
-    manager.match_dims('mlp.output', 'dummy_gaussian.input')
+    manager.match_dims('mlp.P', 'dummy_gaussian.input')
     manager.build()
 
 def test_rnn_cost():
@@ -118,7 +134,36 @@ def test_rnn_cost():
         (data[1] - mu)**2 / (np.exp(2 * log_sigma)) +
         2 * log_sigma + np.log(2 * np.pi)).sum(axis=1).mean()
     assert (abs(cost - _cost) <= _atol), abs(cost - _cost)
-    logger.debug('Expected value of autoencoder cost OK within %.2e' % _atol)
+    logger.debug('Expected value of RNN cost OK within %.2e' % _atol)
+
+def test_make_genrnn_graph():
+    manager.reset()
+    manager.prepare_data('dummy', batch_size=3, n_samples=103, data_shape=(5, 2),
+                         transpose={'input': (1, 0, 2)})
+    manager.prepare_cell('GenRNN', name='rnn', dim_h=17, initialization='MLP')
+    manager.add_step('rnn', 'dummy_binomial.input')
+    manager.match_dims('rnn.P', 'dummy_binomial.input')
+    manager.build()
+
+def test_genrnn_cost():
+    test_make_genrnn_graph()
+    manager.add_cost('rnn.negative_log_likelihood',
+                     X='dummy_binomial.input')
+    session = manager.build_session(test=True)
+    f = theano.function(session.inputs, sum(session.costs), updates=session.updates)
+    data = session.next(mode='train')
+    cost = f(*data)
+    f = theano.function(session.inputs, session.tensors['rnn.P'], updates=session.updates)
+    p_ = f(*data)
+
+    p = feed_numpy_genrnn(manager.cells['rnn'], data[0])
+    print p - p_
+    x = data[0][1:]
+    p = p[:-1]
+    p = np.clip(p, 1e-7, 1-1e-7)
+    _cost = -(x * np.log(p) + (1. - x) * np.log(1. - p)).sum(axis=-1).sum(axis=0).mean()
+    assert (abs(cost - _cost) <= _atol), (cost, _cost, abs(cost - _cost))
+    logger.debug('Expected value of genrnn cost OK within %.2e' % _atol)
 
 def _test_sample(dim_in=13, dim_h=17, n_samples=107, n_steps=21):
     rnn = test_build(dim_in, dim_h)

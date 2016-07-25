@@ -39,6 +39,28 @@ class Session(object):
         self.datasets = []
         self.input_keys = []
 
+    def add_samples(self, arg):
+        manager = self.manager
+        tensors = self.tensors
+
+        d = self.manager.samples[arg]
+
+        key = d['P']
+        if key is not None:
+            P = tensors[d['P']]
+        else:
+            P = None
+
+        cell_name = d['cell_name']
+        cell = manager.cells[cell_name]
+
+        shape = d['shape']
+
+        epsilon = cell.generate_random_variables(shape, P=P)
+        self.tensors[arg + '_epsilon'] = epsilon
+        samples = cell._sample(epsilon, P=P)
+        self.tensors[arg] = samples
+
     def resolve_op_args(self, args, kwargs):
         manager = self.manager
         tensors = self.tensors
@@ -53,6 +75,9 @@ class Session(object):
                         self.inputs.append(dataset_tensor)
                         self.datasets.append(name)
                         self.input_keys.append(key)
+
+                if arg not in tensors.keys() and arg in manager.samples.keys():
+                    self.add_samples(arg)
 
                 if arg in tensors.keys():
                     new_args.append(tensors[arg])
@@ -79,7 +104,6 @@ class Session(object):
                     raise ValueError('Could not find tensor %s' % arg)
             else:
                 new_kwargs[key] = arg
-
         return new_args, new_kwargs
 
     def build(self, test=False):
@@ -112,7 +136,7 @@ class Session(object):
                     self.constants += v
                 else:
                     key = key_prefix + '.' + k
-                    if key in self.tensors.keys():
+                    if key in tensors.keys():
                         raise KeyError('Cannot overwrite %s' % key)
                     else:
                         self.tensors[key] = v
@@ -131,7 +155,7 @@ class Session(object):
                     f = theano.function(self.inputs, t, updates=self.updates)
                     try:
                         t_ = f(*data)
-                        self.logger.info('Tensor `%s` for `%s` has shape %s'
+                        self.logger.info('Tensor `%s` for `%s` has shape %s '
                                          '(passes without error)'
                                          % (key, key_prefix, t_.shape))
                     except ValueError as e:
@@ -166,7 +190,7 @@ class Session(object):
                 f = theano.function(self.inputs, out, updates=self.updates)
                 try:
                     t_ = f(*data)
-                    self.logger.info('Tensor `%s` for `%s` has shape %s'
+                    self.logger.info('Tensor `%s` for `%s` has shape %s '
                                      '(passes without error)'
                                      % (key, key_prefix, t_.shape))
                 except ValueError as e:
@@ -180,6 +204,10 @@ class Session(object):
                         self.logger.info('Data shape: %s' % (d.shape,))
 
                     raise e
+
+        for samples in manager.samples:
+            if samples not in tensors.keys():
+                self.add_samples(samples)
 
     def next(self, mode=None, batch_size=None):
         data = []

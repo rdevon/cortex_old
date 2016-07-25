@@ -91,6 +91,7 @@ class Manager(object):
         self.steps = []
         self.costs = []
         self.tparams = {}
+        self.samples = {}
         self.reset_sessions()
 
     def resolve_class(self, cell_type):
@@ -171,6 +172,37 @@ class Manager(object):
         del self.cells[key]
         del self.cell_args[key]
 
+    # Sample methods
+    def prepare_samples(self, arg, shape, name='samples'):
+        if isinstance(shape, int):
+            shape = (shape,)
+
+        if arg in self.cell_args.keys():
+            cell_name = arg
+            key = None
+        elif is_tensor_arg(arg):
+            cell_name, key, _ = resolve_tensor_arg(arg)
+
+        if cell_name not in self.cell_args.keys():
+            raise KeyError('Cell %s not found' % cell_name)
+
+        C = self.resolve_class(self.cell_args[cell_name]['cell_type'])
+        if not hasattr(C, '_sample'):
+            raise ValueError('Cell type %s does not support sampling'
+                             % C.__name__)
+
+        if key is not None and key not in C._sample_tensors:
+            raise KeyError('Cell %s does not support sample tensor %s'
+                           % (cell_name, key))
+
+        name = _p(cell_name, name)
+        if key is not None:
+            key = arg
+
+        if name in self.samples.keys():
+            self.logger.warn('Overwriting samples %s' % name)
+        self.samples[name] = {'cell_name': cell_name, 'P': key, 'shape': shape}
+
     # Methods for building graph
     def test_op_args(self, op, args, kwargs):
         if hasattr(op, '__call__'):
@@ -241,7 +273,7 @@ class Manager(object):
         cell_name = None
         if isinstance(op, str):
             if is_tensor_arg(op):
-                cell_name, cost_name = op.split('.')
+                cell_name, cost_name, _ = resolve_tensor_arg(op)
                 cell_type = self.cell_args[cell_name]['cell_type']
                 C = self.resolve_class(cell_type)
                 if cost_name == 'cost' and hasattr(C, '_cost'):

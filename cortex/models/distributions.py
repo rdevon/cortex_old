@@ -9,6 +9,7 @@ from theano import tensor as T
 
 from . import init_rngs, Cell
 from ..utils import concatenate, e, floatX, pi, _slice, _slice2
+from ..utils.tools import _p
 
 
 _clip = 1e-7 # clipping for Guassian distributions.
@@ -48,6 +49,7 @@ class Distribution(Cell):
     is_continuous = False
     scale = 1
     must_sample = False
+    base_distribution = None
 
     def __init__(self, dim, name='distribution_proto', **kwargs):
         '''Init function for Distribution class.
@@ -59,7 +61,7 @@ class Distribution(Cell):
         self.dim = dim
         super(Distribution, self).__init__(name=name, **kwargs)
 
-    def _act(self, X):
+    def _act(self, X, as_numpy=False):
         return X
 
     @classmethod
@@ -146,34 +148,42 @@ class Distribution(Cell):
     def _feed(self, *args):
         return self._act(concatenate(args))
 
-    def _sample(self, n_samples, p=None):
+    def generate_random_variables(self, shape, P=None):
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        if P.ndim == 0:
+            P = T.zeros((self.dim,)).astype(floatX) + P
+        if P.ndim == 1:
+            shape = shape + (P.shape[0] // self.scale,)
+        elif P.ndim == 2:
+            shape = shape + (P.shape[0], P.shape[1] // self.scale)
+        elif P.ndim == 3:
+            shape = shape + (P.shape[0], P.shape[1], P.shape[2] // self.scale)
+        elif P.ndim == 4:
+            shape = shape + (P.shape[0], P.shape[1], P.shape[2],
+                             P.shape[3] // self.scale)
+        else:
+            raise ValueError(P.ndim)
+        return self.random_variables(shape)
+
+    def _sample(self, epsilon, P=None):
         '''Samples from distribution.
 
         '''
-        if p is None:
-            p = self.get_prob(*self.get_params())
-            size = None
-        elif p.ndim == 0:
-            p = T.zeros((self.dim,)).astype(floatX) + p
-            size = (n_samples, p.shape[0] // self.scale)
-        elif p.ndim == 1:
-            size = (n_samples, p.shape[0] // self.scale)
-        elif p.ndim == 2:
-            size = (n_samples, p.shape[0], p.shape[1] // self.scale)
-        elif p.ndim == 3:
-            size = (n_samples, p.shape[0], p.shape[1], p.shape[2] // self.scale)
-        else:
-            raise NotImplementedError('%d dim sampling not supported yet' % p.ndim)
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        return self.quantile(epsilon, P)
 
-        return self.f_sample(self.trng, p, size=size), theano.OrderedUpdates()
+    def simple_sample(self, n_samples, P=None):
+        epsilon = self.generate_random_variables((n_samples,), P=P)
+        return self._sample(epslion, P=P)
 
-    def kl_divergence(self, Q=None):
-        '''KL divergence function.
+    def _cost(self, X=None, P=None):
+        if X is None:
+            raise TypeError('X (ground truth) must be provided.')
+        return self.neg_log_prob(X, P=P).mean()
 
-        '''
-        raise NotImplementedError()
-
-    def step_neg_log_prob(self, x, *params):
+    def step_neg_log_prob(self, X, *params):
         '''Step negative log probability for scan.
 
         Args:
@@ -184,10 +194,10 @@ class Distribution(Cell):
             T.tensor: :math:`-\log p(x)`.
 
         '''
-        p = self.get_prob(*params)
-        return self.f_neg_log_prob(x, p)
+        P = self.get_prob(*params)
+        return self.f_neg_log_prob(X, P)
 
-    def neg_log_prob(self, x, p=None, sum_probs=True):
+    def neg_log_prob(self, X, P=None, sum_probs=True):
         '''Negative log probability.
 
         Args:
@@ -199,16 +209,11 @@ class Distribution(Cell):
             T.tensor: :math:`-\log p(x)`.
 
         '''
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(X, P, sum_probs=sum_probs)
 
-    def _cost(self, X=None, P=None):
-        if X is None:
-            raise TypeError('X (ground truth) must be provided.')
-        return self.neg_log_prob(X, p=P).mean()
-
-    def entropy(self, p=None):
+    def entropy(self, P=None):
         '''Entropy function.
 
         Args:
@@ -218,9 +223,9 @@ class Distribution(Cell):
             T.tensor: entropy.
 
         '''
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        return self.f_entropy(p)
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        return self.f_entropy(P)
 
     def get_energy_bias(self, x, z):
         '''For use in RBMs and other energy based models.
@@ -255,8 +260,12 @@ class Binomial(Distribution):
         self.f_entropy = _binary_entropy
         super(Binomial, self).__init__(dim, name=name, **kwargs)
 
-    def _act(self, X):
-        return T.nnet.sigmoid(X) * self._act_slope + self._act_incpt
+    def _act(self, X, as_numpy=False):
+        if as_numpy:
+            sigmoid = lambda x: 1. / (1. + np.exp(-x))
+        else:
+            sigmoid = T.nnet.sigmoid
+        return sigmoid(X) * self._act_slope + self._act_incpt
 
     def init_params(self):
         z = np.zeros((self.dim,)).astype(floatX)
@@ -265,10 +274,10 @@ class Binomial(Distribution):
     def get_params(self):
         return [self.z]
 
-    def step_sample(self, epsilon, p):
-        return (epsilon <= p).astype(floatX)
+    def quantile(self, epsilon, P):
+        return (epsilon <= P).astype(floatX)
 
-    def prototype_samples(self, size):
+    def random_variables(self, size):
         return self.trng.uniform(size, dtype=floatX)
 
     def generate_latent_pair(self):
@@ -292,35 +301,22 @@ class CenteredBinomial(Binomial):
     '''
     _distribution = 'centered_binomial'
 
-    def _act(self, X):
-        return T.tanh(X)
+    def _act(self, X, as_numpy=False):
+        if as_numpy:
+            Te = np
+        else:
+            Te = T
+        return Te.tanh(X)
 
-    def step_sample(self, epsilon, p):
-        return (2.0 * (epsilon <= p).astype(floatX) - 1.0)
+    def quantile(self, epsilon, P):
+        return (2.0 * (epsilon <= P).astype(floatX) - 1.0)
 
-    def sample(self, n_samples, p=None):
-        '''Samples from distribution.
-
-        '''
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        if p.ndim == 1:
-            size = (n_samples, p.shape[0] // self.scale)
-        elif p.ndim == 2:
-            size = (n_samples, p.shape[0], p.shape[1] // self.scale)
-        elif p.ndim == 3:
-            size = (n_samples, p.shape[0], p.shape[2], p.shape[3] // self.scale)
-        elif p.ndim == 4:
-            raise NotImplementedError('%d dim sampling not supported yet' % p.ndim)
-
-        return (2.0 * self.f_sample(self.trng, p, size=size) - 1), theano.OrderedUpdates()
-
-    def neg_log_prob(self, x, p=None, sum_probs=True):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        x = 0.5 * (x + 1.0)
-        p = (0.5 * (p + 1.0)) * 0.9999 + 0.000005
-        return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
+    def neg_log_prob(self, X, P=None, sum_probs=True):
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        X = 0.5 * (x + 1.0)
+        P = (0.5 * (p + 1.0)) * 0.9999 + 0.000005
+        return self.f_neg_log_prob(X, P, sum_probs=sum_probs)
 
 
 class ContinuousBinomial(Binomial):
@@ -343,21 +339,19 @@ class Multinomial(Distribution):
     '''Multinomial distribuion.
 
     '''
+
     def __init__(self, dim, name='multinomial', **kwargs):
         self.f_sample = _sample_multinomial
         self.f_neg_log_prob = _categorical_cross_entropy
         self.f_entropy = _categorical_entropy
         super(Multinomial, self).__init__(dim, name=name, **kwargs)
 
+    def _act(self, X):
+        return _softmax(X)
+
     def init_params(self):
         z = np.zeros((self.dim,)).astype(floatX)
         self.params = OrderedDict(z=z)
-
-    def get_prob(self, z):
-        return _softmax(z)
-
-    def feed(self, z):
-        return _softmax(z)
 
 
 class Gaussian(Distribution):
@@ -385,50 +379,42 @@ class Gaussian(Distribution):
     def get_params(self):
         return [self.mu, self.log_sigma]
 
-    def step_kl_divergence(self, Q, mu, log_sigma):
-        mu_q = _slice(Q, 0, self.dim)
-        log_sigma_q = _slice(Q, 1, self.dim)
-        log_sigma_q = T.maximum(log_sigma_q, self.clip)
-        log_sigma = T.maximum(log_sigma, self.clip)
+    @staticmethod
+    def kl_divergence(mu_p, log_sigma_p, mu_q, log_sigma_q):
+        log_sigma = T.maximum(log_sigma_p, _clip)
+        log_sigma_q = T.maximum(log_sigma_q, _clip)
 
-        kl = log_sigma - log_sigma_q + 0.5 * (
-            (T.exp(2 * log_sigma_q) + (mu - mu_q) ** 2) /
-            T.exp(2 * log_sigma)
+        kl = log_sigma_q - log_sigma_p + 0.5 * (
+            (T.exp(2 * log_sigma_p) + (mu_q - mu_p) ** 2) /
+            T.exp(2 * log_sigma_q)
             - 1)
         return kl.sum(axis=kl.ndim-1)
 
-    def kl_divergence(self, Q=None):
-        if Q is None:
-            raise TypeError
-        return self.step_kl_divergence(Q, *self.get_params())
-
-    def step_sample(self, epsilon, p):
-        dim = p.shape[p.ndim-1] // self.scale
-        mu = _slice(p, 0, dim)
-        log_sigma = _slice(p, 1, dim)
+    def quantile(self, epsilon, P):
+        mu, log_sigma = self.split_prob(P)
         return mu + epsilon * T.exp(log_sigma)
 
-    def prototype_samples(self, size):
+    def random_variables(self, size):
         return self.trng.normal(avg=0, std=1.0, size=size, dtype=floatX)
 
-    def step_neg_log_prob(self, x, *params):
-        p = self.get_prob(*params)
-        return self.f_neg_log_prob(x, p=p, clip=self.clip)
+    def step_neg_log_prob(self, X, *params):
+        P = self.get_prob(*params)
+        return self.f_neg_log_prob(X, P=P, clip=self.clip)
 
-    def neg_log_prob(self, x, p=None, sum_probs=True):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(x, p, clip=self.clip, sum_probs=sum_probs)
+    def neg_log_prob(self, X, P=None, sum_probs=True):
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(X, P, clip=self.clip, sum_probs=sum_probs)
 
-    def standard_prob(self, x, p=None):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        return T.exp(-self.neg_log_prob(x, p))
+    def standard_prob(self, X, P=None):
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        return T.exp(-self.neg_log_prob(X, P))
 
-    def entropy(self, p=None):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        return self.f_entropy(p, clip=self.clip)
+    def entropy(self, P=None):
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        return self.f_entropy(P, clip=self.clip)
 
     def generate_latent_pair(self):
         h0 = self.mu
@@ -488,23 +474,21 @@ class Logistic(Distribution):
     def get_params(self):
         return [self.mu, self.log_s]
 
-    def step_sample(self, epsilon, p):
-        dim = p.shape[p.ndim-1] // self.scale
-        mu = _slice(p, 0, dim)
-        log_s = _slice(p, 1, dim)
+    def quantile(self, epsilon, P):
+        mu, log_s = self.split_prob(P)
         return mu + T.log(epsilon / (1 - epsilon)) * T.exp(log_s)
 
-    def prototype_samples(self, size):
+    def random_variables(self, size):
         return self.trng.uniform(size=size, dtype=floatX)
 
-    def step_neg_log_prob(self, x, *params):
-        p = self.get_prob(*params)
-        return self.f_neg_log_prob(x, p=p)
+    def step_neg_log_prob(self, X, *params):
+        P = self.get_prob(*params)
+        return self.f_neg_log_prob(X, P=P)
 
-    def neg_log_prob(self, x, p=None, sum_probs=True):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
+    def neg_log_prob(self, X, P=None, sum_probs=True):
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(X, P, sum_probs=sum_probs)
 
     def standard_prob(self, x, p=None):
         if p is None:
@@ -559,33 +543,31 @@ class Laplace(Distribution):
     def get_params(self):
         return [self.mu, self.log_b]
 
-    def step_sample(self, epsilon, p):
-        dim = p.shape[p.ndim-1] // self.scale
-        mu = _slice(p, 0, dim)
-        log_b = _slice(p, 1, dim)
+    def quantile(self, epsilon, P):
+        mu, log_b = self.split_prob(P)
         return mu + T.exp(log_b) * T.sgn(epsilon) * T.log(1.0 - 2 * abs(epsilon))
 
-    def prototype_samples(self, size):
+    def random_variables(self, size):
         return self.trng.uniform(size=size, dtype=floatX) - 0.5
 
-    def step_neg_log_prob(self, x, *params):
-        p = self.get_prob(*params)
-        return self.f_neg_log_prob(x, p=p)
+    def step_neg_log_prob(self, X, *params):
+        P = self.get_prob(*params)
+        return self.f_neg_log_prob(X, P)
 
-    def neg_log_prob(self, x, p=None, sum_probs=True):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(x, p, sum_probs=sum_probs)
+    def neg_log_prob(self, X, P=None, sum_probs=True):
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(X, P, sum_probs=sum_probs)
 
-    def standard_prob(self, x, p=None):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        return T.exp(-self.neg_log_prob(x, p))
+    def standard_prob(self, X, P=None):
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        return T.exp(-self.neg_log_prob(X, P))
 
-    def entropy(self, p=None):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        return self.f_entropy(p)
+    def entropy(self, P=None):
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        return self.f_entropy(P)
 
     def generate_latent_pair(self):
         h0 = self.mu
@@ -769,27 +751,38 @@ def make_conditional(C):
         raise TypeError('Conditional distribution not possible with %s' % C)
 
     class Conditional(C):
+        base_distribution = C
         def init_params(self): self.params = OrderedDict()
 
         def get_params(self): return []
 
-        def sample(self, n_samples, p):
-            return super(Conditional, self).sample(n_samples, p=p)
-
-        def neg_log_prob(self, x, p, sum_probs=True):
+        def neg_log_prob(self, X, P, sum_probs=True):
             return super(Conditional, self).neg_log_prob(
-                x, p=p, sum_probs=sum_probs)
+                X, P=P, sum_probs=sum_probs)
 
         def _cost(self, X=None, P=None):
             if X is None:
                 raise TypeError('X (ground truth) must be provided.')
             if P is None:
                 session = self.manager.get_session()
-                P = session.tensors[self.name + '.' + 'P']
-            return self.neg_log_prob(X, p=P).mean()
+                if _p(self.name, 'P') not in session.tensors.keys():
+                    raise TypeError('%s.P not found in graph nor provided'
+                                    % self.name)
+                P = session.tensors[_p(self.name, 'P')]
+            return self.neg_log_prob(X, P=P).mean()
 
-        def entropy(self, p):
-            return super(Conditional, self).entropy(p=p)
+        def generate_random_variables(self, shape, P=None):
+            if P is None:
+                raise TypeError('P (distribution) must be provided')
+
+            return super(Conditional, self).generate_random_variables(
+                shape, P=P)
+
+        def _sample(self, epsilon, P=None):
+            if P is None:
+                raise TypeError('P (distribution) must be provided')
+
+            return super(Conditional, self)._sample(epsilon, P=P)
 
     Conditional.__name__ = Conditional.__name__ + '_' + C.__name__
 
