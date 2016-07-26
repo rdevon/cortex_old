@@ -44,6 +44,7 @@ class Session(object):
         tensors = self.tensors
 
         d = self.manager.samples[arg]
+        _, kwargs = self.resolve_op_args([], d['kwargs'])
 
         key = d['P']
         if key is not None:
@@ -58,8 +59,22 @@ class Session(object):
 
         epsilon = cell.generate_random_variables(shape, P=P)
         self.tensors[arg + '_epsilon'] = epsilon
-        samples = cell._sample(epsilon, P=P)
-        self.tensors[arg] = samples
+        samples = cell._sample(epsilon, P=P, **kwargs)
+
+        if isinstance (samples, T.TensorVariable):
+            samples = dict(samples=samples)
+
+        self.logger.debug('Adding samples: %s'
+                          % pprint.pformat(dict(samples)))
+
+        for k, v in samples.iteritems():
+            if k == 'updates':
+                self.updates += v
+            elif k == 'constants':
+                self.constants += v
+            else:
+                if arg not in tensors.keys():
+                    self.tensors[arg] = samples['samples']
 
     def resolve_op_args(self, args, kwargs):
         manager = self.manager
@@ -127,7 +142,7 @@ class Session(object):
                 cell = None
 
             if isinstance(out, T.TensorVariable):
-                out = dict(output)
+                out = dict(output=out)
 
             for k, v in out.iteritems():
                 if k == 'updates':

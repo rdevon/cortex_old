@@ -151,7 +151,7 @@ class Distribution(Cell):
     def generate_random_variables(self, shape, P=None):
         if P is None:
             P = self.get_prob(*self.get_params())
-        if P.ndim == 0:
+        if isinstance(P, float) or P.ndim == 0:
             P = T.zeros((self.dim,)).astype(floatX) + P
         if P.ndim == 1:
             shape = shape + (P.shape[0] // self.scale,)
@@ -176,7 +176,7 @@ class Distribution(Cell):
 
     def simple_sample(self, n_samples, P=None):
         epsilon = self.generate_random_variables((n_samples,), P=P)
-        return self._sample(epslion, P=P)
+        return self._sample(epsilon, P=P)
 
     def _cost(self, X=None, P=None):
         if X is None:

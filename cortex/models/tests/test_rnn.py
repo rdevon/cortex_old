@@ -157,7 +157,6 @@ def test_genrnn_cost():
     p_ = f(*data)
 
     p = feed_numpy_genrnn(manager.cells['rnn'], data[0])
-    print p - p_
     x = data[0][1:]
     p = p[:-1]
     p = np.clip(p, 1e-7, 1-1e-7)
@@ -165,11 +164,18 @@ def test_genrnn_cost():
     assert (abs(cost - _cost) <= _atol), (cost, _cost, abs(cost - _cost))
     logger.debug('Expected value of genrnn cost OK within %.2e' % _atol)
 
-def _test_sample(dim_in=13, dim_h=17, n_samples=107, n_steps=21):
-    rnn = test_build(dim_in, dim_h)
-    results, updates = rnn.sample(n_samples=107, n_steps=21)
-    f = theano.function([], results['p'], updates=updates)
-    f()
+def test_sample():
+    manager.reset()
+    manager.prepare_data('dummy', batch_size=3, n_samples=103, data_shape=(5, 2),
+                         transpose={'input': (1, 0, 2)})
+    manager.prepare_cell('GenRNN', name='rnn', dim_h=17, initialization='MLP')
+    manager.add_step('rnn', 'dummy_binomial.input')
+    manager.match_dims('rnn.P', 'dummy_binomial.input')
+    manager.prepare_samples('rnn', (7, 3))
+    manager.build()
+    session = manager.build_session()
+    f = theano.function([], session.tensors['rnn.samples'],
+        updates=session.updates)
 
 def _test_recurrent(dim_in=13, dim_h=17, n_samples=107, window=7):
     rnn = test_build(dim_in, dim_h)

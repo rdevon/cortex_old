@@ -317,15 +317,21 @@ class GenRNN(RNN):
         ru_params = self.select_params('RU', *params)
         input_params = self.select_params('input_net', *params)
         initializer_params = self.select_params('initializer', *params)
+        output_params = self.select_params('output_net', *params)
 
         Y = self.input_net._feed(X, *input_params)['output']
-        H = self.ru._recurrence(1, Y, H, Ur, *ru_params)
-        P_ = self.output_net._feed(H, *output_params)
+        H = self.RU._recurrence(1, Y, H, *ru_params)
+        P_ = self.output_net._feed(H, *output_params)['output']
         X_ = self.output_net._sample(epsilon, P=P_)
 
         return H, X_, P_
 
-    def _sample(self, X0=None, H0=None, n_samples=10, n_steps=10):
+    def generate_random_variables(self, shape, P=None):
+        if P is None:
+            P = T.zeros((self.output_net.mlp.dim_out,)).astype(floatX)
+        return self.output_net.generate_random_variables(shape, P=P)
+
+    def _sample(self, epsilon, X0=None, H0=None, P=None):
         '''Samples from an initial state.
 
         Args:
@@ -340,26 +346,16 @@ class GenRNN(RNN):
             theano.OrderedUpdates: updates.
 
         '''
-        if X0 is None: X0 = self.output_net.simple_sample(n_samples, P=0.5)
-        if H0 is None: H0 = self.init_net(X0)['output']
-        epsilon = self.output_net.generate_random_variables(
-            (n_steps, n_samples), P=X0)
+        if X0 is None: X0 = self.output_net.simple_sample(epsilon.shape[1], P=0.5)
+        if H0 is None: H0 = self.initializer(X0)['output']
 
         seqs = [epsilon]
         outputs_info = [X0, H0, None]
         non_seqs = self.get_params()
 
-        if n_steps == 1:
-            inps = outputs_info[:-1] + non_seqs
-            H, X, P = self.step_sample(*inps)
-            updates = theano.OrderedUpdates()
-            H = T.shape_padleft(H)
-            X = T.shape_padleft(X)
-            P = T.shape_padleft(P)
-        else:
-            (H, X, P), updates = scan(
-                self.step_sample, seqs, outputs_info, non_seqs, n_steps,
-                name=self.name+'_sampling')
+        (H, X, P), updates = scan(
+            self._step_sample, seqs, outputs_info, non_seqs, epsilon.shape[0],
+            name=self.name+'_sampling')
 
         return OrderedDict(samples=X, P=P, H=H, updates=updates)
 

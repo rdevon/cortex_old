@@ -173,7 +173,7 @@ class Manager(object):
         del self.cell_args[key]
 
     # Sample methods
-    def prepare_samples(self, arg, shape, name='samples'):
+    def prepare_samples(self, arg, shape, name='samples', **kwargs):
         if isinstance(shape, int):
             shape = (shape,)
 
@@ -201,7 +201,11 @@ class Manager(object):
 
         if name in self.samples.keys():
             self.logger.warn('Overwriting samples %s' % name)
-        self.samples[name] = {'cell_name': cell_name, 'P': key, 'shape': shape}
+        self.samples[name] = dict(
+            cell_name=cell_name,
+            P=key,
+            shape=shape,
+            kwargs=kwargs)
 
     # Methods for building graph
     def test_op_args(self, op, args, kwargs):

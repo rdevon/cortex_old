@@ -92,7 +92,6 @@ def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan',
         non_sequences=non_seqs,
         name=name,
         n_steps=n_steps,
-        profile=profile,
         strict=strict
     )
 
