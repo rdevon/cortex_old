@@ -93,6 +93,8 @@ class Manager(object):
         self.tparams = {}
         self.samples = {}
         self.reset_sessions()
+        self.trainer = None
+        self.tester = None
 
     def resolve_class(self, cell_type):
         from .. import resolve_class
@@ -103,9 +105,11 @@ class Manager(object):
             if k not in self.cells:
                 self.build_cell(k)
 
-    def create_session(self):
+    # Sessions -----------------------------------------------------------------
+    def create_session(self, noise=True):
         from .session import Session
-        self._current_session = Session()
+        self._current_session = Session(noise=noise)
+        return self._current_session
 
     def build_session(self, test=False):
         if self._current_session is None:
@@ -121,13 +125,22 @@ class Manager(object):
         Session._reset()
         self._current_session = None
 
-    # Data methods
+    # Trainer and tester -------------------------------------------------------
+    def setup_trainer(self, session, **kwargs):
+        self.trainer = Trainer(session, **kwargs)
+        return self.trainer
+
+    def setup_tester(self, session, **kwargs):
+        self.tester = Tester(session, **kwargs)
+        return self.tester
+
+    # Data methods -------------------------------------------------------------
     def prepare_data(self, dataset, **kwargs):
         from .. import resolve_class
         C = resolve_class(dataset, self.dataset_classes)
         C(**kwargs)
 
-    # Cell methods
+    # Cell methods -------------------------------------------------------------
     def build_cell(self, name):
         from .link import Link
         kwargs = self.cell_args[name]
@@ -172,42 +185,7 @@ class Manager(object):
         del self.cells[key]
         del self.cell_args[key]
 
-    # Sample methods
-    def prepare_samples(self, arg, shape, name='samples', **kwargs):
-        if isinstance(shape, int):
-            shape = (shape,)
-
-        if arg in self.cell_args.keys():
-            cell_name = arg
-            key = None
-        elif is_tensor_arg(arg):
-            cell_name, key, _ = resolve_tensor_arg(arg)
-
-        if cell_name not in self.cell_args.keys():
-            raise KeyError('Cell %s not found' % cell_name)
-
-        C = self.resolve_class(self.cell_args[cell_name]['cell_type'])
-        if not hasattr(C, '_sample'):
-            raise ValueError('Cell type %s does not support sampling'
-                             % C.__name__)
-
-        if key is not None and key not in C._sample_tensors:
-            raise KeyError('Cell %s does not support sample tensor %s'
-                           % (cell_name, key))
-
-        name = _p(cell_name, name)
-        if key is not None:
-            key = arg
-
-        if name in self.samples.keys():
-            self.logger.warn('Overwriting samples %s' % name)
-        self.samples[name] = dict(
-            cell_name=cell_name,
-            P=key,
-            shape=shape,
-            kwargs=kwargs)
-
-    # Methods for building graph
+    # Methods for building graph -----------------------------------------------
     def test_op_args(self, op, args, kwargs):
         if hasattr(op, '__call__'):
             pass
@@ -267,11 +245,8 @@ class Manager(object):
 
         self.test_op_args(op, args, kwargs)
 
-        self.steps.append(dict(
-            cell_name=cell_name,
-            op=op,
-            args=args,
-            kwargs=kwargs))
+        self.steps.append(dict(cell_name=cell_name, op=op, args=args,
+                               kwargs=kwargs))
 
     def add_cost(self, op, *args, **kwargs):
         cell_name = None
@@ -299,7 +274,41 @@ class Manager(object):
             args=args,
             kwargs=kwargs))
 
-    # Methods for linking and dim matching
+    def prepare_samples(self, arg, shape, name='samples', **kwargs):
+        if isinstance(shape, int):
+            shape = (shape,)
+
+        if arg in self.cell_args.keys():
+            cell_name = arg
+            key = None
+        elif is_tensor_arg(arg):
+            cell_name, key, _ = resolve_tensor_arg(arg)
+
+        if cell_name not in self.cell_args.keys():
+            raise KeyError('Cell %s not found' % cell_name)
+
+        C = self.resolve_class(self.cell_args[cell_name]['cell_type'])
+        if not hasattr(C, '_sample'):
+            raise ValueError('Cell type %s does not support sampling'
+                             % C.__name__)
+
+        if key is not None and key not in C._sample_tensors:
+            raise KeyError('Cell %s does not support sample tensor %s'
+                           % (cell_name, key))
+
+        name = _p(cell_name, name)
+        if key is not None:
+            key = arg
+
+        if name in self.samples.keys():
+            self.logger.warn('Overwriting samples %s' % name)
+        self.samples[name] = dict(
+            cell_name=cell_name,
+            P=key,
+            shape=shape,
+            kwargs=kwargs)
+
+    # Methods for linking and dim matching -------------------------------------
     def resolve_links(self, name):
         self.logger.debug('Resolving %s' % name)
         for link in self.links:
@@ -343,7 +352,7 @@ class Manager(object):
                     and node.C._dist_map.get(node.link_key, None) is not None):
                     self.cell_args[name][node.dist_key] = link
 
-    # Misc
+    # Misc ---------------------------------------------------------------------
     def __getitem__(self, key):
         return self.cells[key]
 

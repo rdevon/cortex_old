@@ -57,6 +57,17 @@ def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
         W = scale * rng.randn(nin, nout)
     return W.astype(floatX)
 
+def dropout(x, act, rate, trng):
+        if act == T.tanh:
+            x_d = trng.binomial(x.shape, p=1-rate, n=1, dtype=x.dtype)
+            x = 2. * (x_d * (x + 1.) / 2) / (1 - rate) - 1
+        elif act in [T.nnet.sigmoid, T.nnet.softplus, T.nnet.relu]:
+            x_d = trng.binomial(x.shape, p=1-rate, n=1, dtype=x.dtype)
+            x = x * x_d / (1 - rate)
+        else:
+            raise NotImplementedError('No dropout for %s yet' % activ)
+        return x
+
 
 class NoiseSwitch(object):
     '''Object to control noise of model.
@@ -97,7 +108,7 @@ class Cell(object):
 
     '''
     _components = {}    # Cells that this cell controls.
-    _options = {}       # Dictionary of optional arguments and default values
+    _options = {'weight_noise': 0}       # Dictionary of optional arguments and default values
     _required = []      # Required arguments for __init__
     _args = ['name']    # Arguments necessary to uniquely id the cell. Used for
                         #   save.
@@ -106,9 +117,11 @@ class Cell(object):
     _dist_map = {}
     _call_args = ['input']
     _costs = {}
-    _weight_keys = []
+    _weights = []
     _test_order = None
     _sample_tensors = []
+
+    noise_switch = get_noise_switch()
 
     def __init__(self, name='layer_proto', **kwargs):
         '''Init function for Cell.
@@ -119,7 +132,6 @@ class Cell(object):
         '''
         kwargs = self.set_options(**kwargs)
         self.manager = get_manager()
-        self.noise_switch = get_noise_switch()
         self.name = name
         self.passed = {}
         init_rngs(self)
@@ -318,10 +330,22 @@ class Cell(object):
     def get_params(self, params=None):
         if params is None:
             params = [self.__dict__[k] for k in self.param_keys]
+        if self.noise_switch() and self.weight_noise:
+            for i in range(len(params)):
+                param = params[i]
+                self.logger.debug(
+                    'Adding weight noise (%.2e) to %s'
+                    % (self.weight_noise, param.name))
+                param += self.trng.normal(
+                    avg=0.,
+                    std=self.weight_noise,
+                    size=param.shape).astype(floatX)
+                self.params[i] = param
 
         for key in self.component_keys:
             component = self.__dict__[key]
-            params += component.get_params()
+            c_params = component.get_params()
+            params += c_params
 
         return params
 

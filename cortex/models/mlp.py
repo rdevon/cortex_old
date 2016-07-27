@@ -9,7 +9,7 @@ from theano import tensor as T
 import warnings
 
 from . import distributions
-from . import Cell, norm_weight
+from . import Cell, norm_weight, dropout
 from ..manager import get_manager
 from ..utils import concatenate, floatX
 
@@ -43,7 +43,7 @@ class MLP(Cell):
 
     '''
     _required = ['dim_in', 'dim_out']
-    _options = {'dropout': False, 'weight_noise': False}
+    _options = {'dropout': False, 'weight_noise': 0}
     _args = ['dim_in', 'dim_out', 'dim_hs', 'h_act', 'out_act']
     _dim_map = {
         'X': 'dim_in',
@@ -52,7 +52,7 @@ class MLP(Cell):
         'output': 'dim_out',
         'Z': 'dim_out'
     }
-    _weight_keys = ['weights']
+    _weights = ['weights']
 
     def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
                  h_act='sigmoid', out_act=None, name='MLP', **kwargs):
@@ -119,18 +119,6 @@ class MLP(Cell):
         params = [i for sl in params for i in sl]
         return super(MLP, self).get_params(params=params)
 
-    def dropout(x, act, rate):
-        if act == 'T.tanh':
-            x_d = self.trng.binomial(x.shape, p=1-rate, n=1,
-                                     dtype=x.dtype)
-            x = 2. * (x_d * (x + 1.) / 2) / (1 - rate) - 1
-        elif act in ['T.nnet.sigmoid', 'T.nnet.softplus', 'lambda x: x']:
-            x_d = self.trng.binomial(x.shape, p=1-rate, n=1, dtype=x.dtype)
-            x = x * x_d / (1 - rate)
-        else:
-            raise NotImplementedError('No dropout for %s yet' % activ)
-        return x
-
     def _feed(self, X, *params):
         '''feed forward MLP.
 
@@ -165,7 +153,7 @@ class MLP(Cell):
                 if self.dropout and self.noise_switch():
                     self.logger.debug('Adding dropout to layer {layer} for MLP '
                                   '`{name}`'.format(layer=l, name=self.name))
-                    X = self.dropout(X, self.h_act, self.dropout)
+                    X = dropout(X, self.h_act, self.dropout, self.trng)
             else:
                 X = self.out_act(preact)
                 outs['Z'] = preact
@@ -244,9 +232,6 @@ class DistributionMLP(Cell):
             raise ValueError
         DC = manager.resolve_class(link.distribution)
         return DC.get_link_value(link, key)
-
-    def get_params(self):
-        return self.mlp.get_params()
 
     def _feed(self, X, *params):
         outs = self.mlp._feed(X, *params)

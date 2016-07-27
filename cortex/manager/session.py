@@ -8,13 +8,15 @@ import theano
 from theano import tensor as T
 
 from . import get_manager, is_tensor_arg, resolve_tensor_arg
+from ..models import get_noise_switch
 
 
 class Session(object):
     _idx = 0
     sessions = []
+    noise_switch = get_noise_switch()
 
-    def __init__(self, manager=None):
+    def __init__(self, manager=None, noise=True):
         if manager is None: manager = get_manager()
         self.logger = logging.getLogger(
             '.'.join([self.__module__, self.__class__.__name__]))
@@ -24,6 +26,7 @@ class Session(object):
 
         self.manager = manager
         self.reset()
+        self.noise = noise
 
     @staticmethod
     def _reset():
@@ -124,6 +127,11 @@ class Session(object):
     def build(self, test=False):
         manager = self.manager
         tensors = self.tensors
+
+        if self.noise:
+            self.noise_switch.switch('on')
+        else:
+            self.noise_switch.switch('off')
 
         for step in manager.steps:
             self.logger.debug('Adding step: %s' % pprint.pformat(dict(step)))
