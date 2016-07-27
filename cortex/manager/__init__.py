@@ -95,11 +95,13 @@ class Manager(object):
         self.cell_args = OrderedDict()
         self.links = []
         self.datasets = {}
+
         self.steps = []
-        self.costs = []
-        self.stats = []
-        self.tparams = {}
+        self.costs = {}
+        self.stats = {}
         self.samples = {}
+
+        self.tparams = {}
         self.reset_sessions()
         self.trainer = None
         self.tester = None
@@ -260,8 +262,8 @@ class Manager(object):
 
         self.test_op_args(op, args, kwargs)
 
-        self.steps.append(dict(cell_name=cell_name, op=op, args=args,
-                               kwargs=kwargs))
+        self.steps.append(dict(
+            cell_name=cell_name, op=op, args=args, kwargs=kwargs))
 
     def add_cost(self, op, *args, **kwargs):
         cell_name = None
@@ -279,7 +281,6 @@ class Manager(object):
                         raise AttributeError('cell type %s for cell `%s` has no '
                                              'cost %s' % (C, cell_name, cost_name))
                     op = getattr(C, C._costs[cost_name])
-
             else:
                 if op not in self.cost_functions.keys():
                     raise TypeError('Cost function `%s` not found.' % op)
@@ -291,12 +292,13 @@ class Manager(object):
             raise TypeError
 
         self.test_op_args(op, args, kwargs)
-        self.costs.append(dict(
-            name=name,
-            cell_name=cell_name,
-            op=op,
-            args=args,
-            kwargs=kwargs))
+
+        if name in self.costs.keys():
+            self.logger.warn('Cost `%s` already found. Overwriting.')
+        else:
+            self.logger.debug('Adding costs `%s`' % name)
+        self.costs[name] = dict(
+            cell_name=cell_name, op=op, args=args, kwargs=kwargs)
 
     def add_stat(self, op, *args, **kwargs):
         cell_name = None
@@ -304,9 +306,9 @@ class Manager(object):
             if is_tensor_arg(op):
                 cell_name, stat_name, _ = resolve_tensor_arg(op)
                 cell_type = self.cell_args[cell_name]['cell_type']
+                C = self.resolve_class(cell_type)
                 name = op
 
-                C = self.resolve_class(cell_type)
                 if not stat_name in C._stats.keys():
                     raise AttributeError('cell type %s for cell `%s` has no '
                                          'stat %s' % (C, cell_name, stat_name))
@@ -322,12 +324,13 @@ class Manager(object):
             raise TypeError
 
         self.test_op_args(op, args, kwargs)
-        self.stats.append(dict(
-            name=name,
-            cell_name=cell_name,
-            op=op,
-            args=args,
-            kwargs=kwargs))
+        if name in self.stats.keys():
+            self.logger.warn('Stat `%s` already found. Overwriting.')
+        else:
+            self.logger.debug('Adding stat `%s`' % name)
+
+        self.stats['name'] = dict(
+            cell_name=cell_name, op=op, args=args, kwargs=kwargs)
 
     def prepare_samples(self, arg, shape, name='samples', **kwargs):
         if isinstance(shape, int):
@@ -352,16 +355,14 @@ class Manager(object):
                            % (cell_name, key))
 
         name = _p(cell_name, name)
-        if key is not None:
-            key = arg
+        if key is not None: key = arg
 
         if name in self.samples.keys():
             self.logger.warn('Overwriting samples %s' % name)
+        else:
+            self.logger.debug('Adding samples `%s`' % name)
         self.samples[name] = dict(
-            cell_name=cell_name,
-            P=key,
-            shape=shape,
-            kwargs=kwargs)
+            cell_name=cell_name, key=key, shape=shape, kwargs=kwargs)
 
     # Methods for linking and dim matching -------------------------------------
     def resolve_links(self, name):

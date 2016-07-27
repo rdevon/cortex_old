@@ -207,6 +207,7 @@ def test_autoencoder_graph():
     cost = f(*data)
     y = feed_numpy(manager.cells['mlp1'], data[0])
     y = feed_numpy(manager.cells['mlp2'], y[-1])
+
     _cost = ((y[-1] - data[0]) ** 2).mean()
     assert (abs(cost - _cost) <= _atol), abs(cost - _cost)
     logger.debug('Expected value of autoencoder cost OK within %.2e' % _atol)
@@ -272,12 +273,13 @@ def test_vae(prior='gaussian'):
     session = manager.create_session()
     session.build(test=True)
     f = theano.function(session.inputs, [
-        session.tensors['approx_posterior.samples'], sum(session.costs)] + session.costs)
+        session.tensors['conditional.P'], session.tensors['approx_posterior.samples'], sum(session.costs)] + session.costs)
     data = session.next()
-    samples, cost, nll_term, kl_term = f(*data)
+    p, samples, cost, kl_term, nll_term = f(*data)
 
     q = feed_numpy_d(manager.cells['approx_posterior'], data[0])[-1]
     py_h = feed_numpy_d(manager.cells['conditional'], samples)[-1]
+
     _nll_term = (-data[0][None, :, :] * np.log(py_h) -
                  (1 - data[0]) * np.log(1. - py_h)).sum(axis=-1).mean()
 
@@ -300,8 +302,10 @@ def test_vae(prior='gaussian'):
             samples, mu_pr[None, None, :], log_s_pr[None, None, :])
         _kl_term = (pos_term - neg_term)
 
-    assert (abs(_nll_term - nll_term) <= 1e-5), (_nll_term - nll_term)
-    assert (abs(_kl_term - kl_term) <= 1e-5), (_kl_term - kl_term)
+    assert (abs(_kl_term - kl_term) <= 1e-5), (
+        _kl_term - kl_term, _kl_term, kl_term)
+    assert (abs(_nll_term - nll_term) <= 1e-5), (
+        _nll_term - nll_term, _nll_term, nll_term)
 
     _cost = _nll_term + _kl_term
 

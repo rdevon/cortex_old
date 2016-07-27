@@ -158,8 +158,7 @@ class Trainer(object):
         if epoch >= self.epochs:
             raise StopIteration
         widgets = ['Epoch {epoch} (training {name}, '.format(
-        epoch= epoch, name=name),
-                  Timer(), '): ', Bar()]
+            epoch=epoch, name=name), Timer(), '): ', Bar()]
         self.epoch_pbar = ProgressBar(widgets=widgets, maxval=train.n).start()
         train.reset()
 
@@ -225,70 +224,47 @@ class Trainer(object):
 class Evaluator(object):
     def __init__(self, session, valid_stat='cost'):
         self.session = session
+        self.f_stats = theano.function(session.inputs, self.session.stats)
+
+    def next(self, mode=None):
+        widgets = ['Testing (%s set): ' % mode, Percentage(),
+                   ' (', Timer(), ')']
+        pbar    = ProgressBar(widgets=widgets, maxval=maxvalid).start()
+        results = OrderedDict()
+        self.session.reset_data(mode=mode)
+
+        while True:
+            try:
+                outs = data_iter.next()
+                inps = [outs[k] for k in input_keys]
+                r = self.f_stats()
+
+                for k, v in r.iteritems():
+                    if isinstance(v, theano.sandbox.cuda.CudaNdarray):
+                        r[k] = np.asarray(v)
+                update_dict_of_lists(results, **r)
+
+                if data_iter.pos == -1:
+                    pbar.update(maxvalid)
+                else:
+                    pbar.update(data_iter.pos)
+
+            except StopIteration:
+                print
+                break
+
+        for k, v in results.iteritems():
+            try:
+                results[k] = np.mean(v)
+            except Exception as e:
+                logging.error(k)
+                logging.error(v)
+                raise e
+
 
 class Visualizer(object):
     pass
 
-def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
-    '''Tests the model using a data iterator.
-
-    Args:
-        data_iter (Dataset): dataset iterator.
-        f_test (theano.function)
-        f_test_keys (list): The keys that go with the corresponding list
-            of outputs from `f_test`.
-        input_keys (list): Used to extract multiple modes from dataset
-            for `f_test`.
-        n_samples (Optional[int]) If not None, use only this number of samples
-            as input to `f_test`.
-
-    Returns:
-        OrderedDict: dictionary of np.array results.
-
-    '''
-    data_iter.reset()
-    maxvalid = data_iter.n
-
-    widgets = ['Testing (%s set): ' % data_iter.mode, Percentage(),
-               ' (', Timer(), ')']
-    pbar    = ProgressBar(widgets=widgets, maxval=maxvalid).start()
-    results = OrderedDict()
-    while True:
-        try:
-            outs = data_iter.next()
-            inps = [outs[k] for k in input_keys]
-            r = f_test(*inps)
-            if isinstance(r, dict):
-                results_i = r
-            else:
-                results_i = dict((k, v) for k, v in zip(f_test_keys, r))
-
-            for k, v in results_i.iteritems():
-                if isinstance(v, theano.sandbox.cuda.CudaNdarray):
-                    results_i[k] = np.asarray(v)
-
-            update_dict_of_lists(results, **results_i)
-
-            if data_iter.pos == -1:
-                pbar.update(maxvalid)
-            else:
-                pbar.update(data_iter.pos)
-
-        except StopIteration:
-            print
-            break
-
-    for k, v in results.iteritems():
-        try:
-            results[k] = np.mean(v)
-        except Exception as e:
-            logging.error(k)
-            logging.error(v)
-            raise e
-
-    data_iter.reset()
-
-    return results
 
 def validate(results, best_valid, e, best_epoch, save=None, valid_key=None,
              valid_sign=None, bestfile=None, **kwargs):
