@@ -117,6 +117,7 @@ class Cell(object):
     _dist_map = {}
     _call_args = ['input']
     _costs = {}
+    _evals = {}
     _weights = []
     _test_order = None
     _sample_tensors = []

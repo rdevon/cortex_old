@@ -54,6 +54,7 @@ class Manager(object):
         from ..models import _classes
         from ..datasets import _classes as _dataset_classes
         from ..costs import _costs
+        from ..costs import _stats
 
         if Manager._instance is not None:
             logger.warn('New `Manager` instance. Old one will be lost.')
@@ -61,9 +62,12 @@ class Manager(object):
 
         self.logger = logging.getLogger(
             '.'.join([self.__module__, self.__class__.__name__]))
+
         self.classes = _classes
         self.dataset_classes = _dataset_classes
         self.cost_functions = _costs
+        self.stat_functions = _stats
+
         self.reset()
 
     # General methods
@@ -75,6 +79,9 @@ class Manager(object):
 
     def add_cost_function(name, f):
         self.cost_functions[name] = f
+
+    def add_stat_function(name, f):
+        self.stat_functions[name] = f
 
     @staticmethod
     def split_ref(ref):
@@ -90,6 +97,7 @@ class Manager(object):
         self.datasets = {}
         self.steps = []
         self.costs = []
+        self.stats = []
         self.tparams = {}
         self.samples = {}
         self.reset_sessions()
@@ -108,17 +116,24 @@ class Manager(object):
     # Sessions -----------------------------------------------------------------
     def create_session(self, noise=True):
         from .session import Session
-        self._current_session = Session(noise=noise)
-        return self._current_session
+        session = Session(noise=noise)
+        self._current_session = session
+        return session
 
-    def build_session(self, test=False):
-        if self._current_session is None:
-            self.create_session()
-        self._current_session.build(test=test)
-        return self._current_session
+    def build_session(self, test=False, idx=None):
+        if idx is not None:
+            session = self.get_session(idx=idx)
+        elif self._current_session is None:
+            session = self.create_session()
+        session.build(test=test)
 
-    def get_session(self):
-        return self._current_session
+    def get_session(self, idx=None):
+        from .session import Session
+        if idx is not None:
+            session = Session.sessions[idx]
+        else:
+            session = self._current_session
+        return session
 
     def reset_sessions(self):
         from .session import Session
@@ -255,6 +270,8 @@ class Manager(object):
                 cell_name, cost_name, _ = resolve_tensor_arg(op)
                 cell_type = self.cell_args[cell_name]['cell_type']
                 C = self.resolve_class(cell_type)
+                name = op
+
                 if cost_name == 'cost' and hasattr(C, '_cost'):
                     op = getattr(C, '_cost')
                 else:
@@ -262,13 +279,51 @@ class Manager(object):
                         raise AttributeError('cell type %s for cell `%s` has no '
                                              'cost %s' % (C, cell_name, cost_name))
                     op = getattr(C, C._costs[cost_name])
+
             else:
                 if op not in self.cost_functions.keys():
                     raise TypeError('Cost function `%s` not found.' % op)
+                name = op
                 op = self.cost_functions[op]
+        elif hasattr(op, '__call__'):
+            name = op.__name__
+        else:
+            raise TypeError
 
         self.test_op_args(op, args, kwargs)
         self.costs.append(dict(
+            name=name,
+            cell_name=cell_name,
+            op=op,
+            args=args,
+            kwargs=kwargs))
+
+    def add_stat(self, op, *args, **kwargs):
+        cell_name = None
+        if isinstance(op, str):
+            if is_tensor_arg(op):
+                cell_name, stat_name, _ = resolve_tensor_arg(op)
+                cell_type = self.cell_args[cell_name]['cell_type']
+                name = op
+
+                C = self.resolve_class(cell_type)
+                if not stat_name in C._stats.keys():
+                    raise AttributeError('cell type %s for cell `%s` has no '
+                                         'stat %s' % (C, cell_name, stat_name))
+                    op = getattr(C, C._stats[stat_name])
+            else:
+                if op not in self.stat_functions.keys():
+                    raise TypeError('Stat function `%s` not found.' % op)
+                name = op
+                op = self.stat_functions[op]
+        elif hasattr(op, '__call__'):
+            name = op.__name__
+        else:
+            raise TypeError
+
+        self.test_op_args(op, args, kwargs)
+        self.stats.append(dict(
+            name=name,
             cell_name=cell_name,
             op=op,
             args=args,

@@ -199,7 +199,8 @@ def test_autoencoder_graph():
     manager.reset()
     test_make_autoencoder()
     manager.add_cost('squared_error', Y_hat='mlp2.output', Y='fibrous.input')
-    session = manager.build_session()
+    session = manager.create_session()
+    session.build()
 
     f = theano.function(session.inputs, sum(session.costs))
     data = session.next(mode='train')
@@ -233,7 +234,8 @@ def test_prob_autoencoder_graph():
     manager.reset()
     test_make_prob_autoencoder()
     manager.add_cost('mlp2.negative_log_likelihood', X='fibrous.input')
-    session = manager.build_session()
+    session = manager.create_session()
+    session.build()
 
     f = theano.function(session.inputs, sum(session.costs))
     data = session.next(mode='train')
@@ -267,7 +269,8 @@ def test_vae(prior='gaussian'):
                      P_samples='approx_posterior.samples',
                      cells=['approx_posterior.distribution', 'prior'])
 
-    session = manager.build_session(test=True)
+    session = manager.create_session()
+    session.build(test=True)
     f = theano.function(session.inputs, [
         session.tensors['approx_posterior.samples'], sum(session.costs)] + session.costs)
     data = session.next()

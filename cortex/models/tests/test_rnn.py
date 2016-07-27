@@ -121,7 +121,8 @@ def test_make_rnn_graph():
 def test_rnn_cost():
     test_make_rnn_graph()
     manager.add_cost('mlp.negative_log_likelihood', X='dummy_gaussian.input')
-    session = manager.build_session(test=True)
+    session = manager.create_session()
+    session.build(test=True)
 
     f = theano.function(session.inputs, sum(session.costs), updates=session.updates)
     data = session.next(mode='train')
@@ -149,7 +150,8 @@ def test_genrnn_cost():
     test_make_genrnn_graph()
     manager.add_cost('rnn.negative_log_likelihood',
                      X='dummy_binomial.input')
-    session = manager.build_session(test=True)
+    session = manager.create_session()
+    session.build(test=True)
     f = theano.function(session.inputs, sum(session.costs), updates=session.updates)
     data = session.next(mode='train')
     cost = f(*data)
@@ -173,7 +175,8 @@ def test_sample():
     manager.match_dims('rnn.P', 'dummy_binomial.input')
     manager.prepare_samples('rnn', (7, 3))
     manager.build()
-    session = manager.build_session()
+    session = manager.create_session()
+    session.build()
     f = theano.function([], session.tensors['rnn.samples'],
         updates=session.updates)
 

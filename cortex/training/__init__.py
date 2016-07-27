@@ -25,20 +25,8 @@ def train(module, cost, tparams, updates, constants, f_test=None, f_save=None,
         module.inputs.values(), cost, tparams, constants, updates, [],
         **module.learning_args)
 
-    print_section('Actually running (main loop)')
     monitor = SimpleMonitor()
 
-    main_loop(
-        module.dataset, module.valid_dataset,
-        f_grad_shared, f_grad_updates, f_test,
-        save=f_save, save_images=f_viz, f_outs=f_outs, f_profile=f_profile,
-        monitor=monitor, monitor_gradients=monitor_gradients,
-        out_path=module.out_path,
-        name=module.name,
-        test_every=test_every,
-        show_every=show_every,
-        input_keys=module.input_keys,
-        **learning_args)
 
 def main_loop(train, valid,
               f_grad_shared, f_grad_updates, f_test,
@@ -50,45 +38,7 @@ def main_loop(train, valid,
               name=None,
               save=None, save_images=None,
               epochs=None, learning_rate=None, learning_rate_scheduler=None,
-              monitor=None,
-              out_path=None,
-              **validation_args):
-    '''Generic main loop.
-
-    Typical main loop. For special applications, a different loop is better.
-
-    Args:
-        train (Dataset): Training dataset.
-        valid (Dataset): Validation dataset.
-        f_grad_shared (theano.function): Computes gradients.
-        f_grad_updates (theano.function): Updates parameters.
-        f_test (theano.function): Tests model are returns results.
-        f_test_keys (Optional[list]): List of keys that go with `f_test` if
-            the output is a list, not a dictionary.
-        f_outs (Optional[theano.function]): Function for extra outputs.
-        f_profile (Optional[theano.function]): Profile function for parameters.
-        input_keys (Optional[list]): If not None, used to extract
-            multiple modes from dataset for `f_grad_shared`.
-        f_extra (theano.function): Function that is run just prior to testing.
-        test_every (Optional[int]): If not None, then controls how many epochs
-            before test.
-        show_every (Optional[int]): If not None, then controls how many epochs
-            before saving images.
-        output_every (Optional[int]): If not None, print rvals from
-            `f_grad_shared` and save images.
-        monitor_grads (bool): If true, add gradients averages to monitor.
-        name (str): Name of experiment.
-        save (function): Saving function for parameters.
-        save_images (Optional[function]): Function to save images.
-        epochs (int): Number of training epochs.
-        learning_rate (float).
-        learning_rate_scheduler (Optional[Scheduler]): For scheduling learning
-            rate.
-        monitor (utils.monitor.Monitor).
-        out_path (str): Director path for output files.
-        **validation_args: Arguments for test.
-
-    '''
+              monitor=None,):
 
     best_valid = float('inf')
     best_epoch = 0
@@ -112,9 +62,11 @@ def main_loop(train, valid,
             except StopIteration:
                 if (test_every is None) or ((e + 1) % test_every == 0):
                     print
+
                     if f_extra is not None:
                         logging.info('Performing initial evaluation function...')
                         f_extra()
+
                     epoch_t1 = time.time()
                     dt_epoch = epoch_t1 - epoch_t0
                     training_time += dt_epoch
@@ -125,6 +77,7 @@ def main_loop(train, valid,
                         results_valid, best_valid, e, best_epoch,
                         bestfile=bestfile,
                         save=save, **validation_args)
+
                     if monitor is not None:
                         monitor.update(**results)
                         if monitor_gradients:
@@ -135,12 +88,14 @@ def main_loop(train, valid,
                                        learning_rate=learning_rate[0])
                         monitor.update_valid(**results_valid)
                         monitor.display()
+
                         if out_path is not None:
                             monitor.save(path.join(out_path, 'monitor.png'))
                             monitor.save_stats(
                                 path.join(out_path, 'stats_train.npz'))
                             monitor.save_stats_valid(
                                 path.join(out_path, 'stats_valid.npz'))
+
                 if (save_images is not None
                     and out_path is not None
                     and (show_every is None or ((e + 1) % show_every == 0))):
@@ -261,16 +216,117 @@ class Trainer(object):
 
         lr = T.scalar(name='lr')
         f_grad_shared, f_grad_updates = eval('op.' + optimizer)(
-            lr,
-            tparams,
-            grads,
-            session.inputs,
-            cost,
-            extra_ups=session.updates,
+            lr, tparams, grads, session.inputs, cost, extra_ups=session.updates,
             **optimizer_args)
 
         self.f_grad_shared = f_grad_shared
         self.f_grad_updates = f_grad_updates
+
+class Evaluator(object):
+    def __init__(self, session, valid_stat='cost'):
+        self.session = session
+
+class Visualizer(object):
+    pass
+
+def test(data_iter, f_test, f_test_keys, input_keys, n_samples=None):
+    '''Tests the model using a data iterator.
+
+    Args:
+        data_iter (Dataset): dataset iterator.
+        f_test (theano.function)
+        f_test_keys (list): The keys that go with the corresponding list
+            of outputs from `f_test`.
+        input_keys (list): Used to extract multiple modes from dataset
+            for `f_test`.
+        n_samples (Optional[int]) If not None, use only this number of samples
+            as input to `f_test`.
+
+    Returns:
+        OrderedDict: dictionary of np.array results.
+
+    '''
+    data_iter.reset()
+    maxvalid = data_iter.n
+
+    widgets = ['Testing (%s set): ' % data_iter.mode, Percentage(),
+               ' (', Timer(), ')']
+    pbar    = ProgressBar(widgets=widgets, maxval=maxvalid).start()
+    results = OrderedDict()
+    while True:
+        try:
+            outs = data_iter.next()
+            inps = [outs[k] for k in input_keys]
+            r = f_test(*inps)
+            if isinstance(r, dict):
+                results_i = r
+            else:
+                results_i = dict((k, v) for k, v in zip(f_test_keys, r))
+
+            for k, v in results_i.iteritems():
+                if isinstance(v, theano.sandbox.cuda.CudaNdarray):
+                    results_i[k] = np.asarray(v)
+
+            update_dict_of_lists(results, **results_i)
+
+            if data_iter.pos == -1:
+                pbar.update(maxvalid)
+            else:
+                pbar.update(data_iter.pos)
+
+        except StopIteration:
+            print
+            break
+
+    for k, v in results.iteritems():
+        try:
+            results[k] = np.mean(v)
+        except Exception as e:
+            logging.error(k)
+            logging.error(v)
+            raise e
+
+    data_iter.reset()
+
+    return results
+
+def validate(results, best_valid, e, best_epoch, save=None, valid_key=None,
+             valid_sign=None, bestfile=None, **kwargs):
+    '''Generic validation method.
+
+    Compares the validation result against previous best.
+
+    Args:
+        results (OrderedDict): dictionary of np.array results.
+        best_valid (float): Best pervious value.
+        e (int): Epoch
+        best_epoch (int): Epoch for best_valid.
+        save (function): Method for saving params.
+        valid_key (str): Key from results to test against best_valid.
+        bestfile (str): Path to best file.
+
+    Returns:
+        float: best valid
+        int: best epoch
+
+    '''
+    warn_kwargs(None, kwargs)
+
+    valid_value = results[valid_key]
+    if valid_sign == '-':
+        valid_value *= -1
+
+    if valid_value < best_valid:
+        print 'Found best %s: %.2f' % (valid_key, valid_value)
+        best_valid = valid_value
+        best_epoch = e
+        if save is not None and bestfile is not None:
+            print 'Saving best to %s' % bestfile
+            save(bestfile)
+    else:
+        print 'Best (%.2f) at epoch %d' % (best_valid, best_epoch)
+
+    return best_valid, best_epoch
 
 def main(args=None):
     if args is None:

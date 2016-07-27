@@ -61,3 +61,4 @@ def kl_divergence(P=None, Q=None, P_samples=None, cells=None):
     return (pos_term - neg_term).mean()
 
 _costs = {'squared_error': squared_error, 'kl_divergence': kl_divergence}
+_stats = {}

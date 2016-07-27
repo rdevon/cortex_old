@@ -23,7 +23,6 @@ class Session(object):
         self.idx = self._idx
         self._idx += 1
         self.sessions.append(self)
-
         self.manager = manager
         self.reset()
         self.noise = noise
@@ -41,6 +40,109 @@ class Session(object):
         self.inputs = []
         self.datasets = []
         self.input_keys = []
+
+    def add_step(self, step):
+        manager = self.manager
+        tensors = self.tensors
+
+        self.logger.debug('Adding step: %s' % pprint.pformat(dict(step)))
+        op = step['op']
+        args, kwargs = self.resolve_op_args(step['args'], step['kwargs'])
+
+        cell_name = step['cell_name']
+        if cell_name is not None:
+            cell = manager.cells[cell_name]
+            out = op(cell, *args, **kwargs)
+            key_prefix = cell_name
+        else:
+            name = op.__name__
+            out = op(*args, **kwargs)
+            key_prefix = name
+            cell = None
+
+        if isinstance(out, T.TensorVariable):
+            out = dict(output=out)
+
+        for k, v in out.iteritems():
+            if k == 'updates':
+                self.updates += v
+            elif k == 'constants':
+                self.constants += v
+            else:
+                key = key_prefix + '.' + k
+                if key in tensors.keys():
+                    raise KeyError('Cannot overwrite %s' % key)
+                else:
+                    self.tensors[key] = v
+
+        if test:
+            data = self.next()
+
+            if cell is None or (cell is not None and cell._test_order is None):
+                test_order = out.keys()
+            else:
+                test_order = cell._test_order
+
+            for key in test_order:
+                self.logger.info('Testing `%s` from step %s' % (key, key_prefix))
+                t = out[key]
+                f = theano.function(self.inputs, t, updates=self.updates)
+                try:
+                    t_ = f(*data)
+                    self.logger.info('Tensor `%s` for `%s` has shape %s '
+                                     '(passes without error)'
+                                     % (key, key_prefix, t_.shape))
+                except ValueError as e:
+                    self.logger.error(
+                        'Test function failed for tensor `%s` in `%s`'
+                        % (key, key_prefix))
+                    if cell is not None:
+                        self.logger.info('Cell: %s' % cell)
+
+                    for d in data:
+                        self.logger.info('Data shape: %s' % (d.shape,))
+
+                    raise e
+
+    def add_cost(self, cost):
+        manager = self.manager
+        tensors = self.tensors
+        self.logger.debug('Adding cost: %s' % pprint.pformat(dict(cost)))
+        op = cost['op']
+        args, kwargs = self.resolve_op_args(cost['args'], cost['kwargs'])
+        cell_name = cost['cell_name']
+        if cell_name is not None:
+            cell = manager.cells[cell_name]
+            out = op(cell, *args, **kwargs)
+        else:
+            out = op(*args, **kwargs)
+
+        self.costs.append(out)
+
+        if test:
+            self.logger.info('Testing cost')
+            data = self.next()
+
+            f = theano.function(self.inputs, out, updates=self.updates)
+            self.test(f, )
+
+    def test(f, data, key, key_prefix, cell=None):
+        try:
+            t_ = f(*data)
+            self.logger.info('Tensor `%s` for `%s` has shape %s '
+                             '(passes without error)'
+                             % (key, key_prefix, t_.shape))
+        except ValueError as e:
+            self.logger.error(
+                'Test function failed for tensor `%s` in `%s`'
+                % (key, key_prefix))
+            if cell is not None:
+                self.logger.info('Cell: %s' % cell)
+
+            for d in data:
+                self.logger.info('Data shape: %s' % (d.shape,))
+
+            raise e
 
     def add_samples(self, arg):
         manager = self.manager
@@ -134,99 +236,10 @@ class Session(object):
             self.noise_switch.switch('off')
 
         for step in manager.steps:
-            self.logger.debug('Adding step: %s' % pprint.pformat(dict(step)))
-            op = step['op']
-            args, kwargs = self.resolve_op_args(step['args'], step['kwargs'])
-
-            cell_name = step['cell_name']
-            if cell_name is not None:
-                cell = manager.cells[cell_name]
-                out = op(cell, *args, **kwargs)
-                key_prefix = cell_name
-            else:
-                name = op.__name__
-                out = op(*args, **kwargs)
-                key_prefix = name
-                cell = None
-
-            if isinstance(out, T.TensorVariable):
-                out = dict(output=out)
-
-            for k, v in out.iteritems():
-                if k == 'updates':
-                    self.updates += v
-                elif k == 'constants':
-                    self.constants += v
-                else:
-                    key = key_prefix + '.' + k
-                    if key in tensors.keys():
-                        raise KeyError('Cannot overwrite %s' % key)
-                    else:
-                        self.tensors[key] = v
-
-            if test:
-                data = self.next()
-
-                if cell is None or (cell is not None and cell._test_order is None):
-                    test_order = out.keys()
-                else:
-                    test_order = cell._test_order
-
-                for key in test_order:
-                    self.logger.info('Testing `%s` from step %s' % (key, key_prefix))
-                    t = out[key]
-                    f = theano.function(self.inputs, t, updates=self.updates)
-                    try:
-                        t_ = f(*data)
-                        self.logger.info('Tensor `%s` for `%s` has shape %s '
-                                         '(passes without error)'
-                                         % (key, key_prefix, t_.shape))
-                    except ValueError as e:
-                        self.logger.error(
-                            'Test function failed for tensor `%s` in `%s`'
-                            % (key, key_prefix))
-                        if cell is not None:
-                            self.logger.info('Cell: %s' % cell)
-
-                        for d in data:
-                            self.logger.info('Data shape: %s' % (d.shape,))
-
-                        raise e
+            self.add_step(step)
 
         for cost in manager.costs:
-            self.logger.debug('Adding cost: %s' % pprint.pformat(dict(cost)))
-            op = cost['op']
-            args, kwargs = self.resolve_op_args(cost['args'], cost['kwargs'])
-            cell_name = cost['cell_name']
-            if cell_name is not None:
-                cell = manager.cells[cell_name]
-                out = op(cell, *args, **kwargs)
-            else:
-                out = op(*args, **kwargs)
-
-            self.costs.append(out)
-
-            if test:
-                self.logger.info('Testing cost')
-                data = self.next()
-
-                f = theano.function(self.inputs, out, updates=self.updates)
-                try:
-                    t_ = f(*data)
-                    self.logger.info('Tensor `%s` for `%s` has shape %s '
-                                     '(passes without error)'
-                                     % (key, key_prefix, t_.shape))
-                except ValueError as e:
-                    self.logger.error(
-                        'Test function failed for tensor `%s` in `%s`'
-                        % (key, key_prefix))
-                    if cell is not None:
-                        self.logger.info('Cell: %s' % cell)
-
-                    for d in data:
-                        self.logger.info('Data shape: %s' % (d.shape,))
-
-                    raise e
+            self.add_cost(step)
 
         for samples in manager.samples:
             if samples not in tensors.keys():
