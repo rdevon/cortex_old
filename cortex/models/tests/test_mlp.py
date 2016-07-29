@@ -187,7 +187,7 @@ def test_feed_forward_dmlp(mlp=None, X=T.matrix('X', dtype=floatX), x=None,
 
 def test_make_autoencoder(dim_in=13):
     manager.reset()
-    data_iter = Euclidean(batch_size=10)
+    data_iter = Euclidean()
     manager.prepare_cell('MLP', name='mlp1', dim_hs=[5, 7])
     manager.prepare_cell('MLP', name='mlp2', dim_in=dim_in, dim_hs=[3, 11])
     manager.add_step('mlp1', 'fibrous.input')
@@ -202,8 +202,8 @@ def test_autoencoder_graph():
     session = manager.create_session()
     session.build()
 
-    f = theano.function(session.inputs, sum(session.costs))
-    data = session.next(mode='train')
+    f = theano.function(session.inputs, session.cost)
+    data = session.next_batch(batch_size=10, mode='train')
     cost = f(*data)
     y = feed_numpy(manager.cells['mlp1'], data[0])
     y = feed_numpy(manager.cells['mlp2'], y[-1])
@@ -214,7 +214,7 @@ def test_autoencoder_graph():
 
 def test_make_prob_autoencoder():
     manager.reset()
-    data_iter = Euclidean(batch_size=10)
+    data_iter = Euclidean()
     manager.prepare_cell('MLP', name='mlp1', dim_hs=[5, 7])
     manager.prepare_cell('DistributionMLP', name='mlp2', dim_in=13, dim_hs=[3, 11])
     manager.add_step('mlp1', 'fibrous.input')
@@ -238,8 +238,8 @@ def test_prob_autoencoder_graph():
     session = manager.create_session()
     session.build()
 
-    f = theano.function(session.inputs, sum(session.costs))
-    data = session.next(mode='train')
+    f = theano.function(session.inputs, session.cost)
+    data = session.next_batch(batch_size=10, mode='train')
     cost = f(*data)
     y = feed_numpy(manager.cells['mlp1'], data[0])
     y = feed_numpy(manager.cells['mlp2.mlp'], y[-1])[-1]
@@ -251,8 +251,7 @@ def test_prob_autoencoder_graph():
 
 def test_vae(prior='gaussian'):
     manager.reset()
-    manager.prepare_data('dummy', name='data', batch_size=11, n_samples=103,
-                         data_shape=(13,))
+    manager.prepare_data('dummy', name='data', n_samples=103, data_shape=(13,))
     manager.prepare_cell('DistributionMLP', name='approx_posterior',
                          dim_hs=[27], h_act='softplus')
     manager.prepare_cell(prior, name='prior', dim=5)
@@ -273,8 +272,8 @@ def test_vae(prior='gaussian'):
     session = manager.create_session()
     session.build(test=True)
     f = theano.function(session.inputs, [
-        session.tensors['conditional.P'], session.tensors['approx_posterior.samples'], sum(session.costs)] + session.costs)
-    data = session.next()
+        session.tensors['conditional.P'], session.tensors['approx_posterior.samples'], session.cost] + session.costs.values())
+    data = session.next_batch(batch_size=11)
     p, samples, cost, kl_term, nll_term = f(*data)
 
     q = feed_numpy_d(manager.cells['approx_posterior'], data[0])[-1]

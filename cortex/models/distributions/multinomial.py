@@ -6,7 +6,7 @@ from collections import OrderedDict
 import numpy as np
 from theano import tensor as T
 
-from . import Distribution
+from . import Distribution, _clip
 from ...utils import floatX
 
 
@@ -53,5 +53,10 @@ class Multinomial(Distribution):
         z = np.zeros((self.dim,)).astype(floatX)
         self.params = OrderedDict(z=z)
 
+    def quantile(self, epsilon, P):
+        return self.trng.multinomial(pvals=P, size=P.shape).astype(floatX)
+
+    def random_variables(self, size):
+        return self.trng.uniform(size, dtype=floatX)
 
 _classes = {'multinomial': Multinomial}

@@ -9,6 +9,8 @@ from theano import tensor as T
 
 from . import get_manager, is_tensor_arg, resolve_tensor_arg
 from ..models import get_noise_switch
+from ..utils import floatX
+from ..utils.tools import _p
 
 
 class Session(object):
@@ -34,7 +36,8 @@ class Session(object):
 
     def reset(self):
         self.tensors = {}
-        self.costs = []
+        self.cost = T.constant(0.).astype(floatX)
+        self.costs = {}
         self.stats = {}
 
         self.updates = theano.OrderedUpdates()
@@ -42,6 +45,7 @@ class Session(object):
         self.inputs = []
         self.datasets = []
         self.input_keys = []
+        self.data_pos = 0
 
     def add_tensors(self, out, key_prefix=None):
 
@@ -83,15 +87,17 @@ class Session(object):
         self.add_tensors(out, key_prefix=key_prefix)
 
         if test:
+            self.reset_data()
             if cell is None or (cell is not None and cell._test_order is None):
                 test_order = out.keys()
             else:
                 test_order = cell._test_order
 
-            data = self.next()
+            data = self.next_batch(batch_size=10)
 
             for key in test_order:
-                self.logger.info('Testing `%s` from step %s' % (key, key_prefix))
+                self.logger.info('Testing `%s` from step %s with batchsize 10'
+                                 % (key, key_prefix))
                 t = out[key]
                 f = theano.function(self.inputs, t, updates=self.updates)
                 self.test(data, f, key, key_prefix, cell=cell)
@@ -110,12 +116,13 @@ class Session(object):
             cell = None
             out = op(*args, **kwargs)
 
-        self.costs.append(out)
-        self.stats[name] = out
+        self.costs[name] = out
+        self.cost += out
 
         if test:
-            data = self.next()
-            self.logger.info('Testing cost')
+            self.reset_data()
+            data = self.next_batch(batch_size=10)
+            self.logger.info('Testing cost with batchsize 10')
             f = theano.function(self.inputs, out, updates=self.updates)
             self.test(data, f, key=name, key_prefix='cost', cell=cell)
 
@@ -133,13 +140,20 @@ class Session(object):
             cell = None
             out = op(*args, **kwargs)
 
-        self.stats[name] = out
+        if isinstance(out, dict):
+            self.stats.update(**out)
+        else:
+            self.stats[name] = out
 
         if test:
-            data = self.next()
-            self.logger.info('Testing stat')
-            f = theano.function(self.inputs, out, updates=self.updates)
-            self.test(data, f, key=name, key_prefix='stat', cell=cell)
+            if not isinstance(out, dict):
+                out = dict(stat=out)
+            for k, o in out.iteritems():
+                self.reset_data()
+                data = self.next_batch(batch_size=10)
+                self.logger.info('Testing stat with batchsize 10')
+                f = theano.function(self.inputs, o, updates=self.updates)
+                self.test(data, f, key=k, key_prefix=name, cell=cell)
 
     def add_samples(self, name=None, op=None, key=None, shape=None,
                     cell_name=None, kwargs=None):
@@ -261,17 +275,81 @@ class Session(object):
         seen = set()
         dataset_names = [x for x in self.datasets
                          if not (x in seen or seen.add(x))]
-        return dataset_name
+        return dataset_names
 
-    def get_dataset_batches(self, mode=None):
+    def get_dataset_size(self, mode=None):
         dataset_names = self.get_dataset_names()
-        n = float('infty')
+        n = None
         for name in dataset_names:
+            dataset = self.manager.datasets[name]
+            if mode is None:
+                ms = dataset.keys()
+                if 'train' in ms:
+                    m = 'train'
+                else:
+                    ms.pop('dims', 'dimensions', 'idx')
+                    m = ms[0]
+            else:
+                m = mode
+            if n is None:
+                n = dataset[m].n_samples
+            else:
+                n = min(n, dataset[m].n_samples)
 
+        return n
 
-    def next(self, mode=None, batch_size=None):
+    def next_batch(self, mode=None, batch_size=None):
+        if batch_size is None: raise TypeError(
+            '`batch_size` keyword must be set.')
         data = []
         batches = {}
+        dataset_names = self.get_dataset_names()
+
+        try:
+            for name in dataset_names:
+                dataset = self.manager.datasets[name]
+                if mode is None:
+                    ms = dataset.keys()
+                    if 'train' in ms:
+                        m = 'train'
+                    else:
+                        ms.pop('dims', 'dimensions', 'idx')
+                        m = ms[0]
+                else:
+                    m = mode
+
+                batch = dataset[m].next(batch_size)
+                batches[name] = batch
+                if name == dataset_names[0]:
+                    self.data_pos = dataset[m].pos
+                else:
+                    if self.data_pos != -1 and self.data_pos != dataset[m].pos:
+                        raise ValueError('Dataset position mismatch. (%d vs %d)'
+                                         % (self.data_pos, dataset[m].pos))
+        except StopIteration:
+            for name in dataset_names:
+                if mode is None:
+                    ms = dataset.keys()
+                    if 'train' in ms:
+                        m = 'train'
+                    else:
+                        ms.pop('dims', 'dimensions', 'idx')
+                        m = ms[0]
+                else:
+                    m = mode
+                dataset[m].reset()
+            raise StopIteration
+
+        for name, key in zip(self.datasets, self.input_keys):
+            batch = batches[name]
+            data.append(batch[key])
+
+        if self.data_pos == -1:
+            self.data_pos = self.get_dataset_size(mode=mode)
+
+        return data
+
+    def reset_data(self, mode=None):
         dataset_names = self.get_dataset_names()
 
         for name in dataset_names:
@@ -286,24 +364,5 @@ class Session(object):
             else:
                 m = mode
 
-            batch = dataset[m].next(batch_size=batch_size)
-            batches[name] = batch
-
-        for name, key in zip(self.datasets, self.input_keys):
-            batch = batches[name]
-            data.append(batch[key])
-
-        return data
-
-    def reset_data(self, mode=None):
-        dataset_names = self.get_dataset_names()
-
-        if mode is None:
-            ms = dataset.keys()
-            if 'train' in ms:
-                m = 'train'
-            else:
-                ms.pop('dims', 'dimensions', 'idx')
-                m = ms[0]
-
-        self.datasets[m].reset()
+            dataset[m].reset()
+        self.data_pos = 0

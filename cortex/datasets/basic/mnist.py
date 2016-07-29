@@ -5,6 +5,7 @@ MNIST dataset
 from collections import OrderedDict
 import cPickle
 import gzip
+import logging
 import multiprocessing as mp
 import numpy as np
 from os import path
@@ -21,6 +22,9 @@ from .. import BasicDataset, Dataset
 from ...utils import concatenate, scan, _rng
 from ...utils.tools import resolve_path
 from ...utils.vis_utils import tile_raster_images
+
+
+logger = logging.getLogger(__name__)
 
 
 class MNIST(BasicDataset):
@@ -45,13 +49,13 @@ class MNIST(BasicDataset):
             **kwargs: extra keyword arguments passed to BasicDataset
 
         '''
+        if source is None:
+            raise TypeError('No source file provided')
+
+        logger.info('Loading {name} ({mode}) from {source}'.format(
+            name=name, mode=mode, source=source))
 
         source = resolve_path(source)
-
-        if source is None:
-            raise ValueError('No source file provided')
-        print 'Loading {name} ({mode}) from {source}'.format(
-            name=name, mode=mode, source=source)
 
         X, Y = self.get_data(source, mode)
 
@@ -59,8 +63,8 @@ class MNIST(BasicDataset):
             X = np.array([x for i, x in enumerate(X) if Y[i] in restrict_digits])
             Y = np.array([y for i, y in enumerate(Y) if Y[i] in restrict_digits])
 
-        data = {'input': X, 'label': Y}
-        distributions = {'input': 'binomial', 'label': 'multinomial'}
+        data = {'input': X, 'labels': Y}
+        distributions = {'input': 'binomial', 'labels': 'multinomial'}
 
         super(MNIST, self).__init__(data, distributions=distributions,
                                     name=name, mode=mode, **kwargs)
@@ -144,4 +148,4 @@ class MNIST(BasicDataset):
             X=X, img_shape=fshape, tile_shape=tshape,
             tile_spacing=(1, 1)))
 
-_classes = {'mnist': MNIST}
+_classes = {'MNIST': MNIST}

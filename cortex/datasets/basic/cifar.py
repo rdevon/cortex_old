@@ -186,4 +186,4 @@ class CIFAR(object):
     def translate(self, x):
         return x
 
-_classes = {'cifar': CIFAR}
+_classes = {'CIFAR': CIFAR}

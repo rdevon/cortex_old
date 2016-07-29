@@ -9,7 +9,7 @@ from ...utils import floatX, intX
 
 class Dummy(BasicDataset):
     def __init__(self, n_samples, data_shape, distribution='binomial',
-                 name=None, **kwargs):
+                 name=None, mode='train', **kwargs):
         shape = list((n_samples,) + data_shape)
         if distribution == 'binomial':
             X = np.random.binomial(
@@ -24,6 +24,6 @@ class Dummy(BasicDataset):
         data = {'input': X}
         distributions = {'input': distribution}
         super(Dummy, self).__init__(data, distributions, name=name,
-                                    mode='train', **kwargs)
+                                    mode=mode, **kwargs)
 
 _classes = {'dummy': Dummy}

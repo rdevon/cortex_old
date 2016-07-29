@@ -12,6 +12,7 @@ from .utils.extra import (
     complete_path, query_yes_no, write_default_theanorc, write_path_conf)
 
 
+__version__ = '0.3a'
 logger = logging.getLogger(__name__)
 manager = get_manager()
 

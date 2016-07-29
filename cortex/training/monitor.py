@@ -1,21 +1,17 @@
 '''
 Module for monitor class.
 '''
-import matplotlib
-from matplotlib import pylab as plt
+
 from collections import OrderedDict
 import cPickle as pkl
 import numpy as np
 import os
-import pprint
-import signal
-import time
+from terminaltables import AsciiTable
 
-from tools import check_bad_nums
-from tools import update_dict_of_lists
+from ..utils.tools import update_dict_of_lists
 
 
-class SimpleMonitor(object):
+class BasicMonitor(object):
     '''Simple monitor for displaying and saving results.
 
     Basic template monitor. Should be interchangeable in training for
@@ -25,57 +21,41 @@ class SimpleMonitor(object):
         d: OrderedDict: dictionary of results.
         d_valid: OrderedDict: dictionary of results for validation.
     '''
-    def __init__(self, *args):
-        self.d = OrderedDict()
-        self.d_valid = OrderedDict()
+    def __init__(self, modes=None):
+        if modes is None:
+            raise TypeError('Keyword value `modes` must be set.')
 
-    def update(self, **kwargs):
-        update_dict_of_lists(self.d, **kwargs)
+        self.stats = {}
+        for mode in modes:
+            if not isinstance(mode, str):
+                raise TypeError('Modes must be strings.')
+            d = OrderedDict()
+            self.stats[mode] = d
 
-    def update_valid(self, **kwargs):
-        update_dict_of_lists(self.d_valid, **kwargs)
+        self.sections = {}
 
-    def add(self, **kwargs):
-        for k, v in kwargs.iteritems():
-            self.d[k] = v
+    def add_section(self, name, keys):
+        self.sections[name] = keys
 
-    def simple_display(self, d):
-        length = len('\t' ) + max(len(k) for k in d.keys())
-        for k, vs in d.iteritems():
-            s = '\t%s' % k
-            s += ' ' * (length - len(s))
-            s += ' |\t%.4g' % vs
-            print s
+    def update(self, mode, **kwargs):
+        update_dict_of_lists(self.stats[mode], **kwargs)
 
     def display(self):
         '''Displays the stats.
 
-        This uses some basic heuristics to get stats into rows with validation
-        (if exists) as well as difference from last step.
         '''
-        d = OrderedDict()
-        for k in sorted(self.d):
-            if not k.startswith('d_'):
-                d[k] = [self.d[k][-1]]
-                if k in self.d_valid.keys():
-                    d[k].append(self.d_valid[k][-1])
-                    if len(self.d_valid[k]) > 1:
-                        d[k].append(self.d_valid[k][-1] - self.d_valid[k][-2])
-                else:
-                    d[k].append(None)
+        for section in self.sections.keys():
+            table_data = [['Name'] + self.stats.keys()]
+            for stat in self.sections[section]:
+                td = [stat]
+                for mode in self.stats.keys():
+                    td.append(self.stats[mode][stat][-1])
+                table_data.append(td)
 
-        length = len('\t' ) + max(len(k) for k in d.keys()) + len(' (train / valid) |')
-        for k, vs in d.iteritems():
-            s = '\t%s' % k
-            if len(vs) > 1 and vs[1] is not None:
-                s += ' (train / valid)'
-            s += ' ' * (length - len(s))
-            s += ' |\t%.4g' % vs[0]
-            if len(vs) > 1 and vs[1] is not None:
-                s += ' / %.4g  ' % vs[1]
-            if len(vs) > 2:
-                s += '\t' + unichr(0x394).encode('utf-8') + '=%.4g' % vs[2]
-            print s
+            table = AsciiTable(table_data, section.title())
+            #table.inner_row_border = True
+            table.justify_columns[2] = 'right'
+            print(table.table)
 
     def save(self, out_path):
         '''Saves a figure for the monitor

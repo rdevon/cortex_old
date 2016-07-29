@@ -56,9 +56,6 @@ class Binomial(Distribution):
         z = np.zeros((self.dim,)).astype(floatX)
         self.params = OrderedDict(z=z)
 
-    def get_params(self):
-        return [self.z]
-
     def quantile(self, epsilon, P):
         return (epsilon <= P).astype(floatX)
 

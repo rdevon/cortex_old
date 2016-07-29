@@ -65,3 +65,5 @@ def l2_decay(self, rate, **kwargs):
     )
 
     return rval
+
+_costs = {'l1_decay': l1_decay, 'l2_decay': l2_decay}

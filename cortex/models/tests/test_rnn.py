@@ -107,9 +107,9 @@ def test_feed(rnn=None, X=T.tensor3('X', dtype=floatX), x=None, batch_size=23,
 
 def test_make_rnn_graph():
     manager.reset()
-    manager.prepare_data('dummy', batch_size=11, n_samples=103, data_shape=(37, 2),
+    manager.prepare_data('dummy', n_samples=103, data_shape=(37, 2),
                          transpose={'input': (1, 0, 2)})
-    manager.prepare_data('dummy', batch_size=11, n_samples=103, data_shape=(2,),
+    manager.prepare_data('dummy', n_samples=103, data_shape=(2,),
                          distribution='gaussian')
     manager.prepare_cell('RNN', name='rnn', dim_h=17, initialization='MLP')
     manager.prepare_cell('DistributionMLP', name='mlp')
@@ -124,8 +124,8 @@ def test_rnn_cost():
     session = manager.create_session()
     session.build(test=True)
 
-    f = theano.function(session.inputs, sum(session.costs), updates=session.updates)
-    data = session.next(mode='train')
+    f = theano.function(session.inputs, session.cost, updates=session.updates)
+    data = session.next_batch(batch_size=11, mode='train')
     cost = f(*data)
     hs = feed_numpy(manager.cells['rnn'], data[0])
     y = feed_numpy_mlp(manager.cells['mlp'].mlp, hs[-1])[-1]
@@ -139,7 +139,7 @@ def test_rnn_cost():
 
 def test_make_genrnn_graph():
     manager.reset()
-    manager.prepare_data('dummy', batch_size=3, n_samples=103, data_shape=(5, 2),
+    manager.prepare_data('dummy', n_samples=103, data_shape=(5, 2),
                          transpose={'input': (1, 0, 2)})
     manager.prepare_cell('GenRNN', name='rnn', dim_h=17, initialization='MLP')
     manager.add_step('rnn', 'dummy_binomial.input')
@@ -152,8 +152,8 @@ def test_genrnn_cost():
                      X='dummy_binomial.input')
     session = manager.create_session()
     session.build(test=True)
-    f = theano.function(session.inputs, sum(session.costs), updates=session.updates)
-    data = session.next(mode='train')
+    f = theano.function(session.inputs, session.cost, updates=session.updates)
+    data = session.next_batch(batch_size=3,mode='train')
     cost = f(*data)
     f = theano.function(session.inputs, session.tensors['rnn.P'], updates=session.updates)
     p_ = f(*data)
@@ -168,7 +168,7 @@ def test_genrnn_cost():
 
 def test_sample():
     manager.reset()
-    manager.prepare_data('dummy', batch_size=3, n_samples=103, data_shape=(5, 2),
+    manager.prepare_data('dummy', n_samples=103, data_shape=(5, 2),
                          transpose={'input': (1, 0, 2)})
     manager.prepare_cell('GenRNN', name='rnn', dim_h=17, initialization='MLP')
     manager.add_step('rnn', 'dummy_binomial.input')
@@ -179,36 +179,3 @@ def test_sample():
     session.build()
     f = theano.function([], session.tensors['rnn.samples'],
         updates=session.updates)
-
-def _test_recurrent(dim_in=13, dim_h=17, n_samples=107, window=7):
-    rnn = test_build(dim_in, dim_h)
-
-    data_iter = Euclidean(n_samples=n_samples, dims=dim_in, batch_size=window)
-    x = data_iter.next()[data_iter.name]
-
-    test_dict = OrderedDict()
-
-    X = T.matrix('x', dtype=floatX)
-
-    Y = rnn.call_seqs(X, None, 0, *rnn.get_sample_params())[0]
-    y = np.dot(x, rnn.input_net.params['W0']) + rnn.input_net.params['b0']
-    test_dict['RNN preact from data'] = (X, Y, x, y, theano.OrderedUpdates())
-    H0 = T.alloc(0., X.shape[0], rnn.dim_hs[0]).astype(floatX)
-    H = rnn._step(1, Y, H0, rnn.Ur0)
-    h0 = np.zeros((x.shape[0], rnn.dim_hs[0])).astype(floatX)
-    h = np.tanh(np.dot(h0, rnn.params['Ur0']) + y)
-    test_dict['step reccurent'] = (X, H, x, h, theano.OrderedUpdates())
-
-    P = rnn.output_net.feed(H)
-    p = sigmoid(np.dot(h, rnn.output_net.params['W0']) + rnn.output_net.params['b0'])
-    test_dict['output'] = (X, P, x, p, theano.OrderedUpdates())
-
-    for k, v in test_dict.iteritems():
-        print 'Testing %s' % k
-        inp, out, inp_np, out_np, updates = v
-        f = theano.function([inp], out, updates=updates)
-        out_actual = f(inp_np)
-        if not np.allclose(out_np, out_actual):
-            print 'np', out_np
-            print 'theano', out_actual
-            assert False

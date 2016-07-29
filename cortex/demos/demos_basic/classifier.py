@@ -1,204 +1,58 @@
-'''
-Demo for training a classifier.
+'''Basic classifier script demo.
 
-Try with `python classifier.py classifier_mnist.yaml`
 '''
 
-from collections import OrderedDict
-import numpy as np
-from os import path
-import pprint
-import sys
-import theano
-from theano import tensor as T
-import time
+import cortex
+print cortex.__file__
+print cortex.__version__
+from cortex.utils.tools import print_section
+from cortex.utils import floatX, logger as cortex_logger
 
-from cortex.datasets import load_data
-from cortex.models.mlp import MLP
-from cortex.utils import floatX
-from cortex.utils.monitor import SimpleMonitor
-from cortex.utils.preprocessor import Preprocessor
-from cortex.utils.tools import get_trng, print_profile, print_section
-from cortex.utils.training import (
-    main_loop,
-    make_argument_parser,
-    set_experiment,
-    set_model,
-    set_optimizer,
-    set_params
+
+cortex_logger.set_stream_logger(2)
+
+manager = cortex.get_manager()
+
+print_section('Setting up data')
+manager.prepare_data('MNIST', mode='train', source='$data/basic/mnist.pkl.gz')
+manager.prepare_data('MNIST', mode='valid', source='$data/basic/mnist.pkl.gz')
+
+print_section('Forming model')
+manager.prepare_cell('DistributionMLP', name='mlp', dim_hs=[200, 100],
+                     weight_noise=0.01, dropout=0.5)
+
+manager.add_step('mlp', 'mnist.input')
+manager.match_dims('mlp.P', 'mnist.labels')
+manager.build()
+
+print_section('Adding costs / stats')
+manager.add_cost('mlp.negative_log_likelihood', 'mnist.labels')
+manager.add_stat('logistic_regression', P='mlp.P', Y_hat='mnist.labels')
+
+print_section('Setting up trainer and evaluator')
+train_session = manager.create_session()
+manager.build_session()
+
+trainer = manager.setup_trainer(
+    manager.get_session(),
+    optimizer='sgd',
+    epochs=1000,
+    learning_rate=0.1,
+    batch_size=100
 )
 
+valid_session = manager.create_session(noise=False)
+manager.build_session()
 
-def init_learning_args(
-    learning_rate=0.01,
-    l2_decay=0.,
-    dropout=0.,
-    optimizer='rmsprop',
-    optimizer_args=dict(),
-    learning_rate_schedule=None,
-    batch_size=100,
-    valid_batch_size=100,
-    epochs=100,
-    valid_key='error',
-    valid_sign='+'):
-    '''Default learning args.
+evaluator = manager.setup_evaluator(
+    valid_session,
+    valid_stat='logistic_regression.error'
+)
 
-    This method acts as a filter for kwargs.
+print_section('Setting up monitor')
+monitor = manager.setup_monitor(modes=['train', 'valid'])
+monitor.add_section('cost', keys=['total_cost']+valid_session.costs.keys())
+monitor.add_section('stats', keys=valid_session.stats.keys())
 
-    Args:
-        learning_rate: float.
-        l2_decay: float, L2 decay rate.
-        dropout: float, dropout_rate.
-        optimizer: str, see utils.op
-        optimizer_args: dict, extra kwargs for op.
-        learning_rate_schedule: OrderedDict, schedule for learning rate.
-        batch_size: int
-        valid_batch_size: int
-        epochs: int
-        valid_key: str, key from results to validate model on.
-        valid_sign: str, + or -. If -, then sign is switched at validation.
-            Good for upperbounds.
-    Returns:
-        locals().
-    '''
-    return locals()
-
-def train(
-    out_path=None, name='', model_to_load=None, test_every=None, show_every=None,
-    classifier=None, preprocessing=None,
-    learning_args=None,
-    dataset_args=None):
-    '''Basic training script.
-
-    Args:
-        out_path: str, path for output directory.
-        name: str, name of experiment.
-        test_every: int (optional), if not None, test every n epochs instead of
-            every 1 epoch.
-        classifier: dict, kwargs for MLP factory.
-        learning_args: dict or None, see `init_learning_args` above for options.
-        dataset_args: dict, arguments for Dataset class.
-    '''
-
-    # ========================================================================
-    if preprocessing is None: preprocessing = []
-    if learning_args is None: learning_args = dict()
-    if dataset_args is None: raise ValueError('Dataset args must be provided')
-
-    learning_args = init_learning_args(**learning_args)
-    print 'Dataset args: %s' % pprint.pformat(dataset_args)
-    print 'Learning args: %s' % pprint.pformat(learning_args)
-
-    # ========================================================================
-    print_section('Setting up data')
-    input_keys = dataset_args.pop('keys')
-    batch_size = learning_args.pop('batch_size')
-    valid_batch_size = learning_args.pop('valid_batch_size')
-    train, valid, test = load_data(
-        train_batch_size=batch_size,
-        valid_batch_size=valid_batch_size,
-        **dataset_args)
-
-    # ========================================================================
-    print_section('Setting model and variables')
-    dim_in = train.dims[input_keys[0]]
-    dim_out = train.dims[input_keys[1]]
-
-    X = T.matrix('x', dtype=floatX) # Input data
-    Y = T.matrix('y', dtype=floatX) # Lables
-    X.tag.test_value = np.zeros((batch_size, dim_in), dtype=X.dtype)
-    Y.tag.test_value = np.zeros((batch_size, dim_out), dtype=X.dtype)
-    trng = get_trng()
-
-    preproc = Preprocessor(preprocessing)
-    X_i = preproc(X, data_iter=train)
-    inps = [X, Y]
-
-    # ========================================================================
-    print_section('Loading model and forming graph')
-    dropout = learning_args.pop('dropout')
-
-    def create_model():
-        model = MLP.factory(dim_in=dim_in, dim_out=dim_out,
-                            distribution=train.distributions[input_keys[1]],
-                            dropout=dropout,
-                            **classifier)
-        models = OrderedDict()
-        models[model.name] = model
-        return models
-
-    def unpack(dim_in=None, dim_out=None, mlp=None, **model_args):
-        model = MLP.factory(dim_in=dim_in, dim_out=dim_out, **mlp)
-        models = [model]
-        return models, model_args, None
-
-    models = set_model(create_model, model_to_load, unpack)
-    model = models['MLP']
-    tparams = model.set_tparams()
-    print_profile(tparams)
-
-    # ==========================================================================
-    print_section('Getting cost')
-    outs = model(X_i)
-    results = OrderedDict()
-
-    p = outs['p']
-    base_cost = model.neg_log_prob(Y, p).sum(axis=0)
-    cost = base_cost
-    results['cost'] = base_cost
-    results['error'] = (Y * (1 - p)).sum(axis=1).mean()
-
-    updates = theano.OrderedUpdates()
-
-    l2_decay = learning_args.pop('l2_decay')
-    if l2_decay > 0.:
-        print 'Adding %.5f L2 weight decay' % l2_decay
-        l2_rval = model.l2_decay(l2_decay)
-        l2_cost = l2_rval.pop('cost')
-        cost += l2_cost
-        results['l2_cost'] = l2_cost
-
-    constants = []
-    # ==========================================================================
-    print_section('Test functions')
-    f_test = theano.function([X, Y], results)
-
-     # ========================================================================
-    print_section('Setting final tparams and save function')
-    tparams, all_params = set_params(tparams, updates)
-
-    def save(outfile):
-        d = dict((k, v.get_value()) for k, v in all_params.items())
-        d.update(
-            dim_in=dim_in,
-            dim_out=dim_out,
-            mlp=classifier
-        )
-        np.savez(outfile, **d)
-
-    # ========================================================================
-    print_section('Getting gradients and building optimizer.')
-    f_grad_shared, f_grad_updates, learning_args = set_optimizer(
-        inps, cost, tparams, constants, updates, [], **learning_args)
-
-    # ========================================================================
-    print_section('Actually running (main loop)')
-    monitor = SimpleMonitor()
-
-    main_loop(
-        train, valid,
-        f_grad_shared, f_grad_updates, f_test,
-        input_keys=input_keys,
-        test_every=test_every,
-        save=save,
-        monitor=monitor,
-        out_path=out_path,
-        name=name,
-        **learning_args)
-
-if __name__ == '__main__':
-    parser = make_argument_parser()
-    args = parser.parse_args()
-    exp_dict = set_experiment(args)
-
-    train(**exp_dict)
+print_section('Training')
+manager.train(['train', 'valid'], 'valid')
