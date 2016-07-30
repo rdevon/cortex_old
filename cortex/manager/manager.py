@@ -5,7 +5,7 @@
 from collections import OrderedDict
 import logging
 
-from ..utils.tools import _p
+from ..utils.tools import _p, print_section
 from ..training import Evaluator, Trainer
 from ..training.monitor import BasicMonitor
 
@@ -438,6 +438,17 @@ class Manager(object):
                     self.cell_args[name][node.dist_key] = link
 
     # Misc ---------------------------------------------------------------------
+    def profile(self):
+        self.logger.info('Profiling cells and params')
+        for k, v in self.cells.iteritems():
+            print_section('Profiling %s' % v.name)
+            print v
+            print 'Params:'
+            for k, vv in self.tparams.iteritems():
+                name, kk = split_arg(k)
+                if name == v.name:
+                    print '\t%s: %s' % (k, vv.get_value().shape)
+
     def __getitem__(self, key):
         return self.cells[key]
 

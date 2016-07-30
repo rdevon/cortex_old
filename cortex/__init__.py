@@ -10,7 +10,11 @@ from .manager import get_manager
 from .utils.tools import get_paths, _p
 from .utils.extra import (
     complete_path, query_yes_no, write_default_theanorc, write_path_conf)
+from .utils import logger as cortex_logger
 
+
+
+cortex_logger.set_stream_logger(1)
 
 __version__ = '0.3a'
 logger = logging.getLogger(__name__)

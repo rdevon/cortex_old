@@ -1,5 +1,18 @@
+'''Weight decay costs
 
-def l1_decay(self, rate, **kwargs):
+'''
+
+from collections import OrderedDict
+import logging
+from theano import tensor as T
+
+from .. import get_manager
+from ..utils import floatX
+
+
+logger = logging.getLogger(__name__)
+
+def l1_decay(rate, *tparams):
     '''L1 decay.
 
     Args:
@@ -10,30 +23,25 @@ def l1_decay(self, rate, **kwargs):
         dict: dictionary of l1 decay costs for each parameter.
 
     '''
-    decay_params = self.get_decay_params()
+    manager = get_manager()
 
     cost = T.constant(0.).astype(floatX)
     rval = OrderedDict()
     if rate <= 0:
         return rval
 
-    for k, v in decay_params.iteritems():
-        if k in kwargs.keys():
-            r = kwargs[k]
-        else:
-            r = rate
-        self.logger.debug('Adding %.4g L1 decay to parameter %s' % (r, k))
-        p_cost = r * (abs(v)).sum()
-        rval[k + '_l1_cost'] = p_cost
+    for tparam in tparams:
+        logger.debug('Adding %.4g L1 decay to parameter %s'
+                     % (rate, tparam.name))
+        p_cost = rate * (abs(tparam)).sum()
+        rval[tparam.name + '_l1_cost'] = p_cost
         cost += p_cost
 
-    rval = OrderedDict(
-        cost = cost
-    )
+    rval['cost'] = cost
 
     return rval
 
-def l2_decay(self, rate, **kwargs):
+def l2_decay(rate, *tparams):
     '''L2 decay.
 
     Args:
@@ -44,25 +52,21 @@ def l2_decay(self, rate, **kwargs):
         dict: dictionary of l2 decay costs for each parameter.
 
     '''
-    decay_params = self.get_decay_params()
+    manager = get_manager()
 
     cost = T.constant(0.).astype(floatX)
     rval = OrderedDict()
     if rate <= 0:
         return rval
-    for k, v in decay_params.iteritems():
-        if k in kwargs.keys():
-            r = kwargs[k]
-        else:
-            r = rate
-        self.logger.debug('Adding %.4g L2 decay to parameter %s' % (r, k))
-        p_cost = r * (v ** 2).sum()
-        rval[k + '_l2_cost'] = p_cost
+
+    for tparam in tparams:
+        logger.debug('Adding %.4g L2 decay to parameter %s'
+                     % (rate, tparam.name))
+        p_cost = rate * (tparam ** 2).sum()
+        rval[tparam.name + '_l2_cost'] = p_cost
         cost += p_cost
 
-    rval = OrderedDict(
-        cost = cost
-    )
+    rval['cost'] = cost
 
     return rval
 

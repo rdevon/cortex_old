@@ -116,8 +116,14 @@ class Session(object):
             cell = None
             out = op(*args, **kwargs)
 
-        self.costs[name] = out
-        self.cost += out
+        if isinstance(out, dict):
+            self.costs[name] = out.pop('cost')
+            self.cost += self.costs[name]
+            self.costs.update(**out)
+            out = self.costs[name]
+        else:
+            self.costs[name] = out
+            self.cost += out
 
         if test:
             self.reset_data()
@@ -223,6 +229,12 @@ class Session(object):
 
                 if arg in tensors.keys():
                     new_args.append(tensors[arg])
+                elif arg not in manager.cells.keys():
+                    new_arg = []
+                    for tpk, tparam in manager.tparams.iteritems():
+                        if arg in tpk:
+                            new_args.append(tparam)
+                    arg = new_arg
                 else:
                     raise ValueError('Could not find tensor %s, found: %s'
                                      % (arg, tensors.keys()))

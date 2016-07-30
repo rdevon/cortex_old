@@ -108,7 +108,7 @@ class Cell(object):
 
     '''
     _components = {}    # Cells that this cell controls.
-    _options = {'weight_noise': 0}       # Dictionary of optional arguments and default values
+    _options = {}       # Dictionary of optional arguments and default values
     _required = []      # Required arguments for __init__
     _args = ['name']    # Arguments necessary to uniquely id the cell. Used for
                         #   save.
@@ -131,10 +131,10 @@ class Cell(object):
             name (str): name identifier of cell.
 
         '''
-        kwargs = self.set_options(**kwargs)
-        self.manager = get_manager()
-        self.name = name
         self.passed = {}
+        self.name = name
+        self.manager = get_manager()
+        kwargs = self.set_options(**kwargs)
         init_rngs(self)
 
         self.logger = get_class_logger(self)
@@ -320,7 +320,7 @@ class Cell(object):
                     tp = theano.shared(pp, name=name)
                     self.manager.tparams[name] = tp
                     self.__dict__[k].append(tp)
-                    self.param_keys.append(k)
+                    self.param_keys.append(kk)
             else:
                 name = _p(self.name, k)
                 tp = theano.shared(p, name=name)
@@ -334,13 +334,16 @@ class Cell(object):
         if self.noise_switch() and self.weight_noise:
             for i in range(len(params)):
                 param = params[i]
-                self.logger.debug(
-                    'Adding weight noise (%.2e) to %s'
-                    % (self.weight_noise, param.name))
-                param += self.trng.normal(
-                    avg=0.,
-                    std=self.weight_noise,
-                    size=param.shape).astype(floatX)
+                for w in self._weights:
+                    if w in param.name:
+                        self.logger.debug(
+                            'Adding weight noise (%.2e) to %s'
+                            % (self.weight_noise, param.name))
+                        param += self.trng.normal(
+                            avg=0.,
+                            std=self.weight_noise,
+                            size=param.shape).astype(floatX)
+
                 self.params[i] = param
 
         for key in self.component_keys:
@@ -453,28 +456,28 @@ class Cell(object):
             raise AttributeError(key)
 
     def __str__(self):
-        attributes = self.__dict__
+        attributes = {}
+        attributes.update(**self.__dict__)
+        for k in ['trng', 'manager', 'passed', 'component_keys', 'rng',
+                  'logger']:
+            attributes.pop(k, None)
 
-        params = attributes['params']
+        params = {}
+        params.update(**attributes['params'])
+
         for k, v in params.iteritems():
             if isinstance(v, np.ndarray):
                 params[k] = '<numpy.ndarray: {shape: %s}>' % (v.shape,)
             elif isinstance(v, list):
                 params[k] = [
                     '<numpy.ndarray: {shape: %s}>' % (a.shape,) for a in v]
-        for k in ['trng', 'rng', 'logger']:
-            attributes.pop(k, None)
+        attributes.update(params=params)
 
         attr_str = ''
         for k, a in attributes.iteritems():
             if k in self._components:
-                c_str = a.__str__()
-                new_str = '\n\t'
-                for i in range(0, len(c_str) - 1):
-                    new_str += c_str[i]
-                    if c_str[i] != '\t' and c_str[i + 1] == '\t':
-                        new_str += '\t'
-                new_str += c_str[-1]
+                c_str = ': <' + a.name + '>'
+                new_str = '\n\t' + k + c_str
             else:
                 new_str = '\n\t%s: %s' % (k, a)
             attr_str += new_str

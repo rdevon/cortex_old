@@ -136,15 +136,7 @@ class MLP(Cell):
         for l in xrange(self.n_layers):
             W = params.pop(0)
             b = params.pop(0)
-
-            if self.weight_noise and self.noise_switch():
-                self.logger.debug(
-                    'Using weight noise in layer %d for MLP %s' % (l, self.name))
-                W_n = W + self.trng.normal(
-                    avg=0., std=self.weight_noise, size=W.shape)
-                preact = T.dot(X, W_n) + b
-            else:
-                preact = T.dot(X, W) + b
+            preact = T.dot(X, W) + b
 
             if l < self.n_layers - 1:
                 X = self.h_act(preact)
@@ -179,7 +171,8 @@ class DistributionMLP(Cell):
         'mlp': {
             'cell_type': 'MLP',
             '_required': {'out_act': 'identity'},
-            '_passed': ['dim_in', 'dim_h', 'n_layers', 'dim_hs', 'h_act']
+            '_passed': ['dim_in', 'dim_h', 'n_layers', 'dim_hs', 'h_act',
+                        'dropout', 'weight_noise']
         },
         'distribution': {
             'cell_type': '&distribution_type',
