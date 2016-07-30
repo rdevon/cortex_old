@@ -29,7 +29,7 @@ train_session = manager.create_session()
 manager.build_session()
 
 trainer = manager.setup_trainer(
-    manager.get_session(),
+    train_session,
     optimizer='sgd',
     epochs=1000,
     learning_rate=0.1,
