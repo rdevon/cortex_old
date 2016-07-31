@@ -100,7 +100,7 @@ class MNIST(BasicDataset):
 
         return X, Y
 
-    def save_images(self, x, imgfile, transpose=False, x_limit=None):
+    def _viz(self, x, imgfile, transpose=False, x_limit=None):
         '''Saves visualization.
 
         Args:
