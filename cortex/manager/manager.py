@@ -5,8 +5,11 @@
 from collections import OrderedDict
 import logging
 
+from .. import costs
+from .. import datasets
+from .. import models
 from ..utils.tools import _p, print_section
-from ..training import Evaluator, Trainer
+from ..training import Evaluator, Trainer, Visualizer
 from ..training.monitor import BasicMonitor
 
 
@@ -15,6 +18,14 @@ def get_manager():
         return Manager()
     else:
         return Manager._instance
+
+def _resolve_class(cell_type, classes):
+    try:
+        C = classes[cell_type]
+    except KeyError:
+        raise KeyError('Unexpected cell subclass `%s`, '
+                       'available classes: %s' % (cell_type, classes.keys()))
+    return C
 
 def split_arg(arg, idx=-1):
     s = arg.split('.')
@@ -27,19 +38,31 @@ def resolve_tensor_arg(arg, manager=None):
     if not is_tensor_arg(arg):
         raise TypeError('Arg %s is not a tensor argument.' % arg)
     cell_args = manager.cell_args
-
     if arg.split('.')[0] in manager.datasets.keys():
         name_, key = split_arg(arg)
         C = None
+    elif '.'.join(arg.split('.')[:-1]) in manager.nodes.keys():
+        name_, key = split_arg(arg)
+        C = manager.nodes[name_]
     elif '.'.join(arg.split('.')[:-1]) in cell_args.keys():
         name_, key = split_arg(arg)
         C = manager.resolve_class(cell_args[name_]['cell_type'])
+    elif '.'.join(arg.split('.')[:-1]) in _ops.keys():
+        name_, key = split_arg(arg)
+        C = None
     else:
         raise KeyError('Cell or data %s not found' % arg)
     return name_, key, C
 
 def is_tensor_arg(arg):
-    return (isinstance(arg, str) and '.' in arg)
+    manager = get_manager()
+    if arg in manager.nodes.keys():
+        return True
+    if not isinstance(arg, str) or '.' not in arg:
+        return False
+    if '/' in arg:
+        return False
+    return True
 
 
 class Manager(object):
@@ -53,11 +76,6 @@ class Manager(object):
     _current_session = None
 
     def __init__(self):
-        from ..models import _classes
-        from ..datasets import _classes as _dataset_classes
-        from ..costs import _costs
-        from ..costs import _stats
-
         if Manager._instance is not None:
             logger.warn('New `Manager` instance. Old one will be lost.')
         Manager._instance = self
@@ -65,10 +83,11 @@ class Manager(object):
         self.logger = logging.getLogger(
             '.'.join([self.__module__, self.__class__.__name__]))
 
-        self.classes = _classes
-        self.dataset_classes = _dataset_classes
-        self.cost_functions = _costs
-        self.stat_functions = _stats
+        self.classes = models._classes
+        self.dataset_classes = datasets._classes
+        self.cost_functions = costs._costs
+        self.stat_functions = costs._stats
+        self.ops = _ops
 
         self.reset()
 
@@ -95,8 +114,9 @@ class Manager(object):
     def reset(self):
         self.cells = OrderedDict()
         self.cell_args = OrderedDict()
-        self.links = []
         self.datasets = {}
+        self.nodes = {}
+        self.links = []
 
         self.steps = []
         self.costs = {}
@@ -108,9 +128,10 @@ class Manager(object):
         self.trainer = None
         self.tester = None
 
-    def resolve_class(self, cell_type):
-        from .. import resolve_class
-        return resolve_class(cell_type, self.classes)
+    def resolve_class(self, cell_type, classes=None):
+        if classes is None:
+            classes = self.classes
+        return _resolve_class(cell_type, self.classes)
 
     def build(self):
         for k, kwargs in self.cell_args.iteritems():
@@ -155,11 +176,20 @@ class Manager(object):
         self.evaluator = Evaluator(session, **kwargs)
         return self.evaluator
 
-    def setup_monitor(self, **kwargs):
+    def setup_monitor(self, session, **kwargs):
         self.monitor = BasicMonitor(**kwargs)
+        self.monitor.add_section('cost', keys=['total_cost']+session.costs.keys())
+        self.monitor.add_section('stats', keys=session.stats.keys())
         return self.monitor
 
-    def train(self, eval_modes, validation_mode):
+    def setup_visualizer(self, session, **kwargs):
+        self.visualizer = Visualizer(session, **kwargs)
+        return self.visualizer
+
+    def train(self, eval_modes=None, validation_mode=None):
+        if eval_modes is None: eval_modes=['train', 'valid']
+        if validation_mode is None: validation_mode = 'valid'
+
         try:
             while True:
                 br = False
@@ -175,6 +205,8 @@ class Manager(object):
                     self.monitor.update(mode, **r)
 
                 self.monitor.display()
+                self.visualizer()
+
                 if br:
                     break
         except KeyboardInterrupt:
@@ -182,8 +214,7 @@ class Manager(object):
 
     # Data methods -------------------------------------------------------------
     def prepare_data(self, dataset, **kwargs):
-        from .. import resolve_class
-        C = resolve_class(dataset, self.dataset_classes)
+        C = _resolve_class(dataset, self.dataset_classes)
         C(**kwargs)
 
     # Cell methods -------------------------------------------------------------
@@ -191,7 +222,6 @@ class Manager(object):
         from .link import Link
         kwargs = self.cell_args[name]
         C = self.resolve_class(kwargs['cell_type'])
-
         for k in kwargs.keys():
             if isinstance(kwargs[k], Link):
                 link = kwargs[k]
@@ -248,12 +278,23 @@ class Manager(object):
                         raise KeyError('Dataset %s has no key `%s`' % (n, k))
                 elif n in self.cell_args.keys():
                     pass
+                elif n in self.nodes.keys():
+                    pass
                 else:
                     raise KeyError('No cell nor dataset with name `%s`' % n)
 
     def add_step(self, op, *args, **kwargs):
-        if isinstance(op, str):
+        name = kwargs.pop('name', None)
+        if isinstance(op, str) and op in self.ops:
+            if name is None: name = op
+            op = self.ops[op]
+            cell_name = None
+            self.nodes[name] = dict(dim=None)
+            if len(args) > 0:
+                self.match_dims(args[0], name + '.input')
+        elif isinstance(op, str):
             op_s = op.split('.')
+
             if len(op_s) == 1:
                 cell_name = op_s[0]
                 op_name = None
@@ -263,103 +304,109 @@ class Manager(object):
                 raise TypeError('Op must be callable '
                                 'or a string of form `cell_name` or '
                                 '`cell_name.op`')
-            if cell_name in self.cell_args.keys():
-                cell_type = self.cell_args[cell_name]['cell_type']
-                C = self.resolve_class(cell_type)
-                if op_name is None:
-                    op_name = '__call__'
-                if hasattr(C, op_name):
-                    op = getattr(C, op_name)
-                else:
-                    raise TypeError('Cell %s of type %s has no method %s.'
-                                    % (cell_name, C, op_name))
-                if op_name == '__call__':
-                    arg_keys = C._call_args
-                else:
-                    arg_keys = getattr(C, '_%s_args' % op_name)
-                if len(args) != len(arg_keys):
-                    raise TypeError('%d operation (%s) args provided, but %d '
-                                    'arg_keys available. (%s given, %s needed)'
-                                    % (len(args), C, len(arg_keys),
-                                       args, arg_keys))
 
-                for arg, key in zip(args, arg_keys):
-                    if (key in C._dim_map.keys() and is_tensor_arg(arg)):
-                        self.match_dims(arg, '.'.join([cell_name, key]))
+            name = cell_name
+
+            cell_type = self.cell_args[cell_name]['cell_type']
+            C = self.resolve_class(cell_type)
+            if op_name is None:
+                op_name = '__call__'
+            if hasattr(C, op_name):
+                op = getattr(C, op_name)
+            else:
+                raise TypeError('Cell %s of type %s has no method %s.'
+                                % (cell_name, C, op_name))
+            if op_name == '__call__':
+                arg_keys = C._call_args
+            else:
+                arg_keys = getattr(C, '_%s_args' % op_name)
+            if len(args) != len(arg_keys):
+                raise TypeError('%d operation (%s) args provided, but %d '
+                                'arg_keys available. (%s given, %s needed)'
+                                % (len(args), C, len(arg_keys),
+                                   args, arg_keys))
+
+            for arg, key in zip(args, arg_keys):
+                if (key in C._dim_map.keys() and is_tensor_arg(arg)):
+                    self.match_dims(arg, '.'.join([cell_name, key]))
         else:
             cell_name = None
+            if name is None:
+                name = op.__name__
 
         self.test_op_args(op, args, kwargs)
 
         self.steps.append(dict(
-            cell_name=cell_name, op=op, args=args, kwargs=kwargs))
+            cell_name=cell_name, name=name, op=op, args=args, kwargs=kwargs))
 
-    def add_cost(self, op, *args, **kwargs):
+    def add_cost(self, *args, **kwargs):
+        self.add('cost', *args, **kwargs)
+
+    def add_stat(self, *args, **kwargs):
+        self.add('stat', *args, **kwargs)
+
+    def add(self, what, op, *args, **kwargs):
         cell_name = None
         if isinstance(op, str):
             if is_tensor_arg(op):
                 cell_name, cost_name, _ = resolve_tensor_arg(op)
                 cell_type = self.cell_args[cell_name]['cell_type']
                 C = self.resolve_class(cell_type)
-                name = op
 
-                if cost_name == 'cost' and hasattr(C, '_cost'):
-                    op = getattr(C, '_cost')
-                else:
-                    if not cost_name in C._costs.keys():
+                if what == 'cost':
+                    if cost_name == 'cost' and hasattr(C, '_cost'):
+                        op = getattr(C, '_cost')
+                        name = 'cost'
+                    else:
+                        if not cost_name in C._costs.keys():
+                            raise AttributeError(
+                                'cell type %s for cell `%s` has no '
+                                'cost %s' % (C, cell_name, cost_name))
+                        op = getattr(C, C._costs[cost_name])
+                        name = cost_name
+
+                elif what == 'stat':
+                    if not stat_name in C._stats.keys():
                         raise AttributeError('cell type %s for cell `%s` has no '
-                                             'cost %s' % (C, cell_name, cost_name))
-                    op = getattr(C, C._costs[cost_name])
+                                             'stat %s' % (C, cell_name, stat_name))
+                        op = getattr(C, C._stats[stat_name])
+
             else:
-                if op not in self.cost_functions.keys():
-                    raise TypeError('Cost function `%s` not found.' % op)
-                name = op
-                op = self.cost_functions[op]
+                if what == 'cost':
+                    if op not in self.cost_functions.keys():
+                        raise TypeError('Cost function `%s` not found.' % op)
+                    op = self.cost_functions[op]
+
+                elif what == 'stat':
+                    if op not in self.stat_functions.keys():
+                        raise TypeError('Stat function `%s` not found.' % op)
+                    op = self.stat_functions[op]
+                name = op.__name__
+
         elif hasattr(op, '__call__'):
             name = op.__name__
+
         else:
             raise TypeError
 
         self.test_op_args(op, args, kwargs)
 
-        if name in self.costs.keys():
-            self.logger.warn('Cost `%s` already found. Overwriting.')
-        else:
-            self.logger.debug('Adding costs `%s`' % name)
-        self.costs[name] = dict(
-            cell_name=cell_name, op=op, args=args, kwargs=kwargs)
-
-    def add_stat(self, op, *args, **kwargs):
-        cell_name = None
-        if isinstance(op, str):
-            if is_tensor_arg(op):
-                cell_name, stat_name, _ = resolve_tensor_arg(op)
-                cell_type = self.cell_args[cell_name]['cell_type']
-                C = self.resolve_class(cell_type)
-                name = op
-
-                if not stat_name in C._stats.keys():
-                    raise AttributeError('cell type %s for cell `%s` has no '
-                                         'stat %s' % (C, cell_name, stat_name))
-                    op = getattr(C, C._stats[stat_name])
+        if what == 'cost':
+            if name in self.costs.keys():
+                self.logger.warn('Cost `%s` already found. Overwriting.')
             else:
-                if op not in self.stat_functions.keys():
-                    raise TypeError('Stat function `%s` not found.' % op)
-                name = op
-                op = self.stat_functions[op]
-        elif hasattr(op, '__call__'):
-            name = op.__name__
-        else:
-            raise TypeError
+                self.logger.debug('Adding costs `%s`' % name)
+            self.costs[name] = dict(
+                cell_name=cell_name, op=op, args=args, kwargs=kwargs)
 
-        self.test_op_args(op, args, kwargs)
-        if name in self.stats.keys():
-            self.logger.warn('Stat `%s` already found. Overwriting.')
-        else:
-            self.logger.debug('Adding stat `%s`' % name)
+        elif what == 'stat':
+            if name in self.stats.keys():
+                self.logger.warn('Stat `%s` already found. Overwriting.')
+            else:
+                self.logger.debug('Adding stat `%s`' % name)
 
-        self.stats['name'] = dict(
-            cell_name=cell_name, op=op, args=args, kwargs=kwargs)
+            self.stats[name] = dict(
+                cell_name=cell_name, op=op, args=args, kwargs=kwargs)
 
     def prepare_samples(self, arg, shape, name='samples', **kwargs):
         if isinstance(shape, int):
@@ -390,6 +437,7 @@ class Manager(object):
             self.logger.warn('Overwriting samples %s' % name)
         else:
             self.logger.debug('Adding samples `%s`' % name)
+
         self.samples[name] = dict(
             cell_name=cell_name, key=key, shape=shape, kwargs=kwargs)
 
@@ -425,6 +473,7 @@ class Manager(object):
     def match_dims(self, f, t):
         from .link import Link
         link = Link(f, t)
+
         for name, node in link.nodes.iteritems():
             if name in self.datasets.keys():
                 pass
@@ -465,3 +514,10 @@ class Manager(object):
         else:
             raise TypeError('`cell` must be of type %s, got %s'
                             % (Cell, type(cell)))
+
+
+_ops = {}
+from .. import ops, visualization
+modules = [ops, visualization]
+for module in modules:
+    _ops.update(module._ops)

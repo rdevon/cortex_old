@@ -7,13 +7,14 @@ import numpy as np
 from theano import tensor as T
 
 from . import Distribution
-from ...utils import floatX, _slice
+from ... import utils
+from ...utils import floatX
 
 
 def _laplace(trng, p, size=None):
     dim = p.shape[p.ndim-1] // 2
-    mu = _slice(p, 0, dim)
-    log_b = _slice(p, 1, dim)
+    mu = utils._slice(p, 0, dim)
+    log_b = utils._slice(p, 1, dim)
     if size is None:
         size = mu.shape
     epsilon = trng.uniform(size=size, dtype=floatX) - 0.5
@@ -21,8 +22,8 @@ def _laplace(trng, p, size=None):
 
 def _neg_laplace_log_prob(x, p, sum_probs=True):
     dim = p.shape[p.ndim-1] // 2
-    mu = _slice(p, 0, dim)
-    log_b = _slice(p, 1, dim)
+    mu = utils._slice(p, 0, dim)
+    log_b = utils._slice(p, 1, dim)
     energy = T.log(2.0) + log_b + abs(x - mu) / T.exp(log_b)
     if sum_probs:
         return energy.sum(axis=energy.ndim-1)
@@ -31,7 +32,7 @@ def _neg_laplace_log_prob(x, p, sum_probs=True):
 
 def _laplace_entropy(p):
     dim = p.shape[p.ndim-1] // 2
-    log_b = _slice(p, 1, dim)
+    log_b = utils._slice(p, 1, dim)
     entropy = log_b + T.log(2.) + 1.0
     return entropy.sum(axis=entropy.ndim-1)
 

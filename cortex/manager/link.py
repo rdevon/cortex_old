@@ -2,6 +2,7 @@
 
 '''
 from . import resolve_tensor_arg, get_manager
+from ..models import Cell
 from ..utils.logger import get_class_logger
 
 
@@ -44,9 +45,15 @@ class Link(object):
             self.value = manager.datasets[dataset_name]['dims'][dataset_key]
             self.distribution = manager.datasets[
                 dataset_name]['distributions'][dataset_key]
+
+        elif f_name in manager.nodes.keys():
+            if f_class['dim'] is None:
+                raise ValueError('from: %s, to: %s, op dim: %s'
+                                 % (f_name, t_name, f_class))
+            self.value = f_class['dim']
         else:
-            t_args = manager.cell_args[t_name]
             f_args = manager.cell_args[f_name]
+            t_args = manager.cell_args[t_name]
 
             try:
                 self.value = t_class.set_link_value(t_key, **t_args)
@@ -74,16 +81,21 @@ class Link(object):
             raise TypeError('Link between %s and %s requires a resolvable '
                             'dimension' % (f, t))
 
-        if f_name != dataset_name:
+        if t_name in manager.nodes.keys():
+            manager.nodes[t_name]['dim'] = self.value
+
+        if f_name in manager.nodes.keys():
+            manager.nodes[f_name]['dim'] = self.value
+
+        if isinstance(f_class, type) and issubclass(f_class, Cell):
             self.nodes[f_name] = Node(f_class, f_key)
-        if t_name != dataset_name:
+        if isinstance(t_class, type) and issubclass(t_class, Cell):
             self.nodes[t_name] = Node(t_class, t_key)
         manager.links.append(self)
 
     def query(self, name, key):
         if not name in self.nodes.keys():
             raise KeyError('Link does not have node `%s`' % name)
-
         node = self.nodes[name]
         if key == node.dim_key:
             (vk_, value) = node.C.get_link_value(self, node.link_key)

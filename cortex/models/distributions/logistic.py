@@ -7,13 +7,14 @@ import numpy as np
 from theano import tensor as T
 
 from . import Distribution
-from ...utils import floatX, _slice
+from ... import utils
+from ...utils import floatX
 
 
 def _logistic(trng, p, size=None):
     dim = p.shape[p.ndim-1] // 2
-    mu = _slice(p, 0, dim)
-    log_s = _slice(p, 1, dim)
+    mu = utils._slice(p, 0, dim)
+    log_s = utils._slice(p, 1, dim)
     if size is None:
         size = mu.shape
     epsilon = trng.uniform(size=size, dtype=floatX)
@@ -21,8 +22,8 @@ def _logistic(trng, p, size=None):
 
 def _neg_logistic_log_prob(x, p, sum_probs=True):
     dim = p.shape[p.ndim-1] // 2
-    mu = _slice(p, 0, dim)
-    log_s = _slice(p, 1, dim)
+    mu = utils._slice(p, 0, dim)
+    log_s = utils._slice(p, 1, dim)
     g = (x - mu) / T.exp(log_s)
     energy = -g + log_s + 2 * T.log(1 + T.exp(g))
     if sum_probs:
@@ -32,7 +33,7 @@ def _neg_logistic_log_prob(x, p, sum_probs=True):
 
 def _logistic_entropy(p):
     dim = p.shape[p.ndim-1] // 2
-    log_s = _slice(p, 1, dim)
+    log_s = utils._slice(p, 1, dim)
     entropy = log_s + 2.0
     return entropy.sum(axis=entropy.ndim-1)
 

@@ -1,3 +1,11 @@
+'''Math functions.
+
+'''
+
+from math import sqrt, floor
+from theano import tensor as T
+
+
 def parzen_estimation(samples, tests, h=1.0):
     '''Estimate parzen window.
 
@@ -72,3 +80,29 @@ def shuffle_columns(x, srng):
         step_shuffle, [x.transpose(1, 0, 2), perm_mat], [None], [], x.shape[1],
         name='shuffle', strict=False)
     return y.transpose(1, 0, 2)
+
+def split_int_into_closest_two(x):
+    '''Splits an integer into the closest 2 integers.
+
+    Args:
+        x (int).
+
+    Returns:
+        int.
+
+    Raises:
+        ValueError: if input is not an integer.
+
+    '''
+
+    if not isinstance(x, (int, long)):
+        raise ValueError('Input is not an integer.')
+
+    n = floor(sqrt(x))
+    while True:
+        if n < 1:
+            raise ValueError
+        rem = x % n
+        if rem == 0:
+            return int(n), int(x / n)
+        n -= 1

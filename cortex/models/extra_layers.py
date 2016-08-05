@@ -11,7 +11,8 @@ from theano import tensor as T
 
 from . import Cell
 from . import mlp as mlp_module
-from ..utils import concatenate, e, floatX, pi, _slice, _slice2
+from .. import utils
+from ..utils import e, floatX, pi
 from ..utils.maths import log_mean_exp
 
 
@@ -215,7 +216,7 @@ class Attention(Cell):
         return tparams
 
     def __call__(self, X, axis=0):
-        X = concatenate(X, axis=X.ndim-1)
+        X = utils.concatenate(X, axis=X.ndim-1)
         Y = self.mlp.feed(X)
         a = T.dot(Y, self.v)
         e = a / a.sum(axis=axis)
@@ -246,7 +247,7 @@ class Attention2(Cell):
         return tparams
 
     def __call__(self, Xa, Xb, axis=0):
-        X = concatenate([Xa, Xb], axis=Xa.ndim-1)
+        X = utils.concatenate([Xa, Xb], axis=Xa.ndim-1)
         Y = self.mlp.feed(X)
         a = T.dot(Y, self.v)
         e = a / a.sum(axis=axis)

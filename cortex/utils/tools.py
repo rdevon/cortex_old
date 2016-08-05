@@ -354,31 +354,3 @@ def _p(pp, name):
     From Cho's arctic repo.
     '''
     return '%s.%s'%(pp, name)
-
-def split_int_into_closest_two(x):
-    '''Splits an integer into the closest 2 integers.
-
-    Args:
-        x (int).
-
-    Returns:
-        int.
-
-    Raises:
-        ValueError: if input is not an integer.
-
-    '''
-
-    if not isinstance(x, (int, long)):
-        raise ValueError('Input is not an integer.')
-
-    from math import sqrt, floor
-
-    n = floor(sqrt(x))
-    while True:
-        if n < 1:
-            raise ValueError
-        rem = x % n
-        if rem == 0:
-            return int(n), int(x / n)
-        n -= 1

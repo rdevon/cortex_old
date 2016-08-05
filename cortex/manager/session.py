@@ -47,13 +47,14 @@ class Session(object):
         self.input_keys = []
         self.data_pos = 0
 
-    def add_tensors(self, out, key_prefix=None):
-
+    def add_tensors(self, out, key_prefix=None, what=None):
         for k, v in out.iteritems():
             if k == 'updates':
                 self.updates += v
+
             elif k == 'constants':
                 self.constants += v
+
             else:
                 if key_prefix is None:
                     key = k
@@ -64,10 +65,32 @@ class Session(object):
                 else:
                     self.tensors[key] = v
 
-    def add_step(self, op=None, cell_name=None, args=None, kwargs=None,
-                 test=False):
-        self.logger.debug('Adding step: %s' % pprint.pformat(
-            dict(op=op, cell_name=cell_name, args=args, kwargs=kwargs)))
+                if what == 'cost':
+                    if k == 'cost':
+                        self.cost += v
+                    else:
+                        self.costs[key] = v
+                elif what == 'stat':
+                    self.stats[key] = v
+
+        if key_prefix + '.outputs' not in self.tensors.keys():
+            self.tensors[key_prefix + '.outputs'] = dict()
+        self.tensors[key_prefix + '.outputs'].update(**out)
+
+    def add_cost(self, *args, **kwargs):
+        self.add('cost', *args, **kwargs)
+
+    def add_stat(self, *args, **kwargs):
+        self.add('stat', *args, **kwargs)
+
+    def add_step(self, *args, **kwargs):
+        self.add('step', *args, **kwargs)
+
+    def add(self, what, name=None, op=None, cell_name=None, args=None,
+            kwargs=None, test=False):
+        self.logger.info('Adding %s: %s' % (what, pprint.pformat(
+            dict(op=op, name=name, cell_name=cell_name, args=args,
+                 kwargs=kwargs))))
 
         args, kwargs = self.resolve_op_args(args, kwargs)
 
@@ -76,15 +99,23 @@ class Session(object):
             out = op(cell, *args, **kwargs)
             key_prefix = cell_name
         else:
-            name = op.__name__
+            cell = None
             out = op(*args, **kwargs)
             key_prefix = name
-            cell = None
 
         if isinstance(out, T.TensorVariable):
-            out = dict(output=out)
+            new_out = dict()
+            if what == 'cost':
+                new_out[name] = out
+                new_out['cost'] = out
+            elif what == 'stat':
+                new_out[name] = out
+            else:
+                new_out['output'] = out
 
-        self.add_tensors(out, key_prefix=key_prefix)
+            out = new_out
+
+        self.add_tensors(out, key_prefix=key_prefix, what=what)
 
         if test:
             self.reset_data()
@@ -94,72 +125,18 @@ class Session(object):
                 test_order = cell._test_order
 
             data = self.next_batch(batch_size=10)
-
-            for key in test_order:
-                self.logger.info('Testing `%s` from step %s with batchsize 10'
-                                 % (key, key_prefix))
-                t = out[key]
-                f = theano.function(self.inputs, t, updates=self.updates)
-                self.test(data, f, key, key_prefix, cell=cell)
-
-    def add_cost(self, name=None, op=None, cell_name=None, args=None,
-                 kwargs=None, test=False):
-        self.logger.debug('Adding cost: %s' % pprint.pformat(
-            dict(name=name, op=op, cell_name=cell_name, args=args,
-                 kwargs=kwargs)))
-
-        args, kwargs = self.resolve_op_args(args, kwargs)
-        if cell_name is not None:
-            cell = self.manager.cells[cell_name]
-            out = op(cell, *args, **kwargs)
-        else:
-            cell = None
-            out = op(*args, **kwargs)
-
-        if isinstance(out, dict):
-            self.costs[name] = out.pop('cost')
-            self.cost += self.costs[name]
-            self.costs.update(**out)
-            out = self.costs[name]
-        else:
-            self.costs[name] = out
-            self.cost += out
-
-        if test:
-            self.reset_data()
-            data = self.next_batch(batch_size=10)
-            self.logger.info('Testing cost with batchsize 10')
-            f = theano.function(self.inputs, out, updates=self.updates)
-            self.test(data, f, key=name, key_prefix='cost', cell=cell)
-
-    def add_stat(self, name=None, op=None, cell_name=None, args=None,
-                 kwargs=None, test=False):
-        self.logger.debug('Adding stat: %s' % pprint.pformat(
-            dict(name=name, op=op, cell_name=cell_name, args=args,
-                 kwargs=kwargs)))
-
-        args, kwargs = self.resolve_op_args(args, kwargs)
-        if cell_name is not None:
-            cell = self.manager.cells[cell_name]
-            out = op(cell, *args, **kwargs)
-        else:
-            cell = None
-            out = op(*args, **kwargs)
-
-        if isinstance(out, dict):
-            self.stats.update(**out)
-        else:
-            self.stats[name] = out
-
-        if test:
-            if not isinstance(out, dict):
-                out = dict(stat=out)
-            for k, o in out.iteritems():
-                self.reset_data()
-                data = self.next_batch(batch_size=10)
-                self.logger.info('Testing stat with batchsize 10')
-                f = theano.function(self.inputs, o, updates=self.updates)
-                self.test(data, f, key=k, key_prefix=name, cell=cell)
+            if what in ['cost', 'stat']:
+                for k, o in out.iteritems():
+                    self.logger.info('Testing stat with batchsize 10')
+                    f = theano.function(self.inputs, o, updates=self.updates)
+                    self.test(data, f, key=k, key_prefix=name, cell=cell)
+            else:
+                for key in test_order:
+                    self.logger.info('Testing `%s` from step %s with batchsize 10'
+                                     % (key, name))
+                    t = out[key]
+                    f = theano.function(self.inputs, t, updates=self.updates)
+                    self.test(data, f, key, name, cell=cell)
 
     def add_samples(self, name=None, op=None, key=None, shape=None,
                     cell_name=None, kwargs=None):
@@ -230,20 +207,21 @@ class Session(object):
                 if arg in tensors.keys():
                     new_args.append(tensors[arg])
                 elif arg not in manager.cells.keys():
-                    new_arg = []
                     for tpk, tparam in manager.tparams.iteritems():
                         if arg in tpk:
                             new_args.append(tparam)
-                    arg = new_arg
                 else:
                     raise ValueError('Could not find tensor %s, found: %s'
                                      % (arg, tensors.keys()))
             else:
                 new_args.append(arg)
+        assert len(new_args) >= len(args)
 
         new_kwargs = {}
         for key, arg in kwargs.iteritems():
-            if is_tensor_arg(arg):
+            if arg in self.tensors.keys():
+                arg = self.tensors[arg]
+            elif is_tensor_arg(arg):
                 name, key_, _ = resolve_tensor_arg(arg)
                 if name in manager.datasets.keys():
                     if arg not in tensors.keys():
@@ -254,11 +232,15 @@ class Session(object):
                         self.input_keys.append(key_)
 
                 if arg in tensors.keys():
-                    new_kwargs[key] = tensors[arg]
+                    arg = tensors[arg]
                 else:
                     raise ValueError('Could not find tensor %s' % arg)
+
+            if key == 'inputs' and isinstance(arg, dict):
+                new_kwargs.update(**arg)
             else:
                 new_kwargs[key] = arg
+
         return new_args, new_kwargs
 
     def build(self, test=False):
@@ -311,8 +293,9 @@ class Session(object):
         return n
 
     def next_batch(self, mode=None, batch_size=None):
-        if batch_size is None: raise TypeError(
-            '`batch_size` keyword must be set.')
+        if batch_size is None:
+            raise TypeError('`batch_size` keyword must be set.')
+
         data = []
         batches = {}
         dataset_names = self.get_dataset_names()

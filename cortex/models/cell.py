@@ -11,13 +11,10 @@ import random
 import re
 import theano
 from theano import tensor as T
-from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from ..manager import get_manager
-from ..manager.link import Link
 from ..utils import floatX, _rng
 from ..utils.logger import get_class_logger
-from ..utils.tools import warn_kwargs, _p
+from ..utils.tools import warn_kwargs, get_trng, _p
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +28,7 @@ def init_rngs(cell):
 
     '''
     cell.rng = _rng
-    cell.trng = RandomStreams(random.randint(1, 10000))
+    cell.trng = get_trng()
 
 def ortho_weight(ndim, rng=None):
     '''Make ortho weight tensor.
@@ -108,7 +105,7 @@ class Cell(object):
 
     '''
     _components = {}    # Cells that this cell controls.
-    _options = {}       # Dictionary of optional arguments and default values
+    _options = {'weight_noise': 0}      # Dictionary of optional arguments and default values
     _required = []      # Required arguments for __init__
     _args = ['name']    # Arguments necessary to uniquely id the cell. Used for
                         #   save.
@@ -131,9 +128,11 @@ class Cell(object):
             name (str): name identifier of cell.
 
         '''
+        from .. import _manager as manager
+
         self.passed = {}
         self.name = name
-        self.manager = get_manager()
+        self.manager = manager
         kwargs = self.set_options(**kwargs)
         init_rngs(self)
 
@@ -177,13 +176,14 @@ class Cell(object):
 
     @classmethod
     def set_link_value(C, key, **kwargs):
+        from .. import manager
         logger.debug('Setting link value for class _dim_map %s with key `%s` and'
                     ' kwargs %s' % (C._dim_map, key, kwargs))
         if key in C._dim_map.keys():
             value = kwargs.get(C._dim_map[key], None)
-            if not isinstance(value, Link) and value is not None:
+            if not isinstance(value, manager.link.Link) and value is not None:
                 return value
-            elif isinstance(value, Link) and value.value is not None:
+            elif isinstance(value, manager.link.Link) and value.value is not None:
                 return value.value
             else:
                 raise ValueError
@@ -205,11 +205,13 @@ class Cell(object):
 
     @classmethod
     def set_link_distribution(C, key, **kwargs):
+        from .. import manager
+
         logger.info('Setting link distribution for class _dist_map %s with key '
                     '`%s` and kwargs %s' % (C._dist_map, key, kwargs))
         if key in C._dist_map.keys():
             value = kwargs.get(C._dist_map[key], None)
-            if not isinstance(value, Link) and value is not None:
+            if not isinstance(value, manager.link.Link) and value is not None:
                 return value
             else:
                 raise ValueError
@@ -237,7 +239,8 @@ class Cell(object):
         for req in C._required:
             if req not in reqs.keys() or reqs[req] is None:
                 raise TypeError('Required argument %s not provided for '
-                                'constructor of %s or is `None`' % (req, C))
+                                'constructor of %s or is `None`. Got %s'
+                                % (req, C, kwargs))
 
         return C(*reqs.values(), **options)
 

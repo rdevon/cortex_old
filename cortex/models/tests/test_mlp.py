@@ -274,7 +274,7 @@ def test_vae(prior='gaussian'):
     f = theano.function(session.inputs, [
         session.tensors['conditional.P'], session.tensors['approx_posterior.samples'], session.cost] + session.costs.values())
     data = session.next_batch(batch_size=11)
-    p, samples, cost, kl_term, nll_term = f(*data)
+    p, samples, cost, nll_term, kl_term = f(*data)
 
     q = feed_numpy_d(manager.cells['approx_posterior'], data[0])[-1]
     py_h = feed_numpy_d(manager.cells['conditional'], samples)[-1]

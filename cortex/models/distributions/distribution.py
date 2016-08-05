@@ -8,7 +8,8 @@ import theano
 from theano import tensor as T
 
 from .. import init_rngs, Cell
-from ...utils import concatenate, e, floatX, pi, _slice, _slice2
+from ... import utils
+from ...utils import e, floatX, pi
 from ...utils.tools import _p
 
 
@@ -122,14 +123,14 @@ class Distribution(Cell):
         '''Returns single tensory from params.
 
         '''
-        return self._act(concatenate(args))
+        return self._act(utils.concatenate(args))
 
     def split_prob(self, p):
         '''Slices single tensor into constituent parts.
 
         '''
         slice_size = p.shape[p.ndim-1] // self.scale
-        slices = [_slice2(p, i * slice_size, (i + 1) * slice_size)
+        slices = [utils._slice2(p, i * slice_size, (i + 1) * slice_size)
                   for i in range(self.scale)]
         return slices
 
@@ -144,7 +145,7 @@ class Distribution(Cell):
         return slices[0]
 
     def _feed(self, *args):
-        return self._act(concatenate(args))
+        return self._act(utils.concatenate(args))
 
     def generate_random_variables(self, shape, P=None):
         if P is None:

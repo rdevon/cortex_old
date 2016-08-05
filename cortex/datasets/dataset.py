@@ -11,7 +11,6 @@ from os import path
 import random
 from theano import tensor as T
 
-from ..manager import get_manager
 from ..utils import floatX, intX
 from ..utils.tools import resolve_path
 from ..utils.extra import download_data, unzip
@@ -361,6 +360,8 @@ class BasicDataset(Dataset):
 
     '''
     _has_split = False
+    _viz = []
+
     def __init__(self, data, distributions=None, labels='labels', name=None,
                 balance=False, one_hot=True, transpose=None, **kwargs):
         '''Init function for BasicDataset.
@@ -382,7 +383,6 @@ class BasicDataset(Dataset):
         if name is None:
             name = data.keys()[0]
 
-        self.manager = get_manager()
         super(BasicDataset, self).__init__(name=name, **kwargs)
         self.data = data
         self.n_samples = None
@@ -435,7 +435,9 @@ class BasicDataset(Dataset):
         self.register()
 
     def register(self):
-        datasets = self.manager.datasets
+        from .. import _manager as manager
+
+        datasets = manager.datasets
         if self.name in datasets.keys():
             if self.mode in datasets[self.name].keys():
                 self.logger.warn(

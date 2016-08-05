@@ -10,7 +10,6 @@ import warnings
 
 from . import distributions
 from . import Cell, norm_weight, dropout
-from ..manager import get_manager
 from ..utils import concatenate, floatX
 
 
@@ -206,7 +205,8 @@ class DistributionMLP(Cell):
 
     @classmethod
     def set_link_value(C, key, distribution_type=None, **kwargs):
-        manager = get_manager()
+        from .. import _manager as manager
+
         if key != 'output':
             return super(DistributionMLP, C).set_link_value(
                 key, distribution_type=distribution_type, **kwargs)
@@ -218,7 +218,8 @@ class DistributionMLP(Cell):
 
     @classmethod
     def get_link_value(C, link, key):
-        manager = get_manager()
+        from .. import _manager as manager
+
         if key != 'output':
             return super(DistributionMLP, C).get_link_value(link, key)
         if link.distribution is None:

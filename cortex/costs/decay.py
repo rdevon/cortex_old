@@ -6,7 +6,6 @@ from collections import OrderedDict
 import logging
 from theano import tensor as T
 
-from .. import get_manager
 from ..utils import floatX
 
 
@@ -23,8 +22,6 @@ def l1_decay(rate, *tparams):
         dict: dictionary of l1 decay costs for each parameter.
 
     '''
-    manager = get_manager()
-
     cost = T.constant(0.).astype(floatX)
     rval = OrderedDict()
     if rate <= 0:
@@ -52,8 +49,6 @@ def l2_decay(rate, *tparams):
         dict: dictionary of l2 decay costs for each parameter.
 
     '''
-    manager = get_manager()
-
     cost = T.constant(0.).astype(floatX)
     rval = OrderedDict()
     if rate <= 0:

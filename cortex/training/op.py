@@ -26,7 +26,8 @@ def make_f_grad_shared(inp, cost, grads, updates):
         inp,
         outs,
         updates=updates,
-        profile=profile)
+        profile=profile,
+        on_unused_input='ignore')
 
     return f_grad_shared
 

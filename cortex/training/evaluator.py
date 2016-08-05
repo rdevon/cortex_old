@@ -38,7 +38,8 @@ class Evaluator(object):
         stats.update(**self.session.stats)
         stats.update(**self.session.costs)
         stats['total_cost'] = self.session.cost
-        self.f_stats = theano.function(self.session.inputs, stats)
+        self.f_stats = theano.function(self.session.inputs, stats,
+                                       on_unused_input='ignore')
 
         '''
         if out_path is not None:
@@ -64,8 +65,11 @@ class Evaluator(object):
                 r = self.f_stats(*inputs)
 
                 for k, v in r.iteritems():
-                    if isinstance(v, theano.sandbox.cuda.CudaNdarray):
-                        r[k] = np.asarray(v)
+                    try:
+                        if isinstance(v, theano.sandbox.cuda.CudaNdarray):
+                            r[k] = np.asarray(v)
+                    except AttributeError:
+                        pass
                 update_dict_of_lists(results, **r)
                 pbar.update(self.session.data_pos)
 

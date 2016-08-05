@@ -7,13 +7,13 @@ import numpy as np
 from theano import tensor as T
 
 from . import Distribution, _clip
-from ...utils import floatX, _slice, pi
+from ... import utils
 
 
 def _normal(trng, p, size=None):
     dim = p.shape[p.ndim-1] // 2
-    mu = _slice(p, 0, dim)
-    log_sigma = _slice(p, 1, dim)
+    mu = utils._slice(p, 0, dim)
+    log_sigma = utils._slice(p, 1, dim)
 
     if size is None:
         size = mu.shape
@@ -21,13 +21,13 @@ def _normal(trng, p, size=None):
 
 def _normal_prob(p):
     dim = p.shape[p.ndim-1] // 2
-    mu = _slice(p, 0, dim)
+    mu = utils._slice(p, 0, dim)
     return mu
 
 def _neg_normal_log_prob(x, p, clip=None, sum_probs=True):
     dim = p.shape[p.ndim-1] // 2
-    mu = _slice(p, 0, dim)
-    log_sigma = _slice(p, 1, dim)
+    mu = utils._slice(p, 0, dim)
+    log_sigma = utils._slice(p, 1, dim)
     if clip is not None:
         log_sigma = T.maximum(log_sigma, clip)
     energy = 0.5 * (
@@ -39,7 +39,7 @@ def _neg_normal_log_prob(x, p, clip=None, sum_probs=True):
 
 def _normal_entropy(p, clip=None):
     dim = p.shape[p.ndim-1] // 2
-    log_sigma = _slice(p, 1, dim)
+    log_sigma = utils._slice(p, 1, dim)
     if clip is not None:
         log_sigma = T.maximum(log_sigma, clip)
     entropy = 0.5 * T.log(2 * pi * e) + log_sigma

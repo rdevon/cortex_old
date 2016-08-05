@@ -56,6 +56,7 @@ class Multinomial(Distribution):
     def quantile(self, epsilon, P):
         return self.trng.multinomial(pvals=P, size=P.shape).astype(floatX)
 
+    @classmethod
     def random_variables(self, size):
         return self.trng.uniform(size, dtype=floatX)
 
