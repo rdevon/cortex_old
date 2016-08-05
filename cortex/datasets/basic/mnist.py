@@ -95,6 +95,9 @@ class MNIST(BasicDataset):
 
         return X, Y
 
+    def viz(self, X=None, out_file=None):
+        self.save_images(X=X, out_file=out_file)
+
     def classification_visualization(self, idx=None, X=None, Y=None,
                                      Y_pred=None, P=None, out_file=None):
 
@@ -113,10 +116,24 @@ class MNIST(BasicDataset):
 
         Y = np.argmax(Y, axis=-1)
         y_str = ['%d' % y for y in Y]
-        y_str = y_str * 2
+
+        if X_in.shape == X_out.shape:
+            X = np.concatenate([X_in, X_out], axis=0)
+            mul = 2
+        elif X_in.shape[1:] == X_out.shape:
+            X = np.concatenate([X_in, X_out[None, :, :]], axis=0)
+            mul = X_in.shape[0] + 1
+        elif X_out.shape[1:] == X_in.shape:
+            X = np.concatenate([X_in[None, :, :], X_out], axis=0)
+            mul = X_out.shape[0] + 1
+        else:
+            raise ValueError
+
+        y_str = y_str * mul
         n = len(y_str)
         annotations = zip(y_str, range(n))
-        self.save_images(X=np.concatenate([X_in, X_out], axis=0),
+
+        self.save_images(X=X,
                          annotations=annotations,
                          annotation_labels=['label'],
                          out_file=out_file)
@@ -186,15 +203,15 @@ class MNIST(BasicDataset):
             if annotation_labels is not None:
                 t_x = i_x * (self.image_shape[0] + spacing)
                 t_y = i_y * (self.image_shape[1] + spacing)
-                idr.line((0, t_y,
-                          t_x, t_y),
+                idr.line((0, t_x,
+                          t_y, t_x),
                     fill=(255, 255, 255))
 
-                idr.text((0, t_y), 'Legend: ', fill=(255, 255, 255),
+                idr.text((0, t_x), 'Legend: ', fill=(255, 255, 255),
                     font=font)
 
                 for i, (label, c) in enumerate(zip(annotation_labels, colors)):
-                    idr.text((((i + 1) * t_x) // 6, t_y), label, fill=c,
+                    idr.text((((i + 1) * t_y) // 6, t_x), label, fill=c,
                         font=font)
 
         image.save(out_file)

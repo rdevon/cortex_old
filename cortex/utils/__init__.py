@@ -8,6 +8,7 @@ import theano
 import warnings
 
 from .base import *
+slice = tslice
 
 __all__ = ['base']
 

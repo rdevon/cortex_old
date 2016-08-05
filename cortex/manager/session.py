@@ -73,9 +73,10 @@ class Session(object):
                 elif what == 'stat':
                     self.stats[key] = v
 
-        if key_prefix + '.outputs' not in self.tensors.keys():
-            self.tensors[key_prefix + '.outputs'] = dict()
-        self.tensors[key_prefix + '.outputs'].update(**out)
+        if key_prefix is not None:
+            if key_prefix + '.outputs' not in self.tensors.keys():
+                self.tensors[key_prefix + '.outputs'] = dict()
+            self.tensors[key_prefix + '.outputs'].update(**out)
 
     def add_cost(self, *args, **kwargs):
         self.add('cost', *args, **kwargs)
@@ -88,7 +89,7 @@ class Session(object):
 
     def add(self, what, name=None, op=None, cell_name=None, args=None,
             kwargs=None, test=False):
-        self.logger.info('Adding %s: %s' % (what, pprint.pformat(
+        self.logger.debug('Adding %s: %s' % (what, pprint.pformat(
             dict(op=op, name=name, cell_name=cell_name, args=args,
                  kwargs=kwargs))))
 
@@ -97,11 +98,11 @@ class Session(object):
         if cell_name is not None:
             cell = self.manager.cells[cell_name]
             out = op(cell, *args, **kwargs)
-            key_prefix = cell_name
         else:
             cell = None
             out = op(*args, **kwargs)
-            key_prefix = name
+
+        key_prefix = name
 
         if isinstance(out, T.TensorVariable):
             new_out = dict()
@@ -140,6 +141,7 @@ class Session(object):
 
     def add_samples(self, name=None, op=None, key=None, shape=None,
                     cell_name=None, kwargs=None):
+
         _, kwargs = self.resolve_op_args([], kwargs)
 
         if key is not None:
@@ -153,18 +155,21 @@ class Session(object):
         samples = cell._sample(epsilon, P=P, **kwargs)
 
         if isinstance (samples, T.TensorVariable):
-            samples = dict(samples=samples)
+            samples = {name: samples}
+            key_prefix = None
+        else:
+            samples = dict(
+                (k + '(sampling)', v)
+                 if not k in ['samples', 'updates', 'constants']
+                 else (k, v)
+                for k, v in samples.iteritems()
+            )
+            key_prefix = cell_name
 
         self.logger.debug('Adding samples: %s'
                           % pprint.pformat(dict(samples)))
 
-        samples = dict(
-            (k + '(sampling)', v)
-             if not k in ['samples', 'updates', 'constants']
-             else (k, v)
-            for k, v in samples.iteritems()
-        )
-        self.add_tensors(samples, key_prefix=cell_name)
+        self.add_tensors(samples, key_prefix=key_prefix)
 
     def test(self, data, f, key, key_prefix, cell=None):
         try:

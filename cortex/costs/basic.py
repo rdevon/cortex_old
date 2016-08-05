@@ -15,9 +15,8 @@ def squared_error(Y_hat=None, Y=None):
     sq_err.name = 'squared_error_loss'
     return sq_err
 
-def kl_divergence(P=None, Q=None, P_samples=None, cells=None):
-    from .. import get_manager
-    manager = get_manager()
+def kl_divergence(P=None, Q=None, P_samples=None, cells=None, average=True):
+    from .. import _manager as manager
 
     if P is None:
         raise TypeError('Reference distribution (P) must be provided.')
@@ -45,7 +44,13 @@ def kl_divergence(P=None, Q=None, P_samples=None, cells=None):
         P_cell.base_distribution == Q_cell.__class__ or
         Q_cell.base_distribution == P_cell.__class__ or
         P_cell_class == Q_cell.__class__):
-        return P_cell.kl_divergence(*(P_cell.split_prob(P) + Q_cell.split_prob(Q))).mean()
+        kl = P_cell.kl_divergence(
+            *(P_cell.split_prob(P) + Q_cell.split_prob(Q)))
+        if average:
+            return kl.mean()
+        else:
+            return kl
+
     else:
         if P_samples is None:
             session = manager.get_session()
@@ -57,7 +62,11 @@ def kl_divergence(P=None, Q=None, P_samples=None, cells=None):
 
     neg_term = P_cell.neg_log_prob(P_samples, P=P)
     pos_term = Q_cell.neg_log_prob(P_samples, P=Q)
+    kl = pos_term - neg_term
 
-    return (pos_term - neg_term).mean()
+    if average:
+        return kl.mean()
+    else:
+        return kl
 
 _costs = {'squared_error': squared_error, 'kl_divergence': kl_divergence}

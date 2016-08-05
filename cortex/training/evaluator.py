@@ -23,7 +23,8 @@ from ..utils.tools import check_bad_nums, update_dict_of_lists
 
 
 class Evaluator(object):
-    def __init__(self, session, valid_stat='cost', valid_sign=1):
+    def __init__(self, session, valid_stat='cost', valid_sign=1,
+                 batch_size=None):
         if valid_sign not in [-1, 1]:
             raise TypeError('valid_sign must be either 1 or -1.')
         self.session = session
@@ -32,6 +33,7 @@ class Evaluator(object):
         self.valid_sign = valid_sign
         self.valid_stat = valid_stat
         self.set_f_stats()
+        self.batch_size = batch_size
 
     def set_f_stats(self):
         stats = OrderedDict()
@@ -48,15 +50,17 @@ class Evaluator(object):
             bestfile = None
         '''
 
-    def __call__(self, batch_size=None, data_mode=None):
+    def __call__(self, data_mode=None):
         widgets = ['Testing (%s set): ' % data_mode, Percentage(),
                    ' (', Timer(), ')']
         self.session.reset_data(mode=data_mode)
         n = self.session.get_dataset_size(mode=data_mode)
         pbar    = ProgressBar(widgets=widgets, maxval=n).start()
         results = OrderedDict()
-        if batch_size is None:
+        if self.batch_size is None:
             batch_size = n
+        else:
+            batch_size = self.batch_size
 
         while True:
             try:
@@ -85,7 +89,6 @@ class Evaluator(object):
                 logging.error(v)
                 raise e
 
-        print
         return results
 
     def validate(self, results, epoch):

@@ -130,7 +130,7 @@ class Distribution(Cell):
 
         '''
         slice_size = p.shape[p.ndim-1] // self.scale
-        slices = [utils._slice2(p, i * slice_size, (i + 1) * slice_size)
+        slices = [utils.slice2(p, i * slice_size, (i + 1) * slice_size)
                   for i in range(self.scale)]
         return slices
 

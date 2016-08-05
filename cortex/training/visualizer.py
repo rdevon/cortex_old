@@ -8,11 +8,12 @@ from theano import tensor as T
 
 class Visualizer(object):
 
-    def __init__(self, session):
+    def __init__(self, session, batch_size=None):
         from ..manager import get_manager
         self.session = session
         self.manager = get_manager()
         self.fs = []
+        self.batch_size = batch_size
 
     def add(self, op, *args, **kwargs):
         from ..manager import resolve_tensor_arg
@@ -59,10 +60,13 @@ class Visualizer(object):
 
         self.fs.append(viz)
 
-    def __call__(self, batch_size=None, data_mode=None):
+    def __call__(self, data_mode=None):
         self.session.reset_data(mode=data_mode)
         n = self.session.get_dataset_size(mode=data_mode)
-        if batch_size is None: batch_size = n
+        if self.batch_size is None:
+            batch_size = n
+        else:
+            batch_size = self.batch_size
         inputs = self.session.next_batch(mode=data_mode, batch_size=batch_size)
         for f in self.fs:
             f(*inputs)

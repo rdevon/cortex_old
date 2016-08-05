@@ -94,7 +94,7 @@ def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan',
         strict=strict
     )
 
-def _slice(_x, n, dim):
+def tslice(_x, n, dim):
     '''Slice a tensor into 2 along last axis.
 
     Extended from Cho's arctic repo.
@@ -120,7 +120,7 @@ def _slice(_x, n, dim):
         raise ValueError('Number of dims (%d) not supported'
                          ' (but can add easily here)' % _x.ndim)
 
-def _slice2(_x, start, end):
+def slice2(_x, start, end):
     '''Slightly different slice function than above.
 
     Args:

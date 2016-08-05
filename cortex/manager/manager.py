@@ -127,6 +127,7 @@ class Manager(object):
         self.reset_sessions()
         self.trainer = None
         self.tester = None
+        self.visualizer = None
 
     def resolve_class(self, cell_type, classes=None):
         if classes is None:
@@ -186,17 +187,13 @@ class Manager(object):
         self.visualizer = Visualizer(session, **kwargs)
         return self.visualizer
 
-    def train(self, eval_modes=None, validation_mode=None):
+    def train(self, eval_modes=None, validation_mode=None, eval_every=10):
         if eval_modes is None: eval_modes=['train', 'valid']
         if validation_mode is None: validation_mode = 'valid'
 
         try:
             while True:
                 br = False
-                try:
-                    self.trainer.next_epoch(n_epochs=10)
-                except StopIteration:
-                    br = True
 
                 for mode in eval_modes:
                     r = self.evaluator(data_mode=mode)
@@ -205,7 +202,13 @@ class Manager(object):
                     self.monitor.update(mode, **r)
 
                 self.monitor.display()
-                self.visualizer()
+                if self.visualizer is not None:
+                    self.visualizer()
+
+                try:
+                    self.trainer.next_epoch(n_epochs=eval_every)
+                except StopIteration:
+                    br = True
 
                 if br:
                     break
@@ -305,7 +308,8 @@ class Manager(object):
                                 'or a string of form `cell_name` or '
                                 '`cell_name.op`')
 
-            name = cell_name
+            if name is None:
+                name = cell_name
 
             cell_type = self.cell_args[cell_name]['cell_type']
             C = self.resolve_class(cell_type)
@@ -379,7 +383,9 @@ class Manager(object):
 
                 elif what == 'stat':
                     if op not in self.stat_functions.keys():
-                        raise TypeError('Stat function `%s` not found.' % op)
+                        raise TypeError('Stat function `%s` not found. '
+                                        'Available: %s'
+                                        % (op, self.stat_functions.keys()))
                     op = self.stat_functions[op]
                 name = op.__name__
 
