@@ -46,9 +46,9 @@ setup(
         ]
     },
     data_files=[
-        'cortex/demos/demos_basic/classifier_mnist.yaml',
-        'cortex/demos/demos_basic/rbm_mnist.yaml',
-        'cortex/demos/demos_basic/vae_mnist.yaml',
+        'cortex/demos/demos_basic/yamls/classifier_mnist.yaml',
+        'cortex/demos/demos_basic/yamls/rbm_mnist.yaml',
+        'cortex/demos/demos_basic/yamls/vae_mnist.yaml',
         'cortex/demos/demos_neuroimaging/rbm_vbm.yaml',
         'cortex/demos/demos_neuroimaging/rbm_olin.yaml'
     ]
