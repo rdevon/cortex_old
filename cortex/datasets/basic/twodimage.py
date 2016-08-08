@@ -17,11 +17,12 @@ from ...utils.vis_utils import tile_raster_images
 
 
 class TwoDImageDataset(BasicDataset):
-    def __init__(self, data, image_shape=None, **kwargs):
-        if image_shape is None:
-            raise TypeError('`image_shape` not set.')
+    def __init__(self, data, image_shape=None, greyscale=True, **kwargs):
+        if image_shape is None: raise TypeError('`image_shape` not set.')
 
         self.image_shape = image_shape
+        self.greyscale = greyscale
+
         super(TwoDImageDataset, self).__init__(data, **kwargs)
 
     def viz(self, X=None, out_file=None):
@@ -56,7 +57,8 @@ class TwoDImageDataset(BasicDataset):
             X = np.concatenate([X_in[None, :, :], X_out], axis=0)
             mul = X_out.shape[0] + 1
         else:
-            raise ValueError
+            raise ValueError('Shapes do not match (%s vs %s)'
+                             % (X_in.shape, X_out.shape))
 
         y_str = y_str * mul
         n = len(y_str)
@@ -77,6 +79,7 @@ class TwoDImageDataset(BasicDataset):
             transpose (bool): if True, then transpose images.
 
         '''
+
         if len(X.shape) == 2:
             i_x, i_y = split_int_into_closest_two(X.shape[0])
             X = X.reshape((i_x, i_y, X.shape[1]))
@@ -94,11 +97,29 @@ class TwoDImageDataset(BasicDataset):
 
         tshape = (X.shape[0], X.shape[1])
         X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
-        image = Image.fromarray(
-            tile_raster_images(
+
+        if not self.greyscale:
+
+            div = X.shape[1] // 3
+            X_r = X[:, :div]
+            X_b = X[:, div:2*div]
+            X_g = X[:, 2*div:]
+            arrs = []
+            for X in [X_r, X_b, X_g]:
+                arr = tile_raster_images(
+                    X=X, img_shape=self.image_shape, tile_shape=tshape,
+                    tile_spacing=(spacing, spacing), bottom_margin=bottom_margin)
+                arrs.append(arr)
+            arr = np.array(arrs).transpose(1, 2, 0)
+        else:
+            arr = tile_raster_images(
                 X=X, img_shape=self.image_shape, tile_shape=tshape,
-                tile_spacing=(spacing, spacing), bottom_margin=bottom_margin))
-        image = Image.merge('RGB', (image, image, image))
+                tile_spacing=(spacing, spacing), bottom_margin=bottom_margin)
+
+        image = Image.fromarray(arr)
+        if self.greyscale:
+            image = Image.merge('RGB', (image, image, image))
+
         if annotations is not None:
             colors = [
                 (200, 0, 200), (50, 255, 50), (50, 50, 255), (255, 50, 50)]
@@ -150,4 +171,4 @@ class TwoDImageDataset(BasicDataset):
                     idr.text((((i + 1) * t_y) // 6, t_x), label, fill=c,
                         font=font)
 
-        image.save(out_file)
+        image.save(resolve_path(out_file))

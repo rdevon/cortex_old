@@ -11,4 +11,10 @@ def binary(X=None, noise=0.5):
     output = noise * X
     return output
 
-_ops = {'binary': binary}
+def gaussian(X=None, noise=0.01):
+    trng = utils.tools.get_trng()
+    noise = trng.normal(avg=0, std=noise, size=X.shape, dtype=X.dtype)
+    output = noise + X
+    return output
+
+_ops = {'binary': binary, 'gaussian': gaussian}
