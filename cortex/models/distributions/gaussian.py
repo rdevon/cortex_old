@@ -69,9 +69,6 @@ class Gaussian(Distribution):
         self.params = OrderedDict(
             mu=mu, log_sigma=log_sigma)
 
-    def get_params(self):
-        return [self.mu, self.log_sigma]
-
     @staticmethod
     def kl_divergence(mu_p, log_sigma_p, mu_q, log_sigma_q):
         log_sigma = T.maximum(log_sigma_p, _clip)

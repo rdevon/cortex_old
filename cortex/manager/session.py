@@ -56,27 +56,30 @@ class Session(object):
                 self.constants += v
 
             else:
-                if key_prefix is None:
-                    key = k
+                if what == 'cost':
+                    if k == 'cost':
+                        key = key_prefix
+                        self.cost += v
+                    else:
+                        key = _p(key_prefix, k)
+                    self.costs[key] = v
+                elif what == 'stat':
+                    if k == 'stat':
+                        key = key_prefix
+                    else:
+                        key = _p(key_prefix, k)
+                    self.stats[key] = v
                 else:
-                    key = key_prefix + '.' + k
+                    key = _p(key_prefix, k)
+
                 if key in self.tensors.keys():
                     raise KeyError('Cannot overwrite %s' % key)
                 else:
                     self.tensors[key] = v
 
-                if what == 'cost':
-                    if k == 'cost':
-                        self.cost += v
-                    else:
-                        self.costs[key] = v
-                elif what == 'stat':
-                    self.stats[key] = v
-
-        if key_prefix is not None:
-            if key_prefix + '.outputs' not in self.tensors.keys():
-                self.tensors[key_prefix + '.outputs'] = dict()
-            self.tensors[key_prefix + '.outputs'].update(**out)
+        if _p(key_prefix, 'outputs') not in self.tensors.keys():
+            self.tensors[_p(key_prefix, 'outputs')] = dict()
+        self.tensors[_p(key_prefix, 'outputs')].update(**out)
 
     def add_cost(self, *args, **kwargs):
         self.add('cost', *args, **kwargs)
@@ -87,14 +90,13 @@ class Session(object):
     def add_step(self, *args, **kwargs):
         self.add('step', *args, **kwargs)
 
-    def add(self, what, name=None, op=None, cell_name=None, args=None,
-            kwargs=None, test=False):
-        self.logger.debug('Adding %s: %s' % (what, pprint.pformat(
-            dict(op=op, name=name, cell_name=cell_name, args=args,
-                 kwargs=kwargs))))
+    def add(self, what, name=None, op=None, cell_name=None, constants=None,
+            args=None, kwargs=None, test=False):
+        self.logger.info('Adding %s: %s' % (what, pprint.pformat(
+            dict(op=op, name=name, cell_name=cell_name, constants=constants,
+                 args=args, kwargs=kwargs))))
 
-        args, kwargs = self.resolve_op_args(args, kwargs)
-
+        args, kwargs = self.resolve_op_args(args, kwargs, constants=constants)
         if cell_name is not None:
             cell = self.manager.cells[cell_name]
             out = op(cell, *args, **kwargs)
@@ -102,21 +104,18 @@ class Session(object):
             cell = None
             out = op(*args, **kwargs)
 
-        key_prefix = name
-
         if isinstance(out, T.TensorVariable):
             new_out = dict()
             if what == 'cost':
-                new_out[name] = out
                 new_out['cost'] = out
             elif what == 'stat':
-                new_out[name] = out
+                new_out['stat'] = out
             else:
                 new_out['output'] = out
 
             out = new_out
 
-        self.add_tensors(out, key_prefix=key_prefix, what=what)
+        self.add_tensors(out, key_prefix=name, what=what)
 
         if test:
             self.reset_data()
@@ -139,13 +138,16 @@ class Session(object):
                     f = theano.function(self.inputs, t, updates=self.updates)
                     self.test(data, f, key, name, cell=cell)
 
-    def add_samples(self, name=None, op=None, key=None, shape=None,
+    def add_samples(self, name=None, op=None, dist_key=None, shape=None,
                     cell_name=None, kwargs=None):
+        self.logger.info('Adding samples: %s' % pprint.pformat(
+            dict(op=op, name=name, dist_key=dist_key, shape=shape,
+                 cell_name=cell_name, kwargs=kwargs)))
 
         _, kwargs = self.resolve_op_args([], kwargs)
 
-        if key is not None:
-            P = self.tensors[key]
+        if dist_key is not None:
+            P = self.tensors[dist_key]
         else:
             P = None
 
@@ -156,7 +158,6 @@ class Session(object):
 
         if isinstance (samples, T.TensorVariable):
             samples = {name: samples}
-            key_prefix = None
         else:
             samples = dict(
                 (k + '(sampling)', v)
@@ -164,12 +165,10 @@ class Session(object):
                  else (k, v)
                 for k, v in samples.iteritems()
             )
-            key_prefix = cell_name
 
-        self.logger.debug('Adding samples: %s'
+        self.logger.info('Adding samples: %s'
                           % pprint.pformat(dict(samples)))
-
-        self.add_tensors(samples, key_prefix=key_prefix)
+        self.add_tensors(samples, key_prefix=cell_name)
 
     def test(self, data, f, key, key_prefix, cell=None):
         try:
@@ -189,14 +188,19 @@ class Session(object):
 
             raise e
 
-    def resolve_op_args(self, args, kwargs):
+    def resolve_op_args(self, args, kwargs, constants=None):
         manager = self.manager
         tensors = self.tensors
+
         if args is None: args = []
         if kwargs is None: kwargs = {}
+        if constants is None: constants = []
+
         new_args = []
         for arg in args:
-            if is_tensor_arg(arg):
+            if arg in self.tensors.keys():
+                new_args.append(self.tensors[arg])
+            elif is_tensor_arg(arg):
                 name, key, _ = resolve_tensor_arg(arg)
                 if name in manager.datasets.keys():
                     if arg not in tensors.keys():
@@ -207,10 +211,15 @@ class Session(object):
                         self.input_keys.append(key)
 
                 if arg not in tensors.keys() and arg in manager.samples.keys():
-                    self.add_samples(name=arg, **manager.samples[arg])
+                    self.add_samples(**manager.samples[arg])
 
                 if arg in tensors.keys():
-                    new_args.append(tensors[arg])
+                    ten = tensors[arg]
+                    if arg in constants:
+                        ten = ten.copy()
+                        tensors[arg + '(copy)'] = ten
+                        self.constants.append(ten)
+                    new_args.append(ten)
                 elif arg not in manager.cells.keys():
                     for tpk, tparam in manager.tparams.iteritems():
                         if arg in tpk:
@@ -220,7 +229,7 @@ class Session(object):
                                      % (arg, tensors.keys()))
             else:
                 new_args.append(arg)
-        assert len(new_args) >= len(args)
+        assert len(new_args) >= len(args), (args, new_args)
 
         new_kwargs = {}
         for key, arg in kwargs.iteritems():
@@ -268,7 +277,7 @@ class Session(object):
 
         for name, samples in manager.samples.iteritems():
             if name not in tensors.keys():
-                self.add_samples(name=name, **samples)
+                self.add_samples(**samples)
 
     def get_dataset_names(self):
         seen = set()

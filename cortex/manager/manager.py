@@ -288,6 +288,7 @@ class Manager(object):
 
     def add_step(self, op, *args, **kwargs):
         name = kwargs.pop('name', None)
+        constants = kwargs.pop('constants', None)
         if isinstance(op, str) and op in self.ops:
             if name is None: name = op
             op = self.ops[op]
@@ -308,40 +309,43 @@ class Manager(object):
                                 'or a string of form `cell_name` or '
                                 '`cell_name.op`')
 
-            if name is None:
-                name = cell_name
+            if name is None: name = cell_name
 
             cell_type = self.cell_args[cell_name]['cell_type']
             C = self.resolve_class(cell_type)
-            if op_name is None:
-                op_name = '__call__'
+            if op_name is None: op_name = '__call__'
+
             if hasattr(C, op_name):
                 op = getattr(C, op_name)
             else:
                 raise TypeError('Cell %s of type %s has no method %s.'
                                 % (cell_name, C, op_name))
-            if op_name == '__call__':
-                arg_keys = C._call_args
-            else:
-                arg_keys = getattr(C, '_%s_args' % op_name)
-            if len(args) != len(arg_keys):
-                raise TypeError('%d operation (%s) args provided, but %d '
-                                'arg_keys available. (%s given, %s needed)'
-                                % (len(args), C, len(arg_keys),
-                                   args, arg_keys))
 
-            for arg, key in zip(args, arg_keys):
-                if (key in C._dim_map.keys() and is_tensor_arg(arg)):
-                    self.match_dims(arg, '.'.join([cell_name, key]))
+            if len(args) > 0:
+                if op_name == '__call__':
+                    arg_keys = C._call_args
+                else:
+                    arg_keys = getattr(C, '_%s_args' % op_name)
+                if len(args) != len(arg_keys):
+                    raise TypeError('%d operation (%s) args provided, but %d '
+                                    'arg_keys available. (%s given, %s needed)'
+                                    % (len(args), C, len(arg_keys),
+                                       args, arg_keys))
+
+                for arg, key in zip(args, arg_keys):
+                    if (key in C._dim_map.keys() and is_tensor_arg(arg)):
+                        self.match_dims(arg, '.'.join([cell_name, key]))
         else:
             cell_name = None
-            if name is None:
-                name = op.__name__
+            if name is None: name = op.__name__
 
-        self.test_op_args(op, args, kwargs)
+        #self.test_op_args(op, args, kwargs)
 
         self.steps.append(dict(
-            cell_name=cell_name, name=name, op=op, args=args, kwargs=kwargs))
+            cell_name=cell_name, name=name, op=op, constants=constants,
+            args=args, kwargs=kwargs))
+
+        return name
 
     def add_cost(self, *args, **kwargs):
         self.add('cost', *args, **kwargs)
@@ -351,34 +355,40 @@ class Manager(object):
 
     def add(self, what, op, *args, **kwargs):
         cell_name = None
+        name = kwargs.pop('name', None)
         if isinstance(op, str):
             if is_tensor_arg(op):
-                cell_name, cost_name, _ = resolve_tensor_arg(op)
+                cell_name, n, _ = resolve_tensor_arg(op)
                 cell_type = self.cell_args[cell_name]['cell_type']
                 C = self.resolve_class(cell_type)
 
+                if name is None: name = cell_name
+
                 if what == 'cost':
-                    if cost_name == 'cost' and hasattr(C, '_cost'):
+                    if n == 'cost' and hasattr(C, '_cost'):
                         op = getattr(C, '_cost')
-                        name = 'cost'
                     else:
-                        if not cost_name in C._costs.keys():
+                        if not n in C._costs.keys():
                             raise AttributeError(
                                 'cell type %s for cell `%s` has no '
-                                'cost %s' % (C, cell_name, cost_name))
-                        op = getattr(C, C._costs[cost_name])
-                        name = cost_name
+                                'cost %s' % (C, cell_name, n))
+                        op = getattr(C, C._costs[n])
+                        name = _p(name, n)
 
                 elif what == 'stat':
-                    if not stat_name in C._stats.keys():
+                    if not n in C._stats.keys():
                         raise AttributeError('cell type %s for cell `%s` has no '
-                                             'stat %s' % (C, cell_name, stat_name))
-                        op = getattr(C, C._stats[stat_name])
+                                             'stat %s' % (C, cell_name, n))
+                    op = getattr(C, C._stats[n])
+                    name = _p(name, n)
 
             else:
+                if name is None: name = op
                 if what == 'cost':
                     if op not in self.cost_functions.keys():
-                        raise TypeError('Cost function `%s` not found.' % op)
+                        raise TypeError('Cost function `%s` not found. '
+                                        'Avalilable: %s'
+                                        % (op, self.cost_functions.keys()))
                     op = self.cost_functions[op]
 
                 elif what == 'stat':
@@ -387,16 +397,14 @@ class Manager(object):
                                         'Available: %s'
                                         % (op, self.stat_functions.keys()))
                     op = self.stat_functions[op]
-                name = op.__name__
 
-        elif hasattr(op, '__call__'):
-            name = op.__name__
+        elif callable(op):
+            if name is None: name = op.__name__
 
         else:
             raise TypeError
 
-        self.test_op_args(op, args, kwargs)
-
+        #self.test_op_args(op, args, kwargs)
         if what == 'cost':
             if name in self.costs.keys():
                 self.logger.warn('Cost `%s` already found. Overwriting.')
@@ -404,6 +412,7 @@ class Manager(object):
                 self.logger.debug('Adding costs `%s`' % name)
             self.costs[name] = dict(
                 cell_name=cell_name, op=op, args=args, kwargs=kwargs)
+            print self.costs
 
         elif what == 'stat':
             if name in self.stats.keys():
@@ -420,9 +429,9 @@ class Manager(object):
 
         if arg in self.cell_args.keys():
             cell_name = arg
-            key = None
+            dist_key = None
         elif is_tensor_arg(arg):
-            cell_name, key, _ = resolve_tensor_arg(arg)
+            cell_name, dist_key, _ = resolve_tensor_arg(arg)
 
         if cell_name not in self.cell_args.keys():
             raise KeyError('Cell %s not found' % cell_name)
@@ -432,20 +441,21 @@ class Manager(object):
             raise ValueError('Cell type %s does not support sampling'
                              % C.__name__)
 
-        if key is not None and key not in C._sample_tensors:
+        if dist_key is not None and dist_key not in C._sample_tensors:
             raise KeyError('Cell %s does not support sample tensor %s'
-                           % (cell_name, key))
+                           % (cell_name, dist_key))
 
-        name = _p(cell_name, name)
-        if key is not None: key = arg
+        s_name = _p(cell_name, name)
+        if dist_key is not None: dist_key = arg
 
-        if name in self.samples.keys():
+        if s_name in self.samples.keys():
             self.logger.warn('Overwriting samples %s' % name)
         else:
             self.logger.debug('Adding samples `%s`' % name)
 
-        self.samples[name] = dict(
-            cell_name=cell_name, key=key, shape=shape, kwargs=kwargs)
+        self.samples[s_name] = dict(
+            cell_name=cell_name, name=name, dist_key=dist_key, shape=shape,
+            kwargs=kwargs)
 
     # Methods for linking and dim matching -------------------------------------
     def resolve_links(self, name):

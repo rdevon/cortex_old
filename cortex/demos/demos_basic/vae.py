@@ -1,5 +1,5 @@
 '''
-Demo for training VAE.
+Demo for training VAE. Has additional semi-supervised classification
 
 Try with `python vae.py vae_mnist.yaml`.
 '''
@@ -18,17 +18,24 @@ cortex.prepare_cell('DistributionMLP', name='approx_posterior', dim_hs=[500],
 cortex.prepare_cell('gaussian', name='prior', dim=dim_h)
 cortex.prepare_cell('DistributionMLP', name='conditional', dim_hs=[500],
                     h_act='softplus')
+cortex.prepare_cell('DistributionMLP', name='classifier', dim_hs=[100],
+                    h_act='softplus')
 
 cortex.match_dims('prior.P', 'approx_posterior.P')
 cortex.match_dims('conditional.P', 'mnist.input')
-cortex.add_step('approx_posterior', 'mnist.input')
 
+cortex.add_step('approx_posterior', 'mnist.input')
 cortex.add_step('conditional', 'approx_posterior.samples')
+
 cortex.prepare_samples('approx_posterior.P', n_posterior_samples)
 cortex.prepare_samples('approx_posterior.P', n_posterior_samples_test,
                        name='test_samples')
 cortex.prepare_samples('prior', 100)
+
 cortex.add_step('conditional', 'prior.samples', name='prior_gen')
+cortex.add_step('classifier', 'approx_posterior.samples',
+                constants=['approx_posterior.samples'])
+cortex.match_dims('classifier.P', 'mnist.labels')
 
 cortex.build()
 cortex.profile()
@@ -45,6 +52,8 @@ cortex.add_stat('variational_inference', X='mnist.input',
                 posterior_samples='test_samples',
                 cells=['conditional.distribution',
                        'approx_posterior.distribution', 'prior'])
+cortex.add_cost('classifier.negative_log_likelihood', 'mnist.labels')
+cortex.add_stat('logistic_regression', P='classifier.P', Y='mnist.labels')
 
 train_session = cortex.create_session()
 cortex.build_session()

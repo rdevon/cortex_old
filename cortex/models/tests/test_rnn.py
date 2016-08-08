@@ -18,7 +18,7 @@ from cortex.utils import floatX, logger as cortex_logger
 logger = logging.getLogger(__name__)
 #cortex_logger.set_stream_logger(2)
 _atol = 1e-6
-manager = cortex.manager
+manager = cortex._manager
 
 sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))
 tanh = lambda x: np.tanh(x)

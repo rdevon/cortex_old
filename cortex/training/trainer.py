@@ -18,6 +18,7 @@ from theano import tensor as T
 import time
 
 from .op import _ops
+from ..utils import floatX
 from ..utils.logger import get_class_logger
 from ..utils.tools import check_bad_nums, update_dict_of_lists
 
@@ -55,7 +56,8 @@ class Trainer(object):
 
     def __init__(self, session, name='trainer', data_mode='train',
                  optimizer=None, epochs=None, batch_size=None,
-                 learning_rate=None, optimizer_args=None):
+                 learning_rate=None, optimizer_args=None, costs=None,
+                 models=None):
         if optimizer is None:
             raise TypeError('`optimizer` not set')
         if epochs is None:
@@ -69,7 +71,6 @@ class Trainer(object):
         training_time = 0
         self.logger = get_class_logger(self)
         self.session = session
-        self.set_optimizer(optimizer=optimizer, optimizer_args=optimizer_args)
         self.learning_rate = learning_rate
         self.epoch = 0
         self.epochs = epochs
@@ -78,11 +79,15 @@ class Trainer(object):
         self.data_mode = data_mode
         self.training_time = 0
 
-        '''
-        if f_extra is not None:
-            logging.info('Performing initial evaluation function...')
-            f_extra()
-        '''
+        self.grads = OrderedDict()
+
+        if costs is None:
+            self.add_objective()
+        else:
+            assert models is not None and len(costs) == len(models)
+            for cost, models_ in zip(costs, models):
+                self.add_objective(cost, models_)
+        self.set_optimizer(optimizer, optimizer_args)
 
     def start_pbar(self, n):
         widgets = ['Epoch {epoch} (training {name}, '.format(
@@ -129,8 +134,14 @@ class Trainer(object):
 
             self.f_grad_updates(self.learning_rate)
 
+    def add_grads(self, grads):
+        for k, v in grads.iteritems():
+            if k in self.grads.keys():
+                self.grads[k] += v
+            else:
+                self.grads[k] = v
 
-    def set_optimizer(self, optimizer='sgd', optimizer_args=None):
+    def add_objective(self, cost=None, models=None):
         '''Sets the parameter update functions with optimizer.
 
         Args:
@@ -139,32 +150,47 @@ class Trainer(object):
             optimizer_args (Optional[dict]): optional arguments for optimizer.
 
         '''
-        self.logger.info('Setting up optimizer `%s`' % optimizer)
+        from .. import _manager as manager
 
         session = self.session
 
-        from ..manager import get_manager
-        manager = get_manager()
-
-        cost = session.cost
-        tparams = manager.tparams
-
-        if optimizer_args is None:
-            optimizer_args = dict()
+        if cost is None:
+            cost = session.cost
+        else:
+            if isinstance(cost, list):
+                cost_ = T.constant(0).astype(floatX)
+                for cost__ in cost:
+                    cost_ += session.costs[cost__]
+                cost = cost_
+            else:
+                cost = session.costs[cost]
+        if models is None:
+            tparams = manager.tparams
+        else:
+            tparams = OrderedDict()
+            for model in models:
+                for k, v in tparams.iteritems():
+                    if model == prefix:
+                        tparams[k] = v
 
         grads = T.grad(
             cost, wrt=tparams.values(), consider_constant=session.constants)
         grads = OrderedDict((k, g) for k, g in zip(tparams.keys(), grads))
+        self.add_grads(grads)
 
+    def set_optimizer(self, optimizer, optimizer_args):
         if optimizer not in _ops.keys():
             raise KeyError('Optimizer `%s` not found, available: %s'
                            % (optimizer, _ops.keys()))
+        from .. import _manager as manager
+
+        session = self.session
+
         optimizer = _ops[optimizer]
 
-        lr = T.scalar(name='lr')
-        f_grad_shared, f_grad_updates = optimizer(
-            lr, tparams, grads, session.inputs, cost, extra_ups=session.updates,
-            **optimizer_args)
+        if optimizer_args is None: optimizer_args = dict()
 
-        self.f_grad_shared = f_grad_shared
-        self.f_grad_updates = f_grad_updates
+        lr = T.scalar(name='lr')
+        self.f_grad_shared, self.f_grad_updates = optimizer(
+            lr, manager.tparams, self.grads, session.inputs, session.cost,
+            extra_ups=session.updates, **optimizer_args)

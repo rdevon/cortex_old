@@ -3,13 +3,11 @@
 '''
 
 import cortex
-from cortex.utils.tools import print_section
 
 
 cortex.prepare_data('MNIST', mode='train', source='$data/basic/mnist.pkl.gz')
 cortex.prepare_data('MNIST', mode='valid', source='$data/basic/mnist.pkl.gz')
 
-print_section('Forming model')
 cortex.prepare_cell('MLP', name='encoder', dim_hs=[200, 100], dim_out=50,
                      weight_noise=0.01, dropout=0.5)
 cortex.prepare_cell('DistributionMLP', name='decoder', dim_hs=[100, 200],
@@ -59,5 +57,4 @@ visualizer.add('mnist.autoencoder_visualization',
                inputs='visualization.random_set.outputs',
                out_file='/Users/devon/tmp/autoencoder_test.png')
 
-print_section('Training')
 cortex.train()

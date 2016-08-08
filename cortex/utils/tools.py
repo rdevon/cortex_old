@@ -353,4 +353,6 @@ def _p(pp, name):
 
     From Cho's arctic repo.
     '''
-    return '%s.%s'%(pp, name)
+    if pp is None:
+        return name
+    return '%s.%s' % (pp, name)

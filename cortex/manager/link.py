@@ -74,7 +74,7 @@ class Link(object):
                 try:
                     self.distribution = f_class.set_link_distribution(
                         f_key, **f_args)
-                except KeyError:
+                except (KeyError, ValueError):
                     pass
 
         if self.value is None:

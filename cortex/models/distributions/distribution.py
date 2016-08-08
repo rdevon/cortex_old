@@ -113,12 +113,6 @@ class Distribution(Cell):
     def init_params(self):
         raise NotImplementedError()
 
-    def get_params(self):
-        '''Fetches distribution parameters.
-
-        '''
-        raise NotImplementedError()
-
     def get_prob(self, *args):
         '''Returns single tensory from params.
 

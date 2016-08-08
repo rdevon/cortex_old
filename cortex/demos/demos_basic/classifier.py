@@ -31,8 +31,8 @@ cortex.build_session()
 
 trainer = cortex.setup_trainer(
     train_session,
-    optimizer='sgd',
     epochs=1000,
+    optimizer='sgd',
     learning_rate=0.1,
     batch_size=100
 )
