@@ -16,7 +16,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='cortex',
-    version='0.12a',
+    version='0.3a',
     description='cortex: a deep learning toolbox for neuroimaging',
     long_description=long_description,
     url='https://github.com/rdevon/cortex',
@@ -31,7 +31,7 @@ setup(
     ],
     keywords='deep learning neuroimaging',
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-    install_requires=['nibabel', 'nipy', 'sklearn', 'python-igraph', 'Pillow'],
+    install_requires=['nibabel', 'nipy', 'sklearn', 'python-igraph', 'Pillow', 'terminaltables'],
     entry_points={
         'console_scripts': [
             'cortex-setup=cortex:main',
