@@ -31,7 +31,7 @@ setup(
     ],
     keywords='deep learning neuroimaging',
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-    install_requires=['nibabel', 'nipy', 'sklearn', 'python-igraph', 'Pillow'],
+    install_requires=['nibabel', 'nipy', 'sklearn', 'python-igraph', 'Pillow', 'terminaltables'],
     entry_points={
         'console_scripts': [
             'cortex-setup=cortex:main',
@@ -46,9 +46,9 @@ setup(
         ]
     },
     data_files=[
-        'cortex/demos/demos_basic/classifier_mnist.yaml',
-        'cortex/demos/demos_basic/rbm_mnist.yaml',
-        'cortex/demos/demos_basic/vae_mnist.yaml',
+        'cortex/demos/demos_basic/yamls/classifier_mnist.yaml',
+        'cortex/demos/demos_basic/yamls/rbm_mnist.yaml',
+        'cortex/demos/demos_basic/yamls/vae_mnist.yaml',
         'cortex/demos/demos_neuroimaging/rbm_vbm.yaml',
         'cortex/demos/demos_neuroimaging/rbm_olin.yaml'
     ]
