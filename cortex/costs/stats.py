@@ -13,6 +13,7 @@ def logistic_regression_stats(P=None, Y=None):
     Y_pred = T.argmax(P, axis=-1)
     Y_ = T.argmax(Y, axis=-1)
     stats['error'] = T.neq(Y_pred, Y_).mean()
+    P = T.clip(P, 1e-7, 1 - 1e-7)
     stats['nll'] = (
         -Y * T.log(P) - (1 - Y) * T.log(1 - P)).sum(axis=-1).mean()
     return stats

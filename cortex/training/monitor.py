@@ -47,9 +47,13 @@ class BasicMonitor(object):
         for section in self.sections.keys():
             table_data = [['Name'] + self.stats.keys()]
             for stat in self.sections[section]:
-                td = [stat]
+                stat_str = stat.replace('_grad_', u'\u03b4')
+                td = [stat_str]
                 for mode in self.stats.keys():
-                    td.append(self.stats[mode][stat][-1])
+                    if stat in self.stats[mode].keys():
+                        td.append(self.stats[mode][stat][-1])
+                    else:
+                        td.append(None)
                 table_data.append(td)
 
             table = AsciiTable(table_data, section.title())

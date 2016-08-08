@@ -5,6 +5,10 @@
 import logging
 
 
+__all__ = ['twodimage']
+
+from twodimage import *
+
 logger = logging.getLogger(__name__)
 from . import caltech, cifar, dummy, euclidean, mnist, uci
 _modules = [caltech, cifar, dummy, euclidean, mnist, uci]

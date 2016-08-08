@@ -9,7 +9,7 @@ from theano import tensor as T
 import warnings
 
 from . import distributions
-from . import Cell, norm_weight, dropout
+from . import batch_normalization, Cell, dropout, norm_weight
 from ..utils import concatenate, floatX
 
 
@@ -42,7 +42,8 @@ class MLP(Cell):
 
     '''
     _required = ['dim_in', 'dim_out']
-    _options = {'dropout': False, 'weight_noise': 0}
+    _options = {'dropout': False, 'weight_noise': 0,
+                'batch_normalization': False}
     _args = ['dim_in', 'dim_out', 'dim_hs', 'h_act', 'out_act']
     _dim_map = {
         'X': 'dim_in',
@@ -129,10 +130,16 @@ class MLP(Cell):
             OrderedDict: results at every layer.
 
         '''
+        session = self.manager._current_session
+
         params = list(params)
         outs = OrderedDict(X=X)
         outs['input'] = X
         for l in xrange(self.n_layers):
+            if self.batch_normalization:
+                self.logger.debug('Batch normalization on layer %d' % l)
+                X = batch_normalization(X, session=session)
+
             W = params.pop(0)
             b = params.pop(0)
             preact = T.dot(X, W) + b
@@ -141,6 +148,7 @@ class MLP(Cell):
                 X = self.h_act(preact)
                 outs['G_%d' % l] = preact
                 outs['H_%d' % l] = X
+
                 if self.dropout and self.noise_switch():
                     self.logger.debug('Adding dropout to layer {layer} for MLP '
                                   '`{name}`'.format(layer=l, name=self.name))
@@ -171,7 +179,7 @@ class DistributionMLP(Cell):
             'cell_type': 'MLP',
             '_required': {'out_act': 'identity'},
             '_passed': ['dim_in', 'dim_h', 'n_layers', 'dim_hs', 'h_act',
-                        'dropout', 'weight_noise']
+                        'dropout', 'weight_noise', 'batch_normalization']
         },
         'distribution': {
             'cell_type': '&distribution_type',

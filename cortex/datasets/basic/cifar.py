@@ -7,76 +7,41 @@ import cPickle
 import gzip
 import numpy as np
 from os import path
-import PIL
 
-from ...utils import floatX
+from . import TwoDImageDataset
 from ...utils.tools import resolve_path
-from ...utils.vis_utils import tile_raster_images
 
 
-class CIFAR(object):
+class CIFAR(TwoDImageDataset):
     '''CIFAR dataset.
 
     '''
-    def __init__(self, batch_size=128, source=None,
-                 restrict_digits=None, mode='train', shuffle=True, inf=False,
-                 stop=None, out_path=None):
+    def __init__(self, source=None, restrict_classes=None, mode='train',
+                 name='cifar', greyscale=False, **kwargs):
+        if source is None:
+            raise TypeError('No source file provided')
+
+        logger.info('Loading {name} ({mode}) from {source}'.format(
+            name=name, mode=mode, source=source))
+
         source = resolve_path(source)
-        self.name = 'cifar'
 
-        X, Y = self.get_data(source, mode)
-        self.mode = mode
+        X, Y = self.get_data(source, mode, greyscale=greyscale)
 
-        self.image_shape = (32, 32)
-        self.out_path = out_path
+        if restrict_classes is not None:
+            X = np.array(
+                [x for i, x in enumerate(X) if Y[i] in restrict_classes])
+            Y = np.array(
+                [y for i, y in enumerate(Y) if Y[i] in restrict_classes])
 
-        if restrict_digits is None:
-            n_classes = 10
-        else:
-            n_classes = len(restrict_digits)
+        data = {'input': X, 'labels': Y}
+        distributions = {'input': 'gaussian', 'labels': 'multinomial'}
 
-        O = np.zeros((X.shape[0], n_classes), dtype='float32')
+        super(CIFAR, self).__init__(data, distributions=distributions,
+                                    name=name, mode=mode, image_shape=(28, 28),
+                                    **kwargs)
 
-        if restrict_digits is None:
-            for idx in xrange(X.shape[0]):
-                O[idx, Y[idx]] = 1.;
-        else:
-            print 'Restricting to classes %s' % restrict_digits
-            new_X = []
-            i = 0
-            for j in xrange(X.shape[0]):
-                if Y[j] in restrict_digits:
-                    new_X.append(X[j])
-                    c_idx = restrict_digits.index(Y[j])
-                    O[i, c_idx] = 1.;
-                    i += 1
-            X = np.float32(new_X)
-
-        if stop is not None:
-            X = X[:stop]
-
-        self.n = X.shape[0]
-        print 'Data shape: %d x %d' % X.shape
-
-        self.dims = dict(cifar=X.shape[1], label=len(np.unique(Y)))
-        self.distributions = dict(cifar='gaussian', label='multinomial')
-
-        self.shuffle = shuffle
-        self.pos = 0
-        self.bs = batch_size
-        self.inf = inf
-        self.next = self._next
-        self.X = X
-        self.O = O
-
-        self.mean_image = self.X.mean(axis=0)
-        self.X -= self.mean_image
-        self.X /= self.X.std(axis=0)
-
-        if self.shuffle:
-            self.randomize()
-
-    def get_data(self, source, mode, greyscale=True):
+    def get_data(self, source, mode, greyscale=False):
         if not greyscale:
             raise NotImplementedError()
         if source is None:
@@ -115,9 +80,7 @@ class CIFAR(object):
             X_g = X[:, 2*div:]
             X = (X_r + X_b + X_g) / 3.0
 
-        X = X.astype(floatX)
-        X = X / float(X.max())
-        X = (X - X.mean(axis=0))# / X.std(axis=0)
+        assert False, X.shape
 
         return X, Y
 

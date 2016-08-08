@@ -4,6 +4,10 @@
 
 import cortex
 from cortex.utils.tools import print_section
+from cortex.utils import logger as cortex_logger
+
+
+cortex_logger.set_stream_logger(2)
 
 print_section('Setting up data')
 cortex.prepare_data('MNIST', mode='train', source='$data/basic/mnist.pkl.gz')
@@ -11,7 +15,7 @@ cortex.prepare_data('MNIST', mode='valid', source='$data/basic/mnist.pkl.gz')
 
 print_section('Forming model') # -----------------------------------------------
 cortex.prepare_cell('DistributionMLP', name='classifier', dim_hs=[200, 100],
-                     weight_noise=0.01, dropout=0.5)
+                     weight_noise=0.01, dropout=0.5, batch_normalization=True)
 
 cortex.add_step('classifier', 'mnist.input')
 cortex.match_dims('classifier.P', 'mnist.labels')
@@ -52,7 +56,7 @@ cortex.profile()
 visualizer = cortex.setup_visualizer(valid_session)
 visualizer.add('mnist.classification_visualization',
                inputs='visualization.classifier.random_set.outputs',
-               out_file='/Users/devon/tmp/classifier_test.png')
+               out_file='/home/devon/tmp/classifier_test.png')
 
 print_section('Training')
 cortex.train()

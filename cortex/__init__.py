@@ -14,8 +14,6 @@ from .utils.extra import (
 from .utils import logger as cortex_logger
 
 
-cortex_logger.set_stream_logger(1)
-
 __version__ = '0.3a'
 logger = logging.getLogger(__name__)
 _manager = manager.get_manager()

@@ -65,6 +65,13 @@ def dropout(x, act, rate, trng):
             raise NotImplementedError('No dropout for %s yet' % activ)
         return x
 
+def batch_normalization(x, epsilon=1e-6, session=None):
+    mu = x.mean(axis=0, keepdims=True)
+    sigma = x.std(axis=0, keepdims=True)
+    if session is not None:
+        session.constants += [mu, sigma]
+    return (x - mu) / T.sqrt(sigma ** 2 + epsilon)
+
 
 class NoiseSwitch(object):
     '''Object to control noise of model.

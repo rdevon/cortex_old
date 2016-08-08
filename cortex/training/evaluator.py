@@ -100,9 +100,11 @@ class Evaluator(object):
         valid_value *= self.valid_sign
 
         if self.best_value is None or valid_value < self.best_value:
-            print 'Found best %s: %.2f' % (self.valid_stat, valid_value)
+            print 'Found best %s: %.2e' % (self.valid_stat, valid_value)
             self.best_value = valid_value
             self.best_epoch = epoch
             return True
         else:
+            print ('Best %s at epoch %d: %.2e'
+                   % (self.valid_stat, self.best_epoch, self.best_value))
             return False

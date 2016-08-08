@@ -92,9 +92,9 @@ class Session(object):
 
     def add(self, what, name=None, op=None, cell_name=None, constants=None,
             args=None, kwargs=None, test=False):
-        self.logger.info('Adding %s: %s' % (what, pprint.pformat(
+        self.logger.debug('Adding %s: %s' % (what,
             dict(op=op, name=name, cell_name=cell_name, constants=constants,
-                 args=args, kwargs=kwargs))))
+                 args=args, kwargs=kwargs)))
 
         args, kwargs = self.resolve_op_args(args, kwargs, constants=constants)
         if cell_name is not None:
@@ -140,9 +140,9 @@ class Session(object):
 
     def add_samples(self, name=None, op=None, dist_key=None, shape=None,
                     cell_name=None, kwargs=None):
-        self.logger.info('Adding samples: %s' % pprint.pformat(
+        self.logger.debug('Adding samples: %s' %
             dict(op=op, name=name, dist_key=dist_key, shape=shape,
-                 cell_name=cell_name, kwargs=kwargs)))
+                 cell_name=cell_name, kwargs=kwargs))
 
         _, kwargs = self.resolve_op_args([], kwargs)
 
@@ -260,6 +260,7 @@ class Session(object):
     def build(self, test=False):
         manager = self.manager
         tensors = self.tensors
+        manager._current_session = self
 
         if self.noise:
             self.noise_switch.switch('on')
@@ -278,6 +279,8 @@ class Session(object):
         for name, samples in manager.samples.iteritems():
             if name not in tensors.keys():
                 self.add_samples(**samples)
+
+        manager._current_session = None
 
     def get_dataset_names(self):
         seen = set()

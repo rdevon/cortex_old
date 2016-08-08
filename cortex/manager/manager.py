@@ -187,9 +187,15 @@ class Manager(object):
         self.visualizer = Visualizer(session, **kwargs)
         return self.visualizer
 
-    def train(self, eval_modes=None, validation_mode=None, eval_every=10):
+    def train(self, eval_modes=None, validation_mode=None, eval_every=10,
+              monitor_grads=False):
         if eval_modes is None: eval_modes=['train', 'valid']
         if validation_mode is None: validation_mode = 'valid'
+        if len(self.trainer.f_grads) == 0:
+            self.trainer.set_optimizer()
+        if monitor_grads:
+            self.monitor.add_section(
+                'Grads', ['_grad_' + k for k in self.trainer.tparams])
 
         try:
             while True:
@@ -206,7 +212,9 @@ class Manager(object):
                     self.visualizer()
 
                 try:
-                    self.trainer.next_epoch(n_epochs=eval_every)
+                    grads = self.trainer.next_epoch(n_epochs=eval_every)
+                    if monitor_grads:
+                        self.monitor.update('train', **grads)
                 except StopIteration:
                     br = True
 

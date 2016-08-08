@@ -78,16 +78,15 @@ class Trainer(object):
         self.name = name
         self.data_mode = data_mode
         self.training_time = 0
+        self.u = 0
 
-        self.grads = OrderedDict()
+        self.f_grads = []
+        self.f_updates = []
+        self.f_freqs = []
+        self.tparams = []
 
-        if costs is None:
-            self.add_objective()
-        else:
-            assert models is not None and len(costs) == len(models)
-            for cost, models_ in zip(costs, models):
-                self.add_objective(cost, models_)
-        self.set_optimizer(optimizer, optimizer_args)
+        self.optimizer = optimizer
+        self.optimizer_args = optimizer_args
 
     def start_pbar(self, n):
         widgets = ['Epoch {epoch} (training {name}, '.format(
@@ -103,6 +102,7 @@ class Trainer(object):
         self.start_pbar(n)
 
         start_epoch = self.epoch
+        grads = OrderedDict()
 
         while True:
             try:
@@ -119,29 +119,32 @@ class Trainer(object):
                     raise StopIteration
                 elif self.epoch >= start_epoch + n_epochs:
                     print
-                    return
+                    return grads
                 else:
                     self.start_pbar(n)
                     self.session.reset_data(mode=self.data_mode)
             self.epoch_pbar.update(self.session.data_pos)
-            rval = self.f_grad_shared(*inputs)
 
-            if check_bad_nums(rval):
-                check_bad_nums(f_test(*inputs))
-                if f_outs is not None:
-                    check_bad_nums(f_outs(*inps))
-                raise RuntimeError('Dying, found bad cost... Sorry (bleh)')
+            for f_grad, f_update, freq in zip(
+                self.f_grads, self.f_updates, self.f_freqs):
+                if self.u % freq != 0: continue
 
-            self.f_grad_updates(self.learning_rate)
+                rval = f_grad(*inputs)
+                _grads = dict((k, v) for k, v in rval.iteritems()
+                    if k.startswith('_grad_'))
+                grads.update(**_grads)
 
-    def add_grads(self, grads):
-        for k, v in grads.iteritems():
-            if k in self.grads.keys():
-                self.grads[k] += v
-            else:
-                self.grads[k] = v
+                if check_bad_nums(rval):
+                    check_bad_nums(f_test(*inputs))
+                    if f_outs is not None:
+                        check_bad_nums(f_outs(*inps))
+                    raise RuntimeError('Dying, found bad cost... Sorry (bleh)')
 
-    def add_objective(self, cost=None, models=None):
+                f_update(self.learning_rate)
+
+            self.u += 1
+
+    def set_optimizer(self, cost=None, models=None, freq=None):
         '''Sets the parameter update functions with optimizer.
 
         Args:
@@ -151,12 +154,21 @@ class Trainer(object):
 
         '''
         from .. import _manager as manager
+        optimizer = self.optimizer
+        optimizer_args = self.optimizer_args or dict()
+
+        if optimizer not in _ops.keys():
+            raise KeyError('Optimizer `%s` not found, available: %s'
+                           % (optimizer, _ops.keys()))
 
         session = self.session
+        optimizer = _ops[optimizer]
 
         if cost is None:
+            self.logger.debug('Using global cost for models %s' % models)
             cost = session.cost
         else:
+            self.logger.debug('Using cost `%s` for models %s' % (cost, models))
             if isinstance(cost, list):
                 cost_ = T.constant(0).astype(floatX)
                 for cost__ in cost:
@@ -164,33 +176,28 @@ class Trainer(object):
                 cost = cost_
             else:
                 cost = session.costs[cost]
+
         if models is None:
             tparams = manager.tparams
         else:
             tparams = OrderedDict()
+            if isinstance(models, str): models = [models]
             for model in models:
-                for k, v in tparams.iteritems():
-                    if model == prefix:
-                        tparams[k] = v
+                for k, v in manager.tparams.iteritems():
+                    prefix = '.'.join(k.split('.')[:-1])
+                    if model == prefix: tparams[k] = v
 
+        self.logger.info('Computing gradients for params: %s' % tparams.keys())
         grads = T.grad(
             cost, wrt=tparams.values(), consider_constant=session.constants)
         grads = OrderedDict((k, g) for k, g in zip(tparams.keys(), grads))
-        self.add_grads(grads)
-
-    def set_optimizer(self, optimizer, optimizer_args):
-        if optimizer not in _ops.keys():
-            raise KeyError('Optimizer `%s` not found, available: %s'
-                           % (optimizer, _ops.keys()))
-        from .. import _manager as manager
-
-        session = self.session
-
-        optimizer = _ops[optimizer]
-
-        if optimizer_args is None: optimizer_args = dict()
 
         lr = T.scalar(name='lr')
-        self.f_grad_shared, self.f_grad_updates = optimizer(
-            lr, manager.tparams, self.grads, session.inputs, session.cost,
+        f_grad, f_update = optimizer(
+            lr, tparams, grads, session.inputs, session.cost,
             extra_ups=session.updates, **optimizer_args)
+
+        self.f_grads.append(f_grad)
+        self.f_updates.append(f_update)
+        self.f_freqs.append(freq or 1)
+        self.tparams = list(set(self.tparams + tparams.keys()))
