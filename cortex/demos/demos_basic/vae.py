@@ -76,10 +76,10 @@ visualizer.add('mnist.autoencoder_visualization',
                X_in='mnist.input',
                X_out='conditional.P',
                Y='mnist.labels',
-               out_file='/Users/devon/tmp/vae_recons_test.png')
+               out_file='$outs/vae_recons_test.png')
 visualizer.add('mnist.viz',
                X='prior_gen.P',
-               out_file='/Users/devon/tmp/vae_prior.png')
+               out_file='$outs/vae_prior.png')
 
 evaluator = cortex.setup_evaluator(
     valid_session,
