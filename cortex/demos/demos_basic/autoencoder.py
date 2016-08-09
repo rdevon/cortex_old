@@ -21,7 +21,8 @@ cortex.prepare_cell('MLP', name='encoder', dim_hs=[500, 200, 100], dim_out=50,
                      batch_normalization=True,
                      dropout=0.1)
 cortex.prepare_cell('MLP', name='decoder', dim_hs=[200, 500, 100],
-                     dropout=0.1, out_act='identity')
+                     dropout=0.1, out_act='identity',
+                     batch_normalization=True)
 
 cortex.add_step('noise.gaussian', 'data.input', name='input_noise', noise=0.01)
 cortex.add_step('encoder', 'input_noise.output')
@@ -46,9 +47,9 @@ cortex.build_session()
 
 trainer = cortex.setup_trainer(
     train_session,
-    optimizer='sgd',
+    optimizer='rmsprop',
     epochs=1000,
-    learning_rate=0.1,
+    learning_rate=0.0001,
     batch_size=100
 )
 

@@ -327,13 +327,13 @@ class Cell(object):
                 for i, pp in enumerate(p):
                     kk = '%s[%d]' % (k, i)
                     name = _p(self.name, kk)
-                    tp = theano.shared(pp, name=name)
+                    tp = theano.shared(pp.astype(floatX), name=name)
                     self.manager.tparams[name] = tp
                     self.__dict__[k].append(tp)
                     self.param_keys.append(kk)
             else:
                 name = _p(self.name, k)
-                tp = theano.shared(p, name=name)
+                tp = theano.shared(p.astype(floatX), name=name)
                 self.manager.tparams[name] = tp
                 self.__dict__[k] = tp
                 self.param_keys.append(k)

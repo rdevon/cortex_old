@@ -56,7 +56,7 @@ cortex.profile()
 visualizer = cortex.setup_visualizer(valid_session)
 visualizer.add('mnist.classification_visualization',
                inputs='visualization.classifier.random_set.outputs',
-               out_file='/home/devon/tmp/classifier_test.png')
+               out_file='$outs/classifier_test.png')
 
 print_section('Training')
 cortex.train()
