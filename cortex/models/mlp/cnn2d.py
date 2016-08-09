@@ -2,11 +2,13 @@
 
 '''
 
+from collections import OrderedDict
 import numpy as np
 from theano import tensor as T
 
 from . import resolve_nonlinearity
 from .. import batch_normalization, Cell, dropout, norm_weight
+from ...utils import floatX
 
 
 class CNN2D(Cell):
@@ -57,9 +59,13 @@ class CNN2D(Cell):
         weights = []
         biases = []
 
-        for dim_in, dim_out, (dim_x, dim_y) in zip(
-            dim_ins, dim_outs, self.filter_shapes):
-            W = norm_weight(dim_in, dim_out, dim_x, dim_y)
+        for dim_in, dim_out, pool_size, (dim_x, dim_y) in zip(
+            dim_ins, dim_outs, self.pool_sizes, self.filter_shapes):
+            fan_in = dim_in * dim_x * dim_y
+            fan_out = dim_out * dim_x * dim_y // np.prod(pool_size)
+            W_bound = np.sqrt(6. / (fan_in + fan_out))
+            W = self.rng.uniform(low=-W_bound, high=W_bound,
+                                 size=(dim_in, dim_out, dim_x, dim_y))
             b = np.zeros((dim_out,))
             weights.append(W)
             biases.append(b)
@@ -77,10 +83,11 @@ class CNN2D(Cell):
         outs = OrderedDict(X=X)
         outs['input'] = X
 
-        X = X.reshape((X.shape[0], self.input_shape[0], self.input_shape[1]))
-        input_shape = X.shape
+        X = X.reshape((X.shape[0], self.input_shape[0], self.input_shape[1],
+                       self.input_shape[2]))
+        input_shape = self.input_shape
 
-        for l in xrange(self.n_filters):
+        for l in xrange(self.n_layers):
             if self.batch_normalization:
                 self.logger.debug('Batch normalization on layer %d' % l)
                 X = batch_normalization(X, session=session)
@@ -89,17 +96,19 @@ class CNN2D(Cell):
             b = params.pop(0)
             shape = self.filter_shapes[l]
             pool_size = self.pool_sizes[l]
+            n_filters = self.n_filters[l]
+            filter_shape = (n_filters, input_shape[1]) + shape
 
             conv_out = T.nnet.conv2d(input=X, filters=W, filter_shape=shape,
                                      input_shape=input_shape)
             dim_x = input_shape[0] - shape[0] + 1
             dim_y = input_shape[1] - shape[1] + 1
-            pool_out = T.signal.pool(input=conv_out, ds=pool_size,
-                                     ignore_borders=True)
+            pool_out = T.signal.pool.pool_2d(input=conv_out, ds=pool_size,
+                                     ignore_border=True)
             dim_x = dim_x // pool_size[0]
             dim_y = dim_y // pool_size[1]
 
-            preact = pooled_out + self.b[None, :, None, None]
+            preact = pool_out + b[None, :, None, None]
             X = self.h_act(preact)
 
             if self.dropout and self.noise_switch():
@@ -113,7 +122,8 @@ class CNN2D(Cell):
                 ('C_%d' % l): conv_out,
                 ('P_%d' % l): pool_out})
 
-            input_shape = (dim_x, dim_y)
+            if l < self.n_layers - 1:
+                input_shape = (self.n_filters[l+1], dim_x, dim_y)
 
         X = X.reshape((X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
         outs['output'] = X
