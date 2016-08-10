@@ -37,6 +37,15 @@ def test_make_cnn(input_shape=(3, 19, 19), filter_shapes=((5, 5), (3, 3)),
             pool_sizes=pool_sizes, n_filters=n_filters, h_act=h_act)
     return cnn
 
+def test_make_rcnn(input_shape=(7, 3, 3), filter_shapes=((3, 3), (5, 5)),
+                  pool_sizes=((2, 2), (2, 2)), n_filters=[5, 3],
+                  h_act='softplus'):
+
+    C = cortex.resolve_class('RCNN2D')
+    rcnn = C(input_shape=input_shape, filter_shapes=filter_shapes,
+            pool_sizes=pool_sizes, n_filters=n_filters, h_act=h_act)
+    return rcnn
+
 def test_make_cnn_classifier():
     cortex.reset()
     cortex.prepare_data('dummy', name='data', n_samples=103, data_shape=(3 * 31 * 31,))
@@ -88,5 +97,22 @@ def test_classifier2():
 
     cortex.add_cost('classifier.negative_log_likelihood', X='labels.input')
 
+    session = cortex.create_session(batch_size=23)
+    session.build(test=True)
+
+def test_autoencoder():
+    cortex.reset()
+    cortex.prepare_data('dummy', name='data', n_samples=103, data_shape=(3 * 31 * 31,))
+    cortex.prepare_cell('CNN2D', name='encoder', input_shape=(3, 31, 31),
+                        filter_shapes=((5, 5), (3, 3)),
+                        pool_sizes=((2, 2), (2, 2)), n_filters=[5, 7],
+                        h_act='softplus')
+    cortex.prepare_cell('RCNN2D', name='decoder', input_shape=(7, 5, 5),
+                        filter_shapes=((4, 4), (6, 6)),
+                        pool_sizes=((2, 2), (2, 2)), n_filters=[5, 3],
+                        h_act='softplus', out_act='identity')
+    cortex.add_step('encoder', 'data.input')
+    cortex.add_step('decoder', 'encoder.output')
+    cortex.build()
     session = cortex.create_session(batch_size=23)
     session.build(test=True)

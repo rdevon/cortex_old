@@ -130,7 +130,8 @@ class Session(object):
             if what in ['cost', 'stat']:
                 for k, o in out.iteritems():
                     self.logger.info('Testing stat with batchsize %d' % batch_size)
-                    f = theano.function(self.inputs, o, updates=self.updates)
+                    f = theano.function(self.inputs, o, updates=self.updates,
+                                        on_unused_input='ignore')
                     self.test(data, f, key=k, key_prefix=name, cell=cell)
             else:
                 for key in test_order:
