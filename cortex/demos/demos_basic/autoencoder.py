@@ -42,15 +42,14 @@ cortex.add_cost('squared_error', Y='data.input', Y_hat='decoder.output')
 cortex.add_cost('l2_decay', 0.0002, 'encoder.weights')
 cortex.add_cost('l2_decay', 0.0002, 'decoder.weights')
 
-train_session = cortex.create_session()
+train_session = cortex.create_session(batch_size=100)
 cortex.build_session()
 
 trainer = cortex.setup_trainer(
     train_session,
     optimizer='rmsprop',
     epochs=1000,
-    learning_rate=0.0001,
-    batch_size=100
+    learning_rate=0.0001
 )
 
 valid_session = cortex.create_session(noise=False)

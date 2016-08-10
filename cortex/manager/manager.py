@@ -140,9 +140,9 @@ class Manager(object):
                 self.build_cell(k)
 
     # Sessions -----------------------------------------------------------------
-    def create_session(self, noise=True):
+    def create_session(self, noise=True, batch_size=None):
         from .session import Session
-        session = Session(noise=noise)
+        session = Session(noise=noise, batch_size=batch_size)
         self._current_session = session
         return session
 
@@ -420,7 +420,6 @@ class Manager(object):
                 self.logger.debug('Adding costs `%s`' % name)
             self.costs[name] = dict(
                 cell_name=cell_name, op=op, args=args, kwargs=kwargs)
-            print self.costs
 
         elif what == 'stat':
             if name in self.stats.keys():

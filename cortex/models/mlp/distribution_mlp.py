@@ -27,14 +27,13 @@ class DistributionMLP(Cell):
         'mlp': {
             'cell_type': 'MLP',
             '_required': {'out_act': 'identity'},
-            '_passed': ['dim_in', 'dim_h', 'n_layers', 'dim_hs', 'h_act',
-                        'dropout', 'weight_noise', 'batch_normalization']
+            '_passed': ['dim_h', 'n_layers', 'dropout', 'weight_noise',
+                        'batch_normalization']
         },
         'distribution': {
             'cell_type': '&distribution_type',
             '_required': {'conditional': True},
-            '_passed': [
-                'dim', 'has_kl', 'neg_log_prob', 'kl_divergence', 'simple_sample']
+            '_passed': ['has_kl', 'neg_log_prob', 'kl_divergence', 'simple_sample']
         },
     }
     _links = [('mlp.output', 'distribution.input')]
@@ -85,8 +84,9 @@ class DistributionMLP(Cell):
         return DC.get_link_value(link, key)
 
     def _feed(self, X, *params):
-        outs = self.mlp._feed(X, *params)
-        Y = outs['Y']
+        inps = self.mlp.init_args(X)
+        outs = self.mlp._feed(*(inps + params))
+        Y = outs['output']
         outs['output'] = self.distribution(Y)
         outs['P'] = outs['output']
         return outs

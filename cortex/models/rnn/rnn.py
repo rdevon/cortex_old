@@ -243,8 +243,7 @@ class RNN(Cell):
         super(RNN, self).__init__(name=name, **kwargs)
 
     def init_args(self, X, M=None):
-        if M is None:
-            M = T.ones((X.shape[0], X.shape[1])).astype(floatX)
+        if M is None: M = T.ones((X.shape[0], X.shape[1])).astype(floatX)
         return (X, M)
 
     def _feed(self, X, M, *params):

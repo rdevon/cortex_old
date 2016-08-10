@@ -23,30 +23,6 @@ from ..utils.logger import get_class_logger
 from ..utils.tools import check_bad_nums, update_dict_of_lists
 
 
-'''
-except KeyboardInterrupt:
-    print 'Training interrupted.'
-except:
-    logger.exception('Exception reached during training')
-    raise
-
-try:
-    if out_path is not None:
-        outfile = path.join(out_path, '{name}_{t}.npz'.format(name=name, t=int(time.time())))
-        last_outfile = path.join(out_path, '{name}_last.npz'.format(name=name))
-
-        if save is not None:
-            logging.info('Saving')
-            save(outfile)
-            save(last_outfile)
-            logging.info('Done saving.')
-except KeyboardInterrupt:
-    print 'Saving interupted.'
-
-print 'Main loop finished.'
-'''
-
-
 class Trainer(object):
     '''Trainer class for cortex.
 
@@ -62,7 +38,7 @@ class Trainer(object):
             raise TypeError('`optimizer` not set')
         if epochs is None:
             raise TypeError('`epochs` not set')
-        if batch_size is None:
+        if batch_size is None and session.batch_size is None:
             raise TypeError('`batch_size` not set')
         if learning_rate is None:
             raise TypeError('`learning_rate` not set')

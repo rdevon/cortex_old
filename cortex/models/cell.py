@@ -260,9 +260,18 @@ class Cell(object):
         self.component_keys = components.keys()
 
         for k, v in components.iteritems():
-            args = kwargs.pop(k, {})
-            args.update(**v)
-            passed = args.pop('_passed', dict())
+            new_args = kwargs.pop(k, {})
+            args = dict((k_, v_) for k_, v_ in v.iteritems())
+            args.update(**new_args)
+
+            passed = args.pop('_passed', [])
+            if 'cell_type' in args.keys():
+                cell_type = args['cell_type']
+                if cell_type.startswith('&'):
+                    cell_type = self.__dict__[cell_type[1:]]
+                C = self.manager.resolve_class(cell_type)
+                passed += C._args
+
             for p in passed:
                 self.passed[p] = k
 
@@ -285,6 +294,7 @@ class Cell(object):
                     final_args[kk] = self.__dict__[vv[1:]]
                 else:
                     final_args[kk] = vv
+
             self.manager.prepare_cell(name=k, requestor=self, **final_args)
 
         for f, t in self._links:

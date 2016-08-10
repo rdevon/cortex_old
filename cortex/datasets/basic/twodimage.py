@@ -28,6 +28,18 @@ class TwoDImageDataset(BasicDataset):
     def viz(self, X=None, out_file=None):
         self.save_images(X=X, out_file=out_file)
 
+    def register(self):
+        super(TwoDImageDataset, self).register()
+
+        from ... import _manager as manager
+
+        if self.greyscale:
+            c = 1
+        else:
+            c = 3
+        datasets = manager.datasets
+        datasets[self.name]['image_shape'] = (c,) + self.image_shape
+
     def classification_visualization(self, idx=None, X=None, Y=None,
                                      Y_pred=None, P=None, out_file=None):
 

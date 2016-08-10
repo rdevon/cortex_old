@@ -18,7 +18,7 @@ class Session(object):
     sessions = []
     noise_switch = get_noise_switch()
 
-    def __init__(self, manager=None, noise=True):
+    def __init__(self, manager=None, noise=True, batch_size=None):
         if manager is None: manager = get_manager()
         self.logger = logging.getLogger(
             '.'.join([self.__module__, self.__class__.__name__]))
@@ -28,6 +28,7 @@ class Session(object):
         self.manager = manager
         self.reset()
         self.noise = noise
+        self.batch_size = batch_size
 
     @staticmethod
     def _reset():
@@ -124,18 +125,20 @@ class Session(object):
             else:
                 test_order = cell._test_order
 
-            data = self.next_batch(batch_size=10)
+            batch_size = self.batch_size or 10
+            data = self.next_batch(batch_size=batch_size)
             if what in ['cost', 'stat']:
                 for k, o in out.iteritems():
-                    self.logger.info('Testing stat with batchsize 10')
+                    self.logger.info('Testing stat with batchsize %d' % batch_size)
                     f = theano.function(self.inputs, o, updates=self.updates)
                     self.test(data, f, key=k, key_prefix=name, cell=cell)
             else:
                 for key in test_order:
-                    self.logger.info('Testing `%s` from step %s with batchsize 10'
-                                     % (key, name))
+                    self.logger.info('Testing `%s` from step %s with batchsize %d'
+                                     % (key, name, batch_size))
                     t = out[key]
-                    f = theano.function(self.inputs, t, updates=self.updates)
+                    f = theano.function(self.inputs, t, updates=self.updates,
+                                        on_unused_input='ignore')
                     self.test(data, f, key, name, cell=cell)
 
     def add_samples(self, name=None, op=None, dist_key=None, shape=None,
@@ -166,8 +169,7 @@ class Session(object):
                 for k, v in samples.iteritems()
             )
 
-        self.logger.info('Adding samples: %s'
-                          % pprint.pformat(dict(samples)))
+        self.logger.info('Adding samples: %s' % dict(samples))
         self.add_tensors(samples, key_prefix=cell_name)
 
     def test(self, data, f, key, key_prefix, cell=None):
@@ -310,6 +312,8 @@ class Session(object):
         return n
 
     def next_batch(self, mode=None, batch_size=None):
+        if batch_size is None:
+            batch_size = self.batch_size
         if batch_size is None:
             raise TypeError('`batch_size` keyword must be set.')
 
