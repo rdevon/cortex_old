@@ -228,6 +228,13 @@ class Manager(object):
         C = _resolve_class(dataset, self.dataset_classes)
         C(**kwargs)
 
+    def prepare_data_split(self, dataset, **kwargs):
+        C = _resolve_class(dataset, self.dataset_classes)
+        if not hasattr(C, 'factory'):
+            raise TypeError('Dataset class `%s` needs a factory to be split '
+                            'automatically.')
+        C.factory(**kwargs)
+
     # Cell methods -------------------------------------------------------------
     def build_cell(self, name):
         from .link import Link

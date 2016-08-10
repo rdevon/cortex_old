@@ -111,11 +111,13 @@ class TwoDImageDataset(BasicDataset):
         X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
 
         if not self.greyscale:
-
+            if X.shape[1] % 3 != 0:
+                raise TypeError('X has incorrect shape for color images.')
             div = X.shape[1] // 3
-            X_r = X[:, :div]
-            X_b = X[:, div:2*div]
-            X_g = X[:, 2*div:]
+            X = X.reshape((X.shape[0], 3, div))
+            X_r = X[:, 0]
+            X_b = X[:, 1]
+            X_g = X[:, 2]
             arrs = []
             for X in [X_r, X_b, X_g]:
                 arr = tile_raster_images(

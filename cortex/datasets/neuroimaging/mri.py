@@ -21,7 +21,7 @@ from sklearn.decomposition import PCA, IncrementalPCA
 import warnings
 import yaml
 
-from . import NeuroimagingDataset
+from .ni_dataset import NeuroimagingDataset
 from ...analysis.mri import rois
 from ...analysis import nifti_viewer
 from ...utils import floatX
@@ -67,11 +67,16 @@ class MRI(NeuroimagingDataset):
             **kwargs: extra keyword arguments passed to BasicDataset
 
         '''
+        if source is None:
+            raise TypeError('`souce` argument must be provided')
+
         self.logger = logging.getLogger(
             '.'.join([self.__module__, self.__class__.__name__]))
         self.logger.info('Loading %s from %s' % (name, source))
 
-        widgets = ['Forming %s dataset: ' % name , ' (', Timer(), ') [', Percentage(), ']']
+        widgets = [
+            'Forming %s dataset: ' % name ,
+            '(', Timer(), ') [', Percentage(), ']']
         self.pbar = ProgressBar(widgets=widgets, maxval=self._init_steps).start()
         self.progress = 0
 
@@ -101,27 +106,11 @@ class MRI(NeuroimagingDataset):
             X = self.pca.transform(X)
         self.update_progress()
 
-        data = {name: X, 'group': Y}
-        distributions = {name: distribution, 'group': 'multinomial'}
+        data = {'input': X, 'labels': Y}
+        distributions = {'input': distribution, 'labels': 'multinomial'}
 
         super(MRI, self).__init__(data, distributions=distributions, name=name,
-                                  labels='group', **kwargs)
-        self.update_progress()
-
-        if distribution == 'gaussian':
-            if self.pca_components == 0:
-                self.X -= self.X.mean(axis=0)
-                self.X /= self.X.std()
-        elif distribution in ['continuous_binomial', 'binomial']:
-            self.X -= self.X.min()
-            self.X /= (self.X.max() - self.X.min())
-        else:
-            raise ValueError(distribution)
-
-        self.mean_image = self.X.mean(axis=0)
-        self.update_progress()
-
-        self.n = self.X.shape[0]
+                                  **kwargs)
         self.update_progress(finish=True)
 
     def get_data(self, source):
@@ -206,18 +195,10 @@ class MRI(NeuroimagingDataset):
         self.n_subjects = X.shape[0]
 
         X = self._mask(X)
-        X -= X.mean(axis=0)
-        X /= X.std(axis=0)
+        X -= X.mean(axis=0, keepdims=True)
+        X /= np.sqrt(X.std(axis=0, keepdims=True) ** 2 + 1e-6)
 
         return X, Y
-
-    def update_progress(self, finish=False, progress=True):
-        if progress:
-            self.progress += 1
-        if finish:
-            self.pbar.update(self._init_steps)
-        else:
-            self.pbar.update(self.progress)
 
     @staticmethod
     def mask_image(X, mask):
@@ -411,4 +392,4 @@ class MRI(NeuroimagingDataset):
 
         self.save_images(y, out_file, **kwargs)
 
-_classes = {'mri': MRI}
+_classes = {'MRI': MRI}

@@ -19,14 +19,16 @@ cortex.prepare_data('CIFAR', name='data', mode='valid',
 
 cortex.prepare_cell('CNN2D', name='encoder',
                     input_shape=cortex._manager.datasets['data']['image_shape'],
-                    filter_shapes=((5, 5), (3, 3), (1, 1)),
+                    filter_shapes=((8, 8), (5, 5), (4, 4)),
                     pool_sizes=((2, 2), (2, 2), (1, 1)),
-                    n_filters=[20, 50, 30],
+                    n_filters=[20, 50, 100],
                     h_act='softplus', batch_normalization=True, dropout=0.1)
-cortex.prepare_cell('RCNN2D', name='decoder', input_shape=(30, 6, 6),
-                    filter_shapes=((3, 3), (5, 5)), pool_sizes=((2, 2), (2, 2)),
-                    n_filters=[20, 3],
-                    h_act='softplus', out_act='identity',
+cortex.prepare_cell('RCNN2D', name='decoder', input_shape=(100, 1, 1),
+                    filter_shapes=((4, 4), (5, 5), (5, 5), (3, 3)),
+                    pool_sizes=((2, 2), (2, 2), (2, 2), (1, 1)),
+                    border_modes=['full', 'full', 'full', 'half'],
+                    n_filters=[50, 20, 10, 3],
+                    h_act='softplus',
                     batch_normalization=True, dropout=0.1)
 
 cortex.add_step('noise.gaussian', 'data.input', name='input_noise', noise=0.01)
@@ -46,7 +48,7 @@ cortex.profile()
 cortex.add_cost('squared_error', Y='data.input', Y_hat='decoder.output')
 
 train_session = cortex.create_session(batch_size=100)
-cortex.build_session()
+cortex.build_session(test=True)
 
 trainer = cortex.setup_trainer(
     train_session,
@@ -70,4 +72,4 @@ visualizer.add('data.autoencoder_visualization',
                inputs='visualization.random_set.outputs',
                out_file='$outs/conv_autoencoder_test.png')
 
-cortex.train()
+cortex.train(eval_every=1)

@@ -67,4 +67,4 @@ visualizer.add('data.autoencoder_visualization',
                inputs='visualization.random_set.outputs',
                out_file='$outs/autoencoder_test.png')
 
-cortex.train()
+cortex.train(show_every=1)

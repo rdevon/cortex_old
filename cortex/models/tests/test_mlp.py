@@ -3,7 +3,6 @@
 '''
 
 from collections import OrderedDict
-import logging
 import numpy as np
 from pprint import pformat, pprint
 import theano
@@ -16,7 +15,6 @@ from cortex.models import mlp as module
 from cortex.utils import floatX, logger as cortex_logger
 
 
-logger = logging.getLogger(__name__)
 cortex_logger.set_stream_logger(2)
 _atol = 1e-6
 manager = cortex._manager

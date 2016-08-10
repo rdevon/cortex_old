@@ -20,7 +20,8 @@ class CNN2D(Cell):
     _dim_map = {'output': None}
 
     def __init__(self, input_shape, n_filters, filter_shapes, pool_sizes,
-                 h_act='sigmoid', out_act=None, name='CNN2D', **kwargs):
+                 h_act='sigmoid', out_act=None, name='CNN2D', border_modes=None,
+                 **kwargs):
         if not(len(n_filters) == len(filter_shapes)):
             raise TypeError(
             '`filter_shapes` and `n_filters` must have the same length')
@@ -33,12 +34,14 @@ class CNN2D(Cell):
         self.pool_sizes = pool_sizes
         self.h_act = resolve_nonlinearity(h_act)
         self.out_act = resolve_nonlinearity(out_act)
+        self.border_modes = border_modes or (['valid'] * self.n_layers)
 
         super(CNN2D, self).__init__(name=name, **kwargs)
 
     @classmethod
     def set_link_value(C, key, input_shape=None, filter_shapes=None,
-                       n_filters=None, pool_sizes=None, **kwargs):
+                       n_filters=None, pool_sizes=None, border_modes=None,
+                       **kwargs):
 
         if key not in ['output']:
             return super(CNN2D, C).set_link_value(link, key)
@@ -47,11 +50,30 @@ class CNN2D(Cell):
         if input_shape is None: raise ValueError('input_shape')
         if filter_shapes is None: raise ValueError('filter_shapes')
         if pool_sizes is None: raise ValueError('pool_sizes')
+        n_layers = len(n_filters)
+        if border_modes is None: border_modes = ['valid'] * n_layers
+        if not(n_layers == len(filter_shapes) == len(pool_sizes) ==
+               len(border_modes)):
+            raise TypeError('All list inputs must have the same length')
+
         input_shape = input_shape[1:]
 
-        for filter_shape, pool_size in zip(filter_shapes, pool_sizes):
-            dim_x = (input_shape[0] - filter_shape[0] + 1) // pool_size[0]
-            dim_y = (input_shape[1] - filter_shape[1] + 1) // pool_size[1]
+        for filter_shape, pool_size, border_mode in zip(
+            filter_shapes, pool_sizes, border_modes):
+            if border_mode == 'valid':
+                dim_x = input_shape[0] - filter_shape[0] + 1
+                dim_y = input_shape[1] - filter_shape[1] + 1
+            elif border_mode == 'full':
+                dim_x = input_shape[0] + filter_shape[0] - 1
+                dim_y = input_shape[1] + filter_shape[1] - 1
+            elif border_mode == 'half':
+                dim_x = input_shape[0] + ((filter_shape[0] + 1) % 2)
+                dim_y = input_shape[1] + ((filter_shape[1] + 1) % 2)
+            else:
+                raise NotImplementedError(border_mode)
+
+            dim_x = dim_x // pool_size[0]
+            dim_y = dim_y // pool_size[1]
             input_shape = (dim_x, dim_y)
 
         return dim_x * dim_y * n_filters[-1]
@@ -109,13 +131,25 @@ class CNN2D(Cell):
             shape = self.filter_shapes[l]
             pool_size = self.pool_sizes[l]
             n_filters = self.n_filters[l]
+            border_mode = self.border_modes[l]
+
             filter_shape = (n_filters, input_shape[1]) + shape
 
             conv_out = T.nnet.conv2d(input=X, filters=W,
                                      filter_shape=filter_shape,
-                                     input_shape=input_shape)
-            dim_x = input_shape[2] - shape[0] + 1
-            dim_y = input_shape[3] - shape[1] + 1
+                                     input_shape=input_shape,
+                                     border_mode=border_mode)
+            if border_mode == 'valid':
+                dim_x = input_shape[2] - shape[0] + 1
+                dim_y = input_shape[3] - shape[1] + 1
+            elif border_mode == 'full':
+                dim_x = input_shape[2] + shape[0] - 1
+                dim_y = input_shape[3] + shape[1] - 1
+            elif border_mode == 'half':
+                dim_x = input_shape[2] + ((shape[0] + 1) % 2)
+                dim_y = input_shape[3] + ((shape[1] + 1) % 2)
+            else:
+                raise NotImplementedError(border_mode)
 
             pool_out = T.signal.pool.pool_2d(input=conv_out, ds=pool_size,
                                              ignore_border=True)
@@ -155,6 +189,54 @@ class CNN2D(Cell):
 
 
 class RCNN2D(CNN2D):
+    def __init__(self, input_shape, n_filters, filter_shapes, pool_sizes,
+                 border_modes=None, name='RCNN2D', **kwargs):
+        n_layers = len(n_filters)
+        border_modes = border_modes or (['full'] * n_layers)
+        super(RCNN2D, self).__init__(input_shape, n_filters, filter_shapes,
+                                     pool_sizes, border_modes=border_modes,
+                                     name=name, **kwargs)
+
+    @classmethod
+    def set_link_value(C, key, input_shape=None, filter_shapes=None,
+                       n_filters=None, pool_sizes=None, border_modes=None,
+                       **kwargs):
+
+        if key not in ['output']:
+            return super(CNN2D, C).set_link_value(link, key)
+
+        if n_filters is None: raise ValueError('n_filters')
+        if input_shape is None: raise ValueError('input_shape')
+        if filter_shapes is None: raise ValueError('filter_shapes')
+        if pool_sizes is None: raise ValueError('pool_sizes')
+        n_layers = len(n_filters)
+        if border_modes is None: border_modes = ['valid'] * n_layers
+        if not(n_layers == len(filter_shapes) == len(pool_sizes) ==
+               len(border_modes)):
+            raise TypeError('All list inputs must have the same length')
+
+        input_shape = input_shape[1:]
+
+        for filter_shape, pool_size, border_mode in zip(
+            filter_shapes, pool_sizes, border_modes):
+
+            dim_x = input_shape[0] * pool_size[0]
+            dim_y = input_shape[1] * pool_size[1]
+
+            if border_mode == 'valid':
+                dim_x = dim_x - filter_shape[0] + 1
+                dim_y = dim_y - filter_shape[1] + 1
+            elif border_mode == 'full':
+                dim_x = dim_x + filter_shape[0] - 1
+                dim_y = dim_y + filter_shape[1] - 1
+            elif border_mode == 'half':
+                dim_x = dim_x + ((filter_shape[0] + 1) % 2)
+                dim_y = dim_y + ((filter_shape[1] + 1) % 2)
+            else:
+                raise NotImplementedError(border_mode)
+            input_shape = (dim_x, dim_y)
+
+        return dim_x * dim_y * n_filters[-1]
 
     def _feed(self, X, batch_size, *params):
         session = self.manager._current_session
@@ -199,9 +281,15 @@ class RCNN2D(CNN2D):
             shape = self.filter_shapes[l]
             pool_size = self.pool_sizes[l]
             n_filters = self.n_filters[l]
+            border_mode = self.border_modes[l]
+
             filter_shape = (n_filters, input_shape[1]) + shape
 
-            unpool_out = depool(X, pool_size, outs, l)
+            if pool_size != (1, 1):
+                unpool_out = depool(X, pool_size, outs, l)
+            else:
+                unpool_out = X
+
             dim_x = input_shape[2] * pool_size[0]
             dim_y = input_shape[3] * pool_size[1]
             input_shape = (input_shape[0], input_shape[1], dim_x, dim_y)
@@ -209,9 +297,19 @@ class RCNN2D(CNN2D):
             conv_out = T.nnet.conv2d(input=unpool_out, filters=W,
                                      filter_shape=filter_shape,
                                      input_shape=input_shape,
-                                     border_mode='full')
-            dim_x = dim_x + shape[0] - 1
-            dim_y = dim_y + shape[1] - 1
+                                     border_mode=border_mode)
+
+            if border_mode == 'valid':
+                dim_x = dim_x - shape[0] + 1
+                dim_y = dim_y - shape[1] + 1
+            elif border_mode == 'full':
+                dim_x = dim_x + shape[0] - 1
+                dim_y = dim_y + shape[1] - 1
+            elif border_mode == 'half':
+                dim_x = dim_x + ((shape[0] + 1) % 2)
+                dim_y = dim_y + ((shape[1] + 1) % 2)
+            else:
+                raise NotImplementedError(border_mode)
 
             outs['P_%d' % l] = unpool_out
             outs['C_%d' % l] = conv_out
@@ -236,6 +334,7 @@ class RCNN2D(CNN2D):
                 outs['Y'] = X
 
             input_shape = (batch_size, filter_shape[0], dim_x, dim_y)
+
         X = X.reshape((X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
         outs['output'] = X
 

@@ -34,8 +34,7 @@ class FMRI_IID(mri_module.MRI):
         clean_data (bool): remove subjects with 0-std voxels after masking.
 
     '''
-    def __init__(self, name='fmri_iid', clean_data=False, **kwargs):
-        self.clean_data = clean_data
+    def __init__(self, name='fmri_iid', **kwargs):
         super(FMRI_IID, self).__init__(name=name, **kwargs)
 
     def get_data(self, source):
@@ -115,25 +114,7 @@ class FMRI_IID(mri_module.MRI):
                              % len(X.shape))
         X = self._mask(X)
         X -= X.mean(axis=1, keepdims=True)
-        s = X.std(axis=1)
-
-        if self.clean_data:
-            s_sums = (s==0).sum(axis=1)
-            clean_idx = np.where(s_sums == 0)[0].tolist()
-            if len(clean_idx) != self.n_subjects:
-                self.logger.warn('%d 0 std subjects found. Removing'
-                                 % (self.n_subjects - len(clean_idx)))
-                self.n_subjects = len(clean_idx)
-                X = X[clean_idx]
-                Y = Y[clean_idx]
-                s = s[clean_idx]
-        else:
-            if (s==0).sum() > 0:
-                self.logger.warn('%d 0-std voxels found. Setting std to 1.'
-                                 % (s==0).sum())
-                s[s==0] = 1
-
-        X /= s[:, None, :]
+        X /= np.sqrt(X.std(axis=1, keepdims=True) ** 2 + 1e-6)
         X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
         Y = Y.reshape((Y.shape[0] * Y.shape[1]))
 
@@ -166,21 +147,18 @@ class FMRI(FMRI_IID):
             **kwargs: keyword arguments for initializaiton.
 
         '''
-        super(FMRI, self).__init__(name=name, **kwargs)
-
+        self.idx = None
         self.window = window
         self.stride = stride
 
-        self.X = self.X.reshape((self.n_subjects, self.n_scans, self.X.shape[1]))
-        self.Y = self.Y.reshape((self.n_subjects, self.n_scans, self.Y.shape[1]))
+        super(FMRI, self).__init__(name=name, **kwargs)
 
+    def finish_setup(self):
+        self.X = self.X.reshape(
+            (self.n_subjects, self.n_scans, self.X.shape[1]))
+        self.Y = self.Y.reshape(
+            (self.n_subjects, self.n_scans, self.Y.shape[1]))
         self.set_idx()
-        if self.shuffle:
-            self.randomize()
-
-    @staticmethod
-    def factory(**kwargs):
-        return mri_module.mri_factory(C=FMRI, **kwargs)
 
     def set_idx(self):
         scan_idx = range(0, self.n_scans - self.window + 1, self.stride)
@@ -189,12 +167,10 @@ class FMRI(FMRI_IID):
         subject_idx_e = [i for j in [[s] * len(scan_idx) for s in subject_idx]
                          for i in j]
         self.idx = zip(subject_idx_e, scan_idx_e)
-        self.n = len(self.idx)
+        self.n_samples = len(self.idx)
 
     def slice_data(self, idx):
-        self.n_subjects = len(idx)
-        self.X = self.X[idx]
-        self.Y = self.Y[idx]
+        super(FMRI, self).slice_data(idx)
         self.set_idx()
         if self.shuffle:
             self.randomize()
@@ -205,40 +181,35 @@ class FMRI(FMRI_IID):
         Shuffles the idx.
 
         '''
-        rnd_idx = np.random.permutation(np.arange(0, self.n, 1))
+        if self.idx is None:
+            self.set_idx()
+        rnd_idx = np.random.permutation(np.arange(0, len(self.idx), 1))
         self.idx = [self.idx[i] for i in rnd_idx]
 
-    def next(self, batch_size=None):
+    def next(self, batch_size):
         '''Draws the next batch of windowed fMRI.
 
         Args:
-            batch_size (Optional[int]): number of windows in batch.
+            batch_size (int): number of windows in batch.
 
         Returns:
             dict: dictionary of batched data
 
         '''
-        if batch_size is None:
-            batch_size = self.batch_size
 
         if self.pos == -1:
             self.reset()
             raise StopIteration
 
         idxs = [self.idx[i] for i in range(self.pos, self.pos+batch_size)]
-        x = np.array([self.X[i][j:j+self.window] for i, j in idxs]).astype(floatX).transpose(1, 0, 2)
-        y = np.array([self.Y[i][j:j+self.window] for i, j in idxs]).astype(floatX).transpose(1, 0, 2)
+        x = np.array(
+            [self.X[i][j:j+self.window] for i, j in idxs]).transpose(1, 0, 2)
+        y = np.array(
+            [self.Y[i][j:j+self.window] for i, j in idxs]).transpose(1, 0, 2)
 
         self.pos += batch_size
+        if self.pos + batch_size > self.n_samples: self.pos = -1
 
-        if self.pos + batch_size > self.n:
-            self.pos = -1
+        return dict(input=x, labels=y)
 
-        rval = {
-            self.name: x,
-            'group': y
-        }
-
-        return rval
-
-_classes = {'fmri_iid': FMRI_IID, 'fmri': FMRI}
+_classes = {'FMRI_IID': FMRI_IID, 'FMRI': FMRI}

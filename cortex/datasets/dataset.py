@@ -26,38 +26,6 @@ def fetch_basic_data():
     unzip(path.join(out_dir, 'basic.zip'), out_dir)
     os.remove(path.join(out_dir, 'basic.zip'))
 
-def resolve(c):
-    '''Resolves the dataset class from string.
-
-    This method only includes basic datasets, such as MNIST. For neuroimaging
-    datasets, see `cortex.datasets.neuroimaging`
-
-
-    Args:
-        c (str): string to resolve.
-
-    Returns:
-        Dataset: dataset object resolved.
-
-    '''
-    from .basic.mnist import MNIST
-    from .basic.caltech import CALTECH
-    from .basic.uci import UCI
-    from .basic.cifar import CIFAR
-
-    r_dict = {
-        'mnist': MNIST,
-        'cifar': CIFAR,
-        'caltech': CALTECH,
-        'uci': UCI
-    }
-
-    C = r_dict.get(c, None)
-    if C is None:
-        raise ValueError('Dataset %s not supported' %c)
-
-    return C
-
 def make_one_hot(Y, n_classes=None):
     '''Makes integer label data into one-hot.
 
@@ -93,158 +61,6 @@ def make_one_hot(Y, n_classes=None):
     if reshape is not None:
         O = O.reshape(reshape + (n_classes,))
     return O
-
-def load_data(dataset=None,
-              train_batch_size=None,
-              valid_batch_size=None,
-              test_batch_size=None,
-              resolve_dataset=None,
-              **dataset_args):
-    '''Load dataset with a predefined split.
-
-    For these datasets, train/valid/test split has already been made.
-    For the batch sizes, if any are None, the corresponding dataset
-    will also be None.
-
-    Args:
-        dataset (str): name of the dataset
-        train_batch_size (Optional[int])
-        valid_batch_size (Optional[int])
-        test_batch_size (Optional[int])
-
-    Returns:
-        Dataset: train dataset
-        Dataset: valid dataset
-        Dataset: test dataset
-
-    '''
-
-    if resolve_dataset is None:
-        resolve_dataset = resolve
-
-    if isinstance(dataset, str):
-        C = resolve_dataset(dataset)
-    else:
-        C = dataset
-
-    if train_batch_size is not None:
-        train = C(batch_size=train_batch_size,
-                  mode='train',
-                  inf=False,
-                  **dataset_args)
-    else:
-        train = None
-    if valid_batch_size is not None:
-        valid = C(batch_size=valid_batch_size,
-                  mode='valid',
-                  inf=False,
-                  **dataset_args)
-    else:
-        valid = None
-    if test_batch_size is not None:
-        test = C(batch_size=test_batch_size,
-                 mode='test',
-                 inf=False,
-                 **dataset_args)
-    else:
-        test = None
-
-    return train, valid, test
-
-def load_data_split(C, idx=None, dataset=None, **dataset_args):
-    '''Load dataset and split.
-
-    Args:
-        idx: (Optional[list]): Indices for train/valid/test datasets.
-
-    Returns:
-        Dataset: train dataset
-        Dataset: valid dataset
-        Dataset: test dataset
-        list: Indices for if split is created.
-
-    '''
-    train, valid, test, idx = make_datasets(C, **dataset_args)
-    return train, valid, test, idx
-
-def build_datasets(resolve_dataset, dataset=None, split=[0.7, 0.2, 0.1],
-                  idx=None, train_batch_size=10, valid_batch_size=10,
-                  test_batch_size=10, **dataset_args):
-    C = resolve_class(dataset, _classes, __name__)
-
-    if not hasattr(C, 'factory'):
-        train, valid, test, idx = make_datasets(
-            C, split=split, idx=idx, train_batch_size=train_batch_size,
-            valid_batch_size=valid_batch_size, test_batch_size=test_batch_size,
-            **dataset_args)
-    else:
-        train, valid, test, idx =  C.factory(
-            split=split, idx=idx,
-            batch_sizes=[train_batch_size, valid_batch_size, test_batch_size],
-            **dataset_args)
-
-    return OrderedDict(train=train, valid=valid, test=test, idx=idx)
-
-def make_datasets(C, split=[0.7, 0.2, 0.1], idx=None,
-                  train_batch_size=None,
-                  valid_batch_size=None,
-                  test_batch_size=None,
-                  **dataset_args):
-    '''Constructs train/valid/test datasets with idx or split.
-
-    If idx is None, use split ratios to create indices.
-
-    Arguments:
-        C (Dataset).
-        split (Optional[list]: Split ratios over total.
-        idx (Optional[list]: Indices for train/valid/test datasets.
-        train_batch_size (Optional[int])
-        valid_batch_size (Optional[int])
-        test_batch_size (Optional[int])
-
-    Returns:
-        Dataset: train dataset
-        Dataset: valid dataset
-        Dataset: test dataset
-        list: Indices for if split is created.
-
-    '''
-    if idx is None:
-        assert split is not None
-        if round(np.sum(split), 5) != 1. or len(split) != 3:
-            raise ValueError(split)
-        dummy = C(batch_size=1, **dataset_args)
-        N = dummy.X.shape[0]
-        idx = range(N)
-        random.shuffle(idx)
-        split_idx = []
-        accum = 0
-        for s in split:
-            s_i = int(s * N + accum)
-            split_idx.append(s_i)
-            accum += s_i
-
-        train_idx = idx[:split_idx[0]]
-        valid_idx = idx[split_idx[0]:split_idx[1]]
-        test_idx = idx[split_idx[1]:]
-        idx = [train_idx, valid_idx, test_idx]
-    if train_batch_size is not None and len(train_idx) > 0:
-        train = C(idx=idx[0], batch_size=train_batch_size, mode='train',
-                  **dataset_args)
-    else:
-        train = None
-    if valid_batch_size is not None and len(valid_idx) > 0:
-        valid = C(idx=idx[1], batch_size=valid_batch_size, mode='valid',
-                  **dataset_args)
-    else:
-        valid = None
-    if test_batch_size is not None and len(test_idx) > 0:
-        test = C(idx=idx[2], batch_size=test_batch_size, mode='test',
-                 **dataset_args)
-    else:
-        test = None
-
-    return train, valid, test, idx
 
 
 class Dataset(object):
@@ -429,10 +245,15 @@ class BasicDataset(Dataset):
             if self.labels in self.data.keys():
                 self.Y = self.data[labels]
 
+        self.finish_setup()
+
         if self.shuffle:
             self.randomize()
 
         self.register()
+
+    def finish_setup(self):
+        return
 
     def register(self):
         from .. import _manager as manager
