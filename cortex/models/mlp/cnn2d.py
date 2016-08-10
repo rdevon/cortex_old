@@ -156,6 +156,49 @@ class CNN2D(Cell):
 
 
 class RCNN2D(CNN2D):
+    _required = ['output_shape', 'n_filters', 'filter_shapes', 'pool_sizes']
+    _options = {'dropout': False, 'weight_noise': 0,
+                'batch_normalization': False}
+    _args = ['output_shape', 'n_filters', 'filter_shapes', 'pool_sizes',
+             'h_act', 'out_act']
+    _dim_map = {'input': dim_in}
+
+    def __init__(self, input_shape, n_filters, filter_shapes, pool_sizes,
+                 h_act='sigmoid', out_act=None, name='CNN2D', **kwargs):
+        if not(len(n_filters) == len(filter_shapes)):
+            raise TypeError(
+            '`filter_shapes` and `n_filters` must have the same length')
+
+        if out_act is None: out_act = h_act
+        self.input_shape = input_shape
+        self.filter_shapes = filter_shapes
+        self.n_filters = n_filters
+        self.n_layers = len(self.n_filters)
+        self.pool_sizes = pool_sizes
+        self.h_act = resolve_nonlinearity(h_act)
+        self.out_act = resolve_nonlinearity(out_act)
+
+        super(CNN2D, self).__init__(name=name, **kwargs)
+
+    @classmethod
+    def set_link_value(C, key, input_shape=None, filter_shapes=None,
+                       n_filters=None, pool_sizes=None, **kwargs):
+
+        if key not in ['output']:
+            return super(CNN2D, C).set_link_value(link, key)
+        if n_filters is None: raise ValueError('n_filters')
+        if input_shape is None: raise ValueError('input_shape')
+        if filter_shapes is None: raise ValueError('filter_shapes')
+        if pool_sizes is None: raise ValueError('pool_sizes')
+        input_shape = input_shape[1:]
+
+        for filter_shape, pool_size in zip(filter_shapes, pool_sizes):
+            dim_x = (input_shape[0] - filter_shape[0] + 1) // pool_size[0]
+            dim_y = (input_shape[1] - filter_shape[1] + 1) // pool_size[1]
+            input_shape = (dim_x, dim_y)
+
+        return dim_x * dim_y * n_filters[-1]
+
     def init_params(self, weight_scale=1e-3, dim_in=None):
         dim_ins = [self.input_shape[0]] + self.n_filters[:-1]
         dim_outs = self.n_filters
@@ -175,7 +218,7 @@ class RCNN2D(CNN2D):
             biases.append(b)
 
         self.params = dict(weights=weights, biases=biases)
-        
+
     def _feed(self, X, batch_size, *params):
         session = self.manager._current_session
         params = list(params)
