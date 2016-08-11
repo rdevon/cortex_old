@@ -111,9 +111,6 @@ class Trainer(object):
                 grads.update(**_grads)
 
                 if check_bad_nums(rval):
-                    check_bad_nums(f_test(*inputs))
-                    if f_outs is not None:
-                        check_bad_nums(f_outs(*inps))
                     raise RuntimeError('Dying, found bad cost... Sorry (bleh)')
 
                 f_update(self.learning_rate)

@@ -166,6 +166,8 @@ class MRI(NeuroimagingDataset):
             X_ = np.load(data_file)
             X.append(X_.astype(floatX))
             Y.append((np.zeros((X_.shape[0],)) + i).astype(floatX))
+            self.logger.info('Found %d subjects' % X_.shape[0])
+        self.logger.info('Found %d groups' % len(X))
         self.update_progress()
 
         X = np.concatenate(X, axis=0)
@@ -316,7 +318,7 @@ class MRI(NeuroimagingDataset):
             x = self.pca.inverse_transform(x)
         return x
 
-    def make_images(self, x, roi_dict=None, update_rois=True, signs=None):
+    def make_images(self, x, roi_dict=None, update_rois=True):
         '''Forms images.
 
         Args:
@@ -333,25 +335,18 @@ class MRI(NeuroimagingDataset):
         '''
         if roi_dict is None: roi_dict = dict()
 
-        x = self.prepare_images(x)
-
         if len(x.shape) == 3:
             x = x[:, 0, :]
-
-        if signs is not None:
-            x *= signs[:, None]
 
         x = self._unmask(x)
         images, nifti_files = self.save_niftis(x)
 
-        if update_rois:
-            roi_dict.update(**rois.main(nifti_files))
+        if update_rois: roi_dict.update(**rois.main(nifti_files))
 
         return images, nifti_files, roi_dict
 
-    def save_images(self, x, out_file=None, remove_niftis=True,
-                    x_limit=None, roi_dict=None, stats=None,
-                    update_rois=True, signs=None, **kwargs):
+    def viz(self, x, out_file=None, remove_niftis=True, roi_dict=None,
+            stats=None, update_rois=True, **kwargs):
         '''Saves images from array.
 
         Args:
@@ -367,7 +362,7 @@ class MRI(NeuroimagingDataset):
 
         '''
         images, nifti_files, roi_dict = self.make_images(
-            x, roi_dict=roi_dict, update_rois=update_rois, signs=signs)
+            x, roi_dict=roi_dict, update_rois=update_rois)
 
         if stats is None: stats = dict()
         stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]
@@ -376,7 +371,8 @@ class MRI(NeuroimagingDataset):
             for f in nifti_files:
                 os.remove(f)
         nifti_viewer.montage(images, self.anat_file, roi_dict,
-                             out_file=out_file, stats=stats, **kwargs)
+                             out_file=resolve_path(out_file), stats=stats,
+                             **kwargs)
 
     def visualize_pca(self, out_file, **kwargs):
         '''Saves the PCA component image.

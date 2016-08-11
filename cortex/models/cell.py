@@ -214,7 +214,7 @@ class Cell(object):
     def set_link_distribution(C, key, **kwargs):
         from .. import manager
 
-        logger.info('Setting link distribution for class _dist_map %s with key '
+        logger.debug('Setting link distribution for class _dist_map %s with key '
                     '`%s` and kwargs %s' % (C._dist_map, key, kwargs))
         if key in C._dist_map.keys():
             value = kwargs.get(C._dist_map[key], None)

@@ -56,7 +56,7 @@ class Visualizer(object):
                     new_args.append(args[i])
 
             kwargs.update(**t_kwargs)
-            return op(*args, **kwargs)
+            return op(*new_args, **kwargs)
 
         self.fs.append(viz)
 

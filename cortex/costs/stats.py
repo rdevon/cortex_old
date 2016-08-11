@@ -42,7 +42,12 @@ def variational_inference(X=None, conditional=None, posterior=None, prior=None,
     log_p_max = T.max(log_p, axis=0, keepdims=True)
     w         = T.exp(log_p - log_p_max)
     nll = (T.log(w.mean(axis=0, keepdims=True)) + log_p_max).mean()
-    return dict(lower_bound=lower_bound, negative_log_likelihood=nll)
+
+    rvals = OrderedDict()
+    rvals['kl_term'] = kl_term.mean()
+    rvals['lower_bound'] = lower_bound
+    rvals['negative_log_likelihood'] = nll
+    return rvals
 
 _stats = {'logistic_regression': logistic_regression_stats,
           'variational_inference': variational_inference}

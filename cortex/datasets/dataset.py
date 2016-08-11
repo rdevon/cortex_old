@@ -379,8 +379,8 @@ class BasicDataset(Dataset):
         d = self.next(10)
         tensors = OrderedDict()
         for k, v in d.iteritems():
-            self.logger.debug('Data mode `%s` has shape %s. '
-                              '(tested with batch_size 10)' % (k, v.shape))
+            self.logger.info('Data mode `%s` has shape %s. '
+                             '(tested with batch_size 10)' % (k, v.shape))
             if v.ndim == 1:
                 C = T.vector
             elif v.ndim == 2:

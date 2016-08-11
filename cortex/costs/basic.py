@@ -1,7 +1,11 @@
 '''Basic cost functions.
 
 '''
+
+from theano import tensor as T
+
 from ..utils.tools import _p
+
 
 def squared_error(Y_hat=None, Y=None):
     if Y_hat is None:

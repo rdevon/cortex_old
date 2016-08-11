@@ -63,6 +63,7 @@ class Session(object):
                         self.cost += v
                     else:
                         key = _p(key_prefix, k)
+                    self.logger.debug('Adding cost `%s`' % key)
                     self.costs[key] = v
                 elif what == 'stat':
                     if k == 'stat':
@@ -70,16 +71,19 @@ class Session(object):
                     else:
                         key = _p(key_prefix, k)
                     self.stats[key] = v
+                    self.logger.debug('Adding stat `%s`' % key)
                 else:
                     key = _p(key_prefix, k)
 
                 if key in self.tensors.keys():
                     raise KeyError('Cannot overwrite %s' % key)
                 else:
+                    self.logger.debug('Adding tensor `%s`' % key)
                     self.tensors[key] = v
 
         if _p(key_prefix, 'outputs') not in self.tensors.keys():
             self.tensors[_p(key_prefix, 'outputs')] = dict()
+
         self.tensors[_p(key_prefix, 'outputs')].update(**out)
 
     def add_cost(self, *args, **kwargs):
@@ -170,7 +174,6 @@ class Session(object):
                 for k, v in samples.iteritems()
             )
 
-        self.logger.info('Adding samples: %s' % dict(samples))
         self.add_tensors(samples, key_prefix=cell_name)
 
     def test(self, data, f, key, key_prefix, cell=None):
@@ -247,6 +250,9 @@ class Session(object):
                         self.inputs.append(dataset_tensor)
                         self.datasets.append(name)
                         self.input_keys.append(key_)
+
+                if arg not in tensors.keys() and arg in manager.samples.keys():
+                    self.add_samples(**manager.samples[arg])
 
                 if arg in tensors.keys():
                     arg = tensors[arg]

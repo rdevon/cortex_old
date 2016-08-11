@@ -92,18 +92,17 @@ class Logistic(Distribution):
             p = self.get_prob(*self.get_params())
         return self.f_entropy(p)
 
-    def generate_latent_pair(self):
+    def premute(self, scale=2.):
         h0 = self.mu
         s = T.nlinalg.AllocDiag()(T.exp(self.log_s)).astype(floatX)
-        h = 2 * s + h0[None, :]
-        return h0, h
+        h = scale * s + h0[None, :]
+        return OrderedDict(mean=h0, perm=h)
 
-    def visualize(self, p0, p=None):
-        if p is None:
-            p = self.get_prob(*self.get_params())
+    def viz(self, P0, P=None):
+        if P is None: P = self.get_prob(*self.get_params())
 
-        outs0 = self.split_prob(p0)
-        outs = self.split_prob(p)
+        outs0 = self.split_prob(P0)
+        outs = self.split_prob(P)
         y0_mu, y0_logs = outs0
         y_mu, y_logs = outs
         py = (y_mu - y0_mu) / T.exp(y0_logs)

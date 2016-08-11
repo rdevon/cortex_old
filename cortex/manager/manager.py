@@ -339,17 +339,21 @@ class Manager(object):
             if len(args) > 0:
                 if op_name == '__call__':
                     arg_keys = C._call_args
-                else:
+                elif hasattr(C, '_%s_args' % op_name):
                     arg_keys = getattr(C, '_%s_args' % op_name)
-                if len(args) != len(arg_keys):
-                    raise TypeError('%d operation (%s) args provided, but %d '
-                                    'arg_keys available. (%s given, %s needed)'
-                                    % (len(args), C, len(arg_keys),
-                                       args, arg_keys))
+                else:
+                    arg_keys = None
 
-                for arg, key in zip(args, arg_keys):
-                    if (key in C._dim_map.keys() and is_tensor_arg(arg)):
-                        self.match_dims(arg, '.'.join([cell_name, key]))
+                if arg_keys is not None:
+                    if len(args) != len(arg_keys):
+                        raise TypeError('%d operation (%s) args provided, but %d '
+                                        'arg_keys available. (%s given, %s needed)'
+                                        % (len(args), C, len(arg_keys),
+                                           args, arg_keys))
+
+                    for arg, key in zip(args, arg_keys):
+                        if (key in C._dim_map.keys() and is_tensor_arg(arg)):
+                            self.match_dims(arg, '.'.join([cell_name, key]))
         else:
             cell_name = None
             if name is None: name = op.__name__
@@ -422,7 +426,14 @@ class Manager(object):
         #self.test_op_args(op, args, kwargs)
         if what == 'cost':
             if name in self.costs.keys():
-                self.logger.warn('Cost `%s` already found. Overwriting.')
+                i = 1
+                while True:
+                    new_name = '%s_%d' % (name, i)
+                    if not new_name in self.costs.keys():
+                        break
+                self.logger.warn('Cost `%s` already found. Changing to %s.'
+                                 % (name, new_name))
+                name = new_name
             else:
                 self.logger.debug('Adding costs `%s`' % name)
             self.costs[name] = dict(
@@ -430,10 +441,14 @@ class Manager(object):
 
         elif what == 'stat':
             if name in self.stats.keys():
-                self.logger.warn('Stat `%s` already found. Overwriting.')
-            else:
-                self.logger.debug('Adding stat `%s`' % name)
-
+                i = 1
+                while True:
+                    new_name = '%s_%d' % (name, i)
+                    if not new_name in self.stats.keys():
+                        break
+                self.logger.warn('Stat `%s` already found. Changing to %s.'
+                                 % (name, new_name))
+                name = new_name
             self.stats[name] = dict(
                 cell_name=cell_name, op=op, args=args, kwargs=kwargs)
 
@@ -502,7 +517,10 @@ class Manager(object):
 
     def match_dims(self, f, t):
         from .link import Link
-        link = Link(f, t)
+        try:
+            link = Link(f, t)
+        except TypeError:
+            return
 
         for name, node in link.nodes.iteritems():
             if name in self.datasets.keys():

@@ -62,16 +62,16 @@ class Binomial(Distribution):
     def random_variables(self, size):
         return self.trng.uniform(size, dtype=floatX)
 
-    def generate_latent_pair(self):
+    def permute(self):
         h0 = T.zeros((self.dim,)).astype(floatX)[None, :]
         h = T.eye(self.dim).astype(floatX)
-        return h0, h
+        return OrderedDict(mean=h0, perm=h)
 
-    def visualize(self, p0, p=None):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        p0 = T.addbroadcast(p0, 0)
-        return p - p0
+    def viz(self, P0, P=None):
+        if P is None:
+            P = self.get_prob(*self.get_params())
+        P0 = T.addbroadcast(P0, 0)
+        return P - P0
 
     def get_energy_bias(self, x, z):
         return T.dot(x, z)
@@ -94,8 +94,7 @@ class CenteredBinomial(Binomial):
         return (2.0 * (epsilon <= P).astype(floatX) - 1.0)
 
     def neg_log_prob(self, X, P=None, sum_probs=True):
-        if P is None:
-            P = self.get_prob(*self.get_params())
+        if P is None: P = self.get_prob(*self.get_params())
         X = 0.5 * (x + 1.0)
         P = (0.5 * (p + 1.0)) * 0.9999 + 0.000005
         return self.f_neg_log_prob(X, P, sum_probs=sum_probs)

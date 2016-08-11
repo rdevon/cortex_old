@@ -88,15 +88,14 @@ class Laplace(Distribution):
             P = self.get_prob(*self.get_params())
         return self.f_entropy(P)
 
-    def generate_latent_pair(self):
+    def permute(self, scale=2.):
         h0 = self.mu
         b = T.nlinalg.AllocDiag()(T.exp(self.log_b)).astype(floatX)
-        h = 2 * b + h0[None, :]
-        return h0, h
+        h = scale * b + h0[None, :]
+        return OrderedDict(mean=h0, perm=h)
 
-    def visualize(self, p0, p=None):
-        if p is None:
-            p = self.get_prob(*self.get_params())
+    def viz(self, p0, p=None):
+        if p is None: p = self.get_prob(*self.get_params())
 
         outs0 = self.split_prob(p0)
         outs = self.split_prob(p)

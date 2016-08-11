@@ -12,7 +12,7 @@ logger.propagate = False
 file_formatter = logging.Formatter(
     '%(asctime)s:%(name)s[%(levelname)s]:%(message)s')
 stream_formatter = logging.Formatter(
-    '[%(levelname)s]:%(message)s' + ' ' * 40)
+    '[%(levelname)s:%(name)s]:%(message)s' + ' ' * 40)
 
 def get_class_logger(obj):
     return logging.getLogger('.'.join([obj.__module__, obj.__class__.__name__]))

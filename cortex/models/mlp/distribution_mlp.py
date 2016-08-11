@@ -33,7 +33,8 @@ class DistributionMLP(Cell):
         'distribution': {
             'cell_type': '&distribution_type',
             '_required': {'conditional': True},
-            '_passed': ['has_kl', 'neg_log_prob', 'kl_divergence', 'simple_sample']
+            '_passed': ['has_kl', 'neg_log_prob', 'kl_divergence',
+                        'simple_sample']
         },
     }
     _links = [('mlp.output', 'distribution.input')]
@@ -112,6 +113,12 @@ class DistributionMLP(Cell):
                                 % self.name)
             P = session.tensors[_p(self.name, 'P')]
         return self.distribution._sample(epsilon, P=P)
+
+    def viz(self, mean=None, perm=None):
+            params = self.get_params()
+            P0 = self._feed(mean, *params)['output']
+            P = self._feed(perm, *params)['output']
+            return self.distribution.viz(P0, P=P)
 
 
 _classes = {'DistributionMLP': DistributionMLP}
