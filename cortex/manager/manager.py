@@ -92,16 +92,16 @@ class Manager(object):
         self.reset()
 
     # General methods
-    def add_cell_class(name, C):
+    def add_cell_class(self, name, C):
         self.classes[name] = C
 
-    def add_dataset_class(name, C):
+    def add_dataset_class(self, name, C):
         self.dataset_classes[name] = C
 
-    def add_cost_function(name, f):
+    def add_cost_function(self, name, f):
         self.cost_functions[name] = f
 
-    def add_stat_function(name, f):
+    def add_stat_function(self, name, f):
         self.stat_functions[name] = f
 
     @staticmethod
@@ -188,7 +188,7 @@ class Manager(object):
         return self.visualizer
 
     def train(self, eval_modes=None, validation_mode=None, eval_every=10,
-              monitor_grads=False):
+              monitor_grads=False, early_stopping=False, patience=10):
         if eval_modes is None: eval_modes=['train', 'valid']
         if validation_mode is None: validation_mode = 'valid'
         if len(self.trainer.f_grads) == 0:
@@ -198,13 +198,22 @@ class Manager(object):
                 'Grads', ['_grad_' + k for k in self.trainer.tparams])
 
         try:
+            curr_patience = patience
+
             while True:
                 br = False
 
                 for mode in eval_modes:
                     r = self.evaluator(data_mode=mode)
                     if mode == validation_mode:
-                        self.evaluator.validate(r, self.trainer.epoch)
+                        is_best = self.evaluator.validate(r, self.trainer.epoch)
+                        if is_best:
+                            curr_patience = patience
+                        else:
+                            curr_patience -= 1
+                        if curr_patience <= 0 and early_stopping:
+                            print 'No more patience... stopping.'
+                            br = True
                     self.monitor.update(mode, **r)
 
                 self.monitor.display()
@@ -222,6 +231,7 @@ class Manager(object):
                     break
         except KeyboardInterrupt:
             print 'Interrupting training...'
+        print 'Training completed.'
 
     # Data methods -------------------------------------------------------------
     def prepare_data(self, dataset, **kwargs):
@@ -246,6 +256,7 @@ class Manager(object):
                 value = link.query(name, k)
                 kwargs[k] = value
 
+        self.logger.debug('Forming cell with args %s' % kwargs)
         C.factory(name=name, **kwargs)
 
     def prepare_cell(self, cell_type, requestor=None, name=None, **kwargs):
@@ -386,6 +397,7 @@ class Manager(object):
                 if what == 'cost':
                     if n == 'cost' and hasattr(C, '_cost'):
                         op = getattr(C, '_cost')
+                        name = _p(name, 'cost')
                     else:
                         if not n in C._costs.keys():
                             raise AttributeError(

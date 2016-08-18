@@ -201,11 +201,15 @@ class Session(object):
         if args is None: args = []
         if kwargs is None: kwargs = {}
         if constants is None: constants = []
-
         new_args = []
         for arg in args:
             if arg in self.tensors.keys():
-                new_args.append(self.tensors[arg])
+                ten = tensors[arg]
+                if arg in constants:
+                    ten = ten.copy()
+                    tensors[arg + '(copy)'] = ten
+                    self.constants.append(ten)
+                new_args.append(ten)
             elif is_tensor_arg(arg):
                 name, key, _ = resolve_tensor_arg(arg)
                 if name in manager.datasets.keys():

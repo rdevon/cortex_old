@@ -69,24 +69,10 @@ class Laplace(Distribution):
     def random_variables(self, size):
         return self.trng.uniform(size=size, dtype=floatX) - 0.5
 
-    def step_neg_log_prob(self, X, *params):
-        P = self.get_prob(*params)
-        return self.f_neg_log_prob(X, P)
-
-    def neg_log_prob(self, X, P=None, sum_probs=True):
-        if P is None:
-            P = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(X, P, sum_probs=sum_probs)
-
     def standard_prob(self, X, P=None):
         if P is None:
             P = self.get_prob(*self.get_params())
         return T.exp(-self.neg_log_prob(X, P))
-
-    def entropy(self, P=None):
-        if P is None:
-            P = self.get_prob(*self.get_params())
-        return self.f_entropy(P)
 
     def permute(self, scale=2.):
         h0 = self.mu

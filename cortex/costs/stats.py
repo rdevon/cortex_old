@@ -35,6 +35,11 @@ def variational_inference(X=None, conditional=None, posterior=None, prior=None,
         return P, cell
 
     conditional, cond_cell = get_cell(conditional, cells[0])
+    posterior, post_cell = get_cell(posterior, cells[1])
+    prior, prior_cell = get_cell(prior, cells[2])
+
+    prior_entropy = prior_cell.entropy()
+    posterior_entropy = post_cell.entropy(P=posterior)
 
     nll_term = cond_cell.neg_log_prob(X, P=conditional)
     log_p = nll_term[None, :, :] + kl_term
@@ -44,6 +49,8 @@ def variational_inference(X=None, conditional=None, posterior=None, prior=None,
     nll = (T.log(w.mean(axis=0, keepdims=True)) + log_p_max).mean()
 
     rvals = OrderedDict()
+    rvals['prior_entropy'] = prior_entropy
+    rvals['posterior_entropy'] = posterior_entropy
     rvals['kl_term'] = kl_term.mean()
     rvals['lower_bound'] = lower_bound
     rvals['negative_log_likelihood'] = nll

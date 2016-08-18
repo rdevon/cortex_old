@@ -1,6 +1,18 @@
+'''Setup script
+
+'''
+import readline, glob
+from os import path
+import urllib2
+
+from .datasets import fetch_basic_data
+from .datasets.neuroimaging import fetch_neuroimaging_data
+from .utils.tools import get_paths, _p
+from .utils.extra import (
+    complete_path, query_yes_no, write_default_theanorc, write_path_conf)
+
+
 def main():
-    from cortex.datasets import fetch_basic_data
-    from cortex.datasets.neuroimaging import fetch_neuroimaging_data
 
     readline.set_completer_delims(' \t\n;')
     readline.parse_and_bind('tab: complete')

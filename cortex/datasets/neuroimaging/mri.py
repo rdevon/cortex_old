@@ -334,6 +334,7 @@ class MRI(NeuroimagingDataset):
 
         '''
         if roi_dict is None: roi_dict = dict()
+        x = self.prepare_images(x)
 
         if len(x.shape) == 3:
             x = x[:, 0, :]

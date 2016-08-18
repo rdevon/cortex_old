@@ -158,6 +158,8 @@ class FMRI(FMRI_IID):
             (self.n_subjects, self.n_scans, self.X.shape[1]))
         self.Y = self.Y.reshape(
             (self.n_subjects, self.n_scans, self.Y.shape[1]))
+        for k, v in self.data.iteritems():
+            self.data[k] = v.reshape((self.n_subjects, self.n_scans, v.shape[1]))
         self.set_idx()
 
     def set_idx(self):

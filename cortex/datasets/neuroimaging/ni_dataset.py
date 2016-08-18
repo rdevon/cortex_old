@@ -93,9 +93,14 @@ def medfilt(x, k):
 
 
 class NeuroimagingDataset(BasicDataset):
-    def slice_data(self, idx):
+    def slice_data(self, idx, axis=0):
         for k, v in self.data.iteritems():
-            self.data[k] = v[idx]
+            if axis == 0:
+                self.data[k] = v[idx]
+            elif axis == 1:
+                self.data[k] = v[:, idx]
+            else:
+                raise TypeError
         self.X = self.data['input']
         if self.labels in self.data.keys():
             self.Y = self.data[self.labels]

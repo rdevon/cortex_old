@@ -73,26 +73,11 @@ class Logistic(Distribution):
     def random_variables(self, size):
         return self.trng.uniform(size=size, dtype=floatX)
 
-    def step_neg_log_prob(self, X, *params):
-        P = self.get_prob(*params)
-        return self.f_neg_log_prob(X, P=P)
-
-    def neg_log_prob(self, X, P=None, sum_probs=True):
-        if P is None:
-            P = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(X, P, sum_probs=sum_probs)
-
     def standard_prob(self, x, p=None):
-        if p is None:
-            p = self.get_prob(*self.get_params())
+        if p is None: p = self.get_prob(*self.get_params())
         return T.exp(-self.neg_log_prob(x, p))
 
-    def entropy(self, p=None):
-        if p is None:
-            p = self.get_prob(*self.get_params())
-        return self.f_entropy(p)
-
-    def premute(self, scale=2.):
+    def permute(self, scale=2.):
         h0 = self.mu
         s = T.nlinalg.AllocDiag()(T.exp(self.log_s)).astype(floatX)
         h = scale * s + h0[None, :]
@@ -101,10 +86,8 @@ class Logistic(Distribution):
     def viz(self, P0, P=None):
         if P is None: P = self.get_prob(*self.get_params())
 
-        outs0 = self.split_prob(P0)
-        outs = self.split_prob(P)
-        y0_mu, y0_logs = outs0
-        y_mu, y_logs = outs
+        y0_mu, y0_logs = self.split_prob(P0)
+        y_mu, y_logs = self.split_prob(P)
         py = (y_mu - y0_mu) / T.exp(y0_logs)
         return py
 

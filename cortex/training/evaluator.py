@@ -92,7 +92,6 @@ class Evaluator(object):
         return results
 
     def validate(self, results, epoch):
-
         if self.valid_stat not in results.keys():
             raise KeyError('valid_stat `%s` not found. Available: %s'
                            % (self.valid_stat, results.keys()))

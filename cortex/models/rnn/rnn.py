@@ -215,12 +215,11 @@ class RNN(Cell):
         },
         'RU': {
             'cell_type': 'RecurrentUnit',
-            '_passed': ['dim_h']
+            '_passed': ['weight_noise']
         },
         'input_net': {
             'cell_type': 'MLP',
             '_required': {'out_act': 'tanh'},
-            '_passed': ['dim_in']
         }
     }
     _links = [
@@ -263,6 +262,7 @@ class RNN(Cell):
         return outs
 
 class GenRNN(RNN):
+    _required = ['distribution_type']
     _components = copy.deepcopy(RNN._components)
     _components.update(**
         {

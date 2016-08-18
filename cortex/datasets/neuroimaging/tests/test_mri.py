@@ -30,7 +30,6 @@ def _test_class(c='MRI'):
         p = AOD_path
     else:
         raise TypeError
-
     cortex.prepare_data(c, source=p)
 
 def _test_split(c='MRI'):

@@ -13,7 +13,7 @@ cortex_logger.set_stream_logger(2)
 n_posterior_samples = 1
 n_posterior_samples_test = 100
 n_prior_samples = 100
-dim_h = 100
+dim_h = 50
 batch_size = 10
 distribution = 'gaussian'
 
@@ -23,8 +23,8 @@ cortex.prepare_data_split('MRI', name='data', split=[.8, .1, .1],
 cortex.prepare_cell('DistributionMLP', name='approx_posterior', dim_hs=[500],
                     h_act='tanh')
 cortex.prepare_cell(distribution, name='prior', dim=dim_h)
-cortex.prepare_cell('DistributionMLP', name='conditional', dim_hs=[500],
-                    h_act='tanh')
+cortex.prepare_cell('DistributionMLP', name='conditional', dim_hs=[500, 500, 500],
+                    h_act='tanh', dropout=0.1)
 
 cortex.match_dims('prior.P', 'approx_posterior.P')
 cortex.match_dims('conditional.P', 'data.input')
@@ -64,14 +64,14 @@ trainer = cortex.setup_trainer(
     train_session,
     optimizer='rmsprop',
     epochs=1000,
-    learning_rate=0.00001
-)
+    learning_rate=0.00001)
 
 valid_session = cortex.create_session(noise=False)
 cortex.build_session()
 
 visualizer = cortex.setup_visualizer(valid_session)
-visualizer.add('data.viz', 'cond_viz.output', out_file='$outs/vbm_vae_latents.png')
+visualizer.add('data.viz', 'cond_viz.output',
+               out_file='$outs/vbm_vae_latents.png')
 
 evaluator = cortex.setup_evaluator(
     valid_session,
@@ -82,4 +82,4 @@ evaluator = cortex.setup_evaluator(
 
 monitor = cortex.setup_monitor(valid_session, modes=['train', 'valid'])
 
-cortex.train(eval_every=1)
+cortex.train(eval_every=10)

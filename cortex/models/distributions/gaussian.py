@@ -87,24 +87,10 @@ class Gaussian(Distribution):
     def random_variables(self, size):
         return self.trng.normal(avg=0, std=1.0, size=size, dtype=floatX)
 
-    def step_neg_log_prob(self, X, *params):
-        P = self.get_prob(*params)
-        return self.f_neg_log_prob(X, P=P, clip=self.clip)
-
-    def neg_log_prob(self, X, P=None, sum_probs=True):
-        if P is None:
-            P = self.get_prob(*self.get_params())
-        return self.f_neg_log_prob(X, P, clip=self.clip, sum_probs=sum_probs)
-
     def standard_prob(self, X, P=None):
         if P is None:
             P = self.get_prob(*self.get_params())
         return T.exp(-self.neg_log_prob(X, P))
-
-    def entropy(self, P=None):
-        if P is None:
-            P = self.get_prob(*self.get_params())
-        return self.f_entropy(P, clip=self.clip)
 
     def permute(self, scale=2.):
         h0 = self.mu

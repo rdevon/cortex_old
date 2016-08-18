@@ -202,8 +202,7 @@ class Distribution(Cell):
             T.tensor: :math:`-\log p(x)`.
 
         '''
-        if P is None:
-            P = self.get_prob(*self.get_params())
+        if P is None: P = self.get_prob(*self.get_params())
         return self.f_neg_log_prob(X, P, sum_probs=sum_probs)
 
     def entropy(self, P=None):
