@@ -82,7 +82,7 @@ class IRVI(Cell):
         '''
         raise NotImplementedError()
 
-    def _feed(self, y, q0, n_samples, n_steps):
+    def _feed(self, y, q0, n_samples=None, n_steps=None, **kwargs):
         '''Perform inference
 
         Args:
@@ -96,12 +96,7 @@ class IRVI(Cell):
             theano.OrderedUpdates: updates.
 
         '''
-        model = self.posterior
         updates = theano.OrderedUpdates()
-
-        # Initialize inference.
-        if q0 is None:
-            q0 = self.init_variational_inference(x)
 
         # Set random variables.
         epsilons = self.generate_random_variables((n_steps, n_samples), P=q0)
@@ -109,18 +104,16 @@ class IRVI(Cell):
         # Set `scan` arguments.
         seqs = [epsilons]
         outputs_info = [q0] + self.init_infer(q0) + [None]
-        non_seqs = [y] + self.params_infer() + model.get_params()
+        non_seqs = [y] + self.params_infer(**kwargs) + model.get_params()
 
         self.logger.info('Doing %d inference steps of %s and a rate of %.5f with %d '
-               'inference samples'
-               % (self.n_inference_steps, self.name,
-                  self.inference_rate, self.n_inference_samples))
+               'inference samples' % (self.n_inference_steps, self.name,
+                                      self.inference_rate, self.n_inference_samples))
 
         # Perform inference.
         if n_inference_steps > 1:
-            outs, updates_i = scan(
-                self.step_infer, seqs, outputs_info, non_seqs,
-                n_inference_steps, self.name + '_infer')
+            outs, updates_i = scan(self.step_infer, seqs, outputs_info, non_seqs,
+                                   n_inference_steps, self.name + '_infer')
             updates.update(updates_i)
             qs, i_costs = self.unpack_infer(outs)
             qs = T.concatenate([q0[None, :, :], qs], axis=0)
@@ -134,23 +127,13 @@ class IRVI(Cell):
             qs = q0[None, :, :]
             i_costs = [T.constant(0.).astype(floatX)]
 
-        if self.pass_gradients:
-            constants = []
-        else:
-            constants = [qs]
-
         if self.use_all_samples:
             qk = qs
         else:
             qk = qs[-1]
 
-        rval = OrderedDict(
-            qk=qk,
-            qs=qs,
-            i_costs=i_costs
-        )
-
-        return rval, constants, updates
+        return OrderedDict(qk=qk, qs=qs, i_costs=i_costs, constants=[qs],
+                           updates=updates)
 
     def test(self, x, y, stride=1, **model_args):
         '''Testing function for inference.

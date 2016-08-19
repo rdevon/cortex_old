@@ -18,18 +18,39 @@ class AIR(IRVI):
     Inference procedure to refine the posterior using adaptive importance
     sampling (AIS)
     '''
-    def __init__(self, model, name='AIR', **kwargs):
+    _required = ['prior', 'conditional', 'posterior']
+    _components = {
+        'prior': {},
+        'conditional': {},
+        'posterior': {}
+    }
+    
+    def __init__(self, prior, conditional, posterior, name='AIR', **kwargs):
         '''Init function for AIR
 
         Args:
-            model: Helmholtz object.
             name: str
             kwargs: dict, remaining IRVI arguments.
         '''
+        
+        manager = self.manager
+        prior = self.manager[prior]
+        conditional = self.manager[conditional]
+        posterior = self.manager[posterior]
+        
+        models = dict(
+            prior=prior,
+            conditional=conditional,
+            posterior=posterior)
 
-        super(AIR, self).__init__(model, name=name, **kwargs)
+        super(AIR, self).__init__(name=name, models=models, **kwargs)
+        
+    def set_components(self, models=None, **kwargs):
+        for k, v in models.iteritems():
+            self.__dict__[k] = self.manager[k]
+        return kwargs
 
-    def step_infer(self, r, q, y, *params):
+    def step_infer(self, r, q, y, inference_rate, *params):
         '''Step inference function for IRVI.inference scan.
 
         Args:
@@ -43,29 +64,23 @@ class AIR(IRVI):
         '''
 
         h        = (r <= q[None, :, :]).astype(floatX)
-        py       = model.p_y_given_h(h, *params)
-        log_py_h = -model.conditional.neg_log_prob(y[None, :, :], py)
-        log_ph   = -model.prior.step_neg_log_prob(h, *prior_params)
-        log_qh   = -model.posterior.neg_log_prob(h, q[None, :, :])
-        log_p     = log_py_h + log_ph - log_qh
-        w_tilde = norm_exp(log_p)
-
         weights = self.score(h, *params)
-        cost    = -log_p.mean()
-        q_ = (w_tilde[:, :, None] * h).sum(axis=0)
-        q  = self.inference_rate * q_ + (1 - self.inference_rate) * q
+        
+        q_ = (weights[:, :, None] * h).sum(axis=0)
+        q  = inference_rate * q_ + (1 - inference_rate) * q
         return q, cost
-
+    
     def score(self, h, *params):
         prior_params = self.select_params('prior', *params)
         cond_params = self.select_params('conditional', *params)
         py       = self.conditional._feed(h, *cond_params)
-        log_py_h = -self.conditional.neg_log_prob(y[None, :, :], py)
+        log_py_h = -self.conditional.neg_log_prob(y[None, :, :], P=py)
         log_ph   = -self.prior.step_neg_log_prob(h, *prior_params)
-        log_qh   = -self.posterior.neg_log_prob(h, q[None, :, :])
+        log_qh   = -self.posterior.neg_log_prob(h, P=q[None, :, :])
         log_p     = log_py_h + log_ph - log_qh
         w_tilde = norm_exp(log_p)
-        return w_tilde
+        cost    = -log_p.mean()
+        return w_tilde, cost
 
     def init_infer(self, q):
         return []
@@ -73,8 +88,8 @@ class AIR(IRVI):
     def unpack_infer(self, outs):
         return outs
 
-    def params_infer(self):
-        return []
+    def params_infer(self, inference_rate=None):
+        return [inference_rate]
 
 
 class DeepAIR(DeepIRVI):

@@ -16,16 +16,18 @@ cortex.prepare_cell('DistributionMLP', name='approx_posterior', dim_hs=[500],
 cortex.prepare_cell('binomial', name='prior', dim=dim_h)
 cortex.prepare_cell('DistributionMLP', name='conditional', dim_hs=[500],
                     h_act='softplus')
-cortex.prepare_cell('AIR', name='inference')
+cortex.prepare_cell('AIR', 'prior', 'conditional', 'posterior', name='inference')
 
 cortex.match_dims('prior.P', 'approx_posterior.P')
 cortex.match_dims('conditional.P', 'mnist.input')
 
 cortex.add_step('approx_posterior', 'mnist.input')
+cortex.add_step('inference', 'mnist.input', 'approx_posterior.P',
+                n_samples=20, n_steps=20, inference_rate=0.1)
+cortex.prepare_samples('inference.qk', n_posterior_samples)
 cortex.add_step('conditional', 'approx_posterior.samples')
 
-cortex.prepare_samples('approx_posterior.P', n_posterior_samples)
-cortex.prepare_samples('approx_posterior.P', n_posterior_samples_test,
+cortex.prepare_samples('inference.qk', n_posterior_samples_test,
                        name='test_samples')
 cortex.prepare_samples('prior', 100)
 
