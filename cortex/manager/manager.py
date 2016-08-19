@@ -337,14 +337,20 @@ class Manager(object):
 
             if name is None: name = cell_name
 
-            cell_type = self.cell_args[cell_name]['cell_type']
-            C = self.resolve_class(cell_type)
-            if op_name is None: op_name = '__call__'
+            if cell_name in self.cell_args.keys():
+                cell_type = self.cell_args[cell_name]['cell_type']
+                C = self.resolve_class(cell_type)
+                if op_name is None: op_name = '__call__'
+            elif cell_name in self.datasets.key():
+                C = self.manager.datasets[cell_name]['train']
+            else:
+                raise KeyError('No cell nor dataset found called `%s`'
+                               % cell_name)
 
             if hasattr(C, op_name):
                 op = getattr(C, op_name)
             else:
-                raise TypeError('Cell %s of type %s has no method %s.'
+                raise TypeError('Cell or dataset %s of type %s has no method %s.'
                                 % (cell_name, C, op_name))
 
             if len(args) > 0:

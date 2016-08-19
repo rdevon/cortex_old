@@ -5,6 +5,8 @@
 from math import sqrt, floor
 from theano import tensor as T
 
+from . import floatX
+
 
 def parzen_estimation(samples, tests, h=1.0):
     '''Estimate parzen window.
@@ -19,7 +21,7 @@ def parzen_estimation(samples, tests, h=1.0):
         log_p += e - z
     return log_p / float(tests.shape[0])
 
-def get_w_tilde(log_factor):
+def norm_exp(log_factor):
     '''Gets normalized weights.
 
     '''
@@ -33,10 +35,7 @@ def log_mean_exp(x, axis=None, as_numpy=False):
     '''Numerically stable log(exp(x).mean()).
 
     '''
-    if as_numpy:
-        Te = np
-    else:
-        Te = T
+    Te = np if as_numpy else T
     x_max = Te.max(x, axis=axis, keepdims=True)
     return Te.log(Te.mean(Te.exp(x - x_max), axis=axis, keepdims=True)) + x_max
 

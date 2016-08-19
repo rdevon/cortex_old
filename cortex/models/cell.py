@@ -128,7 +128,7 @@ class Cell(object):
 
     noise_switch = get_noise_switch()
 
-    def __init__(self, name='layer_proto', **kwargs):
+    def __init__(self, name='layer_proto', inits=None, **kwargs):
         '''Init function for Cell.
 
         Args:
@@ -140,6 +140,7 @@ class Cell(object):
         self.passed = {}
         self.name = name
         self.manager = manager
+        self.inits = inits or dict()
         kwargs = self.set_options(**kwargs)
         init_rngs(self)
 

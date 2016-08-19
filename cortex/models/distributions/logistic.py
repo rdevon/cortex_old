@@ -57,8 +57,8 @@ class Logistic(Distribution):
         super(Logistic, self).__init__(dim, name=name, **kwargs)
 
     def init_params(self):
-        mu = np.zeros((self.dim,)).astype(floatX)
-        log_s = np.zeros((self.dim,)).astype(floatX)
+        mu = np.zeros((self.dim,)) + self.inits.get('mu', 0.)
+        log_s = np.zeros((self.dim,)) + self.inits.get('log_s', 0.)
 
         self.params = OrderedDict(
             mu=mu, log_s=log_s)

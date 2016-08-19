@@ -6,6 +6,7 @@ from collections import OrderedDict
 from theano import tensor as T
 
 from .basic import kl_divergence
+from ..utils.maths import log_mean_exp
 
 
 def logistic_regression_stats(P=None, Y=None):
@@ -44,9 +45,7 @@ def variational_inference(X=None, conditional=None, posterior=None, prior=None,
     nll_term = cond_cell.neg_log_prob(X, P=conditional)
     log_p = nll_term[None, :, :] + kl_term
     lower_bound = -log_p.mean()
-    log_p_max = T.max(log_p, axis=0, keepdims=True)
-    w         = T.exp(log_p - log_p_max)
-    nll = (T.log(w.mean(axis=0, keepdims=True)) + log_p_max).mean()
+    nll = -log_mean_exp(log_p).mean()
 
     rvals = OrderedDict()
     rvals['prior_entropy'] = prior_entropy

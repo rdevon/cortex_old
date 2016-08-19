@@ -33,7 +33,7 @@ class Trainer(object):
     def __init__(self, session, name='trainer', data_mode='train',
                  optimizer=None, epochs=None, batch_size=None,
                  learning_rate=None, optimizer_args=None, costs=None,
-                 models=None):
+                 models=None, excludes=None):
         if optimizer is None:
             raise TypeError('`optimizer` not set')
         if epochs is None:
@@ -63,6 +63,7 @@ class Trainer(object):
 
         self.optimizer = optimizer
         self.optimizer_args = optimizer_args
+        self.excludes = excludes or []
 
     def start_pbar(self, n):
         widgets = ['Epoch {epoch} (training {name}, '.format(
@@ -159,6 +160,8 @@ class Trainer(object):
                 for k, v in manager.tparams.iteritems():
                     prefix = '.'.join(k.split('.')[:-1])
                     if model == prefix: tparams[k] = v
+        tparams = OrderedDict((k, v) for k, v in tparams.iteritems()
+            if k not in self.excludes)
 
         self.logger.info('Computing gradients for params: %s' % tparams.keys())
         grads = T.grad(

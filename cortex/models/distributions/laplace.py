@@ -53,8 +53,8 @@ class Laplace(Distribution):
         super(Laplace, self).__init__(dim, name=name, **kwargs)
 
     def init_params(self):
-        mu = np.zeros((self.dim,)).astype(floatX)
-        log_b = np.zeros((self.dim,)).astype(floatX)
+        mu = np.zeros((self.dim,)) + self.inits.get('mu', 0.)
+        log_b = np.zeros((self.dim,)) + self.inits.get('log_s', 0.)
 
         self.params = OrderedDict(
             mu=mu, log_b=log_b)

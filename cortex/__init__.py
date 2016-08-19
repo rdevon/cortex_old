@@ -1,8 +1,6 @@
 '''Setup scripts for Cortex.
 
 '''
-import logging
-
 from .main import *
 from . import manager
 

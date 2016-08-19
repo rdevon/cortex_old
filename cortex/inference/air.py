@@ -7,42 +7,31 @@ import theano
 from theano import tensor as T
 
 from .irvi import IRVI, DeepIRVI
-from ..utils import floatX
-from ..utils.tools import (
-    get_w_tilde,
-    scan,
-    warn_kwargs
-)
+from ..utils import floatX, scan
+from ..utils.maths import norm_exp
 
 
 class AIR(IRVI):
     '''
     Adaptive importance refinement (AIR).
-    
+
     Inference procedure to refine the posterior using adaptive importance
     sampling (AIS)
     '''
-    def __init__(self,
-                 model,
-                 name='AIR',
-                 pass_gradients=False,
-                 **kwargs):
+    def __init__(self, model, name='AIR', **kwargs):
         '''Init function for AIR
-        
+
         Args:
             model: Helmholtz object.
             name: str
-            pass_gradients: bool (optional)
             kwargs: dict, remaining IRVI arguments.
         '''
 
-        super(AIR, self).__init__(model, name=name,
-                                  pass_gradients=pass_gradients,
-                                  **kwargs)
+        super(AIR, self).__init__(model, name=name, **kwargs)
 
     def step_infer(self, r, q, y, *params):
         '''Step inference function for IRVI.inference scan.
-        
+
         Args:
             r: theano randomstream variable
             q: T.tensor. Current approximate posterior parameters
@@ -52,9 +41,6 @@ class AIR(IRVI):
             q: T.tensor. New approximate posterior parameters
             cost: T.scalar float. Negative lower bound of current parameters
         '''
-        
-        model = self.model
-        prior_params = model.get_prior_params(*params)
 
         h        = (r <= q[None, :, :]).astype(floatX)
         py       = model.p_y_given_h(h, *params)
@@ -62,11 +48,24 @@ class AIR(IRVI):
         log_ph   = -model.prior.step_neg_log_prob(h, *prior_params)
         log_qh   = -model.posterior.neg_log_prob(h, q[None, :, :])
         log_p     = log_py_h + log_ph - log_qh
-        w_tilde = get_w_tilde(log_p)
+        w_tilde = norm_exp(log_p)
+
+        weights = self.score(h, *params)
         cost    = -log_p.mean()
         q_ = (w_tilde[:, :, None] * h).sum(axis=0)
         q  = self.inference_rate * q_ + (1 - self.inference_rate) * q
         return q, cost
+
+    def score(self, h, *params):
+        prior_params = self.select_params('prior', *params)
+        cond_params = self.select_params('conditional', *params)
+        py       = self.conditional._feed(h, *cond_params)
+        log_py_h = -self.conditional.neg_log_prob(y[None, :, :], py)
+        log_ph   = -self.prior.step_neg_log_prob(h, *prior_params)
+        log_qh   = -self.posterior.neg_log_prob(h, q[None, :, :])
+        log_p     = log_py_h + log_ph - log_qh
+        w_tilde = norm_exp(log_p)
+        return w_tilde
 
     def init_infer(self, q):
         return []

@@ -213,12 +213,11 @@ class Session(object):
             elif is_tensor_arg(arg):
                 name, key, _ = resolve_tensor_arg(arg)
                 if name in manager.datasets.keys():
-                    if arg not in tensors.keys():
-                        dataset_tensor = manager.datasets[name]['tensors'][key]
-                        tensors[arg] = dataset_tensor
-                        self.inputs.append(dataset_tensor)
-                        self.datasets.append(name)
-                        self.input_keys.append(key)
+                    dataset_tensor = manager.datasets[name]['tensors'][key]
+                    tensors[arg] = dataset_tensor
+                    self.inputs.append(dataset_tensor)
+                    self.datasets.append(name)
+                    self.input_keys.append(key)
 
                 if arg not in tensors.keys() and arg in manager.samples.keys():
                     self.add_samples(**manager.samples[arg])

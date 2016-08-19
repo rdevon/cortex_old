@@ -39,8 +39,7 @@ class Visualizer(object):
         f_viz = theano.function(
             self.session.inputs,
             [args[i] for i in tensor_idx] + [kwargs[k] for k in tensor_keys],
-            updates=self.session.updates,
-            on_unused_input='ignore')
+            updates=self.session.updates, on_unused_input='ignore')
 
         def viz(*inputs):
             ts = f_viz(*inputs)
