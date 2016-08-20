@@ -45,7 +45,7 @@ def variational_inference(X=None, conditional=None, posterior=None, prior=None,
     nll_term = cond_cell.neg_log_prob(X, P=conditional)
     log_p = nll_term[None, :, :] + kl_term
     lower_bound = -log_p.mean()
-    nll = -log_mean_exp(log_p).mean()
+    nll = -log_mean_exp(log_p, axis=0).mean()
 
     rvals = OrderedDict()
     rvals['prior_entropy'] = prior_entropy

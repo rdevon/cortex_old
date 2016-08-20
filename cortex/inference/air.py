@@ -63,14 +63,14 @@ class AIR(IRVI):
         prior_params = self.select_params('prior', *params)
         post_params = self.select_params('posterior', *params)
         cond_params = self.select_params('conditional', *params)
-        py       = self.conditional._feed(h, *cond_params)['Y']
+        py       = self.conditional._feed(h, *cond_params)['P']
         log_py_h = -self.conditional.neg_log_prob(y[None, :, :], P=py)
         log_ph   = -self.prior.step_neg_log_prob(h, *prior_params)
         log_qh   = -self.posterior.neg_log_prob(h, P=q[None, :, :])
         log_p     = log_py_h + log_ph - log_qh
         w_tilde = norm_exp(log_p)
         cost    = -log_p.mean()
-        return w_tilde, cost
+        return w_tilde, -log_p.mean()
 
     def init_infer(self, q):
         return []

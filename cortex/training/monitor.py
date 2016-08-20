@@ -48,6 +48,7 @@ class BasicMonitor(object):
             table_data = [['Name'] + self.stats.keys()]
             for stat in self.sections[section]:
                 stat_str = stat.replace('_grad_', u'\u03b4')
+                stat_str = stat.replace('_delta_', u'\u0394')
                 td = [stat_str]
                 for mode in self.stats.keys():
                     if stat in self.stats[mode].keys():

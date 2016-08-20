@@ -415,11 +415,15 @@ class Manager(object):
                         name = _p(name, n)
 
                 elif what == 'stat':
-                    if not n in C._stats.keys():
-                        raise AttributeError('cell type %s for cell `%s` has no '
-                                             'stat %s' % (C, cell_name, n))
-                    op = getattr(C, C._stats[n])
-                    name = _p(name, n)
+                    if n == 'stats' and hasattr(C, '_stats'):
+                        op = getattr(C, '_stats')
+                        name = _p(name, 'stats')
+                    else:
+                        if not n in C._stats.keys():
+                            raise AttributeError('cell type %s for cell `%s` has no '
+                                                 'stat %s' % (C, cell_name, n))
+                        op = getattr(C, C._stats[n])
+                        name = _p(name, n)
 
             else:
                 if name is None: name = op

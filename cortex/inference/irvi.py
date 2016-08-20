@@ -138,8 +138,14 @@ class IRVI(Cell):
             Qs = Q0[None, :, :]
             i_costs = [T.constant(0.).astype(floatX)]
 
-        return OrderedDict(Qk=Qs[-1], Qs=Qs, i_costs=i_costs, constants=[Qs],
-                           updates=updates)
+        return OrderedDict(Qk=Qs[-1], Qs=Qs, i_costs=i_costs, epsilons=epsilons,
+                           constants=[Qs], updates=updates)
+
+    def _stats(self, Qs=None, i_costs=None, n_steps=None, **kwargs):
+        rval = OrderedDict()
+        rval['_delta_Q_mean'] = (Qs[-1] - Qs[0]).mean()
+        rval['_delta_i_cost'] = i_costs[-1] - i_costs[0]
+        return rval
 
     def test(self, x, y, stride=1, **model_args):
         '''Testing function for inference.

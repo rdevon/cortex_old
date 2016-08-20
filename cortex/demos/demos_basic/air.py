@@ -5,8 +5,9 @@
 import cortex
 
 n_posterior_samples = 10
-n_posterior_samples_test = 1000
+n_posterior_samples_test = 100
 dim_h = 200
+n_steps = 20
 
 cortex.prepare_data('MNIST', mode='train', source='$data/basic/mnist.pkl.gz')
 cortex.prepare_data('MNIST', mode='valid', source='$data/basic/mnist.pkl.gz')
@@ -25,7 +26,7 @@ cortex.match_dims('approx_posterior.samples', 'conditional.input')
 
 cortex.add_step('approx_posterior', 'mnist.input')
 cortex.add_step('inference', 'mnist.input', 'approx_posterior.P',
-                n_samples=20, n_steps=20, inference_rate=0.1)
+                n_samples=20, n_steps=n_steps, inference_rate=0.1)
 cortex.prepare_samples('inference.Qk', n_posterior_samples)
 cortex.prepare_samples('inference.Qk', n_posterior_samples_test,
                        name='test_samples')
@@ -51,6 +52,8 @@ cortex.add_stat('variational_inference', X='mnist.input',
                 posterior_samples='inference.test_samples',
                 cells=['conditional.distribution',
                        'approx_posterior.distribution', 'prior'])
+cortex.add_stat('inference.stats', Qs='inference.Qs', i_costs='inference.i_costs', epsilons='inference.epsilons',
+                n_steps=n_steps)
 
 train_session = cortex.create_session()
 cortex.build_session()
@@ -87,4 +90,4 @@ evaluator = cortex.setup_evaluator(
 
 monitor = cortex.setup_monitor(valid_session, modes=['train', 'valid'])
 
-cortex.train(eval_every=1)
+cortex.train(eval_every=10)
