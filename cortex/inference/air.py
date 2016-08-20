@@ -22,9 +22,8 @@ class AIR(IRVI):
     _components = {
         'prior': {},
         'conditional': {},
-        'posterior': {}
-    }
-    
+        'posterior': {}}
+
     def __init__(self, prior, conditional, posterior, name='AIR', **kwargs):
         '''Init function for AIR
 
@@ -32,23 +31,13 @@ class AIR(IRVI):
             name: str
             kwargs: dict, remaining IRVI arguments.
         '''
-        
-        manager = self.manager
-        prior = self.manager[prior]
-        conditional = self.manager[conditional]
-        posterior = self.manager[posterior]
-        
+
         models = dict(
             prior=prior,
             conditional=conditional,
             posterior=posterior)
 
         super(AIR, self).__init__(name=name, models=models, **kwargs)
-        
-    def set_components(self, models=None, **kwargs):
-        for k, v in models.iteritems():
-            self.__dict__[k] = self.manager[k]
-        return kwargs
 
     def step_infer(self, r, q, y, inference_rate, *params):
         '''Step inference function for IRVI.inference scan.
@@ -64,16 +53,17 @@ class AIR(IRVI):
         '''
 
         h        = (r <= q[None, :, :]).astype(floatX)
-        weights = self.score(h, *params)
-        
+        weights, cost = self.score(h, y, q, *params)
+
         q_ = (weights[:, :, None] * h).sum(axis=0)
         q  = inference_rate * q_ + (1 - inference_rate) * q
         return q, cost
-    
-    def score(self, h, *params):
+
+    def score(self, h, y, q, *params):
         prior_params = self.select_params('prior', *params)
+        post_params = self.select_params('posterior', *params)
         cond_params = self.select_params('conditional', *params)
-        py       = self.conditional._feed(h, *cond_params)
+        py       = self.conditional._feed(h, *cond_params)['Y']
         log_py_h = -self.conditional.neg_log_prob(y[None, :, :], P=py)
         log_ph   = -self.prior.step_neg_log_prob(h, *prior_params)
         log_qh   = -self.posterior.neg_log_prob(h, P=q[None, :, :])
@@ -90,6 +80,22 @@ class AIR(IRVI):
 
     def params_infer(self, inference_rate=None):
         return [inference_rate]
+
+    def generate_random_variables(self, shape, P=None):
+        if P is None:
+            session = self.manager.get_session()
+            P = session.tensors[self.name + 'Qk']
+
+        return self.posterior.generate_random_variables(shape, P=P)
+
+    def _sample(self, epsilon, P=None):
+        session = self.manager.get_session()
+        if P is None:
+            if _p(self.name, 'Qk') not in session.tensors.keys():
+                raise TypeError('%s.Qk not found in graph nor provided'
+                                % self.name)
+            P = session.tensors[_p(self.name, 'Qk')]
+        return self.posterior._sample(epsilon, P=P)
 
 
 class DeepAIR(DeepIRVI):
@@ -148,3 +154,5 @@ class DeepAIR(DeepIRVI):
 
     def params_infer(self):
         return []
+
+_classes = {'AIR': AIR}

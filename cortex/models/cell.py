@@ -155,7 +155,7 @@ class Cell(object):
         self.register()
 
         self.n_params = 0
-        for param in self.params:
+        for param in self.params.values():
             if isinstance(param, list):
                 self.n_params += len(param)
             else:
@@ -377,6 +377,7 @@ class Cell(object):
     def select_params(self, key, *params):
         params = list(params)
         start = 0
+        end = 0
         if key is None:
             end = self.n_params
         else:
@@ -474,7 +475,7 @@ class Cell(object):
         try:
             return object.__getattr__(self, key)
         except AttributeError:
-            raise AttributeError(key)
+            raise KeyError(key)
 
     def __str__(self):
         attributes = {}

@@ -7,6 +7,7 @@ import logging
 
 from .. import costs
 from .. import datasets
+from .. import inference
 from .. import models
 from ..utils.tools import _p, print_section
 from ..training import Evaluator, Trainer, Visualizer
@@ -84,6 +85,7 @@ class Manager(object):
             '.'.join([self.__module__, self.__class__.__name__]))
 
         self.classes = models._classes
+        self.classes.update(**inference._classes)
         self.dataset_classes = datasets._classes
         self.cost_functions = costs._costs
         self.stat_functions = costs._stats

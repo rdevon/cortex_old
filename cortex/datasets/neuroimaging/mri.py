@@ -53,7 +53,7 @@ class MRI(NeuroimagingDataset):
 
     def __init__(self, source=None, name='mri', flip_signs=False,
                  pca_components=0, incremental_pca=False,
-                 distribution='gaussian', **kwargs):
+                 variance_normalize=False, distribution='gaussian', **kwargs):
         '''Init function for MRI.
 
         Args:
@@ -70,13 +70,12 @@ class MRI(NeuroimagingDataset):
         if source is None:
             raise TypeError('`souce` argument must be provided')
 
-        self.logger = logging.getLogger(
-            '.'.join([self.__module__, self.__class__.__name__]))
+        self.logger = logging.getLogger('.'.join([self.__module__,
+                                                  self.__class__.__name__]))
         self.logger.info('Loading %s from %s' % (name, source))
 
-        widgets = [
-            'Forming %s dataset: ' % name ,
-            '(', Timer(), ') [', Percentage(), ']']
+        widgets = ['Forming %s dataset: ' % name , '(', Timer(), ') [',
+                   Percentage(), ']']
         self.pbar = ProgressBar(widgets=widgets, maxval=self._init_steps).start()
         self.progress = 0
 
@@ -86,24 +85,9 @@ class MRI(NeuroimagingDataset):
         self.image_shape = self.mask.shape
         self.update_progress()
         self.pca_components = pca_components
+        self.variance_normalize = variance_normalize
 
-        if self.pca_components:
-            X -= X.mean(axis=0)
-            if self.pca is None:
-                if incremental_pca:
-                    self.logger.info('Using incremental PCA')
-                    PCAC = IncrementalPCA
-                else:
-                    self.logger.info('Using PCA')
-                    PCAC = PCA
-                self.pca = PCAC(pca_components, whiten=True)
-                self.logger.info('Fitting PCA... (please wait)')
-                self.pca.fit(X)
-                if self.pca_file is not None:
-                    with open(self.pca_file, 'wb') as pf:
-                        cPickle.dump(self.pca, pf)
-            self.logger.info('Performing PCA')
-            X = self.pca.transform(X)
+        if self.pca_components: X = self.apply_pca(X)
         self.update_progress()
 
         data = {'input': X, 'labels': Y}
@@ -111,7 +95,30 @@ class MRI(NeuroimagingDataset):
 
         super(MRI, self).__init__(data, distributions=distributions, name=name,
                                   **kwargs)
+        if self.variance_normalize:
+            self.X -= self.mean_image[None, :]
+            self.X /= self.var_image[None, :]
+            self.data['input'] = self.X
         self.update_progress(finish=True)
+
+    def apply_pca(self, X):
+        X -= X.mean(axis=0)
+        if self.pca is None:
+            if incremental_pca:
+                self.logger.info('Using incremental PCA')
+                PCAC = IncrementalPCA
+            else:
+                self.logger.info('Using PCA')
+                PCAC = PCA
+            self.pca = PCAC(self.pca_components, whiten=True)
+            self.logger.info('Fitting PCA... (please wait)')
+            self.pca.fit(X)
+            if self.pca_file is not None:
+                with open(self.pca_file, 'wb') as pf:
+                    cPickle.dump(self.pca, pf)
+        self.logger.info('Performing PCA')
+        X = self.pca.transform(X)
+        return X
 
     def get_data(self, source):
         '''Fetch the MRI dataset.
@@ -314,6 +321,9 @@ class MRI(NeuroimagingDataset):
         return images, out_files
 
     def prepare_images(self, x):
+        if self.variance_normalize:
+            x *= self.var_image[None, :]
+            x += self.mean_image[None, :]
         if self.pca is not None and self.pca_components:
             x = self.pca.inverse_transform(x)
         return x

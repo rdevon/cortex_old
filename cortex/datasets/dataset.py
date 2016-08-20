@@ -233,6 +233,7 @@ class BasicDataset(Dataset):
 
         self.X = self.data['input']
         self.mean_image = self.X.mean(axis=0)
+        self.var_image = self.X.std(axis=0)
         self.labels = labels
 
         if self.labels is not None:

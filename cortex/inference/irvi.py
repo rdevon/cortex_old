@@ -31,22 +31,28 @@ class IRVI(Cell):
         use_all_samples (bool): Use all the samples rather than just last.
 
     '''
-    def __init__(self, model, name='IRVI', **kwargs):
+    _call_args = ['Y', 'Q0']
+    _sample_tensors = ['Qk']
+
+    def __init__(self, models=None, name='IRVI', **kwargs):
         '''Initialization function for IRVI.
 
         Args:
-            model (Layer): Typically Helmholtz.
-            init_inference (str): Inference initialization option.
-            inference_rate (float): Rate of inference steps.
-            n_inference_steps (int): Number of inference steps.
-            n_inference_samples (int): Number of samples to draw from the
-                approximate posterior.
-            pass_gradients (bool): Pass gradients during inference.
-            use_all_samples (bool): Use all the samples rather than just last.
 
         '''
 
-        super(IRVI, self).__init__(name=name, **kwargs)
+        super(IRVI, self).__init__(name=name, models=models, **kwargs)
+
+    def set_components(self, models=None, **kwargs):
+        self.component_keys = models.keys()
+        for k, v in models.iteritems():
+            if (not v in self.manager.cells.keys() and
+                v in self.manager.cell_args.keys()):
+                self.manager.build_cell(v)
+            elif v not in self.manager.cell_args.keys():
+                raise ValueError('Cell `%s` not foud.' % v)
+            self.__dict__[k] = self.manager[v]
+        return kwargs
 
     # Child-specific methods. These must be defined in child class.
     def step_infer(self, *params):
@@ -82,7 +88,12 @@ class IRVI(Cell):
         '''
         raise NotImplementedError()
 
-    def _feed(self, y, q0, n_samples=None, n_steps=None, **kwargs):
+    def init_args(self, Y, Q0, n_samples=None, n_steps=None, inference_rate=None):
+        if (n_samples is None or n_steps is None):
+            raise TypeError
+        return (Y, Q0, n_samples, n_steps, inference_rate)
+
+    def _feed(self, Y, Q0, n_samples, n_steps, inference_rate, *params):
         '''Perform inference
 
         Args:
@@ -99,40 +110,35 @@ class IRVI(Cell):
         updates = theano.OrderedUpdates()
 
         # Set random variables.
-        epsilons = self.generate_random_variables((n_steps, n_samples), P=q0)
+        epsilons = self.generate_random_variables((n_steps, n_samples), P=Q0)
 
         # Set `scan` arguments.
         seqs = [epsilons]
-        outputs_info = [q0] + self.init_infer(q0) + [None]
-        non_seqs = [y] + self.params_infer(**kwargs) + model.get_params()
+        outputs_info = [Q0] + self.init_infer(Q0) + [None]
+        non_seqs = [Y] + self.params_infer(inference_rate) + list(params)
 
         self.logger.info('Doing %d inference steps of %s and a rate of %.5f with %d '
-               'inference samples' % (self.n_inference_steps, self.name,
-                                      self.inference_rate, self.n_inference_samples))
+               'inference samples' % (n_steps, self.name,
+                                      inference_rate, n_samples))
 
         # Perform inference.
-        if n_inference_steps > 1:
+        if n_steps > 1:
             outs, updates_i = scan(self.step_infer, seqs, outputs_info, non_seqs,
-                                   n_inference_steps, self.name + '_infer')
+                                   n_steps, self.name + '_infer')
             updates.update(updates_i)
-            qs, i_costs = self.unpack_infer(outs)
-            qs = T.concatenate([q0[None, :, :], qs], axis=0)
-        elif n_inference_steps == 1:
+            Qs, i_costs = self.unpack_infer(outs)
+            Qs = T.concatenate([Q0[None, :, :], Qs], axis=0)
+        elif n_steps == 1:
             inps = [epsilons[0]] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
             q, i_cost = self.unpack_infer(outs)
-            qs = T.concatenate([q0[None, :, :], q[None, :, :]], axis=0)
+            qs = T.concatenate([Q0[None, :, :], Q[None, :, :]], axis=0)
             i_costs = [i_cost]
-        elif n_inference_steps == 0:
-            qs = q0[None, :, :]
+        elif n_steps == 0:
+            Qs = Q0[None, :, :]
             i_costs = [T.constant(0.).astype(floatX)]
 
-        if self.use_all_samples:
-            qk = qs
-        else:
-            qk = qs[-1]
-
-        return OrderedDict(qk=qk, qs=qs, i_costs=i_costs, constants=[qs],
+        return OrderedDict(Qk=Qs[-1], Qs=Qs, i_costs=i_costs, constants=[Qs],
                            updates=updates)
 
     def test(self, x, y, stride=1, **model_args):
