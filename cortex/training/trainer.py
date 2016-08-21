@@ -34,17 +34,12 @@ class Trainer(object):
                  optimizer=None, epochs=None, batch_size=None,
                  learning_rate=None, optimizer_args=None, costs=None,
                  models=None, excludes=None):
-        if optimizer is None:
-            raise TypeError('`optimizer` not set')
-        if epochs is None:
-            raise TypeError('`epochs` not set')
+        if optimizer is None: raise TypeError('`optimizer` not set')
+        if epochs is None: raise TypeError('`epochs` not set')
         if batch_size is None and session.batch_size is None:
             raise TypeError('`batch_size` not set')
-        if learning_rate is None:
-            raise TypeError('`learning_rate` not set')
+        if learning_rate is None: raise TypeError('`learning_rate` not set')
 
-        epoch_t0 = time.time()
-        training_time = 0
         self.logger = get_class_logger(self)
         self.session = session
         self.learning_rate = learning_rate

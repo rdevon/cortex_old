@@ -4,8 +4,8 @@
 
 import cortex
 
-n_posterior_samples = 10
-n_posterior_samples_test = 100
+n_posterior_samples = 20
+n_posterior_samples_test = 1000
 dim_h = 200
 n_steps = 20
 
@@ -52,8 +52,8 @@ cortex.add_stat('variational_inference', X='mnist.input',
                 posterior_samples='inference.test_samples',
                 cells=['conditional.distribution',
                        'approx_posterior.distribution', 'prior'])
-cortex.add_stat('inference.stats', Qs='inference.Qs', i_costs='inference.i_costs', epsilons='inference.epsilons',
-                n_steps=n_steps)
+cortex.add_stat('inference.stats', Qs='inference.Qs', i_costs='inference.i_costs',
+                epsilons='inference.epsilons', n_steps=n_steps)
 
 train_session = cortex.create_session()
 cortex.build_session()
@@ -76,10 +76,10 @@ visualizer.add('mnist.autoencoder_visualization',
                X_in='mnist.input',
                X_out='conditional.P',
                Y='mnist.labels',
-               out_file='$outs/vae_recons_test.png')
+               out_file='$outs/air_recons_test.png')
 visualizer.add('mnist.viz',
                X='prior_gen.P',
-               out_file='$outs/vae_prior.png')
+               out_file='$outs/air_prior.png')
 
 evaluator = cortex.setup_evaluator(
     valid_session,
