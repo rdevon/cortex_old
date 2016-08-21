@@ -45,44 +45,30 @@ class Averager(Cell):
 
 
 class Baseline(Cell):
-    def __init__(self, name='baseline', rate=0.1):
+    def __init__(self, name='baseline', rate=0.1, **kwargs):
         self.rate = np.float32(rate)
-        super(Baseline, self).__init__(name)
+        super(Baseline, self).__init__(name=name, **kwargs)
 
-    def set_params(self):
-        m = np.float32(0.)
-        var = np.float32(0.)
-
+    def init_params(self):
+        m = 0.
+        var = 0.
         self.params = OrderedDict(m=m, var=var)
 
-    def __call__(self, input_):
-        m = input_.mean()
-        v = input_.std()
+    def _feed(self, X):
+        m = X.mean()
+        v = X.std() ** 2
 
-        new_m = T.switch(T.eq(self.m, 0.),
-                         m,
-                         (np.float32(1.) - self.rate) * self.m + self.rate * m)
-        new_var = T.switch(T.eq(self.var, 0.),
-                           v,
-                           (np.float32(1.) - self.rate) * self.var + self.rate * v)
-
+        new_m = ((1. - self.rate) * self.m + self.rate * m).astype(floatX)
+        new_var = ((1. - self.rate) * self.var + self.rate * v).astype(floatX)
         updates = [(self.m, new_m), (self.var, new_var)]
+        X_c = (X - new_m) / T.maximum(1., T.sqrt(new_var + 1e-7))
 
-        input_centered = (
-            (input_ - new_m) / T.maximum(1., T.sqrt(new_var)))
-
-        input_ = T.zeros_like(input_) + input_
-
-        outs = OrderedDict(
-            x=input_,
-            x_centered=input_centered,
-            m=new_m,
-            var=new_var
-        )
-        return outs, updates
+        return OrderedDict(x=X, x_centered=X_c, m=new_m, var=new_var, updates=updates)
+    
 
 class BaselineWithInput(Baseline):
     def __init__(self, dims_in, dim_out, rate=0.1, name='baseline_with_input'):
+        raise NotImplementedError('Not up-to-date')
         if len(dims_in) < 1:
             raise ValueError('One or more dims_in needed, %d provided'
                              % len(dims_in))
@@ -144,6 +130,7 @@ class BaselineWithInput(Baseline):
 
 class ScalingWithInput(Cell):
     def __init__(self, dims_in, dim_out, name='scaling_with_input'):
+        raise NotImplementedError('Not up-to-date')
         if len(dims_in) < 1:
             raise ValueError('One or more dims_in needed, %d provided'
                              % len(dims_in))
@@ -194,6 +181,7 @@ class Attention(Cell):
 
     def __init__(self, dim_in, dim_out, mlp=None, name='attention',
                  mlp_args=None, **kwargs):
+        raise NotImplementedError('Not up-to-date')
         if mlp is None:
             if mlp_args is None:
                 mlp_args = dict()
@@ -210,12 +198,7 @@ class Attention(Cell):
         v = self.rng.normal(size=(self.dim_out,)).astype(floatX)
         self.params = OrderedDict(v=v)
 
-    def set_tparams(self):
-        tparams = super(Attention, self).set_tparams()
-        tparams.update(**self.mlp.set_tparams())
-        return tparams
-
-    def __call__(self, X, axis=0):
+    def _feed(self, X):
         X = utils.concatenate(X, axis=X.ndim-1)
         Y = self.mlp.feed(X)
         a = T.dot(Y, self.v)
@@ -228,6 +211,7 @@ class Attention2(Cell):
 
     def __init__(self, dim_in, dim_out, mlp=None, name='attention',
                  **kwargs):
+        raise NotImplementedError('Not up-to-date')
         if mlp is None:
             mlp = mlp_module.factory(dim_in=dim_in, dim_out=dim_out,
                               name=name + '_mlp',
@@ -254,4 +238,4 @@ class Attention2(Cell):
         return OrderedDict(a=a, e=e)
 
 
-_classes = {'Averager': Averager}
+_classes = {'Averager': Averager, 'Baseline': Baseline}

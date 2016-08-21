@@ -2,7 +2,12 @@
 Iterator for UCI dataset
 '''
 
-import h5py
+import warnings
+try:
+    import h5py
+except ImportError:
+    warnings.warn('Could not import h5py. Please follow installation instructions '
+                  'at http://docs.h5py.org/en/latest/build.html to use UCI dataset.')
 import numpy as np
 
 from ...utils import floatX
