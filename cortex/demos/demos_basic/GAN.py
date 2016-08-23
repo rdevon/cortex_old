@@ -73,7 +73,7 @@ monitor = cortex.setup_monitor(valid_session, modes=['train', 'valid'])
 
 visualizer = cortex.setup_visualizer(valid_session)
 visualizer.add('mnist.viz',
-               X='generator.Y',
-               out_file='/home/devon/tmp/GAN_test.png')
+               X='generator.P',
+               out_file='$outs/GAN_test.png')
 
 cortex.train(monitor_grads=True)

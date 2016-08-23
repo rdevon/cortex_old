@@ -45,26 +45,34 @@ class Averager(Cell):
 
 
 class Baseline(Cell):
+    _call_args = ['input']
+
     def __init__(self, name='baseline', rate=0.1, **kwargs):
         self.rate = np.float32(rate)
         super(Baseline, self).__init__(name=name, **kwargs)
 
     def init_params(self):
-        m = 0.
-        var = 0.
-        self.params = OrderedDict(m=m, var=var)
+        m = np.float32(0.)
+        var = np.float32(1.)
+        self.params = OrderedDict(M=m, V=var)
 
-    def _feed(self, X):
-        m = X.mean()
-        v = X.std() ** 2
+    def get_params(self):
+        return [self.M, self.V]
 
-        new_m = ((1. - self.rate) * self.m + self.rate * m).astype(floatX)
-        new_var = ((1. - self.rate) * self.var + self.rate * v).astype(floatX)
-        updates = [(self.m, new_m), (self.var, new_var)]
-        X_c = (X - new_m) / T.maximum(1., T.sqrt(new_var + 1e-7))
+    def _feed(self, X, *params):
+        M, V = params
 
-        return OrderedDict(x=X, x_centered=X_c, m=new_m, var=new_var, updates=updates)
-    
+        M_ = X.mean()
+        V_ = X.std() ** 2
+
+        M_ = ((1. - self.rate) * M + self.rate * M_).astype(floatX)
+        V_ = ((1. - self.rate) * V + self.rate * V_).astype(floatX)
+        updates = [(self.M, M_), (self.V, V_)]
+        #X_c = ((X - M_) / T.maximum(1., T.sqrt(V_ + 1e-7))).astype(floatX)
+        X_c = X - M_
+
+        return OrderedDict(X=X, X_c=X_c, M=M_, V=V_, updates=updates)
+
 
 class BaselineWithInput(Baseline):
     def __init__(self, dims_in, dim_out, rate=0.1, name='baseline_with_input'):

@@ -324,12 +324,11 @@ class Cell(object):
         self.params = OrderedDict()
 
     def set_tparams(self):
-        self.param_keys = []
         '''Sets the tensor parameters.
 
         '''
-        if self.params is None:
-            raise ValueError('Params not set yet')
+        self.param_keys = []
+        if self.params is None: raise ValueError('Params not set yet')
         tparams = OrderedDict()
 
         for k, p in self.params.iteritems():

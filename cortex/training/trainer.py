@@ -155,8 +155,9 @@ class Trainer(object):
                 for k, v in manager.tparams.iteritems():
                     prefix = '.'.join(k.split('.')[:-1])
                     if model == prefix: tparams[k] = v
-        tparams = OrderedDict((k, v) for k, v in tparams.iteritems()
-            if k not in self.excludes)
+        tparams = OrderedDict((k, v)
+            for k, v in tparams.iteritems()
+            if (v not in session.updates.keys()) and (k not in self.excludes))
 
         self.logger.info('Computing gradients for params: %s' % tparams.keys())
         grads = T.grad(

@@ -10,6 +10,7 @@ import numpy as np
 import theano
 from theano import tensor as T
 
+from ..utils import floatX
 from ..utils import tools
 
 
@@ -163,11 +164,10 @@ def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
 
     '''
     logger.info('Stochastic gradient descent.')
-    gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k)
-               for k, p in tparams.iteritems()]
+    gshared = [theano.shared((p.get_value() * 0.).astype(floatX),
+        name='%s_grad'%k) for k, p in tparams.iteritems()]
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads.values())]
-
     f_grad_shared = make_f_grad_shared(inp, cost, grads, updates=gsup+extra_ups)
 
     pup = [(p, p - lr * g) for p, g in zip(tools.itemlist(tparams), gshared)
