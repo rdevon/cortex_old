@@ -543,7 +543,7 @@ class Manager(object):
         from .link import Link
         try:
             link = Link(f, t)
-        except TypeError:
+        except (TypeError, KeyError):
             return
 
         for name, node in link.nodes.iteritems():

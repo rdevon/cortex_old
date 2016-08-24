@@ -34,7 +34,7 @@ class DistributionMLP(Cell):
             'cell_type': '&distribution_type',
             '_required': {'conditional': True},
             '_passed': ['has_kl', 'neg_log_prob', 'kl_divergence',
-                        'simple_sample']
+                        'simple_sample', 'entropy', 'quantile']
         },
     }
     _links = [('mlp.output', 'distribution.input')]
@@ -90,6 +90,7 @@ class DistributionMLP(Cell):
         Y = outs['output']
         outs['output'] = self.distribution(Y)
         outs['P'] = outs['output']
+        outs['P_center'] = self.distribution.get_center(outs['P'])
         return outs
 
     def _cost(self, X=None, P=None):

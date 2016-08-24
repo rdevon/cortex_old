@@ -114,6 +114,12 @@ class CNN2D(Cell):
         session = self.manager._current_session
         params = list(params)
 
+        if X.ndim == 3:
+            reshape = X.shape
+            X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
+        else:
+            reshape = None
+
         X = X.reshape((X.shape[0], self.input_shape[0], self.input_shape[1],
                        self.input_shape[2]))
         input_shape = (batch_size,) + self.input_shape
@@ -182,6 +188,9 @@ class CNN2D(Cell):
             input_shape = (batch_size, filter_shape[0], dim_x, dim_y)
 
         X = X.reshape((X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
+
+        if reshape is not None:
+            X = X.reshape((reshape[0], reshape[1], X.shape[1]))
         outs['output'] = X
 
         assert len(params) == 0

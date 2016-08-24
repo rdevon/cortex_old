@@ -139,6 +139,8 @@ class Session(object):
                     self.test(data, f, key=k, key_prefix=name, cell=cell)
             else:
                 for key in test_order:
+                    if key in ['updates', 'constants']:
+                        continue
                     self.logger.info('Testing `%s` from step %s with batchsize %d'
                                      % (key, name, batch_size))
                     t = out[key]

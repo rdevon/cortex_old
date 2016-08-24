@@ -4,11 +4,12 @@
 
 from collections import OrderedDict
 import numpy as np
+import random
 from theano import tensor as T
 
 from . import Distribution, _clip
 from ... import utils
-from ...utils import e, floatX, pi
+from ...utils import e, floatX, pi, scan
 
 
 def _normal(trng, p, size=None):
@@ -120,5 +121,25 @@ class Gaussian(Distribution):
         '''
         return -((x - mu) ** 2 / (2. * T.exp(log_sigma)) ** 2).sum(axis=x.ndim-1)
 
+    def grid2d(self, idx1=None, idx2=None, n_steps=10, std=2.0, random_idx=False):
+        if random_idx:
+            idx1 = random.randint(0, self.dim - 1)
+            idx2 = random.randint(0, self.dim - 1)
+        else:
+            if idx1 is None or idx2 is None:
+                raise TypeError('Both idx need to be set if not random')
+
+        def step(x):
+            i = x % n_steps
+            j = x // n_steps
+            vec = T.zeros((self.dim, ))
+            vec = T.set_subtensor(vec[idx1], (i - n_steps / 2.) * std / float(n_steps))
+            vec = T.set_subtensor(vec[idx2], (j - n_steps / 2.) * std / float(n_steps))
+            return vec
+
+        a = T.arange(n_steps ** 2)
+        b, _ = scan(step, [a], [None], [], a.shape[0])
+        b = b.reshape((n_steps, n_steps, self.dim)).astype(floatX)
+        return b
 
 _classes = {'gaussian': Gaussian}

@@ -467,14 +467,14 @@ class Cell(object):
         return kwargs[k]
 
     def __getattr__(self, key):
-        if hasattr(self, key) and key == 'passed':
-            return object.__getattr__(self, key)
-        if key in self.passed:
-            return self.__dict__[self.passed[key]].__getattribute__(key)
-        try:
-            return object.__getattr__(self, key)
-        except AttributeError:
-            raise KeyError(key)
+        if key in ['passed', 'components']:
+            raise AttributeError(key)
+
+        if key not in self.passed.keys():
+            raise AttributeError('Cell of type %s has no attribute %s'
+                                 % (type(self), key))
+        component = self.__dict__[self.passed[key]]
+        return object.__getattribute__(component, key)
 
     def __str__(self):
         attributes = {}

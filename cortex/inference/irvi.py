@@ -111,6 +111,9 @@ class IRVI(Cell):
 
         # Set random variables.
         epsilons = self.generate_random_variables((n_steps, n_samples), P=Q0)
+        rval = OrderedDict()
+        rval['Q0'] = Q0
+        rval['epsilons'] = epsilons
 
         # Set `scan` arguments.
         seqs = [epsilons]
@@ -131,20 +134,26 @@ class IRVI(Cell):
         elif n_steps == 1:
             inps = [epsilons[0]] + outputs_info[:-1] + non_seqs
             outs = self.step_infer(*inps)
-            q, i_cost = self.unpack_infer(outs)
-            qs = T.concatenate([Q0[None, :, :], Q[None, :, :]], axis=0)
+            Q, i_cost = self.unpack_infer(outs)
+            Qs = T.concatenate([Q0[None, :, :], Q[None, :, :]], axis=0)
             i_costs = [i_cost]
         elif n_steps == 0:
             Qs = Q0[None, :, :]
             i_costs = [T.constant(0.).astype(floatX)]
 
-        return OrderedDict(Qk=Qs[-1], Qs=Qs, i_costs=i_costs, epsilons=epsilons,
-                           constants=[Qs], updates=updates)
+        rval['Qk'] = Qs[-1]
+        rval['Qs'] = Qs
+        rval['i_costs'] = i_costs
+        rval.update(constants=[Qs], updates=updates)
+        return rval
 
-    def _stats(self, Qs=None, i_costs=None, n_steps=None, **kwargs):
+    def _stats(self, Qs=None, i_costs=None, n_steps=None, epsilons=None,
+               q_cell=None, **kwargs):
         rval = OrderedDict()
         rval['_delta_Q_mean'] = (Qs[-1] - Qs[0]).mean()
         rval['_delta_i_cost'] = i_costs[-1] - i_costs[0]
+        rval['H(Qk)'] = q_cell.entropy(P=Qs[-1]).mean()
+        rval['H(Q0)'] = q_cell.entropy(P=Qs[0]).mean()
         return rval
 
     def test(self, x, y, stride=1, **model_args):

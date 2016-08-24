@@ -16,7 +16,7 @@ batch_size=100
 cortex.prepare_data('MNIST', mode='train', source='$data/basic/mnist.pkl.gz')
 cortex.prepare_data('MNIST', mode='valid', source='$data/basic/mnist.pkl.gz')
 
-cortex.prepare_cell('binomial', name='noise', dim=100)
+cortex.prepare_cell('gaussian', name='noise', dim=100)
 cortex.prepare_cell('DistributionMLP', name='discriminator',
                     distribution_type='binomial', dim_hs=[500, 200],
                     h_act='softplus', dim=1, dropout=0.5)
@@ -57,7 +57,7 @@ trainer = cortex.setup_trainer(
 )
 
 trainer.set_optimizer(models=['discriminator.mlp'], cost='discriminator_cost')
-trainer.set_optimizer(models=['generator', 'noise'],
+trainer.set_optimizer(models=['generator'],
                       cost='generator_cost.negative_log_likelihood',
                       freq=10)
 
@@ -73,7 +73,7 @@ monitor = cortex.setup_monitor(valid_session, modes=['train', 'valid'])
 
 visualizer = cortex.setup_visualizer(valid_session)
 visualizer.add('mnist.viz',
-               X='generator.P',
+               X='generator.Y',
                out_file='$outs/GAN_test.png')
 
 cortex.train(monitor_grads=True)

@@ -52,7 +52,7 @@ class AIR(IRVI):
             cost: T.scalar float. Negative lower bound of current parameters
         '''
 
-        h        = (r <= q[None, :, :]).astype(floatX)
+        h = self.posterior.quantile(r, q)
         weights, cost = self.score(h, y, q, *params)
 
         q_ = (weights[:, :, None] * h).sum(axis=0)

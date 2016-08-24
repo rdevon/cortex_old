@@ -215,8 +215,7 @@ class Distribution(Cell):
             T.tensor: entropy.
 
         '''
-        if P is None:
-            P = self.get_prob(*self.get_params())
+        if P is None: P = self.get_prob(*self.get_params())
         return self.f_entropy(P)
 
     def get_energy_bias(self, x, z):
