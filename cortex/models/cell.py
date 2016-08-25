@@ -273,8 +273,7 @@ class Cell(object):
                 C = self.manager.resolve_class(cell_type)
                 passed += C._args
 
-            for p in passed:
-                self.passed[p] = k
+            for p in passed: self.passed[p] = k
 
             # Required arguments
             required = args.pop('_required', dict())
@@ -295,7 +294,6 @@ class Cell(object):
                     final_args[kk] = self.__dict__[vv[1:]]
                 else:
                     final_args[kk] = vv
-
             self.manager.prepare_cell(name=k, requestor=self, **final_args)
 
         for f, t in self._links:
@@ -306,7 +304,6 @@ class Cell(object):
         for k, v in components.iteritems():
             name = _p(self.name, k)
             self.manager.build_cell(name)
-
             self.__dict__[k] = self.manager[name]
 
         return kwargs
@@ -337,14 +334,20 @@ class Cell(object):
                 for i, pp in enumerate(p):
                     kk = '%s[%d]' % (k, i)
                     name = _p(self.name, kk)
-                    tp = theano.shared(pp.astype(floatX), name=name)
-                    self.manager.tparams[name] = tp
+                    if name not in self.manager.tparams.keys():
+                        tp = theano.shared(pp.astype(floatX), name=name)
+                        self.manager.tparams[name] = tp
+                    else:
+                        tp = self.manager.tparams[name]
                     self.__dict__[k].append(tp)
                     self.param_keys.append(kk)
             else:
                 name = _p(self.name, k)
-                tp = theano.shared(p.astype(floatX), name=name)
-                self.manager.tparams[name] = tp
+                if name not in self.manager.tparams.keys():
+                    tp = theano.shared(p.astype(floatX), name=name)
+                    self.manager.tparams[name] = tp
+                else:
+                    tp = self.manager.tparams[name]
                 self.__dict__[k] = tp
                 self.param_keys.append(k)
 

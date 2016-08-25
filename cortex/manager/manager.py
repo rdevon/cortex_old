@@ -93,6 +93,47 @@ class Manager(object):
 
         self.reset()
 
+    def save(self, out_file):
+        self.logger.info('Saving to %s' % out_file)
+        d = dict((k, v.get_value()) for k, v in self.tparams.iteritems())
+        d.update(
+            cell_args=self.cell_args,
+            data_args=self.data_args,
+            steps=self.steps,
+            costs=self.costs,
+            stats=self.stats,
+            samples=self.samples,
+            cell_order=self.cell_args.keys()
+        )
+        np.savez(out_file, **d)
+
+    def load(self, in_file):
+        self.logger.info('Loading from %s' % in_file)
+        params = np.load(in_file)
+        d = dict()
+        for k in params.keys():
+            try:
+                d[k] = params[k].item()
+            except ValueError:
+                d[k] = params[k]
+
+        self.reset()
+        cell_order = d['cell_order']
+        self.data_args = d['data_args']
+        for dataset, kwargs, split in self.data_args:
+            if split:
+                self.prepare_data_split(dataset, **kwargs)
+            else:
+                self.prepare_data(dataset, **kwargs)
+        for k in cell_order:
+            self.cell_args[k] = d['cell_args'][k]
+
+        self.build()
+        self.steps = d['steps']
+        self.costs = d['costs']
+        self.stats = d['stats']
+        self.samples = d['samples']
+
     # General methods
     def add_cell_class(self, name, C):
         self.classes[name] = C
@@ -116,6 +157,7 @@ class Manager(object):
     def reset(self):
         self.cells = OrderedDict()
         self.cell_args = OrderedDict()
+        self.data_args = []
         self.datasets = {}
         self.nodes = {}
         self.links = []
@@ -239,6 +281,7 @@ class Manager(object):
     def prepare_data(self, dataset, **kwargs):
         C = _resolve_class(dataset, self.dataset_classes)
         C(**kwargs)
+        self.data_args.append((dataset, kwargs, False))
 
     def prepare_data_split(self, dataset, **kwargs):
         C = _resolve_class(dataset, self.dataset_classes)
@@ -246,6 +289,7 @@ class Manager(object):
             raise TypeError('Dataset class `%s` needs a factory to be split '
                             'automatically.')
         C.factory(**kwargs)
+        self.data_args.append((dataset, kwargs, True))
 
     # Cell methods -------------------------------------------------------------
     def build_cell(self, name):
