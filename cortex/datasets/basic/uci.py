@@ -23,8 +23,7 @@ class UCI(object):
             name=name, mode=mode, source=source)
 
         X = self.get_data(source, mode)
-        if stop is not None:
-            X = X[:stop]
+        if stop is not None: X = X[:stop]
         self.n = X.shape[0]
         self.dims = dict()
         self.dims[name] = X.shape[1]

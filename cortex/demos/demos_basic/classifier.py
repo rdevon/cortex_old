@@ -7,7 +7,8 @@ from cortex.utils.tools import print_section
 from cortex.utils import logger as cortex_logger
 
 
-cortex_logger.set_stream_logger(2)
+cortex_logger.set_stream_logger(1)
+out_path = '$outs/classifier_demo'
 
 print_section('Setting up data')
 cortex.prepare_data('MNIST', mode='train', source='$data/basic/mnist.pkl.gz')
@@ -56,7 +57,7 @@ cortex.profile()
 visualizer = cortex.setup_visualizer(valid_session)
 visualizer.add('mnist.classification_visualization',
                inputs='visualization.classifier.random_set.outputs',
-               out_file='$outs/classifier_test.png')
+               out_file=path.join('classifier_test.png'))
 
 print_section('Training')
-cortex.train()
+cortex.train(out_path=out_path)

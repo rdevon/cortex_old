@@ -9,7 +9,7 @@ from .. import costs
 from .. import datasets
 from .. import inference
 from .. import models
-from ..utils.tools import _p, print_section
+from ..utils.tools import _p, resolve_path, print_section
 from ..training import Evaluator, Trainer, Visualizer
 from ..training.monitor import BasicMonitor
 
@@ -94,6 +94,7 @@ class Manager(object):
         self.reset()
 
     def save(self, out_file):
+        out_file = resolve_path(out_file)
         self.logger.info('Saving to %s' % out_file)
         d = dict((k, v.get_value()) for k, v in self.tparams.iteritems())
         d.update(
@@ -108,6 +109,7 @@ class Manager(object):
         np.savez(out_file, **d)
 
     def load(self, in_file):
+        in_file = resolve_path(in_file)
         self.logger.info('Loading from %s' % in_file)
         params = np.load(in_file)
         d = dict()

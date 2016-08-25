@@ -41,25 +41,29 @@ def download_data(url, out_path):
         file_name = out_path
 
     u = urllib2.urlopen(url)
-    with open(file_name, 'wb') as f:
-        meta = u.info()
-        file_size = int(meta.getheaders("Content-Length")[0])
-
-        file_size_dl = 0
-        block_sz = 8192
-
-        widgets = ['Dowloading to %s (' % file_name, Timer(), '): ', Bar()]
-        pbar = ProgressBar(widgets=widgets, maxval=file_size).start()
-
-        while True:
-            buffer = u.read(block_sz)
-            if not buffer:
-                break
-
-            file_size_dl += len(buffer)
-            f.write(buffer)
-            pbar.update(file_size_dl)
-    print
+    try:
+        with open(file_name, 'wb') as f:
+            meta = u.info()
+            file_size = int(meta.getheaders("Content-Length")[0])
+    
+            file_size_dl = 0
+            block_sz = 8192
+    
+            widgets = ['Dowloading to %s (' % file_name, Timer(), '): ', Bar()]
+            pbar = ProgressBar(widgets=widgets, maxval=file_size).start()
+    
+            while True:
+                buffer = u.read(block_sz)
+                if not buffer:
+                    break
+    
+                file_size_dl += len(buffer)
+                f.write(buffer)
+                pbar.update(file_size_dl)
+        print
+    except KeyboardInterrupt:
+        print 'Download interrupted.'
+        exit()
 
 def unzip(source, out_path):
     '''Unzip function.
