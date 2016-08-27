@@ -96,7 +96,7 @@ class Session(object):
         self.add('step', *args, **kwargs)
 
     def add(self, what, name=None, op=None, cell_name=None, constants=None,
-            args=None, kwargs=None, test=False):
+            args=None, kwargs=None, test=False, op_str=None):
         self.logger.debug('Adding %s: %s' % (what,
             dict(op=op, name=name, cell_name=cell_name, constants=constants,
                  args=args, kwargs=kwargs)))

@@ -177,21 +177,6 @@ def get_subclasses(module):
     return resolve_dict
 
 
-def load_experiment(experiment_yaml):
-    '''Load an experiment from a yaml.
-
-    Args:
-        experiment_yaml (str): path to yaml
-
-    Returns:
-        dict: extracted yaml.
-
-    '''
-    logger.info('Loading experiment from %s' % experiment_yaml)
-    exp_dict = yaml.load(open(experiment_yaml))
-    logger.debug('Experiment hyperparams: \n%s' % pprint.pformat(exp_dict))
-    return exp_dict
-
 def load_model(model_file, f_unpack=None, strict=True, **extra_args):
     '''Loads pretrained model.
 

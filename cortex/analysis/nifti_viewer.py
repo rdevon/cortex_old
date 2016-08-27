@@ -156,8 +156,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
 
     '''
     if stats is None: stats = dict()
-    if isinstance(anat, str):
-        anat = load_image(anat)
+    if isinstance(anat, str): anat = load_image(anat)
     assert nifti is not None
     assert anat is not None
     assert roi_dict is not None
@@ -191,12 +190,12 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
     if fig is None:
         fig = plt.figure(figsize=[iscale * y, (1.5 * iscale) * x / 2.5])
     fig.set_facecolor((bgcol, bgcol, bgcol))
-    plt.subplots_adjust(left=0.01, right=0.99, bottom=0.05, top=0.99, wspace=0.05, hspace=0.5)
+    plt.subplots_adjust(
+        left=0.01, right=0.99, bottom=0.05, top=0.99, wspace=0.05, hspace=0.5)
 
     for i, f in enumerate(order):
         roi = roi_dict.get(f, None)
-        if roi is None:
-            continue
+        if roi is None: continue
 
         if 'top_clust' in roi.keys():
             coords = roi['top_clust']['coords']
@@ -218,18 +217,11 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
         ax = fig.add_subplot(x, y, j)
 
         try:
-            plot_map(feat,
-                      xyz_affine(nifti),
-                      anat=anat.get_data(),
-                      anat_affine=xyz_affine(anat),
-                      threshold=thr,
-                      figure=fig,
-                      axes=ax,
-                      cut_coords=coords,
-                      annotate=False,
-                      cmap=cmap,
-                      draw_cross=False,
-                      **imshow_args)
+            plot_map(feat, xyz_affine(nifti), anat=anat.get_data(),
+                     anat_affine=xyz_affine(anat), threshold=thr, figure=fig,
+                     axes=ax, cut_coords=coords, annotate=False, cmap=cmap,
+                     draw_cross=False, **imshow_args)
+
         except Exception as e:
             logger.error(e)
             pass
@@ -263,6 +255,43 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
             ax = fig.add_subplot(x, y, j)
             for tc in tcs:
                 ax.plot(tc)
+
+    if out_file is not None:
+        plt.savefig(out_file, facecolor=(bgcol, bgcol, bgcol))
+    else:
+        plt.show()
+    plt.close()
+
+def slice_montage(weights, thr=2, fig=None, out_file=None, order=None, y=8):
+
+    texcol = 0
+    bgcol = 1
+    iscale = 2.5
+    features = weights.shape[-1]
+    order = order or range(features)
+    y = min(len(order), y)
+
+    indices = [0]
+    x = int(ceil(1.0 * len(order) / y))
+
+    font = {'size': 8}
+    rc('font',**font)
+
+    if fig is None:
+        fig = plt.figure(figsize=[iscale * y, iscale * x])
+    fig.set_facecolor((bgcol, bgcol, bgcol))
+    plt.subplots_adjust(
+        left=0.01, right=0.99, bottom=0.05, top=0.99, wspace=0.05, hspace=0.5)
+
+    for i, f in enumerate(order):
+        feat = weights[:, :, :, f]
+        ax = fig.add_subplot(x, y, i + 1)
+        ax.imshow(feat[:, :, 40], cmap='Greys_r')
+
+        plt.text(0.05, 0.8, str(f),
+                 transform=ax.transAxes,
+                 horizontalalignment='center',
+                 color=(texcol, texcol, texcol))
 
     if out_file is not None:
         plt.savefig(out_file, facecolor=(bgcol, bgcol, bgcol))

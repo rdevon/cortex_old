@@ -2,6 +2,7 @@
 
 '''
 
+from os import path
 import theano
 from theano import tensor as T
 
@@ -55,17 +56,22 @@ class Visualizer(object):
                     new_args.append(args[i])
 
             kwargs.update(**t_kwargs)
+            if 'name' in kwargs.keys() and self.manager.out_path is not None:
+                name = kwargs.pop('name')
+                kwargs['out_file'] = path.join(self.manager.out_path, name + '.png')
+
             return op(*new_args, **kwargs)
 
         self.fs.append(viz)
 
-    def __call__(self, data_mode=None):
-        self.session.reset_data(mode=data_mode)
-        n = self.session.get_dataset_size(mode=data_mode)
-        if self.batch_size is None:
-            batch_size = n
-        else:
-            batch_size = self.batch_size
-        inputs = self.session.next_batch(mode=data_mode, batch_size=batch_size)
+    def __call__(self, data_mode=None, inputs=None):
+        if inputs is None:
+            self.session.reset_data(mode=data_mode)
+            n = self.session.get_dataset_size(mode=data_mode)
+            if self.batch_size is None:
+                batch_size = n
+            else:
+                batch_size = self.batch_size
+            inputs = self.session.next_batch(mode=data_mode, batch_size=batch_size)
         for f in self.fs:
             f(*inputs)

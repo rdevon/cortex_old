@@ -1,3 +1,10 @@
+'''Generic parser
+
+'''
+
+import argparse
+
+
 def make_argument_parser():
     '''Generic experiment parser.
 
@@ -10,7 +17,6 @@ def make_argument_parser():
 
     '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('experiment', default=None)
     parser.add_argument('-o', '--out_path', default=None,
                         help='Output path for stuff')
     parser.add_argument('-r', '--load_last', action='store_true')

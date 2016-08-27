@@ -3,7 +3,11 @@
 '''
 
 from collections import OrderedDict
+from inspect import getsource
 import logging
+import numpy as np
+import os
+from os import path
 
 from .. import costs
 from .. import datasets
@@ -25,7 +29,10 @@ def _resolve_class(cell_type, classes):
         C = classes[cell_type]
     except KeyError:
         raise KeyError('Unexpected cell subclass `%s`, '
-                       'available classes: %s' % (cell_type, classes.keys()))
+                       'available classes: %s. If this class was loaded '
+                       'manually as part of another model, you must reload it '
+                       'before loading model.'
+                       % (cell_type, classes.keys()))
     return C
 
 def split_arg(arg, idx=-1):
@@ -93,19 +100,17 @@ class Manager(object):
 
         self.reset()
 
-    def save(self, out_file):
+    def set_path(self, out_path):
+        self.out_path = resolve_path(path.join('$outs', out_path))
+        if self.out_path is not None and not path.isdir(self.out_path):
+            self.logger.info('%s does not exist. Creating.' % self.out_path)
+            os.mkdir(self.out_path)
+
+    def save(self, out_file=None):
         out_file = resolve_path(out_file)
         self.logger.info('Saving to %s' % out_file)
         d = dict((k, v.get_value()) for k, v in self.tparams.iteritems())
-        d.update(
-            cell_args=self.cell_args,
-            data_args=self.data_args,
-            steps=self.steps,
-            costs=self.costs,
-            stats=self.stats,
-            samples=self.samples,
-            cell_order=self.cell_args.keys()
-        )
+        d.update(**self.save_args)
         np.savez(out_file, **d)
 
     def load(self, in_file):
@@ -120,21 +125,25 @@ class Manager(object):
                 d[k] = params[k]
 
         self.reset()
-        cell_order = d['cell_order']
-        self.data_args = d['data_args']
-        for dataset, kwargs, split in self.data_args:
+        for dataset, kwargs, split in d.pop('data'):
             if split:
                 self.prepare_data_split(dataset, **kwargs)
             else:
                 self.prepare_data(dataset, **kwargs)
-        for k in cell_order:
-            self.cell_args[k] = d['cell_args'][k]
-
-        self.build()
-        self.steps = d['steps']
-        self.costs = d['costs']
-        self.stats = d['stats']
-        self.samples = d['samples']
+        for name, kwargs in d.pop('cells'):
+            self.cell_args[name] = kwargs
+        for op, args, kwargs in d.pop('steps'):
+            if 'lambda' in op: op = eval(op)
+            self.add_step(op, *args, **kwargs)
+        for arg, shape, name, kwargs in d.pop('samples'):
+            self.prepare_samples(arg, shape, name=name, **kwargs)
+        for op, args, kwargs in d.pop('costs'):
+            if 'lambda' in op: op = eval(op)
+            self.add_cost(op, *args, **kwargs)
+        for op, args, kwargs in d.pop('stats'):
+            if 'lambda' in op: op = eval(op)
+            self.add_stat(op, *args, **kwargs)
+        self.tparams.update(**d)
 
     # General methods
     def add_cell_class(self, name, C):
@@ -159,7 +168,6 @@ class Manager(object):
     def reset(self):
         self.cells = OrderedDict()
         self.cell_args = OrderedDict()
-        self.data_args = []
         self.datasets = {}
         self.nodes = {}
         self.links = []
@@ -174,6 +182,9 @@ class Manager(object):
         self.trainer = None
         self.tester = None
         self.visualizer = None
+        self.save_args = dict(
+            cells=[], steps=[], costs=[], stats=[], samples=[], data=[])
+        self.out_path = None
 
     def resolve_class(self, cell_type, classes=None):
         if classes is None:
@@ -234,7 +245,8 @@ class Manager(object):
         return self.visualizer
 
     def train(self, eval_modes=None, validation_mode=None, eval_every=10,
-              monitor_grads=False, early_stopping=False, patience=10):
+              monitor_grads=False, early_stopping=False, patience=10,
+              save_every=100):
         if eval_modes is None: eval_modes=['train', 'valid']
         if validation_mode is None: validation_mode = 'valid'
         if len(self.trainer.f_grads) == 0:
@@ -278,12 +290,14 @@ class Manager(object):
         except KeyboardInterrupt:
             print 'Interrupting training...'
         print 'Training completed.'
+        if self.out_path is not None:
+            self.save(path.join(self.out_path, 'last.npz'))
 
     # Data methods -------------------------------------------------------------
     def prepare_data(self, dataset, **kwargs):
         C = _resolve_class(dataset, self.dataset_classes)
         C(**kwargs)
-        self.data_args.append((dataset, kwargs, False))
+        self.save_args['data'].append((dataset, kwargs, False))
 
     def prepare_data_split(self, dataset, **kwargs):
         C = _resolve_class(dataset, self.dataset_classes)
@@ -291,7 +305,7 @@ class Manager(object):
             raise TypeError('Dataset class `%s` needs a factory to be split '
                             'automatically.')
         C.factory(**kwargs)
-        self.data_args.append((dataset, kwargs, True))
+        self.save_args['data'].append((dataset, kwargs, True))
 
     # Cell methods -------------------------------------------------------------
     def build_cell(self, name):
@@ -305,6 +319,7 @@ class Manager(object):
                 kwargs[k] = value
 
         self.logger.debug('Forming cell with args %s' % kwargs)
+        self.save_args['cells'].append((name, kwargs))
         C.factory(name=name, **kwargs)
 
     def prepare_cell(self, cell_type, requestor=None, name=None, **kwargs):
@@ -361,9 +376,11 @@ class Manager(object):
                     raise KeyError('No cell nor dataset with name `%s`' % n)
 
     def add_step(self, op, *args, **kwargs):
+        orig_kwargs = dict((k, v) for k, v in kwargs.iteritems())
         name = kwargs.pop('name', None)
         constants = kwargs.pop('constants', None)
         if isinstance(op, str) and op in self.ops:
+            op_str = op
             if name is None: name = op
             op = self.ops[op]
             cell_name = None
@@ -371,6 +388,7 @@ class Manager(object):
             if len(args) > 0:
                 self.match_dims(args[0], name + '.input')
         elif isinstance(op, str):
+            op_str = op
             op_s = op.split('.')
 
             if len(op_s) == 1:
@@ -389,7 +407,7 @@ class Manager(object):
                 cell_type = self.cell_args[cell_name]['cell_type']
                 C = self.resolve_class(cell_type)
                 if op_name is None: op_name = '__call__'
-            elif cell_name in self.datasets.key():
+            elif cell_name in self.datasets.keys():
                 C = self.manager.datasets[cell_name]['train']
             else:
                 raise KeyError('No cell nor dataset found called `%s`'
@@ -420,6 +438,11 @@ class Manager(object):
                         if (key in C._dim_map.keys() and is_tensor_arg(arg)):
                             self.match_dims(arg, '.'.join([cell_name, key]))
         else:
+            try:
+                op_str = (getsource(op).split('=')[-1]
+                          if op.__name__ == '<lambda>' else op.__name__)
+            except IOError:
+                op_str = None
             cell_name = None
             if name is None: name = op.__name__
 
@@ -428,7 +451,7 @@ class Manager(object):
         self.steps.append(dict(
             cell_name=cell_name, name=name, op=op, constants=constants,
             args=args, kwargs=kwargs))
-
+        self.save_args['steps'].append((op_str, args, orig_kwargs))
         return name
 
     def add_cost(self, *args, **kwargs):
@@ -438,9 +461,11 @@ class Manager(object):
         self.add('stat', *args, **kwargs)
 
     def add(self, what, op, *args, **kwargs):
+        orig_kwargs = dict((k, v) for k, v in kwargs.iteritems())
         cell_name = None
         name = kwargs.pop('name', None)
         if isinstance(op, str):
+            op_str = op
             if is_tensor_arg(op):
                 cell_name, n, _ = resolve_tensor_arg(op)
                 cell_type = self.cell_args[cell_name]['cell_type']
@@ -488,6 +513,11 @@ class Manager(object):
                     op = self.stat_functions[op]
 
         elif callable(op):
+            try:
+                op_str = (getsource(op).split('=')[-1]
+                    if op.__name__ == '<lambda>' else op.__name__)
+            except IOError:
+                op_str = None
             if name is None: name = op.__name__
 
         else:
@@ -508,6 +538,7 @@ class Manager(object):
                 self.logger.debug('Adding costs `%s`' % name)
             self.costs[name] = dict(
                 cell_name=cell_name, op=op, args=args, kwargs=kwargs)
+            self.save_args['costs'].append((op_str, args, kwargs))
 
         elif what == 'stat':
             if name in self.stats.keys():
@@ -521,6 +552,7 @@ class Manager(object):
                 name = new_name
             self.stats[name] = dict(
                 cell_name=cell_name, op=op, args=args, kwargs=kwargs)
+            self.save_args['stats'].append((op_str, args, orig_kwargs))
 
     def prepare_samples(self, arg, shape, name='samples', **kwargs):
         if isinstance(shape, int):
@@ -555,6 +587,7 @@ class Manager(object):
         self.samples[s_name] = dict(
             cell_name=cell_name, name=name, dist_key=dist_key, shape=shape,
             kwargs=kwargs)
+        self.save_args['samples'].append((arg, shape, name, kwargs))
 
     # Methods for linking and dim matching -------------------------------------
     def resolve_links(self, name):
