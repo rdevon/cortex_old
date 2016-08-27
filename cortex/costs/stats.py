@@ -9,6 +9,14 @@ from .basic import kl_divergence
 from ..utils.maths import log_mean_exp
 
 
+def basic_stats(X=None):
+    mean = X.mean()
+    std = X.std()
+    mi = X.min()
+    ma = X.max()
+    stats = OrderedDict(mean=mean, std=std, min=mi, max=ma)
+    return stats
+
 def logistic_regression_stats(P=None, Y=None):
     stats = OrderedDict()
     Y_pred = T.argmax(P, axis=-1)
@@ -56,4 +64,5 @@ def variational_inference(X=None, conditional=None, posterior=None, prior=None,
     return rvals
 
 _stats = {'logistic_regression': logistic_regression_stats,
-          'variational_inference': variational_inference}
+          'variational_inference': variational_inference,
+          'basic_stats': basic_stats}
