@@ -182,5 +182,4 @@ class NeuroimagingDataset(BasicDataset):
             logger.debug('%s dataset has %d subjects'
                          % (dataset.mode, len(i)))
 
-        manager.datasets[data.name].pop('dummy')
         manager.datasets[data.name]['idx'] = idx

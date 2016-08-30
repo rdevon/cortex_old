@@ -98,16 +98,10 @@ def save_image(nifti, anat, cluster_dict, out_path, f, image_threshold=2,
              color=(texcol, texcol, texcol))
 
     try:
-        plot_map(feature,
-                 xyz_affine(nifti),
-                 anat=anat.get_data(),
-                 anat_affine=xyz_affine(anat),
-                 threshold=image_threshold,
-                 cut_coords=coords,
-                 annotate=False,
-                 cmap=cmap,
-                 draw_cross=False,
-                 **imshow_args)
+        plot_map(feature, xyz_affine(nifti), anat=anat.get_data(),
+                 anat_affine=xyz_affine(anat), threshold=image_threshold,
+                 cut_coords=coords, annotate=False, cmap=cmap,
+                 draw_cross=False, **imshow_args)
     except Exception as e:
         return
 
@@ -142,7 +136,7 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
     p.join()
 
 def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
-            stats=None, time_courses=None, y=8):
+            stats=None, time_courses=None, y=8, global_std=None):
     '''Saves a montage of nifti images.
 
     Args:
@@ -170,6 +164,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
         nifti = nifti[0]
     else:
         weights = nifti.get_data()
+
     features = weights.shape[-1]
     if order is None:
         order = range(features)
@@ -205,7 +200,10 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
 
         feat = weights[:, :, :, f]
 
-        feat = feat / feat.std()
+        if global_std is not None:
+            feat /= global_std
+        else:
+            feat /= feat.std()
         imax = np.max(np.absolute(feat)); imin = -imax
         imshow_args = {'vmax': imax, 'vmin': imin}
         coords = ([-coords[0], -coords[1], coords[2]])
@@ -288,10 +286,8 @@ def slice_montage(weights, thr=2, fig=None, out_file=None, order=None, y=8):
         ax = fig.add_subplot(x, y, i + 1)
         ax.imshow(feat[:, :, 40], cmap='Greys_r')
 
-        plt.text(0.05, 0.8, str(f),
-                 transform=ax.transAxes,
-                 horizontalalignment='center',
-                 color=(texcol, texcol, texcol))
+        plt.text(0.05, 0.8, str(f), transform=ax.transAxes,
+                 horizontalalignment='center', color=(texcol, texcol, texcol))
 
     if out_file is not None:
         plt.savefig(out_file, facecolor=(bgcol, bgcol, bgcol))

@@ -107,7 +107,10 @@ class Session(object):
             out = op(cell, *args, **kwargs)
         else:
             cell = None
+            #try:
             out = op(*args, **kwargs)
+            #except NameError:
+            #    out = 0.1 * args[0] * args[1]
 
         if isinstance(out, T.TensorVariable):
             new_out = dict()

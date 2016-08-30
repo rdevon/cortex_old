@@ -345,19 +345,17 @@ class MRI(NeuroimagingDataset):
         '''
         if roi_dict is None: roi_dict = dict()
         x = self.prepare_images(x)
-
-        if len(x.shape) == 3:
-            x = x[:, 0, :]
+        self.global_std = x.std()
+        if len(x.shape) == 3: x = x[:, 0, :]
 
         x = self._unmask(x)
         images, nifti_files = self.save_niftis(x)
 
         if update_rois: roi_dict.update(**rois.main(nifti_files))
-
         return images, nifti_files, roi_dict
 
     def viz(self, x, out_file=None, remove_niftis=True, roi_dict=None,
-            stats=None, update_rois=True, **kwargs):
+            stats=None, update_rois=True, global_norm=False, **kwargs):
         '''Saves images from array.
 
         Args:
@@ -377,13 +375,17 @@ class MRI(NeuroimagingDataset):
 
         if stats is None: stats = dict()
         stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]
+        if global_norm:
+            global_std = self.global_std
+        else:
+            global_std = None
 
         if remove_niftis:
             for f in nifti_files:
                 os.remove(f)
         nifti_viewer.montage(images, self.anat_file, roi_dict,
                              out_file=resolve_path(out_file), stats=stats,
-                             **kwargs)
+                             global_std=global_std, **kwargs)
 
     def viz_slice(self, x, out_file=None, **kwargs):
         x = self.prepare_images(x)

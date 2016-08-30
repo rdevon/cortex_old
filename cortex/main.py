@@ -112,8 +112,7 @@ def set_experiment(args):
     else:
         model_to_load = None
 
-    if model_to_load is not None:
-        cortex.load(model_to_load)
+    if model_to_load is not None: cortex.load(model_to_load)
     return exp_dict
 
 def reload_model(args):
