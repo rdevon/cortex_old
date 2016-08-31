@@ -102,6 +102,7 @@ class Session(object):
                  args=args, kwargs=kwargs)))
 
         args, kwargs = self.resolve_op_args(args, kwargs, constants=constants)
+
         if cell_name is not None:
             cell = self.manager.cells[cell_name]
             out = op(cell, *args, **kwargs)
@@ -136,20 +137,21 @@ class Session(object):
             data = self.next_batch(batch_size=batch_size)
             if what in ['cost', 'stat']:
                 for k, o in out.iteritems():
-                    self.logger.info('Testing stat with batchsize %d' % batch_size)
+                    self.logger.info('Testing stat with batchsize %d'
+                                     % batch_size)
                     f = theano.function(self.inputs, o, updates=self.updates,
                                         on_unused_input='ignore')
-                    self.test(data, f, key=k, key_prefix=name, cell=cell)
+                    t_ = self.test(data, f, key=k, key_prefix=name, cell=cell)
             else:
                 for key in test_order:
                     if key in ['updates', 'constants']:
                         continue
-                    self.logger.info('Testing `%s` from step %s with batchsize %d'
+                    self.logger.info('Testing `%s` from step `%s` with batchsize %d'
                                      % (key, name, batch_size))
                     t = out[key]
                     f = theano.function(self.inputs, t, updates=self.updates,
                                         on_unused_input='ignore')
-                    self.test(data, f, key, name, cell=cell)
+                    t_ = self.test(data, f, key, name, cell=cell)
 
     def add_samples(self, name=None, op=None, dist_key=None, shape=None,
                     cell_name=None, kwargs=None):
@@ -187,6 +189,7 @@ class Session(object):
             self.logger.info('Tensor `%s` for `%s` has shape %s '
                              '(passes without error)'
                              % (key, key_prefix, t_.shape))
+            return t_
         except ValueError as e:
             self.logger.error(
                 'Test function failed for tensor `%s` in `%s`'

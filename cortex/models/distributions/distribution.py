@@ -163,8 +163,7 @@ class Distribution(Cell):
         '''Samples from distribution.
 
         '''
-        if P is None:
-            P = self.get_prob(*self.get_params())
+        if P is None: P = self.get_prob(*self.get_params())
         return self.quantile(epsilon, P)
 
     def simple_sample(self, n_samples, P=None):
@@ -172,8 +171,7 @@ class Distribution(Cell):
         return self._sample(epsilon, P=P)
 
     def _cost(self, X=None, P=None):
-        if X is None:
-            raise TypeError('X (ground truth) must be provided.')
+        if X is None: raise TypeError('X (ground truth) must be provided.')
         return self.neg_log_prob(X, P=P).mean()
 
     def step_neg_log_prob(self, X, *params):
@@ -265,8 +263,7 @@ def make_conditional(C):
                 X, P=P, sum_probs=sum_probs)
 
         def _cost(self, X=None, P=None):
-            if X is None:
-                raise TypeError('X (ground truth) must be provided.')
+            if X is None: raise TypeError('X (ground truth) must be provided.')
             if P is None:
                 session = self.manager.get_session()
                 if _p(self.name, 'P') not in session.tensors.keys():

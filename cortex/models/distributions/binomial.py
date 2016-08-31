@@ -11,13 +11,11 @@ from ...utils import floatX
 
 
 def _binomial(trng, p, size=None):
-    if size is None:
-        size = p.shape
+    if size is None: size = p.shape
     return trng.binomial(p=p, size=size, n=1, dtype=p.dtype)
 
 def _centered_binomial(trng, p, size=None):
-    if size is None:
-        size = p.shape
+    if size is None: size = p.shape
     return 2 * trng.binomial(p=0.5*(p+1), size=size, n=1, dtype=p.dtype) - 1.
 
 def _cross_entropy(x, p, sum_probs=True):
@@ -68,8 +66,7 @@ class Binomial(Distribution):
         return OrderedDict(mean=h0, perm=h)
 
     def viz(self, P0, P=None):
-        if P is None:
-            P = self.get_prob(*self.get_params())
+        if P is None: P = self.get_prob(*self.get_params())
         P0 = T.addbroadcast(P0, 0)
         return P - P0
 
