@@ -17,11 +17,12 @@ from ..utils import tools
 logger = logging.getLogger(__name__)
 profile = False
 
-def make_f_grad_shared(inp, cost, grads, updates):
+def make_f_grad_shared(inp, cost, grads, extra_outs, updates):
     grad_dict = OrderedDict(('_grad_' + k, g.mean())
         for k, g in grads.iteritems())
     outs = OrderedDict(cost=cost)
     outs.update(**grad_dict)
+    outs.update(**extra_outs)
 
     f_grad_shared = theano.function(
         inp,
@@ -32,7 +33,7 @@ def make_f_grad_shared(inp, cost, grads, updates):
 
     return f_grad_shared
 
-def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
          exclude_params=set([])):
     gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k)
                for k, p in tparams.iteritems()]
@@ -40,7 +41,7 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
     f_grad_shared = theano.function(
-        inp, [cost]+extra_outs, updates=gsup+extra_ups, profile=profile)
+        inp, cost, extra_outs=extra_outs, updates=gsup+extra_ups, profile=profile)
 
     b1 = 0.9
     b2 = 0.999
@@ -81,7 +82,7 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
 
     return f_grad_shared, f_update
 
-def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
              exclude_params=set([])):
     '''Adadelta.
 
@@ -99,7 +100,7 @@ def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
         for rg2, g in zip(running_grads2, grads.values())]
 
     f_grad_shared = make_f_grad_shared(
-        inp, cost, grads, updates=zgup+rg2up+extra_ups)
+        inp, cost, grads, extra_outs, zgup+rg2up+extra_ups)
 
     updir = [-T.sqrt(ru2 + 1e-6) / T.sqrt(rg2 + 1e-6) * zg
              for zg, ru2, rg2 in zip(zipped_grads, running_up2, running_grads2)]
@@ -114,10 +115,9 @@ def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
 
     return f_grad_shared, f_update
 
-def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
             exclude_params=set([]),
-            relaxation=1e-4, momentum=0.9, coefficient=0.95
-            ):
+            relaxation=1e-4, momentum=0.9, coefficient=0.95):
     '''RMSProp.
 
     '''
@@ -140,7 +140,7 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
         for rg2, g in zip(running_grads2, grads.values())]
 
     f_grad_shared = make_f_grad_shared(
-        inp, cost, grads, updates=zgup+rgup+rg2up+extra_ups)
+        inp, cost, grads, extra_outs, zgup+rgup+rg2up+extra_ups)
 
     updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k)
              for k, p in tparams.iteritems()]
@@ -158,7 +158,7 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
 
     return f_grad_shared, f_update
 
-def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
         exclude_params=set([])):
     '''Stochastic gradient descent.
 
@@ -168,7 +168,7 @@ def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
         name='%s_grad'%k) for k, p in tparams.iteritems()]
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads.values())]
-    f_grad_shared = make_f_grad_shared(inp, cost, grads, updates=gsup+extra_ups)
+    f_grad_shared = make_f_grad_shared(inp, cost, extra_outs, gsup+extra_ups)
 
     pup = [(p, p - lr * g) for p, g in zip(tools.itemlist(tparams), gshared)
         if p.name not in exclude_params]
@@ -178,7 +178,7 @@ def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
 
     return f_grad_shared, f_update
 
-def rmsprop2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
+def rmsprop2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
              exclude_params=set([]),
             relaxation=1e-4, momentum=0.9, coefficient=0.95):
     '''An alternative RMSProp
@@ -199,7 +199,7 @@ def rmsprop2(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs=[],
         for rg2, g in zip(running_grads2, grads)]
 
     f_grad_shared = theano.function(
-        inp, [cost]+extra_outs, updates=zgup+rgup+rg2up+extra_ups, profile=profile)
+        inp, cost, grads, extra_outs, zgup+rgup+rg2up+extra_ups)
 
     updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k)
              for k, p in tparams.iteritems()]

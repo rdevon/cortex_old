@@ -52,10 +52,8 @@ class Session(object):
         for k, v in out.iteritems():
             if k == 'updates':
                 self.updates += v
-
             elif k == 'constants':
                 self.constants += v
-
             else:
                 if what == 'cost':
                     if k == 'cost':

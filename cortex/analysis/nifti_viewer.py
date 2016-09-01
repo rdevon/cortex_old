@@ -16,14 +16,18 @@ else:
 from matplotlib.patches import FancyBboxPatch
 from matplotlib import pylab as plt, rc
 import multiprocessing as mp
+import nilearn
+from nilearn import plotting as nplt
 import nipy
-from nipy import load_image
-from nipy.core.api import xyz_affine
+from nipy import load_image, save_image
+from nipy.core.api import Image, xyz_affine
 from nipy.labs.viz import plot_map
 import numpy as np
+import os
 from os import path
 import pickle
-from sys import stdout
+from progressbar import Bar, ProgressBar, Percentage, Timer
+from scipy.signal import detrend
 
 from ..utils import floatX
 
@@ -169,9 +173,9 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
     if order is None:
         order = range(features)
     y = min(len(order), y)
+    x = int(ceil(1.0 * len(order) / y))
 
     indices = [0]
-    x = int(ceil(1.0 * len(order) / y))
 
     if time_courses is not None:
         assert len(time_courses) == features, (
@@ -261,7 +265,6 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
     plt.close()
 
 def slice_montage(weights, thr=2, fig=None, out_file=None, order=None, y=8):
-
     texcol = 0
     bgcol = 1
     iscale = 2.5
@@ -291,6 +294,59 @@ def slice_montage(weights, thr=2, fig=None, out_file=None, order=None, y=8):
 
     if out_file is not None:
         plt.savefig(out_file, facecolor=(bgcol, bgcol, bgcol))
+    else:
+        plt.show()
+    plt.close()
+
+def unfolded_movie(niftis, files, anat, x=20, out_file=None, image_max=None,
+                   image_std=None, stimulus=None, tmax=60, **responses):
+    if isinstance(anat, str): anat = load_image(anat)
+
+    iscale = 2.5
+    y = int(ceil(1.0 * len(niftis[:tmax]) / x))
+    cols = y
+    y *= 2
+
+    fig = plt.figure(figsize=[iscale * y, (1.5 * iscale) * x / 2.5])
+    plt.subplots_adjust(
+        left=0.01, right=0.99, bottom=0.05, top=0.99, wspace=0.05, hspace=0.5)
+
+    widgets = ['Unfolding movie for component, ',
+               Timer(), Bar()]
+    pbar = ProgressBar(widgets=widgets, maxval=len(niftis[:tmax])).start()
+    for i, nifti in enumerate(niftis[:tmax]):
+        im = nilearn.image.load_img(files[i])
+        if image_std is None: image_std = im.get_data().std()
+        if image_max is None: image_max = im.get_data().max()
+        j = 2 * (i // x) + (y * i) % (y * x) + 1
+        ax = fig.add_subplot(x, y, j)
+        nplt.plot_glass_brain(im, figure=fig, axes=ax, alpha=0.8,
+                              vmax=image_max, symmetric_cbar=True,
+                              cmap=plt.cm.RdYlBu_r, plot_abs=False,
+                              threshold=2*image_std)
+        pbar.update(i)
+
+    if stimulus is not None or responses is not None:
+        for c in xrange(cols):
+            ax = fig.add_subplot(1, y, (c + 1) * 2)
+            mi = c * x
+            ma = (c + 1) * x
+
+            if stimulus is not None:
+                for k, v in stimulus.iteritems():
+                    ax.plot(v[mi:ma] / v[mi:ma].std(),
+                            np.arange(mi, ma), label=k)
+            if responses is not None:
+                for k, v in responses.iteritems():
+                    ax.plot(v[mi:ma] / v[mi:ma].std(),
+                            np.arange(mi, ma), label=k)
+
+            ax.set_ylim([mi - 0.5, ma - 0.5])
+            ax.set_ylim(ax.get_ylim()[::-1])
+            ax.legend()
+
+    if out_file is not None:
+        plt.savefig(out_file, bbox_inches='tight', pad_inches=0)
     else:
         plt.show()
     plt.close()

@@ -389,8 +389,7 @@ class MRI(NeuroimagingDataset):
 
     def viz_slice(self, x, out_file=None, **kwargs):
         x = self.prepare_images(x)
-        if len(x.shape) == 3:
-            x = x[:, 0, :]
+        if len(x.shape) == 3: x = x[:, 0, :]
         x = self._unmask(x).transpose(1, 2, 3, 0)
 
         nifti_viewer.slice_montage(

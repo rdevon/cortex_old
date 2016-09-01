@@ -214,4 +214,22 @@ class FMRI(FMRI_IID):
 
         return dict(input=x, labels=y)
 
+    def viz_unfold(self, x, out_file=None, remove_niftis=True, **kwargs):
+        x = self.prepare_images(x)
+        image_std = x.std()
+        image_max = x.max()
+        if len(x.shape) == 3: x = x[:, 0, :]
+        x = self._unmask(x)
+        images, nifti_files = self.save_niftis(x)
+
+        nifti_viewer.unfolded_movie(
+            images, nifti_files, self.anat_file, out_file=out_file,
+            image_max=image_max, image_std=image_std,
+            stimulus=dict(targets=self.extras['targets'],
+                          novels=self.extras['novels']),
+            **kwargs)
+        if remove_niftis:
+            for f in nifti_files:
+                os.remove(f)
+
 _classes = {'FMRI_IID': FMRI_IID, 'FMRI': FMRI}

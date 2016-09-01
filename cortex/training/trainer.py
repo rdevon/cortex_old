@@ -7,12 +7,7 @@ Does typical training work.
 from collections import OrderedDict
 import logging
 import numpy as np
-from progressbar import (
-    Bar,
-    ProgressBar,
-    Percentage,
-    Timer
-)
+from progressbar import Bar, ProgressBar, Percentage, Timer
 import theano
 from theano import tensor as T
 import time
