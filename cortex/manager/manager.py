@@ -59,7 +59,8 @@ def resolve_tensor_arg(arg, manager=None):
         name_, key = split_arg(arg)
         C = None
     else:
-        raise KeyError('Cell or data %s not found' % arg)
+        raise KeyError('Cell or data %s not found. Found cells %s and data %s'
+                       % (arg, manager.cells.keys(), manager.datasets.keys()))
     return name_, key, C
 
 def is_tensor_arg(arg):

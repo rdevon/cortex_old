@@ -213,11 +213,37 @@ class FMRI(FMRI_IID):
         if self.pos + batch_size > self.n_samples: self.pos = -1
 
         return dict(input=x, labels=y)
+    
+    def viz_std(self, x, out_file=None, remove_niftis=True, roi_dict=None,
+            stats=None, update_rois=True, global_norm=False, **kwargs):
+        if roi_dict is None: roi_dict = dict()
+        x = self.prepare_images(x)
+        self.global_std = x.std()
+        x = self._unmask(x)
+        x = x.std(axis=0)
+        
+        images, nifti_files = self.save_niftis(x)
+        
+        if update_rois: roi_dict.update(**rois.main(nifti_files))
+        if stats is None: stats = dict()
+        stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]
+        if global_norm:
+            global_std = self.global_std
+        else:
+            global_std = None
+
+        if remove_niftis:
+            for f in nifti_files:
+                os.remove(f)
+        nifti_viewer.montage(images, self.anat_file, roi_dict,
+                             out_file=resolve_path(out_file), stats=stats,
+                             global_std=global_std, **kwargs)
 
     def viz_unfold(self, x, out_file=None, remove_niftis=True, **kwargs):
         x = self.prepare_images(x)
         image_std = x.std()
         image_max = x.max()
+        
         if len(x.shape) == 3: x = x[:, 0, :]
         x = self._unmask(x)
         images, nifti_files = self.save_niftis(x)

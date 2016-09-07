@@ -43,13 +43,6 @@ class Evaluator(object):
         self.f_stats = theano.function(self.session.inputs, stats,
                                        on_unused_input='ignore')
 
-        '''
-        if out_path is not None:
-            bestfile = path.join(out_path, '{name}_best.npz'.format(name=name))
-        else:
-            bestfile = None
-        '''
-
     def __call__(self, data_mode=None):
         widgets = ['Testing (%s set): ' % data_mode, Percentage(),
                    ' (', Timer(), ')']

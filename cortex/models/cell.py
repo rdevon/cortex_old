@@ -373,7 +373,6 @@ class Cell(object):
             component = self.__dict__[key]
             c_params = component.get_params()
             params += c_params
-
         return params
 
     def select_params(self, key, *params):
