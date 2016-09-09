@@ -54,13 +54,13 @@ def norm_weight(nin, nout=None, scale=0.01, ortho=True, rng=None):
         W = scale * rng.randn(nin, nout)
     return W.astype(floatX)
 
-def dropout(x, act, rate, trng):
+def dropout(x, act, rate, trng, epsilon=None):
+        if epsilon is None:
+            epsilon = trng.binomial(x.shape, p=1-rate, n=1, dtype=x.dtype)
         if act == T.tanh:
-            x_d = trng.binomial(x.shape, p=1-rate, n=1, dtype=x.dtype)
-            x = 2. * (x_d * (x + 1.) / 2) / (1 - rate) - 1
+            x = 2. * (epsilon * (x + 1.) / 2) / (1 - rate) - 1
         elif act in [T.nnet.sigmoid, T.nnet.softplus, T.nnet.relu]:
-            x_d = trng.binomial(x.shape, p=1-rate, n=1, dtype=x.dtype)
-            x = x * x_d / (1 - rate)
+            x = x * epsilon / (1 - rate)
         else:
             raise NotImplementedError('No dropout for %s yet' % activ)
         return x
@@ -166,6 +166,9 @@ class Cell(object):
             self.n_component_params += component.total_params
         self.total_params = self.n_params + self.n_component_params
         self.set_tparams()
+
+#    def total_params(self):
+#        return self.get_n_params() + self.n_component_params
 
     def set_options(self, **kwargs):
         for k, v in self._options.iteritems():
@@ -380,9 +383,9 @@ class Cell(object):
         start = 0
         end = 0
         if key is None:
-            end = self.n_params
+            end = self.n_params #self.get_n_params()
         else:
-            start = self.n_params
+            start = self.n_params #self.get_n_params()
             if key not in self.component_keys:
                 raise KeyError('Component `%s` not found' % key)
             for k in self.component_keys:
@@ -394,6 +397,9 @@ class Cell(object):
                     start = start + l
 
         return params[start:end]
+
+    def get_n_params(self):
+        return self.n_params
 
     def get_args(self):
         d = dict((k, self.__dict__[k]) for k in self._args)

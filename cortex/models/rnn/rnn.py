@@ -358,6 +358,8 @@ class GenRNN(RNN):
 
         return OrderedDict(samples=X, P=P, H=H, updates=updates)
 
+    def get_center(self, P):
+        return self.output_net.distribution.get_center(P)
 
 _classes = {'RNNInitializer': RNNInitializer,
             'RecurrentUnit': RecurrentUnit,

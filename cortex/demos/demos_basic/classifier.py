@@ -10,7 +10,7 @@ from cortex.utils import logger as cortex_logger
 
 
 cortex_logger.set_stream_logger(1)
-out_path = '$outs/classifier_demo'
+cortex.set_path('demo_classifier')
 
 print_section('Setting up data')
 cortex.prepare_data('MNIST', mode='train', source='$data/basic/mnist.pkl.gz')
@@ -59,7 +59,7 @@ cortex.profile()
 visualizer = cortex.setup_visualizer(valid_session)
 visualizer.add('mnist.classification_visualization',
                inputs='visualization.classifier.random_set.outputs',
-               out_file=path.join(out_path, 'classifier_test.png'))
+               name='classifier_test')
 
 print_section('Training')
-cortex.train(out_path=out_path)
+cortex.train()

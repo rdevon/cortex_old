@@ -168,7 +168,7 @@ def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
         name='%s_grad'%k) for k, p in tparams.iteritems()]
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads.values())]
-    f_grad_shared = make_f_grad_shared(inp, cost, extra_outs, gsup+extra_ups)
+    f_grad_shared = make_f_grad_shared(inp, cost, grads, extra_outs, gsup+extra_ups)
 
     pup = [(p, p - lr * g) for p, g in zip(tools.itemlist(tparams), gshared)
         if p.name not in exclude_params]

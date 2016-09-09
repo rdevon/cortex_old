@@ -9,6 +9,8 @@ n_posterior_samples = 10
 n_posterior_samples_test = 1000
 dim_h = 200
 
+cortex.set_path('demo_vae')
+
 cortex.prepare_data('MNIST', mode='train', source='$data/basic/mnist.pkl.gz')
 cortex.prepare_data('MNIST', mode='valid', source='$data/basic/mnist.pkl.gz')
 
@@ -76,10 +78,10 @@ visualizer.add('mnist.autoencoder_visualization',
                X_in='mnist.input',
                X_out='conditional.P',
                Y='mnist.labels',
-               out_file='$outs/vae_recons_test.png')
+               name='vae_recons_test')
 visualizer.add('mnist.viz',
                X='prior_gen.P',
-               out_file='$outs/vae_prior.png')
+               name='vae_prior')
 
 evaluator = cortex.setup_evaluator(
     valid_session,

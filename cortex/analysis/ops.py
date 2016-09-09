@@ -73,7 +73,7 @@ class PCASign(Op):
     def make_node(self, x):
         x = T.as_tensor_variable(x)
         assert x.ndim == 2
-        o = T.vector(dtype=x.dtype)
+        o = T.matrix(dtype=x.dtype)
         return Apply(self, [x], [o])
 
     def perform(self, node, inputs, output_storage):
@@ -87,3 +87,25 @@ class PCASign(Op):
         x[abs(x) < 2] = 0
         signs = 2 * (x.sum(axis=1) >= 0).astype(floatX) - 1
         z[0] = signs
+
+
+class PCAInverse(Op):
+    __props__ = ()
+
+    def __init__(self, pca):
+        self.pca = pca
+        super(PCAInverse, self).__init__()
+
+    def make_node(self, x):
+        x = T.as_tensor_variable(x)
+        assert x.ndim == 2
+        o = T.vector(dtype=x.dtype)
+        return Apply(self, [x], [o])
+
+    def perform(self, node, inputs, output_storage):
+        '''Get signs
+
+        '''
+        (x,) = inputs
+        (z,) = output_storage
+        z[0] = self.pca.inverse_transform(x)

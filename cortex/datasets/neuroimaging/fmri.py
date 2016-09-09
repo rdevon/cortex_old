@@ -213,24 +213,40 @@ class FMRI(FMRI_IID):
         if self.pos + batch_size > self.n_samples: self.pos = -1
 
         return dict(input=x, labels=y)
-    
+
     def viz_std(self, x, out_file=None, remove_niftis=True, roi_dict=None,
             stats=None, update_rois=True, global_norm=False, **kwargs):
+        x = x[:, 0]
+        #x_tot = None
+        shape = x.shape
         if roi_dict is None: roi_dict = dict()
+        '''
+        nS = 1#x.shape[1]
+        for s in xrange(nS):
+            x_s = x[:, s]
+            x_s = x_s.reshape((shape[0] * shape[1], shape[2]))
+            x_s = self.prepare_images(x_s)
+            x_s = x_s.reshape((shape[0], shape[1], x_s.shape[1]))
+            x_s = x_s.std(0)
+            if x_tot is None:
+                x_tot = x_s
+            else:
+                x_tot += x_s
+        x = x_tot
+        x /= nS
+        '''
+        x = x.reshape((shape[0] * shape[1], shape[2]))
         x = self.prepare_images(x)
-        self.global_std = x.std()
+        x = x.reshape((shape[0], shape[1],) + tuple(x.shape[1:]))
+        x = x.std(0)# / x.mean(0)
         x = self._unmask(x)
-        x = x.std(axis=0)
-        
+        global_std = None#x.std()
+        #((x.std(0) - x.std(0).mean((1, 2, 3), keepdims=True)) / x.std(0).std((1, 2, 3), keepdims=True))
         images, nifti_files = self.save_niftis(x)
-        
-        if update_rois: roi_dict.update(**rois.main(nifti_files))
+
+        roi_dict.update(**rois.main(nifti_files))
         if stats is None: stats = dict()
         stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]
-        if global_norm:
-            global_std = self.global_std
-        else:
-            global_std = None
 
         if remove_niftis:
             for f in nifti_files:
@@ -243,7 +259,7 @@ class FMRI(FMRI_IID):
         x = self.prepare_images(x)
         image_std = x.std()
         image_max = x.max()
-        
+
         if len(x.shape) == 3: x = x[:, 0, :]
         x = self._unmask(x)
         images, nifti_files = self.save_niftis(x)

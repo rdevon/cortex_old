@@ -118,7 +118,7 @@ class MLP(Cell):
         params = [i for sl in params for i in sl]
         return super(MLP, self).get_params(params=params)
 
-    def _feed(self, X, *params):
+    def feed(self, X, *params):
         '''feed forward MLP.
 
         Args:
@@ -149,9 +149,11 @@ class MLP(Cell):
                 outs['H_%d' % l] = X
 
                 if self.dropout and self.noise_switch():
+                    epsilon = params.pop(0)
                     self.logger.debug('Adding dropout to layer {layer} for MLP '
                                   '`{name}`'.format(layer=l, name=self.name))
-                    X = dropout(X, self.h_act, self.dropout, self.trng)
+                    X = dropout(X, self.h_act, self.dropout, self.trng,
+                                epsilon=epsilon)
             else:
                 X = self.out_act(preact)
                 outs['Z'] = preact
@@ -160,6 +162,54 @@ class MLP(Cell):
 
         assert len(params) == 0, params
         return outs
+    '''
+    def get_n_params(self):
+        n_params = self.n_params
+        if self.dropout and self.noise_switch(): n_params += self.n_layers - 1
+        return n_params
+    '''
+
+    def _feed(self, X, *params):
+        params = list(params)
+        if self.dropout and self.noise_switch():
+            if X.ndim == 1:
+                size = None
+            elif X.ndim == 2:
+                size = (X.shape[0],)
+            elif X.ndim == 3:
+                size = (X.shape[0], X.shape[1])
+            elif X.ndim == 4:
+                size = (X.shape[0], X.shape[1], X.shape[2])
+            else:
+                raise TypeError
+
+            epsilons = self.dropout_epsilons(size)
+            params = self.get_epsilon_params(epsilons, *params)
+
+        return self.feed(X, *params)
+
+    def get_epsilon_params(self, epsilons, *params):
+        if self.dropout and self.noise_switch():
+            new_params = []
+            for l in xrange(self.n_layers - 1):
+                new_params += params[2*l:2*(l+1)]
+                new_params.append(epsilons[l])
+            new_params += params[2*(l+1):]
+            assert len(new_params) == len(params) + self.n_layers - 1
+
+            return new_params
+        else:
+            return params
+
+    def dropout_epsilons(self, size):
+        epsilons = []
+
+        for dim_h in self.dim_hs:
+            shape = size + (dim_h,)
+            eps = self.trng.binomial(shape, p=1-self.dropout, n=1, dtype=floatX)
+            epsilons.append(eps)
+
+        return epsilons
 
 
 _classes = {'MLP': MLP}
