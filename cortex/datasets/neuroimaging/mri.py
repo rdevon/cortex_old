@@ -89,6 +89,7 @@ class MRI(NeuroimagingDataset):
 
         if self.pca_components: X = self.apply_pca(X)
         self.update_progress()
+        self.global_std = None
 
         data = {'input': X, 'labels': Y}
         distributions = {'input': distribution, 'labels': 'multinomial'}
@@ -328,7 +329,8 @@ class MRI(NeuroimagingDataset):
             x = self.pca.inverse_transform(x)
         return x
 
-    def make_images(self, x, roi_dict=None, update_rois=True):
+    def make_images(self, x, roi_dict=None, update_rois=True, set_global_norm=False,
+                    extra_mean=None):
         '''Forms images.
 
         Args:
@@ -345,17 +347,17 @@ class MRI(NeuroimagingDataset):
         '''
         if roi_dict is None: roi_dict = dict()
         x = self.prepare_images(x)
-        self.global_std = x.std()
         if len(x.shape) == 3: x = x[:, 0, :]
-
+        if extra_mean is not None: x -= extra_mean
+        if set_global_norm: self.global_std = x.std(axis=1)
         x = self._unmask(x)
         images, nifti_files = self.save_niftis(x)
 
         if update_rois: roi_dict.update(**rois.main(nifti_files))
         return images, nifti_files, roi_dict
 
-    def viz(self, x, out_file=None, remove_niftis=True, roi_dict=None,
-            stats=None, update_rois=True, global_norm=False, **kwargs):
+    def viz(self, x, out_file=None, remove_niftis=True, roi_dict=None, extra_mean=None,
+            stats=None, update_rois=True, global_norm=False, set_global_norm=False, **kwargs):
         '''Saves images from array.
 
         Args:
@@ -371,11 +373,14 @@ class MRI(NeuroimagingDataset):
 
         '''
         images, nifti_files, roi_dict = self.make_images(
-            x, roi_dict=roi_dict, update_rois=update_rois)
+            x, roi_dict=roi_dict, update_rois=update_rois, set_global_norm=set_global_norm,
+            extra_mean=extra_mean)
 
         if stats is None: stats = dict()
         stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]
-        if global_norm:
+        if isinstance(global_norm, np.ndarray):
+            pass
+        elif global_norm:
             global_std = self.global_std
         else:
             global_std = None

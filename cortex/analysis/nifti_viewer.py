@@ -205,7 +205,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
         feat = weights[:, :, :, f]
 
         if global_std is not None:
-            feat /= global_std
+            feat /= global_std[f]
         else:
             feat /= feat.std()
         imax = np.max(np.absolute(feat)); imin = -imax

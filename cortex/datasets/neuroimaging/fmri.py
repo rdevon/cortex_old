@@ -214,14 +214,21 @@ class FMRI(FMRI_IID):
 
         return dict(input=x, labels=y)
 
+    def set_mean(self, x):
+        shape = x.shape
+        x = x.reshape((shape[0] * shape[1], shape[2]))
+        x = self.prepare_images(x)
+        x = x.reshape((shape[0], shape[1],) + tuple(x.shape[1:]))
+        self.temporal_mean = x.mean(axis=0)
+
     def viz_std(self, x, out_file=None, remove_niftis=True, roi_dict=None,
             stats=None, update_rois=True, global_norm=False, **kwargs):
         x = x[:, 0]
-        #x_tot = None
         shape = x.shape
         if roi_dict is None: roi_dict = dict()
         '''
-        nS = 1#x.shape[1]
+        x_tot = None
+        nS = x.shape[1]
         for s in xrange(nS):
             x_s = x[:, s]
             x_s = x_s.reshape((shape[0] * shape[1], shape[2]))
@@ -240,11 +247,13 @@ class FMRI(FMRI_IID):
         x = x.reshape((shape[0], shape[1],) + tuple(x.shape[1:]))
         x = x.std(0)# / x.mean(0)
         x = self._unmask(x)
-        global_std = None#x.std()
-        #((x.std(0) - x.std(0).mean((1, 2, 3), keepdims=True)) / x.std(0).std((1, 2, 3), keepdims=True))
+        if global_norm:
+            global_std = self.global_norm
+        else:
+            global_std = None
         images, nifti_files = self.save_niftis(x)
 
-        roi_dict.update(**rois.main(nifti_files))
+        if update_rois: roi_dict.update(**rois.main(nifti_files))
         if stats is None: stats = dict()
         stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]
 
@@ -256,7 +265,15 @@ class FMRI(FMRI_IID):
                              global_std=global_std, **kwargs)
 
     def viz_unfold(self, x, out_file=None, remove_niftis=True, **kwargs):
+        if len(x.shape) == 3:
+            shape = x.shape
+            x = x.reshape((shape[0] * shape[1], shape[2]))
+        else:
+            shape = None
         x = self.prepare_images(x)
+        if shape is not None:
+            x = x.reshape((shape[0], shape[1], x.shape[1]))
+            x = x.mean(1) / x.std(1)
         image_std = x.std()
         image_max = x.max()
 
