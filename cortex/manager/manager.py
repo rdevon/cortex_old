@@ -8,6 +8,7 @@ import logging
 import numpy as np
 import os
 from os import path
+import theano
 
 from .. import costs
 from .. import datasets
@@ -144,7 +145,8 @@ class Manager(object):
         for op, args, kwargs in d.pop('stats'):
             if 'lambda' in op: op = eval(op)
             self.add_stat(op, *args, **kwargs)
-        self.tparams.update(**d)
+        for k, v in d.iteritems():
+            self.tparams[k] = theano.shared(v, name=k)
 
     # General methods
     def add_cell_class(self, name, C):
@@ -532,6 +534,7 @@ class Manager(object):
                     new_name = '%s_%d' % (name, i)
                     if not new_name in self.costs.keys():
                         break
+                    i += 1
                 self.logger.warn('Cost `%s` already found. Changing to %s.'
                                  % (name, new_name))
                 name = new_name

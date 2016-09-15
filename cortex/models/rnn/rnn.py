@@ -91,7 +91,7 @@ class RNNInitializer(Cell):
         return super(RNNInitializer, self).set_components(
             components=components, **kwargs)
 
-    def _cost(self, X, H):
+    def _cost(self, X=None, H=None):
         '''Call function for RNN_Initializer.
 
         Updates the initializer or returns cost.

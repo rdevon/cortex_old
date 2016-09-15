@@ -43,7 +43,7 @@ class MLP(Cell):
     _required = ['dim_in', 'dim_out']
     _options = {'dropout': False, 'weight_noise': 0,
                 'batch_normalization': False}
-    _args = ['dim_in', 'dim_out', 'dim_hs', 'h_act', 'out_act']
+    _args = ['dim_in', 'dim_out', 'dim_hs', 'h_act', 'out_act', 'out_scale']
     _dim_map = {
         'X': 'dim_in',
         'input': 'dim_in',
@@ -54,7 +54,8 @@ class MLP(Cell):
     _weights = ['weights']
 
     def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
-                 h_act='sigmoid', out_act=None, name='MLP', **kwargs):
+                 h_act='sigmoid', out_act=None, out_scale=None, name='MLP',
+                 **kwargs):
         '''Init function for MLP.
 
         Args:
@@ -77,6 +78,7 @@ class MLP(Cell):
         if out_act is None: out_act = h_act
         self.out_act = resolve_nonlinearity(out_act)
         self.h_act = resolve_nonlinearity(h_act)
+        self.out_scale = out_scale
 
         # Various means to get the hidden layers.
         if dim_hs is None and dim_h is None and n_layers is None:
@@ -156,6 +158,7 @@ class MLP(Cell):
                                 epsilon=epsilon)
             else:
                 X = self.out_act(preact)
+                if self.out_scale is not None: X *= self.out_scale
                 outs['Z'] = preact
                 outs['Y'] = X
                 outs['output'] = X

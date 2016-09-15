@@ -163,6 +163,7 @@ class Cell(object):
         self.n_component_params = 0
         for key in self.component_keys:
             component = self.__dict__[key]
+            if component is None: continue
             self.n_component_params += component.total_params
         self.total_params = self.n_params + self.n_component_params
         self.set_tparams()
@@ -264,6 +265,7 @@ class Cell(object):
         self.component_keys = components.keys()
 
         for k, v in components.iteritems():
+            if v is None: continue
             new_args = kwargs.pop(k, {})
             args = dict((k_, v_) for k_, v_ in v.iteritems())
             args.update(**new_args)
@@ -305,9 +307,13 @@ class Cell(object):
             self.manager.match_dims(f, t)
 
         for k, v in components.iteritems():
-            name = _p(self.name, k)
-            self.manager.build_cell(name)
-            self.__dict__[k] = self.manager[name]
+            if v is None:
+                comp = None
+            else:
+                name = _p(self.name, k)
+                self.manager.build_cell(name)
+                comp = self.manager[name]
+            self.__dict__[k] = comp
 
         return kwargs
 
@@ -374,6 +380,7 @@ class Cell(object):
 
         for key in self.component_keys:
             component = self.__dict__[key]
+            if component is None: continue
             c_params = component.get_params()
             params += c_params
         return params
@@ -389,7 +396,9 @@ class Cell(object):
             if key not in self.component_keys:
                 raise KeyError('Component `%s` not found' % key)
             for k in self.component_keys:
-                l = self.__dict__[k].total_params
+                component = self.__dict__[k]
+                if component is None: continue
+                l = component.total_params
                 if k == key:
                     end = start + l
                     break
@@ -450,6 +459,7 @@ class Cell(object):
         components = []
         for k in self._components:
             component = getattr(self, k)
+            if component is None: continue
             if isinstance(component, list):
                 components += [c for c in component if c is not None]
             elif component is not None:
@@ -457,6 +467,7 @@ class Cell(object):
 
         c_components = []
         for component in components:
+            if component is None: continue
             c_components += component.get_components()
         components += c_components
         return components

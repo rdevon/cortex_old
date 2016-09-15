@@ -227,7 +227,6 @@ class Session(object):
 
                 if arg not in tensors.keys() and arg in manager.samples.keys():
                     self.add_samples(**manager.samples[arg])
-
                 if arg in tensors.keys():
                     ten = tensors[arg]
                     if arg in constants:
@@ -272,7 +271,6 @@ class Session(object):
                 new_kwargs.update(**arg)
             else:
                 new_kwargs[key] = arg
-
         return new_args, new_kwargs
 
     def build(self, test=False):
