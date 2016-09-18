@@ -221,31 +221,48 @@ class FMRI(FMRI_IID):
         x = x.reshape((shape[0], shape[1],) + tuple(x.shape[1:]))
         self.temporal_mean = x.mean(axis=0)
 
+    def viz_mean(self, x, out_file=None, remove_niftis=True, roi_dict=None,
+            stats=None, update_rois=True, global_norm=False, **kwargs):
+        shape = x.shape
+        if roi_dict is None: roi_dict = dict()
+        x_tot = []
+        nC = x.shape[1]
+        for c in xrange(nC):
+            x_c = x[:, c]
+            x_c = self.prepare_images(x_c)
+            x_tot.append()
+        x = x_tot
+        x /= nT
+        x = self._unmask(x)
+        if global_norm:
+            global_std = self.global_norm
+        else:
+            global_std = None
+        images, nifti_files = self.save_niftis(x)
+
+        if update_rois: roi_dict.update(**rois.main(nifti_files))
+        if stats is None: stats = dict()
+        stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]
+
+        if remove_niftis:
+            for f in nifti_files:
+                os.remove(f)
+        nifti_viewer.montage(images, self.anat_file, roi_dict,
+                             out_file=resolve_path(out_file), stats=stats,
+                             global_std=global_std, **kwargs)
+
     def viz_std(self, x, out_file=None, remove_niftis=True, roi_dict=None,
             stats=None, update_rois=True, global_norm=False, **kwargs):
         x = x[:, 0]
         shape = x.shape
         if roi_dict is None: roi_dict = dict()
-        '''
-        x_tot = None
-        nS = x.shape[1]
-        for s in xrange(nS):
-            x_s = x[:, s]
-            x_s = x_s.reshape((shape[0] * shape[1], shape[2]))
-            x_s = self.prepare_images(x_s)
-            x_s = x_s.reshape((shape[0], shape[1], x_s.shape[1]))
-            x_s = x_s.std(0)
-            if x_tot is None:
-                x_tot = x_s
-            else:
-                x_tot += x_s
-        x = x_tot
-        x /= nS
-        '''
-        x = x.reshape((shape[0] * shape[1], shape[2]))
-        x = self.prepare_images(x)
-        x = x.reshape((shape[0], shape[1],) + tuple(x.shape[1:]))
-        x = x.std(0)# / x.mean(0)
+        x_tot = []
+        nC = x.shape[1]
+        for c in xrange(nC):
+            x_c = x[:, c]
+            x_c = self.prepare_images(x_c)
+            x_tot.append(x_c.std(0))
+        x = np.array(x_tot)
         x = self._unmask(x)
         if global_norm:
             global_std = self.global_norm

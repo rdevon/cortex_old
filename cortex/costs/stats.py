@@ -17,6 +17,19 @@ def basic_stats(X=None):
     stats = OrderedDict(mean=mean, std=std, min=mi, max=ma)
     return stats
 
+def cell_stats(cell):
+    from .. import _manager as manager
+    stats = OrderedDict()
+    for k, v in manager.tparams.iteritems():
+        split = k.split('.')
+        cell_name = '.'.join(split[:-1])
+        t_name = split[-1]
+        if cell_name == cell:
+            t_stats = basic_stats(X=v)
+            stats.update(**dict(('.'.join([cell_name, t_name, k]), v) for k, v in t_stats.iteritems()))
+
+    return stats
+
 def logistic_regression_stats(P=None, Y=None):
     stats = OrderedDict()
     Y_pred = T.argmax(P, axis=-1)
@@ -65,4 +78,5 @@ def variational_inference(X=None, conditional=None, posterior=None, prior=None,
 
 _stats = {'logistic_regression': logistic_regression_stats,
           'variational_inference': variational_inference,
-          'basic_stats': basic_stats}
+          'basic_stats': basic_stats,
+          'cell_stats': cell_stats}

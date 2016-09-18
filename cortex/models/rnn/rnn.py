@@ -78,7 +78,9 @@ class RNNInitializer(Cell):
                 'cell_type': 'MLP',
                 'dim_in': self.dim_in,
                 'dim_out': self.dim_out,
-                '_passed': ['dim_h', 'dim_hs', 'n_layers', 'h_act'],
+                'dim_hs': [self.dim_in],
+                'dropout': 0.5,
+                '_passed': ['dim_h', 'dim_hs', 'n_layers', 'h_act', 'dropout'],
                 '_required': {'out_act': 'tanh'}
             }
         elif self.initialization == 'Averager':
@@ -253,10 +255,12 @@ class RNN(Cell):
         outs = self.input_net._feed(X, *input_params)
         outs = OrderedDict((_p('input_net', k), v)
             for k, v in outs.iteritems())
+
         outs_init = self.initializer._feed(X[0], *initializer_params)
         outs.update(**dict((_p('initializer', k), v)
             for k, v in outs_init.iteritems()))
         outs['H0'] = outs_init['output']
+
         outs.update(**self.RU(outs[_p('input_net', 'Y')], M, outs['H0']))
         outs['output'] = outs['H'][-1]
         return outs

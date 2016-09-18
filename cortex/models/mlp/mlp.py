@@ -43,7 +43,7 @@ class MLP(Cell):
     _required = ['dim_in', 'dim_out']
     _options = {'dropout': False, 'weight_noise': 0,
                 'batch_normalization': False}
-    _args = ['dim_in', 'dim_out', 'dim_hs', 'h_act', 'out_act', 'out_scale']
+    _args = ['dim_in', 'dim_out', 'dim_hs', 'h_act', 'out_act', 'out_scale', 'dropout']
     _dim_map = {
         'X': 'dim_in',
         'input': 'dim_in',
@@ -176,7 +176,7 @@ class MLP(Cell):
         params = list(params)
         if self.dropout and self.noise_switch():
             if X.ndim == 1:
-                size = None
+                size = tuple()
             elif X.ndim == 2:
                 size = (X.shape[0],)
             elif X.ndim == 3:
@@ -197,7 +197,7 @@ class MLP(Cell):
             for l in xrange(self.n_layers - 1):
                 new_params += params[2*l:2*(l+1)]
                 new_params.append(epsilons[l])
-            new_params += params[2*(l+1):]
+            new_params += params[2*(self.n_layers-1):]
             assert len(new_params) == len(params) + self.n_layers - 1
 
             return new_params

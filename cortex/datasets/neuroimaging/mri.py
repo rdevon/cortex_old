@@ -329,8 +329,8 @@ class MRI(NeuroimagingDataset):
             x = self.pca.inverse_transform(x)
         return x
 
-    def make_images(self, x, roi_dict=None, update_rois=True, set_global_norm=False,
-                    extra_mean=None):
+    def make_images(self, x, roi_dict=None, update_rois=True,
+                    set_global_norm=False, extra_mean=None, average=None):
         '''Forms images.
 
         Args:
@@ -346,8 +346,15 @@ class MRI(NeuroimagingDataset):
 
         '''
         if roi_dict is None: roi_dict = dict()
+        if x.ndim > 2:
+            shape = x.shape[:-1]
+            x = x.reshape((reduce(lambda x, y: x * y, shape), x.shape[-1]))
+        else:
+            shape = None
         x = self.prepare_images(x)
-        if len(x.shape) == 3: x = x[:, 0, :]
+        if shape is not None: x = x.reshape(shape + (x.shape[-1],))
+        if average is not None: x = x.mean(average)
+
         if extra_mean is not None: x -= extra_mean
         if set_global_norm: self.global_std = x.std(axis=1)
         x = self._unmask(x)
@@ -357,7 +364,8 @@ class MRI(NeuroimagingDataset):
         return images, nifti_files, roi_dict
 
     def viz(self, x, out_file=None, remove_niftis=True, roi_dict=None, extra_mean=None,
-            stats=None, update_rois=True, global_norm=False, set_global_norm=False, **kwargs):
+            stats=None, update_rois=True, global_norm=False, set_global_norm=False,
+            average=None, **kwargs):
         '''Saves images from array.
 
         Args:
@@ -374,7 +382,7 @@ class MRI(NeuroimagingDataset):
         '''
         images, nifti_files, roi_dict = self.make_images(
             x, roi_dict=roi_dict, update_rois=update_rois, set_global_norm=set_global_norm,
-            extra_mean=extra_mean)
+            extra_mean=extra_mean, average=average)
 
         if stats is None: stats = dict()
         stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]

@@ -46,7 +46,7 @@ class BasicMonitor(object):
         '''
         for section in self.sections.keys():
             table_data = [['Name'] + self.stats.keys()]
-            for stat in self.sections[section]:
+            for stat in sorted(self.sections[section]):
                 stat_str = stat.replace('_grad_', u'\u03b4')
                 stat_str = stat.replace('_delta_', u'\u0394')
                 td = [stat_str]
