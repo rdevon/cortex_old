@@ -140,7 +140,7 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
     p.join()
 
 def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
-            stats=None, time_courses=None, y=8, global_std=None):
+            stats=None, time_courses=None, y=8, global_std=None, clusters=None):
     '''Saves a montage of nifti images.
 
     Args:
@@ -170,19 +170,32 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
         weights = nifti.get_data()
 
     features = weights.shape[-1]
-    if order is None:
-        order = range(features)
-    y = min(len(order), y)
-    x = int(ceil(1.0 * len(order) / y))
+
+    if clusters is not None:
+        cls = np.unique(clusters).tolist()
+        n_clusters = len(clusters)
+        order = []
+        _clusters = []
+        for cl in cls:
+            _cl = []
+            for f in xrange(features):
+                if clusters[f] == cl:
+                    order.append(f)
+                    _cl.append(f)
+            _clusters.append(_cl)
+        clusters = _clusters
+
+    if order is None: order = range(features)
+
+    if clusters is None:
+        y = min(len(order), y)
+        x = int(ceil(1.0 * len(order) / y))
+    else:
+        y = max([len(c) for c in clusters])
+        x = len(clusters)
 
     indices = [0]
-
-    if time_courses is not None:
-        assert len(time_courses) == features, (
-            'Number of time courses must match features (%d vs %d).'
-            % (features, len(time_courses)))
-        x *= 2
-
+    if time_courses is not None: x *= 2
     font = {'size': 8}
     rc('font',**font)
 
@@ -212,10 +225,19 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
         imshow_args = {'vmax': imax, 'vmin': imin}
         coords = ([-coords[0], -coords[1], coords[2]])
 
+        pad = 0
+        if clusters is not None:
+            for cluster in clusters:
+                if f in cluster:
+                    break
+                else:
+                    pad += y - len(cluster)
+        i_ = i + pad
+
         if time_courses is not None:
-            j = 2 * y * (i // y) + (i % y) + 1
+            j = 2 * y * (i_ // y) + (i_ % y) + 1
         else:
-            j = i + 1
+            j = i_ + 1
         ax = fig.add_subplot(x, y, j)
 
         try:
@@ -249,14 +271,16 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
                          color=colors[j])
 
         if time_courses is not None:
-            j = y * (2 * (i // y) + 1) + (i % y) + 1
-            if not isinstance(time_courses[i], list):
-                tcs = [time_courses[f]]
-            else:
-                tcs = time_courses[f]
+            j = y * (2 * (i_ // y) + 1) + (i_ % y) + 1
             ax = fig.add_subplot(x, y, j)
-            for tc in tcs:
-                ax.plot(tc)
+            for k, v in time_courses.iteritems():
+                if v.ndim == 1:
+                    tc = v
+                else:
+                    tc = v[f]
+                ax.plot(tc, label=k)
+            if i_ == 1:
+                ax.legend()
 
     if out_file is not None:
         plt.savefig(out_file, facecolor=(bgcol, bgcol, bgcol))

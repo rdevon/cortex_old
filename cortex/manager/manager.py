@@ -3,12 +3,14 @@
 '''
 
 from collections import OrderedDict
+import copy
 from inspect import getsource
 import logging
 import numpy as np
 import os
 from os import path
 import theano
+from theano import tensor as T
 
 from .. import costs
 from .. import datasets
@@ -134,8 +136,11 @@ class Manager(object):
                 self.prepare_data(dataset, **kwargs)
         for name, kwargs in d.pop('cells'):
             self.cell_args[name] = kwargs
-        for op, args, kwargs in d.pop('steps'):
-            if 'lambda' in op: op = eval(op)
+        for op, args, kwargs, op_args in d.pop('steps'):
+            if op_args is not None:
+                op = op(**op_args)
+            elif 'lambda' in op:
+                op = eval(op)
             self.add_step(op, *args, **kwargs)
         for arg, shape, name, kwargs in d.pop('samples'):
             self.prepare_samples(arg, shape, name=name, **kwargs)
@@ -384,12 +389,12 @@ class Manager(object):
         constants = kwargs.pop('constants', None)
         if isinstance(op, str) and op in self.ops:
             op_str = op
+            op_args = None
             if name is None: name = op
             op = self.ops[op]
             cell_name = None
             self.nodes[name] = dict(dim=None)
-            if len(args) > 0:
-                self.match_dims(args[0], name + '.input')
+            if len(args) > 0: self.match_dims(args[0], name + '.input')
         elif isinstance(op, str):
             op_str = op
             op_s = op.split('.')
@@ -440,12 +445,16 @@ class Manager(object):
                     for arg, key in zip(args, arg_keys):
                         if (key in C._dim_map.keys() and is_tensor_arg(arg)):
                             self.match_dims(arg, '.'.join([cell_name, key]))
+            op_args = None
         else:
             try:
-                op_str = (getsource(op).split('=')[-1]
+                op_str = ('='.join(getsource(op).split('=')[1:])
                           if op.__name__ == '<lambda>' else op.__name__)
-            except IOError:
-                op_str = None
+                op_args = None
+            except (IOError, AttributeError):
+                op_str = op.__class__
+                op_args = copy.deepcopy(op.__dict__)
+                op_args.pop('_op_use_c_code', None)
             cell_name = None
             if name is None: name = op.__name__
 
@@ -454,7 +463,7 @@ class Manager(object):
         self.steps.append(dict(
             cell_name=cell_name, name=name, op=op, constants=constants,
             args=args, kwargs=kwargs))
-        self.save_args['steps'].append((op_str, args, orig_kwargs))
+        self.save_args['steps'].append((op_str, args, orig_kwargs, op_args))
         return name
 
     def add_cost(self, *args, **kwargs):

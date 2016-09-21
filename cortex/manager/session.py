@@ -241,6 +241,12 @@ class Session(object):
                 else:
                     raise ValueError('Could not find tensor %s, found: %s'
                                      % (arg, tensors.keys()))
+            elif isinstance(arg, list):
+                arg, _ = self.resolve_op_args(arg, {}, constants=constants)
+                new_args.append(arg)
+            elif isinstance(arg, dict):
+                _, arg = self.resolve_op_args([], arg, constants=constants)
+                new_args.append(arg)
             else:
                 new_args.append(arg)
         assert len(new_args) >= len(args), (args, new_args)
@@ -266,6 +272,10 @@ class Session(object):
                     arg = tensors[arg]
                 else:
                     raise ValueError('Could not find tensor %s' % arg)
+            elif isinstance(arg, list):
+                arg, _ = self.resolve_op_args(arg, {}, constants=constants)
+            elif isinstance(arg, dict):
+                _, arg = self.resolve_op_args([], arg, constants=constants)
 
             if key == 'inputs' and isinstance(arg, dict):
                 new_kwargs.update(**arg)

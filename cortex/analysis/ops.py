@@ -2,12 +2,14 @@
 
 '''
 
+import igraph
 import numpy as np
+from scipy.stats import ttest_1samp
 import theano
 import theano.tensor as T
 from theano.gof import Apply, Op
 
-from cortex.utils import floatX
+from cortex.utils import floatX, intX
 
 
 class Detrender(theano.Op):
@@ -109,3 +111,142 @@ class PCAInverse(Op):
         (x,) = inputs
         (z,) = output_storage
         z[0] = self.pca.inverse_transform(x)
+
+
+class CorrCoef(Op):
+    __props__ = ()
+
+    def make_node(self, x):
+        x = T.as_tensor_variable(x)
+        assert x.ndim >= 2
+        o = T.matrix(dtype=floatX)
+        return Apply(self, [x], [o])
+
+    def perform(self, node, inputs, output_storage):
+        (x,) = inputs
+        (z,) = output_storage
+        '''
+        if x.ndim == 3:
+            x = x.reshape((x.shape[0] * x.shape[1], x.shape[2]))
+        elif x.ndim == 4:
+            x = x.reshape((x.shape[0] * x.shape[1] * x.shape[2], x.shape[3]))
+        else:
+            raise TypeError(x.ndim)
+        '''
+        if x.ndim == 2:
+            cc = np.corrcoef(x.T)
+        else:
+            cc = []
+            for i in range(x.shape[1]):
+                cc.append(np.corrcoef(x[:, i].T))
+            cc = np.array(cc).mean(0).astype(floatX)
+        z[0] =  cc
+
+
+class Cluster(Op):
+    __props__ = ()
+
+    def __init__(self, thr=0.3):
+        self.thr = 0.3
+        super(Cluster, self).__init__()
+
+    def make_node(self, x):
+        x = T.as_tensor_variable(x)
+        assert x.ndim == 2
+        o = T.vector(dtype=intX)
+        return Apply(self, [x], [o])
+
+    def perform(self, node, inputs, output_storage):
+        (mat,) = inputs
+        (z,) = output_storage
+        mat = abs(mat)
+
+        max_weight = mat.max()
+        thr = self.thr * max_weight
+        idx = range(mat.shape[0])
+        wheres = np.where(mat > thr)
+
+        edgelist = []
+        weights = []
+
+        for x, y in zip(wheres[0], wheres[1]):
+            if x < y:
+                edgelist.append((x, y))
+                weights.append((mat[x, y]))
+
+        if len(weights) > 0:
+            weights /= np.std(weights)
+        else:
+            return [[i] for i in idx]
+
+        g = igraph.Graph(edgelist, directed=False)
+        g.vs['label'] = idx
+        cls = g.community_multilevel(return_levels=True, weights=weights)
+        cl = list(cls[0])
+        assert cl is not None
+
+        clusters = []
+        n_clusters = len(cl)
+        for i in idx:
+            found = False
+            for j, cluster in enumerate(cl):
+                if i in cluster:
+                    clusters.append(j)
+                    found = True
+                    break
+
+            if not found:
+                clusters.append(n_clusters)
+                n_clusters += 1
+
+        clusters = np.array(clusters).astype(intX)
+        z[0] = clusters
+
+
+class OLS(Op):
+    __props__ = ()
+
+    def __init__(self):
+        super(OLS, self).__init__()
+
+    def make_node(self, x, y):
+        x = T.as_tensor_variable(x)
+        y = T.as_tensor_variable(y)
+        assert x.ndim == 3
+        assert y.ndim == 2
+        o = T.tensor3(dtype=floatX)
+        return Apply(self, [x, y], [o])
+
+    def perform(self, node, inputs, output_storage):
+        (x, y) = inputs
+        (z,) = output_storage
+
+        betas = []
+        for c in xrange(x.shape[2]):
+            beta, _, _, _ = np.linalg.lstsq(x[:, :, c], y)
+            betas.append(beta)
+        betas = np.asarray(betas).astype(floatX)
+        assert betas.ndim == 3, betas.ndim
+
+        z[0] = betas
+
+
+class TTest(Op):
+    __props__ = ()
+
+    def __init__(self):
+        super(TTest, self).__init__()
+
+    def make_node(self, x):
+        x = T.as_tensor_variable(x)
+        assert x.ndim == 3
+        o = T.matrix(dtype=floatX)
+        return Apply(self, [x], [o])
+
+    def perform(self, node, inputs, output_storage):
+        (x,) = inputs
+        (z,) = output_storage
+
+        test = ttest_1samp(x, 0., axis=1)
+        test = np.concatenate([test[0][:, :, None], test[1][:, :, None]], axis=2).astype(floatX)
+        z[0] = test

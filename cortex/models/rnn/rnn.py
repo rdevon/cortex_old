@@ -9,7 +9,7 @@ import pprint
 import theano
 from theano import tensor as T
 
-from .. import Cell, norm_weight, ortho_weight
+from .. import Cell, dropout, norm_weight, ortho_weight
 from ..extra_layers import Averager
 from .. import mlp as mlp_module
 from ...costs import squared_error
@@ -195,21 +195,7 @@ class RecurrentUnit(Cell):
 
 
 class RNN(Cell):
-    '''RNN class.
-
-    Implements a generic multilayer RNN.
-
-    Attributes:
-        dim_in (int): input dimension.
-        dim_out (int): output dimension.
-        dim_hs (list): dimenstions of recurrent units.
-        n_layers (int): number of recurrent layers. Should match len(dim_hs).
-        input_net (MLP): MLP to feed input into recurrent layers.
-        init_net (RNN_Initializer): Initializer for RNN recurrent state.
-        nets (list): list of networks. input network, output_net, conditional.
-        inter_nets (list): list of inter-networks between recurrent layers.
-
-    '''
+    _options = {'dropout': False}
     _components = {
         'initializer': {
             'cell_type': 'RNNInitializer',
@@ -262,7 +248,11 @@ class RNN(Cell):
         outs['H0'] = outs_init['output']
 
         outs.update(**self.RU(outs[_p('input_net', 'Y')], M, outs['H0']))
-        outs['output'] = outs['H'][-1]
+        H = outs['H'][-1]
+        if self.dropout and self.noise_switch():
+            H = dropout(H, T.tanh, self.dropout, self.trng)
+        outs['output'] = H
+
         return outs
 
 class GenRNN(RNN):

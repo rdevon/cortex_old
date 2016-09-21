@@ -6,6 +6,8 @@ from os import path
 import theano
 from theano import tensor as T
 
+from ..utils.logger import get_class_logger
+
 
 class Visualizer(object):
 
@@ -15,6 +17,7 @@ class Visualizer(object):
         self.manager = get_manager()
         self.fs = []
         self.batch_size = batch_size
+        self.logger = get_class_logger(self)
 
     def add(self, op, *args, **kwargs):
         from ..manager import resolve_tensor_arg
@@ -73,5 +76,6 @@ class Visualizer(object):
             else:
                 batch_size = self.batch_size
             inputs = self.session.next_batch(mode=data_mode, batch_size=batch_size)
-        for f in self.fs:
+        for i, f in enumerate(self.fs):
+            self.logger.debug('Visualizer function %d' % i)
             f(*inputs)

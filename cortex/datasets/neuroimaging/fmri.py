@@ -208,11 +208,21 @@ class FMRI(FMRI_IID):
             [self.X[i][j:j+self.window] for i, j in idxs]).transpose(1, 0, 2)
         y = np.array(
             [self.Y[i][j:j+self.window] for i, j in idxs]).transpose(1, 0, 2)
+        y_l = y[0]
+        x_c = self.X.transpose(1, 0, 2)
+        targets = np.array(
+            [self.extras['targets'][j:j+self.window] for i, j in idxs])
+        novels = np.array(
+            [self.extras['novels'][j:j+self.window] for i, j in idxs])
+        stim = np.concatenate([targets[:, None], novels[:, None]], axis=1).astype(floatX)
+        stim_all = np.concatenate([self.extras['targets'][:, None],
+                                   self.extras['novels'][:, None]], axis=1)
 
         self.pos += batch_size
         if self.pos + batch_size > self.n_samples: self.pos = -1
 
-        return dict(input=x, labels=y)
+        return dict(input=x, labels=y, labels_t=y_l, x_total=x_c, stim=stim,
+                    stim_all=stim_all)
 
     def set_mean(self, x):
         shape = x.shape
@@ -220,6 +230,44 @@ class FMRI(FMRI_IID):
         x = self.prepare_images(x)
         x = x.reshape((shape[0], shape[1],) + tuple(x.shape[1:]))
         self.temporal_mean = x.mean(axis=0)
+
+    def viz(self, x, time_course_keys=None, t_limit=None, **kwargs):
+        if time_course_keys is not None:
+            time_courses = dict()
+            for k in time_course_keys:
+                time_courses[k] = kwargs.pop(k)
+        else:
+            time_courses = None
+
+        if time_courses is not None:
+            targets = (self.extras['targets'] - self.extras['targets'].mean()) / self.extras['targets'].std()
+            novels = (self.extras['novels'] - self.extras['novels'].mean()) / self.extras['novels'].std()
+
+            if isinstance(time_courses, np.ndarray):
+                time_courses = {'tc': time_courses}
+            elif isinstance(time_courses, list):
+                time_courses = dict(('tc%d' % i, tc)
+                    for i, tc in enumerate(time_courses))
+            elif not isinstance(time_courses, dict):
+                raise TypeError('Time courses must be dict, list, or np.ndarray.')
+
+            time_courses['targets'] = targets
+            time_courses['novels'] = novels
+
+            for k in time_courses.keys():
+                tc = time_courses[k]
+                t_limit = t_limit or tc.shape[0]
+                if tc.ndim == 3: tc = tc.mean(1)
+
+                tc = tc - tc.mean(axis=0, keepdims=True)
+                tc = tc / tc.std(axis=0, keepdims=True)
+                tc = tc[:t_limit]
+
+                if tc.ndim == 2: tc = tc.T
+
+                time_courses[k] = tc
+
+        super(FMRI, self).viz(x, time_courses=time_courses, **kwargs)
 
     def viz_mean(self, x, out_file=None, remove_niftis=True, roi_dict=None,
             stats=None, update_rois=True, global_norm=False, **kwargs):

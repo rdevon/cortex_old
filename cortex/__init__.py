@@ -1,7 +1,10 @@
 '''Setup scripts for Cortex.
 
 '''
-import gym
+try:
+    import gym
+except ImportError:
+    pass
 import logging
 import warnings
 

@@ -3,6 +3,7 @@ Module for the MRI dataset
 '''
 
 import cPickle
+from glob import glob
 import logging
 import nipy
 from nipy.core.api import Image
@@ -296,7 +297,7 @@ class MRI(NeuroimagingDataset):
         image = Image.from_image(base_nifti, data=X)
         return image
 
-    def save_niftis(self, X):
+    def save_niftis(self, X, save=True):
         '''Save nifti files from array.
 
         Args:
@@ -314,12 +315,25 @@ class MRI(NeuroimagingDataset):
         out_files = []
         for i, x in enumerate(X):
             image = self.make_image(x, base_nifti)
-            out_file = path.join(self.tmp_path, 'tmp_image_%d.nii.gz' % i)
-            nipy.save_image(image, out_file)
             images.append(image)
+            if save:
+                out_file = path.join(self.tmp_path, 'tmp_image_%d.nii.gz' % i)
+                nipy.save_image(image, out_file)
+            else:
+                out_file = None
+
             out_files.append(out_file)
 
         return images, out_files
+
+    def load_niftis(self):
+        nifti_files = sorted(glob(path.join(self.tmp_path, 'tmp_image_*.nii.gz')))
+        if len(nifti_files) == 0: raise ValueError
+
+        images = []
+        for nifti_file in nifti_files:
+            images.append(nipy.load_image(nifti_file))
+        return images, nifti_files
 
     def prepare_images(self, x):
         if self.variance_normalize:
@@ -358,14 +372,19 @@ class MRI(NeuroimagingDataset):
         if extra_mean is not None: x -= extra_mean
         if set_global_norm: self.global_std = x.std(axis=1)
         x = self._unmask(x)
-        images, nifti_files = self.save_niftis(x)
+        images, nifti_files = self.save_niftis(x, save=update_rois)
 
+        if update_rois: roi_dict.update(**rois.main(nifti_files))
+        return images, nifti_files, roi_dict
+
+    def load_images(self, update_rois=True, roi_dict=None):
+        images, nifti_files = self.load_niftis()
         if update_rois: roi_dict.update(**rois.main(nifti_files))
         return images, nifti_files, roi_dict
 
     def viz(self, x, out_file=None, remove_niftis=True, roi_dict=None, extra_mean=None,
             stats=None, update_rois=True, global_norm=False, set_global_norm=False,
-            average=None, **kwargs):
+            average=None, load_niftis=False, **kwargs):
         '''Saves images from array.
 
         Args:
@@ -380,9 +399,16 @@ class MRI(NeuroimagingDataset):
             **kwargs: keywork arguments for montage.
 
         '''
-        images, nifti_files, roi_dict = self.make_images(
-            x, roi_dict=roi_dict, update_rois=update_rois, set_global_norm=set_global_norm,
-            extra_mean=extra_mean, average=average)
+        if load_niftis:
+            try:
+                images, nifti_files, roi_dict = self.load_images(update_rois=update_rois, roi_dict=roi_dict)
+            except:
+                self.logger.warning('Loading nifti files failed. Creating new ones.')
+                load_niftis = False
+        if not load_niftis:
+            images, nifti_files, roi_dict = self.make_images(
+                x, roi_dict=roi_dict, update_rois=update_rois, set_global_norm=set_global_norm,
+                extra_mean=extra_mean, average=average)
 
         if stats is None: stats = dict()
         stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]
@@ -394,8 +420,9 @@ class MRI(NeuroimagingDataset):
             global_std = None
 
         if remove_niftis:
+            nifti_files = sorted(glob(path.join(self.tmp_path, 'tmp_image_*.nii.gz')))
             for f in nifti_files:
-                os.remove(f)
+                if f is not None: os.remove(f)
         nifti_viewer.montage(images, self.anat_file, roi_dict,
                              out_file=resolve_path(out_file), stats=stats,
                              global_std=global_std, **kwargs)
