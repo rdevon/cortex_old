@@ -9,9 +9,12 @@ from nipy import save_image, load_image
 import numpy as np
 import os
 from os import path
+import readline
+import sys
 import yaml
 
-from load_mri import find_niftis, load_niftis, make_argument_parser
+from .load_mri import find_niftis, load_niftis, make_argument_parser
+from ..utils.extra import complete_path
 
 
 def read_niftis(file_list):
