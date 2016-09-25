@@ -16,9 +16,13 @@ __version__ = '0.3a'
 _manager = manager.get_manager()
 
 #assert False, logging.Logger.manager.loggerDict['gym'].keys()
-logging.Logger.manager.loggerDict['gym'].setLevel(logging.ERROR)
+try:
+    logging.Logger.manager.loggerDict['gym'].setLevel(logging.ERROR)
+    warnings.filterwarnings('ignore', module='gym')
+except:
+    pass
+    
 warnings.filterwarnings('ignore', module='nipy')
-warnings.filterwarnings('ignore', module='gym')
 warnings.filterwarnings('ignore',
                         'This call to matplotlib.use() has no effect.*',
                         UserWarning)
