@@ -5,6 +5,7 @@
 import igraph
 import numpy as np
 from scipy.stats import ttest_1samp
+from scipy.interpolate import UnivariateSpline
 import theano
 import theano.tensor as T
 from theano.gof import Apply, Op
@@ -61,6 +62,69 @@ class Detrender(theano.Op):
         return i0_shapes
 detrender = Detrender()
 
+
+class Despiker(theano.Op):
+    __props__ = ()
+
+    itypes = [T.ftensor3]
+    otypes = [T.ftensor3]
+
+    def perform(self, node, inputs, output_storage):
+        data = inputs[0]
+        z = output_storage[0]
+
+        def despike_one(tc, bpfrac=0.5):
+            tlen = tc.shape[0]
+            maxid = np.argmax(tc)
+            minid = np.argmin(tc)
+
+            x = np.setdiff1d(range(tlen), [maxid, minid])
+            y = tc[x]
+
+            mad_res = np.median(abs(y - np.median(y)))
+            sig = mad_res * np.sqrt(np.pi / 2)
+            s = tc / sig
+            idx = np.where(abs(s) > 2.5)[0]
+
+            x = np.setdiff1d(range(tlen), idx).flatten()
+            y = tc[x]
+            edges = np.setdiff1d([0, tlen - 1],x)
+
+            if edges.shape[0] > 0:
+               f0 = UnivariateSpline(x, y, k=1)
+               y0 = f0.__call__(range(tlen))
+               tc[edges] = y0[edges].astype(np.float32)
+
+            idx = np.setdiff1d(idx, edges)
+
+            f3 = UnivariateSpline(x, y, k=3)
+            f2 = UnivariateSpline(x, y, k=2)
+            f1 = UnivariateSpline(x, y, k=1)
+            y3 = f3.__call__(range(0, tlen))
+            y2 = f2.__call__(range(0, tlen))
+            y1 = f1.__call__(range(0, tlen))
+            for i in idx:
+                if (abs(tc[i]) > abs(y3[i])):
+                    tc[i] = y3[i]
+                elif (abs(tc[i]) > abs(y2[i])):
+                    tc[i] = y2[i]
+                else:
+                    tc[i] = y1[i]
+            return tc
+
+        shape = data.shape
+        data = data.reshape((shape[0], shape[1] * shape[2]))
+
+        tcs = []
+        for i in xrange(data.shape[1]):
+            tcs.append(despike_one(data[:, i]))
+
+        tcs = np.array(tcs).astype(floatX)
+        tcs = tcs.T.reshape(shape)
+        z[0] = tcs
+
+    def infer_shape(self, node, i0_shapes):
+        return i0_shapes
 
 class PCASign(Op):
     '''Gets the sign of a feature that was preprocessed with PCA.
@@ -146,8 +210,8 @@ class CorrCoef(Op):
 class Cluster(Op):
     __props__ = ()
 
-    def __init__(self, thr=0.3):
-        self.thr = 0.3
+    def __init__(self, thr=0.2):
+        self.thr = thr
         super(Cluster, self).__init__()
 
     def make_node(self, x):
@@ -177,7 +241,7 @@ class Cluster(Op):
         if len(weights) > 0:
             weights /= np.std(weights)
         else:
-            return [[i] for i in idx]
+            return idx
 
         g = igraph.Graph(edgelist, directed=False)
         g.vs['label'] = idx
@@ -206,9 +270,6 @@ class Cluster(Op):
 class OLS(Op):
     __props__ = ()
 
-    def __init__(self):
-        super(OLS, self).__init__()
-
     def make_node(self, x, y):
         x = T.as_tensor_variable(x)
         y = T.as_tensor_variable(y)
@@ -233,9 +294,6 @@ class OLS(Op):
 
 class TTest(Op):
     __props__ = ()
-
-    def __init__(self):
-        super(TTest, self).__init__()
 
     def make_node(self, x):
         x = T.as_tensor_variable(x)

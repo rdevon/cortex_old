@@ -95,6 +95,7 @@ def load_niftis(source_dir, out_dir, name='fmri', patterns=None):
     mask_file = path.join(out_dir, name + '_mask.npy')
     yaml_file = path.join(out_dir, name + '.yaml')
     tmp_dir = path.join(out_dir, name + '_tmp')
+
     if not path.isdir(tmp_dir):
         os.mkdir(tmp_dir)
 

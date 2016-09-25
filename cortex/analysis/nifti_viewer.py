@@ -207,7 +207,8 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
 
     for i, f in enumerate(order):
         roi = roi_dict.get(f, None)
-        if roi is None: continue
+        if roi is None:
+            continue
 
         if 'top_clust' in roi.keys():
             coords = roi['top_clust']['coords']
@@ -273,13 +274,14 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
         if time_courses is not None:
             j = y * (2 * (i_ // y) + 1) + (i_ % y) + 1
             ax = fig.add_subplot(x, y, j)
-            for k, v in time_courses.iteritems():
+            n_tc = len(time_courses)
+            for t, (k, v) in enumerate(time_courses.iteritems()):
                 if v.ndim == 1:
                     tc = v
                 else:
                     tc = v[f]
-                ax.plot(tc, label=k)
-            if i_ == 1:
+                ax.plot(tc + 2 * t, label=k)
+            if i_ == 0:
                 ax.legend()
 
     if out_file is not None:

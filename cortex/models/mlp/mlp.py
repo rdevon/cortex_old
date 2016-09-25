@@ -105,18 +105,32 @@ class MLP(Cell):
         dim_outs = self.dim_hs + [self.dim_out]
         weights = []
         biases = []
+        if self.batch_normalization:
+            gammas = []
+            betas = []
 
         for dim_in, dim_out in zip(dim_ins, dim_outs):
             W = norm_weight(dim_in, dim_out, scale=weight_scale, ortho=False)
-            b = np.zeros((dim_out,)).astype(floatX)
+            b = np.zeros((dim_out,))
+            gamma = np.ones((dim_in,))
+            beta = np.zeros_like(gamma)
             weights.append(W)
             biases.append(b)
+            if self.batch_normalization:
+                gammas.append(gamma)
+                betas.append(beta)
 
         self.params['weights'] = weights
         self.params['biases'] = biases
+        if self.batch_normalization:
+           self.params['gammas'] = gammas
+           self.params['betas'] = betas
 
     def get_params(self):
-        params = zip(self.weights, self.biases)
+        if self.batch_normalization:
+            params = zip(self.weights, self.biases, self.gammas, self.betas)
+        else:
+            params = zip(self.weights, self.biases)
         params = [i for sl in params for i in sl]
         return super(MLP, self).get_params(params=params)
 
@@ -137,12 +151,15 @@ class MLP(Cell):
         outs = OrderedDict(X=X)
         outs['input'] = X
         for l in xrange(self.n_layers):
-            if self.batch_normalization:
-                self.logger.debug('Batch normalization on layer %d' % l)
-                X = batch_normalization(X, session=session)
-
             W = params.pop(0)
             b = params.pop(0)
+
+            if self.batch_normalization:
+                gamma = params.pop(0)
+                beta = params.pop(0)
+                self.logger.debug('Batch normalization on layer %d' % l)
+                X = batch_normalization(X, gamma, beta, session=session)
+
             preact = T.dot(X, W) + b
 
             if l < self.n_layers - 1:
@@ -193,11 +210,15 @@ class MLP(Cell):
 
     def get_epsilon_params(self, epsilons, *params):
         if self.dropout and self.noise_switch():
+            if self.batch_normalization:
+                ppl = 4
+            else:
+                ppl = 2
             new_params = []
             for l in xrange(self.n_layers - 1):
-                new_params += params[2*l:2*(l+1)]
+                new_params += params[ppl*l:ppl*(l+1)]
                 new_params.append(epsilons[l])
-            new_params += params[2*(self.n_layers-1):]
+            new_params += params[ppl*(self.n_layers-1):]
             assert len(new_params) == len(params) + self.n_layers - 1
 
             return new_params

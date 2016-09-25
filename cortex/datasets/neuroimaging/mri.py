@@ -53,7 +53,7 @@ class MRI(NeuroimagingDataset):
     '''
 
     def __init__(self, source=None, name='mri', flip_signs=False,
-                 pca_components=0, incremental_pca=False,
+                 pca_components=0, incremental_pca=False, whiten=False,
                  variance_normalize=False, distribution='gaussian', **kwargs):
         '''Init function for MRI.
 
@@ -88,7 +88,8 @@ class MRI(NeuroimagingDataset):
         self.pca_components = pca_components
         self.variance_normalize = variance_normalize
 
-        if self.pca_components: X = self.apply_pca(X)
+        if self.pca_components:
+            X = self.apply_pca(X, incremental_pca, whiten=whiten)
         self.update_progress()
         self.global_std = None
 
@@ -103,7 +104,7 @@ class MRI(NeuroimagingDataset):
             self.data['input'] = self.X
         self.update_progress(finish=True)
 
-    def apply_pca(self, X):
+    def apply_pca(self, X, incremental_pca, whiten=False):
         X -= X.mean(axis=0)
         if self.pca is None:
             if incremental_pca:
@@ -112,7 +113,7 @@ class MRI(NeuroimagingDataset):
             else:
                 self.logger.info('Using PCA')
                 PCAC = PCA
-            self.pca = PCAC(self.pca_components, whiten=True)
+            self.pca = PCAC(self.pca_components, whiten=whiten)
             self.logger.info('Fitting PCA... (please wait)')
             self.pca.fit(X)
             if self.pca_file is not None:
@@ -428,6 +429,7 @@ class MRI(NeuroimagingDataset):
                              global_std=global_std, **kwargs)
 
     def viz_slice(self, x, out_file=None, **kwargs):
+        x = x.copy()
         x = self.prepare_images(x)
         if len(x.shape) == 3: x = x[:, 0, :]
         x = self._unmask(x).transpose(1, 2, 3, 0)

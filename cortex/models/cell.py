@@ -34,8 +34,7 @@ def ortho_weight(ndim, rng=None):
     '''Make ortho weight tensor.
 
     '''
-    if not rng:
-        rng = _rng
+    if not rng: rng = _rng
     W = rng.randn(ndim, ndim)
     u, s, v = np.linalg.svd(W)
     return u.astype(floatX)
@@ -65,12 +64,22 @@ def dropout(x, act, rate, trng, epsilon=None):
             raise NotImplementedError('No dropout for %s yet' % activ)
         return x
 
-def batch_normalization(x, epsilon=1e-6, session=None):
-    mu = x.mean(axis=0, keepdims=True)
-    sigma = x.std(axis=0, keepdims=True)
-    if session is not None:
-        session.constants += [mu, sigma]
-    return (x - mu) / T.sqrt(sigma ** 2 + epsilon)
+def batch_normalization(x, gamma, beta, epsilon=1e-6, session=None):
+    if x.ndim == 1:
+        mu = 0.
+        sigma = 1.
+    elif x.ndim == 2:
+        mu = x.mean(axis=0, keepdims=True)
+        sigma = x.std(axis=0, keepdims=True)
+    elif x.ndim == 3:
+        mu = x.mean(axis=(0, 1), keepdims=True)
+        sigma = x.std(axis=(0, 1), keepdims=True)
+    else:
+        raise TypeError(x.ndim)
+    #if session is not None:
+    #    session.constants += [mu, sigma]
+    y = gamma * (x - mu) / T.sqrt(sigma ** 2 + epsilon) + beta
+    return y
 
 
 class NoiseSwitch(object):

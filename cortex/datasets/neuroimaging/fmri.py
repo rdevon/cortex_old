@@ -62,14 +62,18 @@ class FMRI_IID(mri_module.MRI):
                           tmp_path=None, pca=None, data=None, **kwargs):
             return (name, nifti, mask, anat_file, tmp_path, pca, data, kwargs)
 
-        (name, nifti_file, mask_file, self.anat_file,
-         self.tmp_path, self.pca_file, data_files, extras) = unpack_source(
-            **source_dict)
+        (name, nifti_file, mask_file, anat_file,
+         tmp_path, pca_file, data_files, extras) = unpack_source(**source_dict)
+        nifti_file = resolve_path(nifti_file)
+        mask_file = resolve_path(mask_file)
+        self.anat_file = resolve_path(anat_file)
+        self.tmp_path = resolve_path(tmp_path)
+        self.pca_file = resolve_path(pca_file)
+
         self.update_progress()
 
         self.base_nifti_file = nifti_file
-        if not path.isdir(self.tmp_path):
-            os.mkdir(self.tmp_path)
+        if not path.isdir(self.tmp_path): os.mkdir(self.tmp_path)
 
         mask = np.load(mask_file)
         if not np.all(np.bitwise_or(mask == 0, mask == 1)):
@@ -87,7 +91,7 @@ class FMRI_IID(mri_module.MRI):
             self.pca = None
         self.update_progress()
 
-        self.extras = dict((k, np.load(v).astype(floatX))
+        self.extras = dict((k, np.load(resolve_path(v)).astype(floatX))
             for k, v in extras.iteritems())
 
         if isinstance(data_files, str):
@@ -95,6 +99,7 @@ class FMRI_IID(mri_module.MRI):
         X = []
         Y = []
         for i, data_file in enumerate(data_files):
+            data_file = resolve_path(data_file)
             self.logger.info('Loading %s' % data_file)
             self.update_progress(progress=False)
             X_ = np.load(data_file)
@@ -174,8 +179,7 @@ class FMRI(FMRI_IID):
     def slice_data(self, idx):
         super(FMRI, self).slice_data(idx)
         self.set_idx()
-        if self.shuffle:
-            self.randomize()
+        if self.shuffle: self.randomize()
 
     def randomize(self):
         '''Randomize the fMRI dataset.

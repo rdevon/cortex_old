@@ -502,10 +502,7 @@ class Manager(object):
                         op = getattr(C, '_stats')
                         name = _p(name, 'stats')
                     else:
-                        if not n in C._stats.keys():
-                            raise AttributeError('cell type %s for cell `%s` has no '
-                                                 'stat %s' % (C, cell_name, n))
-                        op = getattr(C, C._stats[n])
+                        op = getattr(C, n)
                         name = _p(name, n)
 
             else:
