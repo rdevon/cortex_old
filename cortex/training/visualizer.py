@@ -3,6 +3,7 @@
 '''
 
 from os import path
+from progressbar import Bar, ProgressBar, Percentage, Timer
 import theano
 from theano import tensor as T
 
@@ -18,6 +19,7 @@ class Visualizer(object):
         self.fs = []
         self.batch_size = batch_size
         self.logger = get_class_logger(self)
+        self.f_names = []
 
     def add(self, op, *args, **kwargs):
         from ..manager import resolve_tensor_arg
@@ -68,8 +70,10 @@ class Visualizer(object):
             return op(*new_args, **kwargs)
 
         self.fs.append(viz)
+        self.f_names.append(kwargs.get('name', 'Viz'))
 
     def __call__(self, data_mode=None, inputs=None):
+        widgets = ['Visualizing (please wait): ', Bar()]
         if inputs is None:
             self.session.reset_data(mode=data_mode)
             n = self.session.get_dataset_size(mode=data_mode)
@@ -78,6 +82,10 @@ class Visualizer(object):
             else:
                 batch_size = self.batch_size
             inputs = self.session.next_batch(mode=data_mode, batch_size=batch_size)
+        pbar = ProgressBar(widgets=widgets, maxval=len(self.fs)).start()
         for i, f in enumerate(self.fs):
-            self.logger.debug('Visualizer function %d' % i)
+            self.logger.debug('Visualizer function `%s`' % self.f_names[i])
             f(*inputs)
+            pbar.update(i)
+        pbar.update(i + 1)
+        print
