@@ -167,7 +167,11 @@ class Distribution(Cell):
         return self.quantile(epsilon, P)
 
     def simple_sample(self, n_samples, P=None):
-        epsilon = self.generate_random_variables((n_samples,), P=P)
+        if isinstance(n_samples, tuple):
+            shape = n_samples
+        else:
+            shape = (n_samples,)
+        epsilon = self.generate_random_variables(shape, P=P)
         return self._sample(epsilon, P=P)
 
     def _cost(self, X=None, P=None):
@@ -273,8 +277,7 @@ def make_conditional(C):
             return self.neg_log_prob(X, P=P).mean()
 
         def generate_random_variables(self, shape, P=None):
-            if P is None:
-                raise TypeError('P (distribution) must be provided')
+            if P is None: P = T.zeros((self.dim,)).astype(floatX)
 
             return super(Conditional, self).generate_random_variables(
                 shape, P=P)

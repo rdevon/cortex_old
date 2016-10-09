@@ -202,7 +202,7 @@ class RNN(Cell):
             '_passed': ['initialization']
         },
         'RU': {
-            'cell_type': 'RecurrentUnit',
+            'cell_type': '&recurrence_type',
             '_passed': ['weight_noise']
         },
         'input_net': {
@@ -218,36 +218,66 @@ class RNN(Cell):
         'input': 'dim_in',
         'output': 'dim_h'
     }
-    _test_order = ['input_net.Y', 'H0', 'H', 'output']
+    _test_order = ['input_net.Y', 'input_Y', 'H0', 'Xa', 'Xb', 'H', 'output']
 
-    def __init__(self, name='RNN', **kwargs):
+    def __init__(self, name='RNN', recurrence_type='RecurrentUnit', **kwargs):
         '''Init function for RNN.
 
         Args:
             **kwargs: additional keyword arguments.
 
         '''
+        self.recurrence_type = recurrence_type
         super(RNN, self).__init__(name=name, **kwargs)
 
     def init_args(self, X, M=None):
         if M is None: M = T.ones((X.shape[0], X.shape[1])).astype(floatX)
         return (X, M)
+    
+    def set_components(self, components=None, **kwargs):
+        if components is None:
+            components = OrderedDict((k, v) for k, v in self._components.items())
+        if self.recurrence_type in ['GRU']:
+            components['aux_net'] = dict((k, v)
+                for k, v in components['input_net'].iteritems())
+            components['aux_net']['dim_out'] = 2 * kwargs['dim_h']
+            components['aux_net']['dim_in'] = kwargs['dim_in']
+        else:
+            components['aux_net'] = None
 
-    def _feed(self, X, M, *params):
-        ru_params = self.select_params('RU', *params)
+        return super(RNN, self).set_components(
+            components=components, **kwargs)
+    
+    def feed_in(self, X, *params):
         input_params = self.select_params('input_net', *params)
-        initializer_params = self.select_params('initializer', *params)
-
         outs = self.input_net._feed(X, *input_params)
         outs = OrderedDict((_p('input_net', k), v)
             for k, v in outs.iteritems())
+        if self.aux_net is not None:
+            aux_params = self.select_params('aux_net', *params)
+            outs_a = self.aux_net._feed(X, *aux_params)
+            outs_a = OrderedDict((_p('aux_net', k), v)
+            for k, v in outs_a.iteritems())
+            outs.update(**outs_a)
+            outs['input_Y'] = concatenate(
+                [outs[_p('aux_net', 'Y')],
+                 outs[_p('input_net', 'Y')]],
+                axis=X.ndim-1)
+        else:
+            outs['input_Y'] = outs[_p('input_net', 'Y')]
+        return outs
 
+    def _feed(self, X, M, *params):
+        ru_params = self.select_params('RU', *params)
+        initializer_params = self.select_params('initializer', *params)
+        
+        outs = self.feed_in(X, *params)
         outs_init = self.initializer._feed(X[0], *initializer_params)
         outs.update(**dict((_p('initializer', k), v)
             for k, v in outs_init.iteritems()))
         outs['H0'] = outs_init['output']
 
-        outs.update(**self.RU(outs[_p('input_net', 'Y')], M, outs['H0']))
+        outs.update(**self.RU(outs['input_Y'], M, outs['H0']))
         H = outs['H'][-1]
         if self.dropout and self.noise_switch():
             H = dropout(H, T.tanh, self.dropout, self.trng)

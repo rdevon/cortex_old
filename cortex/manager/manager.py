@@ -254,7 +254,7 @@ class Manager(object):
 
     def train(self, eval_modes=None, validation_mode=None, eval_every=10,
               monitor_grads=False, early_stopping=False, patience=10,
-              save_every=100):
+              save_every=100, extra_update=None):
         if eval_modes is None: eval_modes=['train', 'valid']
         if validation_mode is None: validation_mode = 'valid'
         if len(self.trainer.f_grads) == 0:
@@ -263,10 +263,15 @@ class Manager(object):
             self.monitor.add_section(
                 'Grads', ['_grad_' + k for k in self.trainer.tparams])
 
+        if extra_update is not None:
+            f_extra = theano.function([], [], updates=extra_update)
+        else:
+            f_extra = None
         try:
             curr_patience = patience
 
             while True:
+                if f_extra is not None: f_extra()
                 br = False
 
                 for mode in eval_modes:
@@ -275,6 +280,7 @@ class Manager(object):
                         is_best = self.evaluator.validate(r, self.trainer.epoch)
                         if is_best:
                             curr_patience = patience
+                            self.save(path.join(self.out_path, 'best.npz'))
                         else:
                             curr_patience -= 1
                         if curr_patience <= 0 and early_stopping:
@@ -283,18 +289,18 @@ class Manager(object):
                     self.monitor.update(mode, **r)
 
                 self.monitor.display()
-                if self.visualizer is not None:
-                    self.visualizer()
+                if self.visualizer is not None: self.visualizer()
+                
+                if self.out_path is not None:
+                    self.save(path.join(self.out_path, 'curr.npz'))
 
                 try:
                     grads = self.trainer.next_epoch(n_epochs=eval_every)
-                    if monitor_grads:
-                        self.monitor.update('train', **grads)
+                    if monitor_grads: self.monitor.update('train', **grads)
                 except StopIteration:
                     br = True
 
-                if br:
-                    break
+                if br: break
         except KeyboardInterrupt:
             print 'Interrupting training...'
         print 'Training completed.'

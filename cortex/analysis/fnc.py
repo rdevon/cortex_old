@@ -9,7 +9,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 
 
-def plot(fnc, idx=None, groups=None, transform=None, labels=None, out_file=None):
+def plot_fnc(fnc, idx=None, groups=None, transform=None, labels=None,
+             out_file=None):
     if groups is None:
         groups = [range(fnc.shape[0])]
 

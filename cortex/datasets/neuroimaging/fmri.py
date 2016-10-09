@@ -34,7 +34,10 @@ class FMRI_IID(mri_module.MRI):
         clean_data (bool): remove subjects with 0-std voxels after masking.
 
     '''
-    def __init__(self, name='fmri_iid', **kwargs):
+    def __init__(self, name='fmri_iid', detrend=False, load_preprocessed=True,
+                 **kwargs):
+        self.detrend = detrend
+        self.load_preprocessed = load_preprocessed
         super(FMRI_IID, self).__init__(name=name, **kwargs)
 
     def get_data(self, source):
@@ -59,11 +62,14 @@ class FMRI_IID(mri_module.MRI):
         self.logger.debug('Source locations: \n%s' % pprint.pformat(source_dict))
 
         def unpack_source(name=None, nifti=None, mask=None, anat_file=None,
-                          tmp_path=None, pca=None, data=None, **kwargs):
-            return (name, nifti, mask, anat_file, tmp_path, pca, data, kwargs)
+                          tmp_path=None, pca=None, data=None, preprocessed=None,
+                          **kwargs):
+            return (name, nifti, mask, anat_file, tmp_path, pca, data,
+                    preprocessed, kwargs)
 
         (name, nifti_file, mask_file, anat_file,
-         tmp_path, pca_file, data_files, extras) = unpack_source(**source_dict)
+         tmp_path, pca_file, data_files, preprocessed, extras) = unpack_source(
+            **source_dict)
         nifti_file = resolve_path(nifti_file)
         mask_file = resolve_path(mask_file)
         self.anat_file = resolve_path(anat_file)
@@ -94,39 +100,81 @@ class FMRI_IID(mri_module.MRI):
         self.extras = dict((k, np.load(resolve_path(v)).astype(floatX))
             for k, v in extras.iteritems())
 
-        if isinstance(data_files, str):
-            data_files = [data_files]
-        X = []
-        Y = []
-        for i, data_file in enumerate(data_files):
-            data_file = resolve_path(data_file)
-            self.logger.info('Loading %s' % data_file)
-            self.update_progress(progress=False)
-            X_ = np.load(data_file)
-            X.append(X_.astype(floatX))
-            Y.append((np.zeros((X_.shape[0], X_.shape[1])) + i).astype(floatX))
-        self.update_progress()
+        if preprocessed is not None: preprocessed = resolve_path(preprocessed)
 
-        X = np.concatenate(X, axis=0)
-        Y = np.concatenate(Y, axis=0)
+        if (not self.load_preprocessed
+            or preprocessed is None
+            or not path.isfile(preprocessed)):
+            if isinstance(data_files, str):
+                data_files = [data_files]
+            X = []
+            Y = []
+            for i, data_file in enumerate(data_files):
+                data_file = resolve_path(data_file)
+                self.logger.info('Loading %s' % data_file)
+                self.update_progress(progress=False)
+                X_ = np.load(data_file)
+                X.append(X_.astype(floatX))
+                Y.append((np.zeros((X_.shape[0], X_.shape[1])) + i).astype(floatX))
+            self.update_progress()
 
-        if len(X.shape) == 3:
-            self.n_subjects, self.n_scans, _ = X.shape
-        elif len(X.shape) == 5:
-            self.n_subjects, self.n_scans, _, _, _ = X.shape
+            X = np.concatenate(X, axis=0)
+            Y = np.concatenate(Y, axis=0)
+
+            if len(X.shape) == 3:
+                self.n_subjects, self.n_scans, _ = X.shape
+            elif len(X.shape) == 5:
+                self.n_subjects, self.n_scans, _, _, _ = X.shape
+            else:
+                raise ValueError('X has incorrect shape. Should be 3 or 5 (got %d)'
+                                 % len(X.shape))
+            X = self._mask(X)
+
+            if self.detrend:
+                self.logger.info('Detrending voxels...')
+                X = self.perform_detrend(X.transpose(1, 0, 2)).transpose(1, 0, 2)
+
+            X -= X.mean(axis=1, keepdims=True)
+            X /= np.sqrt(X.std(axis=1, keepdims=True) ** 2 + 1e-6)
+            X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
+            X -= X.mean(axis=0, keepdims=True)
+            X /= X.std(axis=0, keepdims=True)
+            Y = Y.reshape((Y.shape[0] * Y.shape[1]))
         else:
-            raise ValueError('X has incorrect shape. Should be 3 or 5 (got %d)'
-                             % len(X.shape))
-        X = self._mask(X)
-        X -= X.mean(axis=1, keepdims=True)
-        X /= np.sqrt(X.std(axis=1, keepdims=True) ** 2 + 1e-6)
-        X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
-        Y = Y.reshape((Y.shape[0] * Y.shape[1]))
+            self.logger.info('Reloading preprocessed from {}'.format(preprocessed))
+            self.update_progress()
+            d = np.load(preprocessed)
+            X = d['X']
+            Y = d['Y']
+            self.n_subjects = int(d['n_subjects'])
+            self.n_scans = int(d['n_scans'])
+
+        if (self.load_preprocessed
+            and preprocessed is not None
+            and not path.isfile(preprocessed)):
+            d = dict(X=X, Y=Y, n_subjects=self.n_subjects, n_scans=self.n_scans)
+            self.logger.info('Saving preprocessed to {}'.format(preprocessed))
+            np.savez(preprocessed, **d)
 
         self.update_progress()
 
-        return X, Y
+        return X.astype(floatX), Y
 
+    def perform_detrend(self, data, order=4):
+        x = np.arange(data.shape[0])
+        if len(data.shape) == 3:
+            shape = data.shape
+            data = data.reshape((data.shape[0], data.shape[1] * data.shape[2]))
+        elif len(data.shape) > 3:
+            raise ValueError('Detrending over 3 dims not supported')
+        else:
+            reshape = None
+        fit = np.polyval(np.polyfit(x, data, deg=order),
+                         np.repeat(x[:, None], data.shape[1], axis=1))
+        data = data - fit
+        if shape is not None:
+            data = data.reshape(shape)
+        return data.astype(floatX)
 
 class FMRI(FMRI_IID):
     '''fMRI dataset class.
@@ -187,8 +235,7 @@ class FMRI(FMRI_IID):
         Shuffles the idx.
 
         '''
-        if self.idx is None:
-            self.set_idx()
+        if self.idx is None: self.set_idx()
         rnd_idx = np.random.permutation(np.arange(0, len(self.idx), 1))
         self.idx = [self.idx[i] for i in rnd_idx]
 

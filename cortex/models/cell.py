@@ -137,7 +137,7 @@ class Cell(object):
 
     noise_switch = get_noise_switch()
 
-    def __init__(self, name='layer_proto', inits=None, **kwargs):
+    def __init__(self, name='layer_proto', inits=None, excludes=None, **kwargs):
         '''Init function for Cell.
 
         Args:
@@ -150,6 +150,7 @@ class Cell(object):
         self.name = name
         self.manager = manager
         self.inits = inits or dict()
+        self.excludes = excludes or []
         kwargs = self.set_options(**kwargs)
         init_rngs(self)
 
@@ -370,8 +371,7 @@ class Cell(object):
                 self.param_keys.append(k)
 
     def get_params(self, params=None):
-        if params is None:
-            params = [self.__dict__[k] for k in self.param_keys]
+        if params is None: params = [self.__dict__[k] for k in self.param_keys]
         if self.noise_switch() and self.weight_noise:
             for i in range(len(params)):
                 param = params[i]
@@ -384,6 +384,7 @@ class Cell(object):
                             avg=0.,
                             std=self.weight_noise,
                             size=param.shape).astype(floatX)
+                        break
 
                 self.params[i] = param
 
@@ -498,7 +499,7 @@ class Cell(object):
         if key in ['passed', 'components']:
             raise AttributeError(key)
 
-        if key not in self.passed.keys():
+        if not hasattr(self, 'passed') or key not in self.passed.keys():
             raise AttributeError('Cell of type %s has no attribute %s'
                                  % (type(self), key))
         component = self.__dict__[self.passed[key]]
@@ -521,10 +522,9 @@ class Cell(object):
                 params[k] = [
                     '<numpy.ndarray: {shape: %s}>' % (a.shape,) for a in v]
         attributes.update(params=params)
-
         attr_str = ''
         for k, a in attributes.iteritems():
-            if k in self._components:
+            if k in self._components and a is not None:
                 c_str = ': <' + a.name + '>'
                 new_str = '\n\t' + k + c_str
             else:

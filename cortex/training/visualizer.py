@@ -32,12 +32,14 @@ class Visualizer(object):
             raise TypeError
 
         args, kwargs = self.session.resolve_op_args(args, kwargs)
-
+        
         tensor_idx = [i for i, a in enumerate(args)
-                      if isinstance(a, T.TensorVariable)]
+                      if isinstance(a, (T.TensorVariable,
+                                        T.sharedvar.SharedVariable))]
         nontensor_idx = [i for i in range(len(args)) if i not in tensor_idx]
         tensor_keys = [k for k, v in kwargs.iteritems()
-                       if isinstance(v, T.TensorVariable)]
+                       if isinstance(v, (T.TensorVariable,
+                                         T.sharedvar.SharedVariable))]
         nontensor_keys = [k for k in kwargs.keys() if k not in tensor_keys]
 
         f_viz = theano.function(

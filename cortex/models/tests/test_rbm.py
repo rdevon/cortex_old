@@ -1,38 +1,65 @@
 '''
-Module for RBM tests.
+Module for testing MLPs.
 '''
 
+from collections import OrderedDict
+import numpy as np
+from pprint import pformat, pprint
 import theano
 from theano import tensor as T
 
-from cortex.datasets.basic import euclidean
-from cortex.models import rbm
-from cortex.utils import floatX
+import cortex
+from cortex import models
+from cortex.datasets.basic.dummy import Dummy
+from cortex.models import mlp as module
+from cortex.utils import floatX, logger as cortex_logger
 
 
-def test_build(dim_h=11, dim_v=13):
-    model = rbm.RBM(dim_v, dim_h)
-    model.set_tparams()
-    return model
+sigmoid = lambda x: 1.0 / (1.0 + np.exp(-x))
+tanh = lambda x: np.tanh(x)
+softplus = lambda x: np.log(1.0 + np.exp(x))
+identity = lambda x: x
 
-def test_sample(n_steps=3, dim_v=13, batch_size=7):
-    data_iter = euclidean.Euclidean(dims=dim_v, batch_size=batch_size)
-    x = data_iter.next()[data_iter.name]
+def test_fetch_class(c='RBM'):
+    C = cortex.resolve_class(c)
+    return C
 
-    model = test_build(dim_v=dim_v)
+def test_make_rbm(dim_in=13, dim_h=17):
+    C = test_fetch_class()
+    mlp = C(dim_in, dim_h)
+    return mlp
 
-    X = T.matrix('X', dtype=floatX)
-    ph0 = model.ph_v(X)
-    r = model.trng.uniform(size=(X.shape[0], model.dim_h))
-    h_p = (r <= ph0).astype(floatX)
+def test_mlp_factory(dim_in=13, dim_h=17):
+    cortex.reset()
+    C = test_fetch_class()
+    return C.factory(dim_in=dim_in, dim_h=dim_h)
 
-    outs, updates = model.sample(h_p, n_steps=n_steps)
-    keys = outs.keys()
-
-    f = theano.function([X], outs.values(), updates=updates)
-    values = f(x)
-
-    outs = model(X, n_chains=batch_size, n_steps=n_steps)
-    results, samples, updates, constants = outs
-    f = theano.function([X], results.values(), updates=updates)
-    f(x)
+def test_feed(dim_h=17):
+    cortex.reset()
+    cortex.prepare_data('dummy', name='data', n_samples=103, data_shape=(5,))
+    cortex.prepare_cell('RBM', name='rbm', dim_h=3, h_dist_type='binomial')
+    cortex.match_dims('rbm.input', 'data.input')
+    cortex.add_step('rbm', 'data.input', n_steps=1, n_chains=3)
+    
+    cortex.build()
+    cortex.profile()
+    train_session = cortex.create_session()
+    cortex.build_session(test=True)
+    tensors = OrderedDict((k, v) for k, v in train_session.tensors.items()
+        if not 'outputs' in k)
+    
+    f = theano.function(train_session.inputs, tensors,
+                        updates=train_session.updates)
+    data = train_session.next_batch(batch_size=11)
+    rbm = cortex._manager.cells['rbm']
+    W = rbm.W.get_value()
+    b = rbm.v_dist.z.get_value()
+    c = rbm.h_dist.z.get_value()
+    
+    rvals = f(*data)
+    print rvals['rbm.pH0']
+    
+    ph0 = sigmoid(np.dot(rvals['rbm.V0'], W) + c) * .9999 + 5e-6
+    print ph0
+    print rvals['rbm.pH0'] - ph0
+    assert False, rvals.keys()

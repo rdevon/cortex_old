@@ -83,8 +83,7 @@ def save_image(nifti, anat, cluster_dict, out_path, f, image_threshold=2,
     rc('font', **font)
 
     coords = cluster_dict['top_clust']['coords']
-    if coords == None:
-        return
+    if coords == None: return
 
     feature /= feature.std()
     imax = np.max(np.absolute(feature))
@@ -140,7 +139,7 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
     p.join()
 
 def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
-            stats=None, time_courses=None, y=8, global_std=None, clusters=None):
+            stats=None, time_courses=None, y=10, global_std=None, clusters=None):
     '''Saves a montage of nifti images.
 
     Args:
@@ -196,7 +195,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
 
     indices = [0]
     if time_courses is not None: x *= 2
-    font = {'size': 8}
+    font = {'size': 10}
     rc('font',**font)
 
     if fig is None:
@@ -266,7 +265,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
         for j, (k, vs) in enumerate(stats.iteritems()):
             v = vs[f]
             if v is not None:
-                plt.text(pos[j][0], pos[j][1], '%s=%.2f' % (k, v),
+                plt.text(pos[j][0], pos[j][1], '%s=%.2e' % (k, v),
                          transform=ax.transAxes,
                          horizontalalignment='left',
                          color=colors[j])
@@ -325,15 +324,23 @@ def slice_montage(weights, thr=2, fig=None, out_file=None, order=None, y=8):
     plt.close()
 
 def unfolded_movie(niftis, files, anat, x=20, out_file=None, image_max=None,
-                   image_std=None, stimulus=None, tmax=60, **responses):
+                   image_std=None, stimulus=None, tmax=60, horizontal=False,
+                   global_tcs=False, global_norm=False, **responses):
     if isinstance(anat, str): anat = load_image(anat)
 
     iscale = 2.5
     y = int(ceil(1.0 * len(niftis[:tmax]) / x))
     cols = y
-    y *= 2
+    if (stimulus is not None or len(responses) > 0) and not global_tcs:
+        y *= 2
+    elif (stimulus is not None or len(responses) > 0) and global_tcs:
+        y += 1
 
-    fig = plt.figure(figsize=[iscale * y, (1.5 * iscale) * x / 2.5])
+    if horizontal:
+        fig = plt.figure(figsize=[iscale * x, 1.5 * iscale * y / 2.5])
+    else:
+        fig = plt.figure(figsize=[iscale * y, 1.5 * iscale * x / 2.5])
+
     plt.subplots_adjust(
         left=0.01, right=0.99, bottom=0.05, top=0.99, wspace=0.05, hspace=0.5)
 
@@ -342,17 +349,30 @@ def unfolded_movie(niftis, files, anat, x=20, out_file=None, image_max=None,
     pbar = ProgressBar(widgets=widgets, maxval=len(niftis[:tmax])).start()
     for i, nifti in enumerate(niftis[:tmax]):
         im = nilearn.image.load_img(files[i])
-        if image_std is None: image_std = im.get_data().std()
-        if image_max is None: image_max = im.get_data().max()
-        j = 2 * (i // x) + (y * i) % (y * x) + 1
-        ax = fig.add_subplot(x, y, j)
+        if image_std is None or not global_norm:
+            image_std = im.get_data().std()
+        if image_max is None or not global_norm:
+            image_max = im.get_data().max()
+
+        if (stimulus is not None or len(responses) > 0) and not global_tcs:
+            j = 2 * (i // x) + (y * i) % (y * x) + 1
+        elif (stimulus is not None or len(responses) > 0) and global_tcs:
+            j = (i // x) + (y * i) % (y * x) + 2
+        else:
+            j = (i // x) + (y * i) % (y * x) + 1
+
+        if horizontal:
+            ax = fig.add_subplot(y, x, j)
+        else:
+            ax = fig.add_subplot(x, y, j)
+
         nplt.plot_glass_brain(im, figure=fig, axes=ax, alpha=0.8,
                               vmax=image_max, symmetric_cbar=True,
                               cmap=plt.cm.RdYlBu_r, plot_abs=False,
-                              threshold=2*image_std)
+                              threshold=image_std)
         pbar.update(i)
 
-    if stimulus is not None or responses is not None:
+    if (stimulus is not None or len(responses) > 0) and not global_tcs:
         for c in xrange(cols):
             ax = fig.add_subplot(1, y, (c + 1) * 2)
             mi = c * x
@@ -362,7 +382,7 @@ def unfolded_movie(niftis, files, anat, x=20, out_file=None, image_max=None,
                 for k, v in stimulus.iteritems():
                     ax.plot(v[mi:ma] / v[mi:ma].std(),
                             np.arange(mi, ma), label=k)
-            if responses is not None:
+            if len(responses) > 0:
                 for k, v in responses.iteritems():
                     ax.plot(v[mi:ma] / v[mi:ma].std(),
                             np.arange(mi, ma), label=k)
@@ -370,6 +390,23 @@ def unfolded_movie(niftis, files, anat, x=20, out_file=None, image_max=None,
             ax.set_ylim([mi - 0.5, ma - 0.5])
             ax.set_ylim(ax.get_ylim()[::-1])
             ax.legend()
+    elif (stimulus is not None or len(responses) > 0) and global_tcs:
+        ax = fig.add_subplot(1, y, 1)
+        mi = 0
+        ma = x
+
+        if stimulus is not None:
+            for k, v in stimulus.iteritems():
+                ax.plot(v[mi:ma] / v[mi:ma].std(),
+                        np.arange(mi, ma), label=k)
+        if len(responses) > 0:
+            for k, v in responses.iteritems():
+                ax.plot(v[mi:ma] / v[mi:ma].std(),
+                        np.arange(mi, ma), label=k)
+
+        ax.set_ylim([mi - 0.5, ma - 0.5])
+        ax.set_ylim(ax.get_ylim()[::-1])
+        ax.legend(loc=4)
 
     if out_file is not None:
         plt.savefig(out_file, bbox_inches='tight', pad_inches=0)

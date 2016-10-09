@@ -23,8 +23,7 @@ import warnings
 import yaml
 
 from .ni_dataset import NeuroimagingDataset
-from ...analysis.mri import rois
-from ...analysis import nifti_viewer
+from ...analysis import nifti_viewer, rois
 from ...utils import floatX
 from ...utils.tools import resolve_path
 
@@ -89,7 +88,7 @@ class MRI(NeuroimagingDataset):
         self.variance_normalize = variance_normalize
 
         if self.pca_components:
-            X = self.apply_pca(X, incremental_pca, whiten=whiten)
+            X = self.apply_pca(X, incremental_pca, whiten=whiten).astype(floatX)
         self.update_progress()
         self.global_std = None
 
@@ -98,10 +97,10 @@ class MRI(NeuroimagingDataset):
 
         super(MRI, self).__init__(data, distributions=distributions, name=name,
                                   **kwargs)
+        self.X -= self.mean_image[None, :]
         if self.variance_normalize:
-            self.X -= self.mean_image[None, :]
             self.X /= self.var_image[None, :]
-            self.data['input'] = self.X
+        self.data['input'] = self.X
         self.update_progress(finish=True)
 
     def apply_pca(self, X, incremental_pca, whiten=False):
@@ -309,6 +308,10 @@ class MRI(NeuroimagingDataset):
             list: list of output files for images.
 
         '''
+        nifti_files = sorted(
+            glob(path.join(self.tmp_path, 'tmp_image_*.nii.gz')))
+        for f in nifti_files:
+            if f is not None: os.remove(f)
 
         base_nifti = nipy.load_image(self.base_nifti_file)
 
@@ -337,9 +340,8 @@ class MRI(NeuroimagingDataset):
         return images, nifti_files
 
     def prepare_images(self, x):
-        if self.variance_normalize:
-            x *= self.var_image[None, :]
-            x += self.mean_image[None, :]
+        if self.variance_normalize: x *= self.var_image[None, :]
+        x += self.mean_image[None, :]
         if self.pca is not None and self.pca_components:
             x = self.pca.inverse_transform(x)
         return x
@@ -406,13 +408,13 @@ class MRI(NeuroimagingDataset):
             except:
                 self.logger.warning('Loading nifti files failed. Creating new ones.')
                 load_niftis = False
+        
         if not load_niftis:
             images, nifti_files, roi_dict = self.make_images(
                 x, roi_dict=roi_dict, update_rois=update_rois, set_global_norm=set_global_norm,
                 extra_mean=extra_mean, average=average)
 
         if stats is None: stats = dict()
-        stats['gm'] = [v['top_clust']['grey_value'] for v in roi_dict.values()]
         if isinstance(global_norm, np.ndarray):
             pass
         elif global_norm:
@@ -421,9 +423,11 @@ class MRI(NeuroimagingDataset):
             global_std = None
 
         if remove_niftis:
-            nifti_files = sorted(glob(path.join(self.tmp_path, 'tmp_image_*.nii.gz')))
+            nifti_files = sorted(
+                glob(path.join(self.tmp_path, 'tmp_image_*.nii.gz')))
             for f in nifti_files:
                 if f is not None: os.remove(f)
+                
         nifti_viewer.montage(images, self.anat_file, roi_dict,
                              out_file=resolve_path(out_file), stats=stats,
                              global_std=global_std, **kwargs)
@@ -434,8 +438,7 @@ class MRI(NeuroimagingDataset):
         if len(x.shape) == 3: x = x[:, 0, :]
         x = self._unmask(x).transpose(1, 2, 3, 0)
 
-        nifti_viewer.slice_montage(
-            x, out_file=resolve_path(out_file), **kwargs)
+        nifti_viewer.slice_montage(x, out_file=resolve_path(out_file), **kwargs)
 
     def visualize_pca(self, out_file, **kwargs):
         '''Saves the PCA component image.

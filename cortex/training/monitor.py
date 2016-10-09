@@ -3,6 +3,7 @@ Module for monitor class.
 '''
 
 from collections import OrderedDict
+from colorclass import Color
 import cPickle as pkl
 import numpy as np
 import os
@@ -45,15 +46,42 @@ class BasicMonitor(object):
 
         '''
         for section in self.sections.keys():
-            table_data = [['Name'] + self.stats.keys()]
+            keys = []
+            for k in self.stats.keys():
+                keys.append(k)
+                keys.append(u'\u0394' + k)
+            table_data = [['Name'] + keys]
             for stat in sorted(self.sections[section]):
                 stat_str = stat.replace('_grad_', u'\u03b4')
                 stat_str = stat.replace('_delta_', u'\u0394')
                 td = [stat_str]
                 for mode in self.stats.keys():
                     if stat in self.stats[mode].keys():
-                        td.append(self.stats[mode][stat][-1])
+                        s = self.stats[mode][stat][-1]
+                        if len(self.stats[mode][stat]) > 1:
+                            s_ = self.stats[mode][stat][-2]
+                            ds = s - s_
+                        else:
+                            ds = float('inf')
+                        if not isinstance(s, np.ndarray) and abs(s) < 1.:
+                            td.append('%.2e' % s)
+                            if ds > 0:
+                                dss = Color('{autored}%.2e{/autored}' % ds)
+                            else:
+                                dss = Color('{autogreen}%.2e{/autogreen}' % ds)
+                            td.append(dss)
+                        elif not isinstance(s, np.ndarray):
+                            td.append('%.2f' % s)
+                            if ds > 0:
+                                dss = Color('{autored}%.2f{/autored}' % ds)
+                            else:
+                                dss = Color('{autogreen}%.2f{/autogreen}' % ds)
+                            td.append(dss)
+                        else:
+                            td.append(s)
+                            td.append(None)
                     else:
+                        td.append(None)
                         td.append(None)
                 table_data.append(td)
 
@@ -71,9 +99,7 @@ class BasicMonitor(object):
 
         plt.clf()
         np.set_printoptions(precision=4)
-        font = {
-            'size': 7
-        }
+        font = {'size': 7}
         matplotlib.rc('font', **font)
         y = 2
         x = ((len(self.d) - 1) // y) + 1

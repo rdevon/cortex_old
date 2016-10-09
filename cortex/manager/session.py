@@ -261,6 +261,16 @@ class Session(object):
 
                 if arg in tensors.keys():
                     arg = tensors[arg]
+                    if arg in constants:
+                        ten = ten.copy()
+                        tensors[arg + '(copy)'] = ten
+                        self.constants.append(ten)
+                        arg = ten
+                elif arg not in manager.cells.keys():
+                    for tpk, tparam in manager.tparams.iteritems():
+                        if arg in tpk:
+                            arg = tparam
+                            break
                 else:
                     raise ValueError('Could not find tensor %s' % arg)
 
