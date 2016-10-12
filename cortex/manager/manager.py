@@ -4,13 +4,17 @@
 
 from collections import OrderedDict
 import copy
+from glob import glob
 from inspect import getsource
 import logging
 import numpy as np
 import os
 from os import path
+import shutil
+import tarfile
 import theano
 from theano import tensor as T
+import time
 
 from .. import costs
 from .. import datasets
@@ -111,11 +115,33 @@ class Manager(object):
             os.mkdir(self.out_path)
 
     def save(self, out_file=None):
+        def profile(d):
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    print 'name', k, '----------------'
+                    if isinstance(v, (list, tuple, dict)):
+                        profile(v)
+                    else:
+                        print '--type:', type(v)
+            elif isinstance(d, (list, tuple, dict)):
+                for i, v in enumerate(d):
+                    print '----', i, '----------------'
+                    if isinstance(v, (list, tuple, dict)):
+                        profile(v)
+                    else:
+                        print '--type:', type(v)
+            else:
+                print '--type:', type(d)
+                        
         out_file = resolve_path(out_file)
         self.logger.info('Saving to %s' % out_file)
         d = dict((k, v.get_value()) for k, v in self.tparams.iteritems())
         d.update(**self.save_args)
-        np.savez(out_file, **d)
+        try:
+            np.savez(out_file, **d)
+        except TypeError as e:
+            profile(d)
+            raise e
 
     def load(self, in_file):
         in_file = resolve_path(in_file)
@@ -254,7 +280,7 @@ class Manager(object):
 
     def train(self, eval_modes=None, validation_mode=None, eval_every=10,
               monitor_grads=False, early_stopping=False, patience=10,
-              save_every=100, extra_update=None):
+              save_every=100, extra_update=None, archive_every=None):
         if eval_modes is None: eval_modes=['train', 'valid']
         if validation_mode is None: validation_mode = 'valid'
         if len(self.trainer.f_grads) == 0:
@@ -262,6 +288,13 @@ class Manager(object):
         if monitor_grads:
             self.monitor.add_section(
                 'Grads', ['_grad_' + k for k in self.trainer.tparams])
+        if archive_every is not None:
+            archive_path = path.join(self.out_path, 'archive')
+            if path.isdir(archive_path):
+                self.logger.info('Found old archive... deleting (if you don\'t want '
+                                 'this deleted next time, move it).')
+                shutil.rmtree(archive_path)
+            os.mkdir(archive_path)
 
         if extra_update is not None:
             f_extra = theano.function([], [], updates=extra_update)
@@ -270,6 +303,8 @@ class Manager(object):
         try:
             curr_patience = patience
 
+            s = 0
+            n_epochs = 0
             while True:
                 if f_extra is not None: f_extra()
                 br = False
@@ -290,10 +325,18 @@ class Manager(object):
 
                 self.monitor.display()
                 if self.visualizer is not None: self.visualizer()
-                
+
                 if self.out_path is not None:
                     self.save(path.join(self.out_path, 'curr.npz'))
 
+                if archive_every and s >= archive_every:
+                    shutil.copy(path.join(self.out_path, 'curr.npz'),
+                                path.join(archive_path, 'save_%d.npz' % n_epochs))
+                    for f in glob(path.join(self.out_path, '*.png')):
+                        f_name = f.split('/')[-1]
+                        f_name = '.'.join(f_name.split('.')[:-1]) + '_%d.png' % n_epochs
+                        shutil.copy(f, path.join(archive_path, f_name))
+                    s = 0
                 try:
                     grads = self.trainer.next_epoch(n_epochs=eval_every)
                     if monitor_grads: self.monitor.update('train', **grads)
@@ -301,11 +344,23 @@ class Manager(object):
                     br = True
 
                 if br: break
+                s += eval_every
+                n_epochs += eval_every
+
         except KeyboardInterrupt:
             print 'Interrupting training...'
         print 'Training completed.'
         if self.out_path is not None:
             self.save(path.join(self.out_path, 'last.npz'))
+            
+        if archive_every:
+            shutil.copy(path.join(self.out_path, 'last.npz'),
+                        path.join(archive_path, 'save_%d.npz' % s))
+
+            tname = '{t}.tar'.format(t=int(time.time()))
+            tar_file = path.join(self.out_path, tname)
+            with tarfile.open(tar_file, 'w:gz') as tar:
+                tar.add(archive_path, arcname='TarName')
 
     # Data methods -------------------------------------------------------------
     def prepare_data(self, dataset, **kwargs):

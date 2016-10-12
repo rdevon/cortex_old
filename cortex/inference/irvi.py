@@ -148,12 +148,14 @@ class IRVI(Cell):
         return rval
 
     def _stats(self, Qs=None, i_costs=None, n_steps=None, epsilons=None,
-               q_cell=None, **kwargs):
+               **kwargs):
         rval = OrderedDict()
         rval['_delta_Q_mean'] = (Qs[-1] - Qs[0]).mean()
         rval['_delta_i_cost'] = i_costs[-1] - i_costs[0]
-        rval['H(Qk)'] = q_cell.entropy(P=Qs[-1]).mean()
-        rval['H(Q0)'] = q_cell.entropy(P=Qs[0]).mean()
+        rval['i0'] = i_costs[0]
+        rval['i1'] = i_costs[1]
+        rval['i2'] = i_costs[2]
+        rval['i3'] = i_costs[3]
         return rval
 
     def test(self, x, y, stride=1, **model_args):
