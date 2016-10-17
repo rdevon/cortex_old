@@ -72,6 +72,7 @@ def set_experiment(args):
         pass
 
     verbosity = args.pop('verbosity', 1)
+    autoname = args.pop('autoname')
     cortex_logger.set_stream_logger(verbosity)
 
     if 'load_model' in args.keys():
@@ -84,7 +85,13 @@ def set_experiment(args):
     else:
         load_last = False
 
-    args = OrderedDict((k, v) for k, v in args.iteritems() if v is not None)
+    args = OrderedDict((k, v) for k, v in args.items() if v is not None)
+    if autoname:
+        name = args.pop('name', 'model')
+        for k, v in args.items():
+            tk = ''.join([k_[0] for k_ in k.split('_')])
+            name += '.{key}={value}'.format(key=tk, value=v)
+        args['name'] = name
 
     '''
     try:
@@ -162,7 +169,7 @@ def reload_model(args):
 
     exp_dict['model_to_load'] = model_file
     args = vars(args)
-    args = OrderedDict((k, v) for k, v in args.iteritems() if v is not None)
+    args = OrderedDict((k, v) for k, v in args.items() if v is not None)
     exp_dict.update(**args)
     return exp_dict
 

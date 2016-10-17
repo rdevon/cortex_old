@@ -250,7 +250,7 @@ class MRI(NeuroimagingDataset):
         if mask is None:
             mask = self.mask
 
-        if X.shape[1] == mask.sum():
+        if X.shape[-1] == mask.sum():
             self.logger.debug('Data already masked')
             return X
 

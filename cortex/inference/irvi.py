@@ -148,14 +148,15 @@ class IRVI(Cell):
         return rval
 
     def _stats(self, Qs=None, i_costs=None, n_steps=None, epsilons=None,
-               **kwargs):
+               isteps=4, **kwargs):
         rval = OrderedDict()
         rval['_delta_Q_mean'] = (Qs[-1] - Qs[0]).mean()
         rval['_delta_i_cost'] = i_costs[-1] - i_costs[0]
-        rval['i0'] = i_costs[0]
-        rval['i1'] = i_costs[1]
-        rval['i2'] = i_costs[2]
-        rval['i3'] = i_costs[3]
+        for i in xrange(isteps):
+            try:
+                rval['i_cost({})'.format(isteps)] = i_costs[isteps]
+            except:
+                pass
         return rval
 
     def test(self, x, y, stride=1, **model_args):
