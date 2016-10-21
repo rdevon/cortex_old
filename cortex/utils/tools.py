@@ -271,7 +271,7 @@ def load_model(model_file, f_unpack=None, strict=True, **extra_args):
 
     return model_dict, kwargs
 
-def check_bad_nums(rvals):
+def check_bad_nums(rvals, logger=None):
     '''Checks for nans and infs.
 
     Args:
@@ -284,10 +284,10 @@ def check_bad_nums(rvals):
     found = False
     for k, v in rvals.iteritems():
         if np.any(np.isnan(v)):
-            logger.error('Found nan num (%s)' % k)
+            if logger is not None: logger.error('Found nan num (%s)' % k)
             found = True
         elif np.any(np.isinf(v)):
-            logger.error('Found inf (%s)' % k)
+            if logger is not None: logger.error('Found inf (%s)' % k)
             found = True
     return found
 

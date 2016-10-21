@@ -5,6 +5,7 @@ Module for monitor class.
 from collections import OrderedDict
 from colorclass import Color
 import cPickle as pkl
+import mpld3
 import numpy as np
 import os
 from terminaltables import AsciiTable
@@ -90,7 +91,7 @@ class BasicMonitor(object):
             table.justify_columns[2] = 'right'
             print(table.table)
 
-    def save(self, out_path):
+    def plot(self, out_path):
         '''Saves a figure for the monitor
 
         Args:
@@ -98,6 +99,10 @@ class BasicMonitor(object):
         '''
 
         plt.clf()
+        fig, ax = plt.subplots(2, 2, figsize=(8, 6),sharex='col', sharey='row')
+        fig.subplots_adjust(hspace=0.3)
+
+
         np.set_printoptions(precision=4)
         font = {'size': 7}
         matplotlib.rc('font', **font)
@@ -118,19 +123,11 @@ class BasicMonitor(object):
         plt.savefig(out_path, facecolor=(1, 1, 1))
         plt.close()
 
-    def save_stats(self, out_path):
+    def save(self, out_path):
         '''Saves the monitor dictionary.
 
         Args:
             out_path: str
         '''
 
-        np.savez(out_path, **self.d)
-
-    def save_stats_valid(self, out_path):
-        '''Saves the valid monitor dictionary.
-
-        Args:
-            out_path: str
-        '''
-        np.savez(out_path, **self.d_valid)
+        np.savez(out_path, **self.stats)

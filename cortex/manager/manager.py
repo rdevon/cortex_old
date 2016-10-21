@@ -66,8 +66,18 @@ def resolve_tensor_arg(arg, manager=None):
         name_, key = split_arg(arg)
         C = None
     else:
-        raise KeyError('Cell or data %s not found. Found cells %s and data %s'
-                       % (arg, manager.cells.keys(), manager.datasets.keys()))
+        found = False
+        for step in manager.steps:
+            if '.'.join(arg.split('.')[:-1]) == step['name']:
+                name_, key = split_arg(arg)
+                cell_name = step.get('cell_name')
+                if cell_name is not None:
+                    C = manager.resolve_class(cell_args[cell_name]['cell_type'])
+                found = True
+                break
+        if not found:
+            raise KeyError('Cell or data %s not found. Found cells %s and data %s'
+                           % (arg, manager.cells.keys(), manager.datasets.keys()))
     return name_, key, C
 
 def is_tensor_arg(arg):
@@ -285,6 +295,8 @@ class Manager(object):
         if validation_mode is None: validation_mode = 'valid'
         if len(self.trainer.f_grads) == 0:
             self.trainer.set_optimizer()
+        self.monitor.add_section(
+            'Times', ['Total time', '_delta_time/_delta_epoch'])
         if monitor_grads:
             self.monitor.add_section(
                 'Grads', ['_grad_' + k for k in self.trainer.tparams])
@@ -305,6 +317,7 @@ class Manager(object):
 
             s = 0
             n_epochs = 0
+            training_time = 0
             while True:
                 if f_extra is not None: f_extra()
                 br = False
@@ -328,20 +341,32 @@ class Manager(object):
 
                 if self.out_path is not None:
                     self.save(path.join(self.out_path, 'curr.npz'))
+                self.monitor.save(path.join(self.out_path, 'monitor.npz'))
 
-                if archive_every and s >= archive_every:
+                try:
+                    grads = self.trainer.next_epoch(n_epochs=eval_every)
+                    self.monitor.update(
+                        'train',
+                        **{'Total time': self.trainer.training_time,
+                           '_delta_time/_delta_epoch':
+                           (self.trainer.training_time - training_time)
+                           / float(eval_every)})
+                    training_time = self.trainer.training_time
+                    if monitor_grads: self.monitor.update('train', **grads)
+                    
+                except StopIteration:
+                    br = True
+                    
+                if archive_every and s >= archive_every and self.out_path is not None:
                     shutil.copy(path.join(self.out_path, 'curr.npz'),
                                 path.join(archive_path, 'save_%d.npz' % n_epochs))
+                    shutil.copy(path.join(self.out_path, 'monitor.npz'),
+                                path.join(archive_path, 'monitor.npz'))
                     for f in glob(path.join(self.out_path, '*.png')):
                         f_name = f.split('/')[-1]
                         f_name = '.'.join(f_name.split('.')[:-1]) + '_%d.png' % n_epochs
                         shutil.copy(f, path.join(archive_path, f_name))
                     s = 0
-                try:
-                    grads = self.trainer.next_epoch(n_epochs=eval_every)
-                    if monitor_grads: self.monitor.update('train', **grads)
-                except StopIteration:
-                    br = True
 
                 if br: break
                 s += eval_every
@@ -387,7 +412,8 @@ class Manager(object):
                 value = link.query(name, k)
                 kwargs[k] = value
 
-        self.logger.debug('Forming cell with args %s' % kwargs)
+        self.logger.debug('Forming cell `{name}` with args {args}'.format(
+            name=name, args=kwargs))
         self.save_args['cells'].append((name, kwargs))
         C.factory(name=name, **kwargs)
 
@@ -487,7 +513,7 @@ class Manager(object):
             else:
                 raise TypeError('Cell or dataset %s of type %s has no method %s.'
                                 % (cell_name, C, op_name))
-
+            
             if len(args) > 0:
                 if op_name == '__call__':
                     arg_keys = C._call_args
@@ -626,22 +652,22 @@ class Manager(object):
             self.save_args['stats'].append((op_str, args, orig_kwargs))
 
     def prepare_samples(self, arg, shape, name='samples', **kwargs):
-        if isinstance(shape, int):
-            shape = (shape,)
+        if isinstance(shape, int): shape = (shape,)
 
         if arg in self.cell_args.keys():
             cell_name = arg
             dist_key = None
+            C = None
         elif is_tensor_arg(arg):
-            cell_name, dist_key, _ = resolve_tensor_arg(arg)
+            cell_name, dist_key, C = resolve_tensor_arg(arg)
 
-        if cell_name not in self.cell_args.keys():
-            raise KeyError('Cell %s not found' % cell_name)
-
-        C = self.resolve_class(self.cell_args[cell_name]['cell_type'])
-        if not hasattr(C, '_sample'):
-            raise ValueError('Cell type %s does not support sampling'
-                             % C.__name__)
+        if C is None:
+            if cell_name not in self.cell_args.keys():
+                raise KeyError('Cell %s not found' % cell_name)
+            C = self.resolve_class(self.cell_args[cell_name]['cell_type'])
+            if not hasattr(C, '_sample'):
+                raise ValueError('Cell type %s does not support sampling'
+                                 % C.__name__)
 
         if dist_key is not None and dist_key not in C._sample_tensors:
             raise KeyError('Cell %s does not support sample tensor %s'
@@ -693,7 +719,8 @@ class Manager(object):
         from .link import Link
         try:
             link = Link(f, t)
-        except (TypeError, KeyError):
+        except (TypeError, KeyError) as e:
+            self.logger.debug('Link failed, {}'.format(e))
             return
 
         for name, node in link.nodes.iteritems():

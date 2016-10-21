@@ -174,7 +174,11 @@ class Cell(object):
         for key in self.component_keys:
             component = self.__dict__[key]
             if component is None: continue
-            self.n_component_params += component.total_params
+            if isinstance(component, list):
+                for c_ in component:
+                    self.n_component_params += c_.total_params
+            else:
+                self.n_component_params += component.total_params
         self.total_params = self.n_params + self.n_component_params
         self.set_tparams()
 
@@ -391,8 +395,13 @@ class Cell(object):
         for key in self.component_keys:
             component = self.__dict__[key]
             if component is None: continue
-            c_params = component.get_params()
-            params += c_params
+            if isinstance(component, (list, tuple)):
+                for c_ in component:
+                    c_params = c_.get_params()
+                    params += c_params
+            else:
+                c_params = component.get_params()
+                params += c_params
         return params
 
     def select_params(self, key, *params):
@@ -400,20 +409,33 @@ class Cell(object):
         start = 0
         end = 0
         if key is None:
-            end = self.n_params #self.get_n_params()
+            end = self.n_params
         else:
-            start = self.n_params #self.get_n_params()
-            if key not in self.component_keys:
-                raise KeyError('Component `%s` not found' % key)
+            start = self.n_params
+            found = False
             for k in self.component_keys:
                 component = self.__dict__[k]
                 if component is None: continue
-                l = component.total_params
-                if k == key:
-                    end = start + l
-                    break
+                if isinstance(component, (list, tuple)):
+                    for i in xrange(len(component)):
+                        l = component[i].total_params
+                        k_ = '{comp}_{index}'.format(comp=k, index=i)
+                        if k_ == key:
+                            end = start + l
+                            found = True
+                            break
+                        else:
+                            start = start + l
                 else:
-                    start = start + l
+                    l = component.total_params
+                    if k == key:
+                        end = start + l
+                        found = True
+                        break
+                    else:
+                        start = start + l
+            if not found:
+                raise KeyError('Component `%s` not found' % key)
 
         return params[start:end]
 
@@ -523,9 +545,15 @@ class Cell(object):
                     '<numpy.ndarray: {shape: %s}>' % (a.shape,) for a in v]
         attributes.update(params=params)
         attr_str = ''
+        
         for k, a in attributes.iteritems():
             if k in self._components and a is not None:
-                c_str = ': <' + a.name + '>'
+                if isinstance(a, (list, tuple)):
+                    c_str = ': '
+                    for a_ in a:
+                        c_str += '<' + a_.name + '>'
+                else:
+                    c_str = ': <' + a.name + '>'
                 new_str = '\n\t' + k + c_str
             else:
                 new_str = '\n\t%s: %s' % (k, a)

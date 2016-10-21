@@ -3,7 +3,7 @@ __all__ = ['distribution', 'binomial', 'gaussian', 'laplace', 'multinomial',
 
 from distribution import *
 
-_clip = 1e-7
+_clip = 1e-6
 
 _classes = {}
 from . import binomial, gaussian, laplace, logistic, multinomial

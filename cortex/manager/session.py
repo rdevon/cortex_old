@@ -156,7 +156,9 @@ class Session(object):
 
         _, kwargs = self.resolve_op_args([], kwargs)
 
-        if dist_key is not None:
+        if 'P' in kwargs.keys():
+            P = kwargs.pop('P')
+        elif dist_key is not None:
             P = self.tensors[dist_key]
         else:
             P = None
@@ -181,9 +183,15 @@ class Session(object):
     def test(self, data, f, key, key_prefix, cell=None):
         try:
             t_ = f(*data)
-            self.logger.info('Tensor `%s` for `%s` has shape %s '
-                             '(passes without error)'
-                             % (key, key_prefix, t_.shape))
+            if isinstance(t_, list):
+                for i, t__ in enumerate(t_):
+                    self.logger.info('Tensor `%s`(%i) for `%s` has shape %s '
+                                 '(passes without error)'
+                                 % (key, i, key_prefix, t__.shape))
+            else:
+                self.logger.info('Tensor `%s` for `%s` has shape %s '
+                                 '(passes without error)'
+                                 % (key, key_prefix, t_.shape))
             return t_
         except ValueError as e:
             self.logger.error(

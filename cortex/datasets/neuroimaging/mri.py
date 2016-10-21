@@ -247,8 +247,7 @@ class MRI(NeuroimagingDataset):
             numpy.array: masked array.
 
         '''
-        if mask is None:
-            mask = self.mask
+        if mask is None: mask = self.mask
 
         if X.shape[-1] == mask.sum():
             self.logger.debug('Data already masked')

@@ -89,6 +89,7 @@ def set_experiment(args):
     if autoname:
         name = args.pop('name', 'model')
         for k, v in args.items():
+            if k in ['source', 'test']: continue
             tk = ''.join([k_[0] for k_ in k.split('_')])
             name += '.{key}={value}'.format(key=tk, value=v)
         args['name'] = name

@@ -21,7 +21,7 @@ class CIFAR(TwoDImageDataset):
 
     '''
     def __init__(self, source=None, restrict_classes=None, mode='train',
-                 name='cifar', grayscale=False, **kwargs):
+                 name='cifar', greyscale=False, **kwargs):
         if source is None: raise TypeError('No source file provided')
 
         logger.info('Loading {name} ({mode}) from {source}'.format(
@@ -29,7 +29,7 @@ class CIFAR(TwoDImageDataset):
 
         source = resolve_path(source)
 
-        X, Y = self.get_data(source, mode, grayscale=grayscale)
+        X, Y = self.get_data(source, mode, greyscale=greyscale)
 
         if restrict_classes is not None:
             X = np.array(
@@ -42,9 +42,9 @@ class CIFAR(TwoDImageDataset):
 
         super(CIFAR, self).__init__(data, distributions=distributions,
                                     name=name, mode=mode, image_shape=(32, 32),
-                                    grayscale=grayscale, **kwargs)
+                                    greyscale=greyscale, **kwargs)
 
-    def get_data(self, source, mode, grayscale=False):
+    def get_data(self, source, mode, greyscale=False):
         print 'Loading CIFAR-10 ({mode})'.format(mode=mode)
 
         X = []
@@ -72,7 +72,7 @@ class CIFAR(TwoDImageDataset):
         X = np.concatenate(X)
         Y = np.concatenate(Y)
 
-        if grayscale:
+        if greyscale:
             div = X.shape[1] // 3
             X_r = X[:, :div]
             X_b = X[:, div:2*div]

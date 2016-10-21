@@ -5,10 +5,11 @@
 import cortex
 
 n_posterior_samples = 20
-n_posterior_samples_test = 1000
+n_posterior_samples_test = 100
 dim_h = 200
 n_steps = 20
 
+cortex.set_path('air_demo')
 cortex.prepare_data('MNIST', mode='train', source='$data/basic/mnist.pkl.gz')
 cortex.prepare_data('MNIST', mode='valid', source='$data/basic/mnist.pkl.gz')
 
@@ -76,10 +77,10 @@ visualizer.add('mnist.autoencoder_visualization',
                X_in='mnist.input',
                X_out='conditional.P',
                Y='mnist.labels',
-               out_file='$outs/air_recons_test.png')
+               name='air_recons_test')
 visualizer.add('mnist.viz',
                X='prior_gen.P',
-               out_file='$outs/air_prior.png')
+               name='air_prior')
 
 evaluator = cortex.setup_evaluator(
     valid_session,

@@ -101,7 +101,7 @@ class Trainer(object):
                     if k.startswith('_grad_'))
                 grads.update(**_grads)
 
-                if check_bad_nums(rval):
+                if check_bad_nums(rval, self.logger):
                     raise RuntimeError('Dying, found bad cost... Sorry (bleh)')
 
                 f_update(self.learning_rate)

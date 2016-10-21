@@ -23,6 +23,8 @@ def make_argument_parser():
     parser.add_argument('-l', '--load_model', default=None)
     parser.add_argument('-n', '--name', default=None)
     parser.add_argument('-a', '--autoname', action='store_true')
+    parser.add_argument('-S', '--source', type=str, default=None)
+    parser.add_argument('-t', '--test', action='store_true')
     parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help='Verbosity of the logging. (0, 1, 2)')
     return parser

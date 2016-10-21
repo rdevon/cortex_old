@@ -142,6 +142,7 @@ class Distribution(Cell):
         return self._act(utils.concatenate(args))
 
     def generate_random_variables(self, shape, P=None):
+        shape = tuple(shape)
         if P is None:
             P = self.get_prob(*self.get_params())
         if isinstance(P, float) or P.ndim == 0:
