@@ -8,7 +8,7 @@ from theano import tensor as T
 
 from .irvi import IRVI, DeepIRVI
 from ..utils import concatenate, floatX, scan, slice2
-from ..utils.maths import norm_exp, log_mean_exp
+from ..utils.maths import norm_exp, log_mean_exp, log_sum_exp
 
 
 class AIR(IRVI):
@@ -238,7 +238,7 @@ class DeepAIR(DeepIRVI):
         Qk_samples = self.split(Qk_samples, aslist=True)
         Hs = [X[None, :, :]] + Qk_samples
         
-        gen_term = -self.prior.step_neg_log_prob(Hs[-1], *prior_params)
+        gen_term = self.prior.step_neg_log_prob(Hs[-1], *prior_params)
         infer_term = T.zeros_like(gen_term)
         infer_termk = T.zeros_like(gen_term)
         kl_term = T.constant(0.).astype(floatX)
@@ -246,19 +246,17 @@ class DeepAIR(DeepIRVI):
             cond_params = self.select_params(
                 'conditionals_{}'.format(i), *params)
             py = self.conditionals[i]._feed(Hs[i + 1], *cond_params)['P']
-            log_py_h = -self.conditionals[i].neg_log_prob(Hs[i], P=py)
-            log_qh = -self.posteriors[i].neg_log_prob(Hs[i + 1], P=Qs[i][None, :, :])
-            log_qhk = -self.posteriors[i].neg_log_prob(Hs[i + 1], P=Qks[i][None, :, :])
+            nl_py_h = self.conditionals[i].neg_log_prob(Hs[i], P=py)
+            nl_qh = self.posteriors[i].neg_log_prob(Hs[i + 1], P=Qs[i][None, :, :])
+            nl_qhk = self.posteriors[i].neg_log_prob(Hs[i + 1], P=Qks[i][None, :, :])
             
-            kl_term += (log_qhk - log_qh).mean()
-            gen_term += -log_py_h
-            infer_term += -log_qh
-            infer_termk += -log_qhk
+            kl_term += (nl_qh - nl_qhk).mean()
+            gen_term += nl_py_h
+            infer_term += nl_qh
+            infer_termk += nl_qhk
             
-        log_pq = -gen_term + infer_termk - T.log(gen_term.shape[0])
-        w_norm = log_sum_exp(log_pq, axis=0)
-        log_w = log_pq - T.shape_padleft(w_norm)
-        w_tilde = T.exp(log_w)
+        log_p = -gen_term - infer_termk
+        w_tilde = norm_exp(log_p)
         
         cost = T.constant(0.).astype(floatX)
         if reweight_conditional:
@@ -270,11 +268,11 @@ class DeepAIR(DeepIRVI):
         else:
             cost += infer_term.mean()
             
-        log_p = log_sum_exp(log_pq)
         nll = -log_mean_exp(log_p, axis=0).mean()
         lower_bound = -log_p.mean()
        
         return OrderedDict(cost=cost, kl_term=kl_term, gen_term=gen_term.mean(),
-                           nll=nll, lower_bound=lower_bound)
+                           nll=nll, lower_bound=lower_bound,
+                           infer_term=infer_termk.mean())
 
 _classes = {'AIR': AIR, 'DeepAIR': DeepAIR}

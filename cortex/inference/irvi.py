@@ -99,7 +99,10 @@ class IRVI(Cell):
         updates = theano.OrderedUpdates()
 
         # Set random variables.
-        epsilons = self.generate_random_variables((n_steps, n_samples), P=Q0)
+        if n_steps > 0:
+            epsilons = self.generate_random_variables((n_steps, n_samples), P=Q0)
+        else:
+            epsilons = self.generate_random_variables((n_samples,), P=Q0)
         rval = OrderedDict()
         rval['Q0'] = Q0
         rval['epsilons'] = epsilons
@@ -129,7 +132,7 @@ class IRVI(Cell):
             i_costs = [i_cost]
         elif n_steps == 0:
             Qs = Q0[None, :, :]
-            extras = Q0
+            extra = Q0
             i_costs = [T.constant(0.).astype(floatX)]
         
         rval['extra'] = extra
@@ -225,7 +228,11 @@ class DeepIRVI(IRVI):
         updates = theano.OrderedUpdates()
 
         # Set random variables.
-        epsilons = self.generate_random_variables((n_steps, n_samples), P=Q0)
+        if n_steps > 0:
+            epsilons = self.generate_random_variables((n_steps, n_samples), P=Q0)
+        else:
+            epsilons = self.generate_random_variables((n_samples,), P=Q0)
+        
         rval = OrderedDict()
         rval['Q0'] = Q0
         rval['epsilons'] = epsilons
