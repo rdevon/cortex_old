@@ -276,5 +276,5 @@ class DeepIRVI(IRVI):
         rval['Qk'] = Qk
         rval['Qs'] = Qs
         rval['i_costs'] = i_costs
-        rval.update(constants=[Qs_], updates=updates)
+        rval.update(updates=updates)
         return rval
