@@ -229,7 +229,8 @@ class DeepAIR(DeepIRVI):
             
         return concatenate(Ss, axis=E.ndim-1)
     
-    def _cost(self, X=None, Qk_samples=None, Q=None, Qk=None):
+    def _cost(self, X=None, Qk_samples=None, Q=None, Qk=None,
+              reweight_posterior=False, reweight_conditional=False):
         params = self.get_params()
         prior_params = self.select_params('prior', *params)
         Qs = self.split(Q, aslist=True)
@@ -237,9 +238,9 @@ class DeepAIR(DeepIRVI):
         Qk_samples = self.split(Qk_samples, aslist=True)
         Hs = [X[None, :, :]] + Qk_samples
         
-        log_p = -self.prior.step_neg_log_prob(Hs[-1], *prior_params)
-        gen_term = log_p.mean()
-        cost = log_p.mean()
+        gen_term = -self.prior.step_neg_log_prob(Hs[-1], *prior_params)
+        infer_term = T.zeros_like(gen_term)
+        infer_termk = T.zeros_like(gen_term)
         kl_term = T.constant(0.).astype(floatX)
         for i in xrange(len(self.conditionals)):
             cond_params = self.select_params(
@@ -248,15 +249,32 @@ class DeepAIR(DeepIRVI):
             log_py_h = -self.conditionals[i].neg_log_prob(Hs[i], P=py)
             log_qh = -self.posteriors[i].neg_log_prob(Hs[i + 1], P=Qs[i][None, :, :])
             log_qhk = -self.posteriors[i].neg_log_prob(Hs[i + 1], P=Qks[i][None, :, :])
-            cost += (-log_py_h - log_qh).mean()
-            kl_term += (log_qhk - log_qh).mean()
-            gen_term += -log_py_h.mean()
-            log_p += log_py_h - log_qhk
             
+            kl_term += (log_qhk - log_qh).mean()
+            gen_term += -log_py_h
+            infer_term += -log_qh
+            infer_termk += -log_qhk
+            
+        log_pq = -gen_term + infer_termk - T.log(gen_term.shape[0])
+        w_norm = log_sum_exp(log_pq, axis=0)
+        log_w = log_pq - T.shape_padleft(w_norm)
+        w_tilde = T.exp(log_w)
+        
+        cost = T.constant(0.).astype(floatX)
+        if reweight_conditional:
+            cost += (w_tilde * gen_term).sum(0).mean()
+        else:
+            cost += gen_term.mean()
+        if reweight_posterior:
+            cost += (w_tilde * infer_term).sum(0).mean()
+        else:
+            cost += infer_term.mean()
+            
+        log_p = log_sum_exp(log_pq)
         nll = -log_mean_exp(log_p, axis=0).mean()
         lower_bound = -log_p.mean()
        
-        return OrderedDict(cost=cost, kl_term=kl_term, gen_term=gen_term,
+        return OrderedDict(cost=cost, kl_term=kl_term, gen_term=gen_term.mean(),
                            nll=nll, lower_bound=lower_bound)
 
 _classes = {'AIR': AIR, 'DeepAIR': DeepAIR}

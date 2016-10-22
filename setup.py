@@ -34,7 +34,7 @@ setup(
     install_requires=[
         'nibabel', 'nipy', 'scikit-learn==0.17.0', 'scipy>0.17.1',
         'python-igraph', 'Pillow', 'terminaltables', 'matplotlib',
-        'nilearn', 'colorclass'],
+        'nilearn', 'colorclass', 'pyyaml', 'progressbar', 'mpld3', 'jinja2'],
     entry_points={
         'console_scripts': [
             'cortex-setup=cortex:main',
