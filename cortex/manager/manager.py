@@ -290,11 +290,12 @@ class Manager(object):
 
     def train(self, eval_modes=None, validation_mode=None, eval_every=10,
               monitor_grads=False, early_stopping=False, patience=10,
-              save_every=100, extra_update=None, archive_every=None):
+              save_every=100, extra_update=None, archive_every=None,
+              profile=False):
         if eval_modes is None: eval_modes=['train', 'valid']
         if validation_mode is None: validation_mode = 'valid'
         if len(self.trainer.f_grads) == 0:
-            self.trainer.set_optimizer()
+            self.trainer.set_optimizer(profile=profile)
         self.monitor.add_section(
             'Times', ['Total time', '_delta_time/_delta_epoch'])
         if monitor_grads:

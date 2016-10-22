@@ -98,8 +98,7 @@ class MRI(NeuroimagingDataset):
         super(MRI, self).__init__(data, distributions=distributions, name=name,
                                   **kwargs)
         self.X -= self.mean_image[None, :]
-        if self.variance_normalize:
-            self.X /= self.var_image[None, :]
+        if self.variance_normalize: self.X /= self.var_image[None, :]
         self.data['input'] = self.X
         self.update_progress(finish=True)
 

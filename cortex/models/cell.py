@@ -313,6 +313,7 @@ class Cell(object):
                     final_args[kk] = self.__dict__[vv[1:]]
                 else:
                     final_args[kk] = vv
+                    
             self.manager.prepare_cell(name=k, requestor=self, **final_args)
 
         for f, t in self._links:

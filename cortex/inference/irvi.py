@@ -106,7 +106,7 @@ class IRVI(Cell):
 
         # Set `scan` arguments.
         seqs = [epsilons]
-        outputs_info = [Q0] + self.init_infer(Q0) + [None]
+        outputs_info = [Q0] + self.init_infer(Q0) + [None, None]
         non_seqs = [Y] + self.params_infer(inference_rate) + list(params)
 
         self.logger.info('Doing %d inference steps of %s and a rate of %.5f with %d '
@@ -118,18 +118,21 @@ class IRVI(Cell):
             outs, updates_i = scan(self.step_infer, seqs, outputs_info, non_seqs,
                                    n_steps, self.name + '_infer')
             updates.update(updates_i)
-            Qs, i_costs = self.unpack_infer(outs)
+            Qs, i_costs, extras = self.unpack_infer(outs)
+            extra = extras[0]
             Qs = T.concatenate([Q0[None, :, :], Qs], axis=0)
         elif n_steps == 1:
-            inps = [epsilons[0]] + outputs_info[:-1] + non_seqs
+            inps = [epsilons[0]] + outputs_info[:-2] + non_seqs
             outs = self.step_infer(*inps)
-            Q, i_cost = self.unpack_infer(outs)
+            Q, i_cost, extra = self.unpack_infer(outs)
             Qs = T.concatenate([Q0[None, :, :], Q[None, :, :]], axis=0)
             i_costs = [i_cost]
         elif n_steps == 0:
             Qs = Q0[None, :, :]
+            extras = Q0
             i_costs = [T.constant(0.).astype(floatX)]
-
+        
+        rval['extra'] = extra
         rval['Qk'] = Qs[-1]
         rval['Qs'] = Qs
         rval['i_costs'] = i_costs
@@ -229,7 +232,7 @@ class DeepIRVI(IRVI):
 
         # Set `scan` arguments.
         seqs = [epsilons]
-        outputs_info = [Q0] + self.init_infer(Q0) + [None]
+        outputs_info = [Q0] + self.init_infer(Q0) + [None, None]
         non_seqs = [Y] + self.params_infer(inference_rate) + list(params)
 
         self.logger.info('Doing %d inference steps of %s and a rate of %.5f with %d '
@@ -241,18 +244,21 @@ class DeepIRVI(IRVI):
             outs, updates_i = scan(self.step_infer, seqs, outputs_info, non_seqs,
                                    n_steps, self.name + '_infer')
             updates.update(updates_i)
-            Qs, i_costs = self.unpack_infer(outs)
+            Qs, i_costs, extras = self.unpack_infer(outs)
+            extra = extras
             Qs = T.concatenate([Q0[None, :, :], Qs], axis=0)
         elif n_steps == 1:
-            inps = [epsilons[0]] + outputs_info[:-1] + non_seqs
+            inps = [epsilons[0]] + outputs_info[:-2] + non_seqs
             outs = self.step_infer(*inps)
-            Q, i_cost = self.unpack_infer(outs)
+            Q, i_cost, extra = self.unpack_infer(outs)
             Qs = T.concatenate([Q0[None, :, :], Q[None, :, :]], axis=0)
             i_costs = [i_cost]
         elif n_steps == 0:
             Qs = Q0[None, :, :]
+            extra = Qs
             i_costs = [T.constant(0.).astype(floatX)]
 
+        rval['extra'] = extra
         rval['Qk'] = Qs[-1]
         rval['Qs'] = Qs
         rval['i_costs'] = i_costs

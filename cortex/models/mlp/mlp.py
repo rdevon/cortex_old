@@ -112,11 +112,11 @@ class MLP(Cell):
         for dim_in, dim_out in zip(dim_ins, dim_outs):
             W = norm_weight(dim_in, dim_out, scale=weight_scale, ortho=False)
             b = np.zeros((dim_out,))
-            gamma = np.ones((dim_in,))
-            beta = np.zeros_like(gamma)
             weights.append(W)
             biases.append(b)
             if self.batch_normalization:
+                gamma = np.ones((dim_in,))
+                beta = np.zeros_like(gamma)
                 gammas.append(gamma)
                 betas.append(beta)
 

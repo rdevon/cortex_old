@@ -108,7 +108,7 @@ class Trainer(object):
 
             self.u += 1
 
-    def set_optimizer(self, cost=None, models=None, freq=None):
+    def set_optimizer(self, cost=None, models=None, freq=None, profile=False):
         '''Sets the parameter update functions with optimizer.
 
         Args:
@@ -162,7 +162,7 @@ class Trainer(object):
         lr = T.scalar(name='lr')
         f_grad, f_update = optimizer(
             lr, tparams, grads, session.inputs, session.cost,
-            extra_ups=session.updates, **optimizer_args)
+            extra_ups=session.updates, profile=profile, **optimizer_args)
 
         self.f_grads.append(f_grad)
         self.f_updates.append(f_update)

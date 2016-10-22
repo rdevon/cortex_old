@@ -53,12 +53,12 @@ class AIR(IRVI):
         '''
 
         h = self.posterior.quantile(r, q)
-        weights, cost = self.score(h, y, q, *params)
+        weights, cost, extra = self.score(h, y, q, *params)
 
         q_ = (weights[:, :, None] * h).sum(axis=0)
         q  = inference_rate * q_ + (1 - inference_rate) * q
         q = T.clip(q, 1e-6, 1 - 1e-6)
-        return q, cost
+        return q, cost, extra
 
     def score(self, h, y, q, *params):
         prior_params = self.select_params('prior', *params)
@@ -71,7 +71,7 @@ class AIR(IRVI):
         log_p     = log_py_h + log_ph - log_qh
         w_tilde = norm_exp(log_p)
         cost    = -log_p.mean()
-        return w_tilde, -log_p.mean()
+        return w_tilde, -log_p.mean(), py
 
     def init_infer(self, q):
         return []
@@ -142,7 +142,7 @@ class DeepAIR(DeepIRVI):
         hs = []
         start = 0
         for posterior in self.posteriors:
-            dim = posterior.dim_out
+            dim = posterior.mlp.dim_out
             q_ = slice2(q, start, start + dim)
             r_ = slice2(r, start, start + dim)
             h = posterior.quantile(r_, q_)
@@ -151,13 +151,13 @@ class DeepAIR(DeepIRVI):
             hs.append(h)
             start += dim
         
-        weights, cost = self.score(hs, y, qs, *params)
+        weights, cost, extra = self.score(hs, y, qs, *params)
 
         qs_ = [(weights[:, :, None] * h).sum(axis=0) for h in hs]
         qs  = [inference_rate * qs_[i] + (1 - inference_rate) * qs[i] for i in range(len(qs))]
         qs = [T.clip(q, 1e-6, 1 - 1e-6) for q in qs]
         q = concatenate(qs, axis=1)
-        return q, cost
+        return q, cost, extra
 
     def score(self, hs, y, qs, *params):
         prior_params = self.select_params('prior', *params)
@@ -173,7 +173,7 @@ class DeepAIR(DeepIRVI):
             log_p += log_py_h - log_qh
         w_tilde = norm_exp(log_p)
         cost = -log_p.mean()
-        return w_tilde, -log_p.mean()
+        return w_tilde, -log_p.mean(), hs[0]
 
     def init_infer(self, q):
         return []
@@ -192,7 +192,7 @@ class DeepAIR(DeepIRVI):
         Es = []
         start = 0
         for posterior in self.posteriors:
-            dim = posterior.dim_out
+            dim = posterior.mlp.dim_out
             P_ = slice2(P, start, start + dim)
             E = posterior.generate_random_variables(shape, P=P_)
             Es.append(E)
@@ -204,7 +204,7 @@ class DeepAIR(DeepIRVI):
         Qs = []
         start = 0
         for i, posterior in enumerate(self.posteriors):
-            dim = posterior.dim_out
+            dim = posterior.mlp.dim_out
             Qs.append(slice2(Q, start, start + dim))
             start += dim
         if aslist:
@@ -222,7 +222,7 @@ class DeepAIR(DeepIRVI):
         Ss = []
         start = 0
         for posterior in self.posteriors:
-            dim = posterior.dim_out
+            dim = posterior.mlp.dim_out
             P_ = slice2(P, start, start + dim)
             E_ = slice2(E, start, start + dim)
             Ss.append(posterior._sample(E, P=P))

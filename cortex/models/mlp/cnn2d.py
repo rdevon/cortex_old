@@ -16,12 +16,13 @@ class CNN2D(Cell):
     _options = {'dropout': False, 'weight_noise': 0,
                 'batch_normalization': False}
     _args = ['input_shape', 'n_filters', 'filter_shapes', 'pool_sizes',
-             'h_act', 'out_act']
+             'h_act']
     _dim_map = {'output': None}
+    _components = {'fully_connected': None}
 
     def __init__(self, input_shape, n_filters, filter_shapes, pool_sizes,
                  h_act='sigmoid', out_act=None, name='CNN2D', border_modes=None,
-                 **kwargs):
+                 dim_hs=None, dim_out=None, **kwargs):
         if not(len(n_filters) == len(filter_shapes)):
             raise TypeError(
             '`filter_shapes` and `n_filters` must have the same length')
@@ -33,11 +34,37 @@ class CNN2D(Cell):
         self.n_layers = len(self.n_filters)
         self.pool_sizes = pool_sizes
         self.h_act = resolve_nonlinearity(h_act)
+        if out_act is None: out_act = h_act
         self.out_act = resolve_nonlinearity(out_act)
-        self.border_modes = border_modes or (['valid'] * self.n_layers)
+        self.border_modes = border_modes or (['full_and_trim'] * self.n_layers)
 
-        super(CNN2D, self).__init__(name=name, **kwargs)
+        super(CNN2D, self).__init__(name=name, dim_hs=dim_hs,
+                                    dim_out=dim_out, h_act=h_act,
+                                    out_act=out_act, **kwargs)
+    
+    def set_components(self, components=None, dim_hs=None, dim_in=None,
+                       dim_out=None, h_act=None, out_act=None, **kwargs):
 
+        components = OrderedDict((k, v) for k, v in self._components.items())
+        if dim_out is not None:
+            dim_in = self.set_link_value(
+                'output', input_shape=self.input_shape,
+                filter_shapes=self.filter_shapes, n_filters=self.n_filters,
+                pool_sizes=self.pool_sizes, border_modes=self.border_modes)
+            dim_hs = dim_hs or []
+            components['fully_connected'] = OrderedDict(
+                cell_type='MLP',
+                dim_hs=dim_hs,
+                h_act=h_act,
+                out_act=out_act,
+                dim_in=dim_in,
+                dim_out=dim_out,
+                dropout=kwargs.get('dropout', False),
+                batch_normalization=kwargs.get('batch_normalization', False)
+            )
+
+        return super(CNN2D, self).set_components(components=components, **kwargs)
+    
     @classmethod
     def set_link_value(C, key, input_shape=None, filter_shapes=None,
                        n_filters=None, pool_sizes=None, border_modes=None,
@@ -51,7 +78,7 @@ class CNN2D(Cell):
         if filter_shapes is None: raise ValueError('filter_shapes')
         if pool_sizes is None: raise ValueError('pool_sizes')
         n_layers = len(n_filters)
-        if border_modes is None: border_modes = ['valid'] * n_layers
+        if border_modes is None: border_modes = ['full'] * n_layers
         if not(n_layers == len(filter_shapes) == len(pool_sizes) ==
                len(border_modes)):
             raise TypeError('All list inputs must have the same length')
@@ -66,6 +93,8 @@ class CNN2D(Cell):
             elif border_mode == 'full':
                 dim_x = input_shape[0] + filter_shape[0] - 1
                 dim_y = input_shape[1] + filter_shape[1] - 1
+            elif border_mode == 'full_and_trim':
+                dim_x, dim_y = input_shape[:2]
             elif border_mode == 'half':
                 dim_x = input_shape[0] + ((filter_shape[0] + 1) % 2)
                 dim_y = input_shape[1] + ((filter_shape[1] + 1) % 2)
@@ -79,27 +108,52 @@ class CNN2D(Cell):
         return dim_x * dim_y * n_filters[-1]
 
     def init_params(self, weight_scale=1e-3, dim_in=None):
+        self.params = OrderedDict()
         dim_ins = [self.input_shape[0]] + self.n_filters[:-1]
         dim_outs = self.n_filters
 
         weights = []
         biases = []
+        if self.batch_normalization:
+            gammas = []
+            betas = []
+            
+        self.trims = []
 
-        for dim_in, dim_out, pool_size, (dim_x, dim_y) in zip(
-            dim_ins, dim_outs, self.pool_sizes, self.filter_shapes):
+        for i in xrange(self.n_layers):
+            dim_in = dim_ins[i]
+            dim_out = dim_outs[i]
+            pool_size = self.pool_sizes[i]
+            dim_x, dim_y = self.filter_shapes[i]
+            border_mode = self.border_modes[i]
+            
             fan_in = dim_in * dim_x * dim_y
             fan_out = dim_out * dim_x * dim_y // np.prod(pool_size)
             W_bound = np.sqrt(6. / (fan_in + fan_out))
             W = self.rng.uniform(low=-W_bound, high=W_bound,
                                  size=(dim_out, dim_in, dim_x, dim_y))
+            self.trims.append((int(np.floor(W.shape[2] / 2.)),
+                               int(np.floor(W.shape[3] / 2.))))
             b = np.zeros((dim_out,))
             weights.append(W)
             biases.append(b)
+            if self.batch_normalization:
+                gamma = np.ones((dim_in,))
+                beta = np.zeros_like(gamma)
+                gammas.append(gamma)
+                betas.append(beta)
 
-        self.params = dict(weights=weights, biases=biases)
+        self.params['weights'] = weights
+        self.params['biases'] = biases
+        if self.batch_normalization:
+           self.params['gammas'] = gammas
+           self.params['betas'] = betas
 
     def get_params(self):
-        params = zip(self.weights, self.biases)
+        if self.batch_normalization:
+            params = zip(self.weights, self.biases, self.gammas, self.betas)
+        else:
+            params = zip(self.weights, self.biases)
         params = [i for sl in params for i in sl]
         return super(CNN2D, self).get_params(params=params)
 
@@ -110,7 +164,7 @@ class CNN2D(Cell):
 
         return (X, batch_size)
 
-    def _feed(self, X, batch_size, *params):
+    def feed(self, X, batch_size, *params):
         session = self.manager._current_session
         params = list(params)
 
@@ -127,30 +181,48 @@ class CNN2D(Cell):
         outs['input'] = X
 
         for l in xrange(self.n_layers):
-            if self.batch_normalization:
-                self.logger.debug('Batch normalization on layer %d' % l)
-                X = batch_normalization(X, session=session)
-
             W = params.pop(0)
             b = params.pop(0)
+            if self.batch_normalization:
+                gamma = params.pop(0)
+                beta = params.pop(0)
+                self.logger.debug('Batch normalization on layer %d' % l)
+                shape = X.shape
+                X = batch_normalization(
+                    X.reshape((shape[0], shape[1] * shape[2] * shape[3])),
+                    gamma, beta, session=session)
+                X = X.reshape(shape)
 
             shape = self.filter_shapes[l]
             pool_size = self.pool_sizes[l]
             n_filters = self.n_filters[l]
             border_mode = self.border_modes[l]
-
+            if border_mode == 'full_and_trim':
+                _border_mode = 'full'
+                trim = True
+            else:
+                _border_mode = border_mode
+                trim = False
+                
             filter_shape = (n_filters, input_shape[1]) + shape
-
+            
             conv_out = T.nnet.conv2d(input=X, filters=W,
                                      filter_shape=filter_shape,
                                      input_shape=input_shape,
-                                     border_mode=border_mode)
+                                     border_mode=_border_mode)
+            
+            if trim:
+                sx, sy = self.trims[l]
+                conv_out = conv_out[:, :, sx:-sx, sy:-sy]
+            
             if border_mode == 'valid':
                 dim_x = input_shape[2] - shape[0] + 1
                 dim_y = input_shape[3] - shape[1] + 1
             elif border_mode == 'full':
                 dim_x = input_shape[2] + shape[0] - 1
                 dim_y = input_shape[3] + shape[1] - 1
+            elif border_mode == 'full_and_trim':
+                dim_x, dim_y = input_shape[2:]
             elif border_mode == 'half':
                 dim_x = input_shape[2] + ((shape[0] + 1) % 2)
                 dim_y = input_shape[3] + ((shape[1] + 1) % 2)
@@ -172,9 +244,11 @@ class CNN2D(Cell):
                 X = self.h_act(preact)
 
                 if self.dropout and self.noise_switch():
-                    self.logger.debug('Adding dropout to layer {layer} for CNN2D '
+                    epsilon = params.pop(0)
+                    self.logger.debug('Adding dropout to layer {layer} for MLP '
                                   '`{name}`'.format(layer=l, name=self.name))
-                    X = dropout(X, self.h_act, self.dropout, self.trng)
+                    X = dropout(X, self.h_act, self.dropout, self.trng,
+                                epsilon=epsilon)
 
                 outs.update(**{
                     ('G_%d' % l): preact,
@@ -188,23 +262,99 @@ class CNN2D(Cell):
             input_shape = (batch_size, filter_shape[0], dim_x, dim_y)
 
         X = X.reshape((X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
+        
+        if self.fully_connected is not None:
+            ffn_outs = self.fully_connected._feed(X, *params)
+            outs.update(('ffn_{}'.format(k), v) for k, v in ffn_outs.items())
+            X = ffn_outs['Y']
 
         if reshape is not None:
             X = X.reshape((reshape[0], reshape[1], X.shape[1]))
         outs['output'] = X
 
-        assert len(params) == 0
         return outs
+    
+    def _feed(self, X, batch_size, *params):
+        params = list(params)
+        if self.dropout and self.noise_switch():
+            epsilons = self.dropout_epsilons(
+                size=(X.shape[0],), input_shape=(X.shape[2], X.shape[3]))
+            params = self.get_epsilon_params(epsilons, *params)
+
+        return self.feed(X, batch_size, *params)
+
+    def get_epsilon_params(self, epsilons, *params):
+        if self.dropout and self.noise_switch():
+            if self.batch_normalization:
+                ppl = 4
+            else:
+                ppl = 2
+            new_params = []
+            for l in xrange(self.n_layers - 1):
+                new_params += params[ppl*l:ppl*(l+1)]
+                new_params.append(epsilons[l])
+            new_params += params[ppl*(self.n_layers-1):]
+            assert len(new_params) == len(params) + self.n_layers - 1
+
+            return new_params
+        else:
+            return params
+
+    def dropout_epsilons(self, size, input_shape):
+        epsilons = []
+        
+        for filter_shape, pool_size, border_mode, n_filter in zip(
+            self.filter_shapes, self.pool_sizes, self.border_modes, self.n_filters):
+            if border_mode == 'valid':
+                dim_x = input_shape[0] - filter_shape[0] + 1
+                dim_y = input_shape[1] - filter_shape[1] + 1
+            elif border_mode == 'full':
+                dim_x = input_shape[0] + filter_shape[0] - 1
+                dim_y = input_shape[1] + filter_shape[1] - 1
+            elif border_mode == 'half':
+                dim_x = input_shape[0] + ((filter_shape[0] + 1) % 2)
+                dim_y = input_shape[1] + ((filter_shape[1] + 1) % 2)
+            else:
+                raise NotImplementedError(border_mode)
+
+            dim_x = dim_x // pool_size[0]
+            dim_y = dim_y // pool_size[1]
+            input_shape = (dim_x, dim_y)
+            shape = size + (n_filter, dim_x, dim_y)
+            eps = self.trng.binomial(shape, p=1-self.dropout, n=1, dtype=floatX)
+            epsilons.append(eps)
+
+        return epsilons
 
 
 class RCNN2D(CNN2D):
     def __init__(self, input_shape, n_filters, filter_shapes, pool_sizes,
-                 border_modes=None, name='RCNN2D', **kwargs):
+                 border_modes=None, dim_in=None, name='RCNN2D', **kwargs):
         n_layers = len(n_filters)
-        border_modes = border_modes or (['full'] * n_layers)
+        border_modes = border_modes or (['full_and_trim'] * n_layers)
         super(RCNN2D, self).__init__(input_shape, n_filters, filter_shapes,
                                      pool_sizes, border_modes=border_modes,
-                                     name=name, **kwargs)
+                                     dim_in=dim_in, name=name, **kwargs)
+        
+    def set_components(self, components=None, dim_hs=None, dim_in=None,
+                       dim_out=None, h_act=None, out_act=None, **kwargs):
+
+        components = OrderedDict((k, v) for k, v in self._components.items())
+        if dim_in is not None:
+            dim_out = reduce(lambda x, y: x * y, self.input_shape)
+            dim_hs = dim_hs or []
+            components['fully_connected'] = OrderedDict(
+                cell_type='MLP',
+                dim_hs=dim_hs,
+                h_act=h_act,
+                out_act=out_act,
+                dim_in=dim_in,
+                dim_out=dim_out,
+                dropout=kwargs.get('dropout', False),
+                batch_normalization=kwargs.get('batch_normalization', False)
+            )
+
+        return super(CNN2D, self).set_components(components=components, **kwargs)
 
     @classmethod
     def set_link_value(C, key, input_shape=None, filter_shapes=None,
@@ -212,14 +362,14 @@ class RCNN2D(CNN2D):
                        **kwargs):
 
         if key not in ['output']:
-            return super(CNN2D, C).set_link_value(link, key)
+            return super(RCNN2D, C).set_link_value(link, key)
 
         if n_filters is None: raise ValueError('n_filters')
         if input_shape is None: raise ValueError('input_shape')
         if filter_shapes is None: raise ValueError('filter_shapes')
         if pool_sizes is None: raise ValueError('pool_sizes')
         n_layers = len(n_filters)
-        if border_modes is None: border_modes = ['valid'] * n_layers
+        if border_modes is None: border_modes = ['full'] * n_layers
         if not(n_layers == len(filter_shapes) == len(pool_sizes) ==
                len(border_modes)):
             raise TypeError('All list inputs must have the same length')
@@ -238,6 +388,8 @@ class RCNN2D(CNN2D):
             elif border_mode == 'full':
                 dim_x = dim_x + filter_shape[0] - 1
                 dim_y = dim_y + filter_shape[1] - 1
+            elif border_mode == 'full_and_trim':
+                dim_x, dim_y = input_shape[:2]
             elif border_mode == 'half':
                 dim_x = dim_x + ((filter_shape[0] + 1) % 2)
                 dim_y = dim_y + ((filter_shape[1] + 1) % 2)
@@ -247,15 +399,30 @@ class RCNN2D(CNN2D):
 
         return dim_x * dim_y * n_filters[-1]
 
-    def _feed(self, X, batch_size, *params):
+    def feed(self, X, batch_size, *params):
         session = self.manager._current_session
         params = list(params)
+        
+        if X.ndim == 2:
+            reshape = None
+        elif X.ndim == 3:
+            reshape = (X.shape[0], X.shape[1])
+            X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
+        else:
+            raise ValueError()
+        
+        outs = OrderedDict()
+        if self.fully_connected is not None:
+            ffn_params = self.select_params('fully_connected', *params)
+            params = params[:-len(ffn_params)]
+            ffn_outs = self.fully_connected._feed(X, *ffn_params)
+            outs.update(('ffn_{}'.format(k), v) for k, v in ffn_outs.items())
+            X = ffn_outs['Y']
 
         X = X.reshape((X.shape[0], self.input_shape[0], self.input_shape[1],
                        self.input_shape[2]))
         input_shape = (batch_size,) + self.input_shape
-        outs = OrderedDict(X=X)
-        outs['input'] = X
+        outs.update(X=X, input=X)
 
         def depool(X, pool, out, l):
             '''
@@ -269,7 +436,7 @@ class RCNN2D(CNN2D):
             upsampled = T.zeros((dim_in, dim_out))
 
             rs = T.arange(dim_in)
-            cs = rs * pool[1] + (rs / stride * pool[0] * offset)
+            cs = rs * pool[1] + (rs // stride * pool[0] * offset)
             upsampled = T.set_subtensor(upsampled[rs, cs], 1.)
             X_f = X.reshape((X.shape[0], shape[0], X.shape[2] * X.shape[3]))
 
@@ -281,8 +448,14 @@ class RCNN2D(CNN2D):
 
         for l in xrange(self.n_layers):
             if self.batch_normalization:
+                gamma = params.pop(0)
+                beta = params.pop(0)
                 self.logger.debug('Batch normalization on layer %d' % l)
-                X = batch_normalization(X, session=session)
+                shape = X.shape
+                X = batch_normalization(
+                    X.reshape((shape[0], shape[1] * shape[2] * shape[3])),
+                    gamma, beta, session=session)
+                X = X.reshape(shape)
 
             W = params.pop(0)
             b = params.pop(0)
@@ -302,11 +475,22 @@ class RCNN2D(CNN2D):
             dim_x = input_shape[2] * pool_size[0]
             dim_y = input_shape[3] * pool_size[1]
             input_shape = (input_shape[0], input_shape[1], dim_x, dim_y)
+            
+            if border_mode == 'full_and_trim':
+                _border_mode = 'full'
+                trim = True
+            else:
+                _border_mode = border_mode
+                trim = False
 
             conv_out = T.nnet.conv2d(input=unpool_out, filters=W,
                                      filter_shape=filter_shape,
                                      input_shape=input_shape,
-                                     border_mode=border_mode)
+                                     border_mode=_border_mode)
+            
+            if trim:
+                sx, sy = self.trims[l]
+                conv_out = conv_out[:, :, sx:-sx, sy:-sy]
 
             if border_mode == 'valid':
                 dim_x = dim_x - shape[0] + 1
@@ -314,6 +498,8 @@ class RCNN2D(CNN2D):
             elif border_mode == 'full':
                 dim_x = dim_x + shape[0] - 1
                 dim_y = dim_y + shape[1] - 1
+            elif border_mode == 'full_and_trim':
+                dim_x, dim_y = input_shape[2:]
             elif border_mode == 'half':
                 dim_x = dim_x + ((shape[0] + 1) % 2)
                 dim_y = dim_y + ((shape[1] + 1) % 2)
@@ -329,9 +515,11 @@ class RCNN2D(CNN2D):
                 X = self.h_act(preact)
 
                 if self.dropout and self.noise_switch():
-                    self.logger.debug('Adding dropout to layer {layer} for CNN2D '
+                    epsilon = params.pop(0)
+                    self.logger.debug('Adding dropout to layer {layer} for MLP '
                                   '`{name}`'.format(layer=l, name=self.name))
-                    X = dropout(X, self.h_act, self.dropout, self.trng)
+                    X = dropout(X, self.h_act, self.dropout, self.trng,
+                                epsilon=epsilon)
 
                 outs.update(**{
                     ('G_%d' % l): preact,
@@ -345,9 +533,11 @@ class RCNN2D(CNN2D):
             input_shape = (batch_size, filter_shape[0], dim_x, dim_y)
 
         X = X.reshape((X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
+        if reshape is not None:
+            X = X.reshape((reshape[0], reshape[1], X.shape[1]))
         outs['output'] = X
 
-        assert len(params) == 0
         return outs
+    
 
 _classes = {'CNN2D': CNN2D, 'RCNN2D': RCNN2D}
