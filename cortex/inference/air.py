@@ -257,6 +257,8 @@ class DeepAIR(DeepIRVI):
             
         log_p = -gen_term + infer_termk
         w_tilde = norm_exp(log_p)
+        ess = (1. / (w_tilde ** 2).sum(0)).mean()
+        log_ess = (-T.log((w_tilde ** 2).sum(0))).mean()
         
         cost = T.constant(0.).astype(floatX)
         if reweight_conditional:
@@ -273,6 +275,7 @@ class DeepAIR(DeepIRVI):
        
         return OrderedDict(cost=cost, kl_term=kl_term, gen_term=gen_term.mean(),
                            nll=nll, lower_bound=lower_bound,
-                           infer_term=infer_termk.mean())
+                           infer_term=infer_termk.mean(), constants=[w_tilde],
+                           ess=ess, log_ess=log_ess)
 
 _classes = {'AIR': AIR, 'DeepAIR': DeepAIR}
