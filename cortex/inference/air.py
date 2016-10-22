@@ -255,7 +255,7 @@ class DeepAIR(DeepIRVI):
             infer_term += nl_qh
             infer_termk += nl_qhk
             
-        log_p = -gen_term - infer_termk
+        log_p = -gen_term + infer_termk
         w_tilde = norm_exp(log_p)
         
         cost = T.constant(0.).astype(floatX)
@@ -264,9 +264,9 @@ class DeepAIR(DeepIRVI):
         else:
             cost += gen_term.mean()
         if reweight_posterior:
-            cost += (w_tilde * infer_term).sum(0).mean()
+            cost += (w_tilde * infer_termk).sum(0).mean()
         else:
-            cost += infer_term.mean()
+            cost += infer_termk.mean()
             
         nll = -log_mean_exp(log_p, axis=0).mean()
         lower_bound = -log_p.mean()
