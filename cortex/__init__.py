@@ -32,3 +32,4 @@ methods = dict((method, getattr(_manager, method)) for method in dir(_manager)
  and not method.startswith('_'))
 
 vars().update(**methods)
+

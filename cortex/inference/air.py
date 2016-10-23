@@ -19,12 +19,14 @@ class AIR(IRVI):
     sampling (AIS)
     '''
     _required = ['prior', 'conditional', 'posterior']
+    _args = ['bidirectional']
     _components = {
         'prior': {},
         'conditional': {},
         'posterior': {}}
 
-    def __init__(self, prior, conditional, posterior, name='AIR', **kwargs):
+    def __init__(self, prior, conditional, posterior, bidirectional=False,
+                 name='AIR', **kwargs):
         '''Init function for AIR
 
         Args:
@@ -36,6 +38,7 @@ class AIR(IRVI):
             prior=prior,
             conditional=conditional,
             posterior=posterior)
+        self.bidirectional = bidirectional
 
         super(AIR, self).__init__(name=name, models=models, **kwargs)
 
@@ -69,7 +72,10 @@ class AIR(IRVI):
         log_ph   = -self.prior.step_neg_log_prob(h, *prior_params)
         log_qh   = -self.posterior.neg_log_prob(h, P=q[None, :, :])
         log_p     = log_py_h + log_ph - log_qh
-        w_tilde = norm_exp(log_p)
+        if self.bidirectional:
+            w_tilde = norm_exp(0.5 * log_p)
+        else:
+            w_tilde = norm_exp(log_p)
         cost    = -log_p.mean()
         return w_tilde, -log_p.mean(), py
 
@@ -105,8 +111,10 @@ class DeepAIR(DeepIRVI):
         'prior': {},
         'conditionals': {},
         'posteriors': {}}
+    _args = ['bidirectional']
 
-    def __init__(self, prior, conditionals, posteriors, name='AIR', **kwargs):
+    def __init__(self, prior, conditionals, posteriors, bidirectional=False,
+                 name='AIR', **kwargs):
         '''Init function for DeepAIR
 
         Args:
@@ -118,6 +126,7 @@ class DeepAIR(DeepIRVI):
             prior=prior,
             conditionals=conditionals,
             posteriors=posteriors)
+        self.bidirectional = bidirectional
         
         if len(conditionals) != len(posteriors):
             raise TypeError('Same number of conditionals and posteriors must be'
@@ -171,7 +180,10 @@ class DeepAIR(DeepIRVI):
             log_qh = -self.posteriors[i].neg_log_prob(
                 hs[i + 1], P=qs[i][None, :, :])
             log_p += log_py_h - log_qh
-        w_tilde = norm_exp(log_p)
+        if self.bidirectional:
+            w_tilde = norm_exp(0.5 * log_p)
+        else:
+            w_tilde = norm_exp(log_p)
         cost = -log_p.mean()
         return w_tilde, -log_p.mean(), hs[0]
 

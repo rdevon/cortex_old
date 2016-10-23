@@ -142,7 +142,7 @@ class Manager(object):
                         print '--type:', type(v)
             else:
                 print '--type:', type(d)
-                        
+
         out_file = resolve_path(out_file)
         self.logger.info('Saving to %s' % out_file)
         d = dict((k, v.get_value()) for k, v in self.tparams.iteritems())
@@ -154,8 +154,9 @@ class Manager(object):
             raise e
 
     def load(self, in_file):
-        in_file = resolve_path(in_file)
-        self.logger.info('Loading from %s' % in_file)
+        if isinstance(in_file, str):
+            in_file = resolve_path(in_file)
+            self.logger.info('Loading from %s' % in_file)
         params = np.load(in_file)
         d = dict()
         for k in params.keys():
@@ -224,11 +225,32 @@ class Manager(object):
         self.tparams = {}
         self.reset_sessions()
         self.trainer = None
-        self.tester = None
+        self.evaluator = None
         self.visualizer = None
         self.save_args = dict(
             cells=[], steps=[], costs=[], stats=[], samples=[], data=[])
         self.out_path = None
+        
+    def get_cells(self):
+        return self.cells
+    
+    def get_cell_args(self):
+        return self.cell_args
+    
+    def get_datasets(self):
+        return self.datasets
+    
+    def get_tparams(self):
+        return self.tparams
+    
+    def get_trainer(self):
+        return self.trainer
+    
+    def get_evaluator(self):
+        return self.evaluator
+    
+    def get_visualizer(self):
+        return self.visualizer
 
     def resolve_class(self, cell_type, classes=None):
         if classes is None:
@@ -354,10 +376,10 @@ class Manager(object):
                            / float(eval_every)})
                     training_time = self.trainer.training_time
                     if monitor_grads: self.monitor.update('train', **grads)
-                    
+
                 except StopIteration:
                     br = True
-                    
+
                 if archive_every and s >= archive_every and self.out_path is not None:
                     shutil.copy(path.join(self.out_path, 'curr.npz'),
                                 path.join(archive_path, 'save_%d.npz' % n_epochs))
@@ -378,7 +400,7 @@ class Manager(object):
         print 'Training completed.'
         if self.out_path is not None:
             self.save(path.join(self.out_path, 'last.npz'))
-            
+
         if archive_every:
             shutil.copy(path.join(self.out_path, 'last.npz'),
                         path.join(archive_path, 'save_%d.npz' % s))
@@ -514,7 +536,7 @@ class Manager(object):
             else:
                 raise TypeError('Cell or dataset %s of type %s has no method %s.'
                                 % (cell_name, C, op_name))
-            
+
             if len(args) > 0:
                 if op_name == '__call__':
                     arg_keys = C._call_args
