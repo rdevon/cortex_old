@@ -82,7 +82,7 @@ class Visualizer(object):
             else:
                 batch_size = self.batch_size
             inputs = self.session.next_batch(mode=data_mode, batch_size=batch_size)
-        pbar = ProgressBar(widgets=widgets, maxval=len(self.fs)).start()
+        pbar = ProgressBar(widgets=widgets, max_value=len(self.fs)).start()
         for i, f in enumerate(self.fs):
             self.logger.debug('Visualizer function `%s`' % self.f_names[i])
             f(*inputs)

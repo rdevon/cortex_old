@@ -48,7 +48,7 @@ class Evaluator(object):
                    ' (', Timer(), ')']
         self.session.reset_data(mode=data_mode)
         n = self.session.get_dataset_size(mode=data_mode)
-        pbar    = ProgressBar(widgets=widgets, maxval=n).start()
+        pbar    = ProgressBar(widgets=widgets, max_value=n).start()
         results = OrderedDict()
         if self.batch_size is None:
             batch_size = n

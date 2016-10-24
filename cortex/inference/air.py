@@ -60,7 +60,7 @@ class AIR(IRVI):
 
         q_ = (weights[:, :, None] * h).sum(axis=0)
         q  = inference_rate * q_ + (1 - inference_rate) * q
-        q = T.clip(q, 1e-6, 1 - 1e-6)
+        #q = T.clip(q, 1e-6, 1 - 1e-6)
         return q, cost, extra
 
     def score(self, h, y, q, *params):
@@ -163,8 +163,9 @@ class DeepAIR(DeepIRVI):
         weights, cost, extra = self.score(hs, y, qs, *params)
 
         qs_ = [(weights[:, :, None] * h).sum(axis=0) for h in hs]
-        qs  = [inference_rate * qs_[i] + (1 - inference_rate) * qs[i] for i in range(len(qs))]
-        qs = [T.clip(q, 1e-6, 1 - 1e-6) for q in qs]
+        qs  = [inference_rate * qs_[i] + (1 - inference_rate) * qs[i]
+               for i in range(len(qs))]
+        #qs = [T.clip(q, 1e-6, 1 - 1e-6) for q in qs]
         q = concatenate(qs, axis=1)
         return q, cost, extra
 
@@ -274,13 +275,13 @@ class DeepAIR(DeepIRVI):
         
         cost = T.constant(0.).astype(floatX)
         if reweight_conditional:
-            cost += (w_tilde * gen_term).sum(0).mean()
+            cost += (w_tilde * gen_term).sum(0).sum(0)
         else:
-            cost += gen_term.mean()
+            cost += gen_term.mean(0).sum(0)
         if reweight_posterior:
-            cost += (w_tilde * infer_term).sum(0).mean()
+            cost += (w_tilde * infer_term).sum(0).sum(0)
         else:
-            cost += infer_term.mean()
+            cost += infer_term.mean(0).sum(0)
             
         nll = -log_mean_exp(log_p, axis=0).mean()
         lower_bound = -log_p.mean()

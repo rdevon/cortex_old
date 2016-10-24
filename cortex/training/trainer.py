@@ -59,7 +59,7 @@ class Trainer(object):
         widgets = ['Epoch {epoch} (training {name}, '.format(
             epoch=self.epoch, name=self.name), Timer(), ' Total time (%.2f)): '
                    % self.training_time, Bar()]
-        self.epoch_pbar = ProgressBar(widgets=widgets, maxval=n).start()
+        self.epoch_pbar = ProgressBar(widgets=widgets, max_value=n).start()
 
     def next_epoch(self, n_epochs=1):
         t0 = time.time()
