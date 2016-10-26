@@ -153,7 +153,8 @@ class Dataset(object):
 
     def get_dim(self, key):
         dim_map = {
-            'input': self.dims[self.name]
+            'input': self.dims[self.name],
+            'input_centered': self.dims[self.name]
         }
         dim_map.update(**self.dims)
 
@@ -232,9 +233,13 @@ class BasicDataset(Dataset):
                 self.distributions[k] = 'binomial'
 
         self.X = self.data['input']
-        self.mean_image = self.X.mean(axis=0)
+        if not hasattr(self, 'mean_image'):
+            self.mean_image = self.X.mean(axis=0)
         self.var_image = self.X.std(axis=0)
         self.labels = labels
+        self.data['input_centered'] = self.data['input'] - self.mean_image
+        self.dims['input_centered'] = self.dims['input']
+        self.distributions['input_centered'] = self.distributions['input']
 
         if self.labels is not None:
             self.label_nums = self.data[labels].sum(axis=0)
@@ -361,7 +366,6 @@ class BasicDataset(Dataset):
 
     def set_link_value(self, key):
         k_, name = key.split('.')
-
         if name in self.data.keys():
             if k_ == 'dim':
                 return self.dims[name]

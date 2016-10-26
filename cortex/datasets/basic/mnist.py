@@ -93,6 +93,11 @@ class MNIST(TwoDImageDataset):
         else:
             raise ValueError()
 
+        self.mean_image = np.concatenate([np.float32(x[0][0]),
+                                          np.float32(x[1][0]),
+                                          np.float32(x[2][0])],
+                                         axis=0).mean(0)
+
         return X, Y
 
 

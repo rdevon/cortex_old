@@ -62,12 +62,18 @@ class Session(object):
                     else:
                         key = _p(key_prefix, k)
                     self.logger.debug('Adding cost `%s`' % key)
+                    if key in self.costs.keys():
+                        raise ValueError('Cost %s already found' % key)
                     self.costs[key] = v
                 elif what == 'stat':
                     if k == 'stat':
                         key = key_prefix
                     else:
                         key = _p(key_prefix, k)
+
+                    if key in self.stats.keys():
+                        raise ValueError('Stat %s already found' % key)
+
                     self.stats[key] = v
                     self.logger.debug('Adding stat `%s`' % key)
                 else:

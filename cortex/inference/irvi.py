@@ -254,15 +254,15 @@ class DeepIRVI(IRVI):
             updates.update(updates_i)
             Qs, i_costs, extras = self.unpack_infer(outs)
             extra = extras
-            Qs_ = Qs
             Qs = T.concatenate([Q0[None, :, :], Qs], axis=0)
             Qk = Qs[-1]
+            Qs_ = Qk
         elif n_steps == 1:
             inps = [epsilons[0]] + outputs_info[:-2] + non_seqs
             outs = self.step_infer(*inps)
             Q, i_cost, extra = self.unpack_infer(outs)
             Qs_ = Q[None, :, :]
-            Qs = T.concatenate([Q0[None, :, :], Qs], axis=0)
+            Qs = T.concatenate([Q0[None, :, :], Qs_], axis=0)
             i_costs = [i_cost]
             Qk = Q
         elif n_steps == 0:

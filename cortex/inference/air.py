@@ -9,7 +9,7 @@ from theano import tensor as T
 from .irvi import IRVI, DeepIRVI
 from ..utils import concatenate, floatX, scan, slice2
 from ..utils.maths import norm_exp, log_mean_exp, log_sum_exp
-
+from ..utils.tools import update_dict_of_lists
 
 class AIR(IRVI):
     '''
@@ -60,7 +60,7 @@ class AIR(IRVI):
 
         q_ = (weights[:, :, None] * h).sum(axis=0)
         q  = inference_rate * q_ + (1 - inference_rate) * q
-        #q = T.clip(q, 1e-6, 1 - 1e-6)
+        q = T.clip(q, 1e-7, 1 - 1e-7)
         return q, cost, extra
 
     def score(self, h, y, q, *params):
@@ -147,25 +147,19 @@ class DeepAIR(DeepIRVI):
             cost: T.scalar float. Negative lower bound of current parameters
         '''
         qs = []
-        rs = []
         hs = []
         start = 0
-        for posterior in self.posteriors:
-            dim = posterior.mlp.dim_out
-            q_ = slice2(q, start, start + dim)
-            r_ = slice2(r, start, start + dim)
-            h = posterior.quantile(r_, q_)
-            qs.append(q_)
-            rs.append(r_)
-            hs.append(h)
-            start += dim
-        
+        qs = self.split(q, aslist=True)
+        rs = self.split(r, aslist=True)
+        hs = [self.posteriors[i].quantile(rs[i], qs[i])
+              for i in range(len(self.posteriors))]
+                
         weights, cost, extra = self.score(hs, y, qs, *params)
 
         qs_ = [(weights[:, :, None] * h).sum(axis=0) for h in hs]
         qs  = [inference_rate * qs_[i] + (1 - inference_rate) * qs[i]
                for i in range(len(qs))]
-        #qs = [T.clip(q, 1e-6, 1 - 1e-6) for q in qs]
+        qs = [T.clip(q, 1e-6, 1 - 1e-6) for q in qs]
         q = concatenate(qs, axis=1)
         return q, cost, extra
 
@@ -181,12 +175,14 @@ class DeepAIR(DeepIRVI):
             log_qh = -self.posteriors[i].neg_log_prob(
                 hs[i + 1], P=qs[i][None, :, :])
             log_p += log_py_h - log_qh
+
         if self.bidirectional:
-            w_tilde = norm_exp(0.5 * log_p)
-        else:
-            w_tilde = norm_exp(log_p)
+            log_p *= 0.5
+        
+        w_tilde = norm_exp(log_p)
         cost = -log_p.mean()
-        return w_tilde, -log_p.mean(), hs[0]
+        
+        return w_tilde, cost, w_tilde
 
     def init_infer(self, q):
         return []
@@ -202,50 +198,56 @@ class DeepAIR(DeepIRVI):
             session = self.manager.get_session()
             P = session.tensors[self.name + 'Qk']
 
-        Es = []
-        start = 0
-        for posterior in self.posteriors:
-            dim = posterior.mlp.dim_out
-            P_ = slice2(P, start, start + dim)
-            E = posterior.generate_random_variables(shape, P=P_)
-            Es.append(E)
-            start += dim
+        Ps = self.split(P, aslist=True)
+        Es = [self.posteriors[i].generate_random_variables(shape, P=Ps[i])
+              for i in range(len(self.posteriors))]
 
-        return concatenate(Es, axis=len(shape)+1)
+        return concatenate(Es, axis=P.ndim-1+len(shape))
     
     def split(self, Q, aslist=False):
         Qs = []
+
         start = 0
-        for i, posterior in enumerate(self.posteriors):
+        for posterior in self.posteriors:
             dim = posterior.mlp.dim_out
             Qs.append(slice2(Q, start, start + dim))
             start += dim
+
         if aslist:
             return Qs
         else:
             return OrderedDict(('Q_{}'.format(i), Q) for i, Q in enumerate(Qs))
 
     def _sample(self, E, P=None):
+        '''
         session = self.manager.get_session()
         if P is None:
             if _p(self.name, 'Qk') not in session.tensors.keys():
                 raise TypeError('%s.Qk not found in graph nor provided'
                                 % self.name)
             P = session.tensors[_p(self.name, 'Qk')]
-        Ss = []
+        '''
         start = 0
-        for posterior in self.posteriors:
-            dim = posterior.mlp.dim_out
-            P_ = slice2(P, start, start + dim)
-            E_ = slice2(E, start, start + dim)
-            Ss.append(posterior._sample(E, P=P))
+        Ps = self.split(P, aslist=True)
+        Es = self.split(E, aslist=True)
+        Ss = [self.posteriors[i].quantile(Es[i], Ps[i])
+              for i in range(len(self.posteriors))]
             
         return concatenate(Ss, axis=E.ndim-1)
-    
+
     def _cost(self, X=None, Qk_samples=None, Q=None, Qk=None,
-              reweight_posterior=False, reweight_conditional=False):
+              reweight_posterior=False, reweight_conditional=False,
+              return_stats=False):
         params = self.get_params()
+        return self.get_stats(X, Qk_samples, Q, Qk,
+                              reweight_posterior, reweight_conditional,
+                              return_stats, *params)
+        
+    def get_stats(self, X, Qk_samples, Q, Qk,
+                  reweight_posterior, reweight_conditional,
+                  return_stats, *params):
         prior_params = self.select_params('prior', *params)
+
         Qs = self.split(Q, aslist=True)
         Qks = self.split(Qk, aslist=True)
         Qk_samples = self.split(Qk_samples, aslist=True)
@@ -260,6 +262,7 @@ class DeepAIR(DeepIRVI):
                 'conditionals_{}'.format(i), *params)
             py = self.conditionals[i]._feed(Hs[i + 1], *cond_params)['P']
             nl_py_h = self.conditionals[i].neg_log_prob(Hs[i], P=py)
+
             nl_qh = self.posteriors[i].neg_log_prob(Hs[i + 1], P=Qs[i][None, :, :])
             nl_qhk = self.posteriors[i].neg_log_prob(Hs[i + 1], P=Qks[i][None, :, :])
             
@@ -285,10 +288,33 @@ class DeepAIR(DeepIRVI):
             
         nll = -log_mean_exp(log_p, axis=0).mean()
         lower_bound = -log_p.mean()
-       
-        return OrderedDict(cost=cost, kl_term=kl_term, gen_term=gen_term.mean(),
-                           nll=nll, lower_bound=lower_bound,
-                           infer_term=infer_termk.mean(), constants=[w_tilde],
-                           ess=ess, log_ess=log_ess)
+
+        if return_stats:        
+            return OrderedDict(kl_term=kl_term, gen_term=gen_term.mean(),
+                               nll=nll, lower_bound=lower_bound,
+                               infer_term=infer_termk.mean(),
+                               ess=ess, log_ess=log_ess)
+        else:
+            return OrderedDict(cost=cost, constants=[w_tilde])
+
+    def test(self, X=None, Q=None, Qs=None, n_steps=None, n_samples=None):
+        rvals = OrderedDict()
+        params = self.get_params()
+        Es = self.generate_random_variables((n_samples, n_steps + 1), P=Q)
+        Qk_samples = self._sample(Es, P=Qs).transpose(1, 0, 2, 3)
+        stat_keys = ['kl_term', 'gen_term', 'nll', 'lower_bound', 'infer_term',
+                     'ess', 'log_ess']
+        
+        seqs = [Qs, Qk_samples]
+        outputs_info = [None] * len(stat_keys)
+        non_seqs = [Q, X] + list(params) 
+        def step(Qk, samples, Q, X, *params):
+            outs = self.get_stats(X, samples, Q, Qk, False, False, True, *params)
+            return [outs[k] for k in stat_keys]
+
+        rvals, updates = scan(step, seqs, outputs_info, non_seqs,
+                              n_steps+1, self.name + '_test')
+            
+        return OrderedDict((k, v) for k, v in zip(stat_keys, rvals))
 
 _classes = {'AIR': AIR, 'DeepAIR': DeepAIR}

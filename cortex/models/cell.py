@@ -64,7 +64,7 @@ def dropout(x, act, rate, trng, epsilon=None):
             raise NotImplementedError('No dropout for %s yet' % activ)
         return x
 
-def batch_normalization(x, gamma, beta, epsilon=1e-6, session=None):
+def batch_normalization(x, gamma, beta, epsilon=1e-5, session=None):
     if x.ndim == 1:
         mu = 0.
         sigma = 1.
@@ -76,8 +76,6 @@ def batch_normalization(x, gamma, beta, epsilon=1e-6, session=None):
         sigma = x.std(axis=(0, 1), keepdims=True)
     else:
         raise TypeError(x.ndim)
-    #if session is not None:
-    #    session.constants += [mu, sigma]
     y = gamma * (x - mu) / T.sqrt(sigma ** 2 + epsilon) + beta
     return y
 
