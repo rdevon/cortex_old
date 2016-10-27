@@ -318,7 +318,7 @@ class Manager(object):
         if eval_modes is None: eval_modes=['train', 'valid']
         if validation_mode is None: validation_mode = 'valid'
         if len(self.trainer.f_grads) == 0:
-            self.trainer.set_optimizer(profile=profile)
+            self.trainer.set_optimizer()
         self.monitor.add_section(
             'Times', ['Total time', '_delta_time/_delta_epoch'])
         if monitor_grads or self.monitor_grads:
@@ -376,7 +376,8 @@ class Manager(object):
                            (self.trainer.training_time - training_time)
                            / float(eval_every)})
                     training_time = self.trainer.training_time
-                    if monitor_grads: self.monitor.update('train', **grads)
+                    if monitor_grads or self.monitor_grads:
+                        self.monitor.update('train', **grads)
 
                 except StopIteration:
                     br = True

@@ -132,25 +132,26 @@ class Trainer(object):
             model_costs = (None, None)
 
         grads = OrderedDict()
+        tparams = OrderedDict()
 
         for models, cost in model_costs:
             
             # Models
             if models is None:
-                tparams = manager.tparams
+                tparams_ = manager.tparams
             else:
-                tparams = OrderedDict()
+                tparams_ = OrderedDict()
                 if isinstance(models, str): models = [models]
                 for model in models:
                     for k, v in manager.tparams.items():
                         prefix = '.'.join(k.split('.')[:-1])
-                        if model == prefix: tparams[k] = v
+                        if model == prefix: tparams_[k] = v
                         
             # Theano parameters
-            tparams = OrderedDict((k, v)
-                for k, v in tparams.items()
+            tparams_ = OrderedDict((k, v)
+                for k, v in tparams_.items()
                 if (v not in session.updates.keys()) and (k not in self.excludes))
-            self.tparams = list(set(self.tparams + tparams.keys()))
+            self.tparams = list(set(self.tparams + tparams_.keys()))
             
             # Costs
             if cost is None:
@@ -168,17 +169,20 @@ class Trainer(object):
                     cost = session.costs[cost]
 
             # Gradients
-            self.logger.info('Computing gradients for params: %s' % tparams.keys())
+            self.logger.info('Computing gradients for params: %s' % tparams_.keys())
             grads_ = T.grad(
-                cost, wrt=tparams.values(), consider_constant=session.constants)
-            grads_ = OrderedDict((k, g) for k, g in zip(tparams.keys(), grads))
+                cost, wrt=tparams_.values(), consider_constant=session.constants)
+            grads_ = OrderedDict((k, g) for k, g in zip(tparams_.keys(), grads_))
             for k, v in grads_.items():
                 if k in grads.keys():
                     grads[k] += grads_[k]
                 else:
                     grads[k] = grads_[k]
                     
-        tparams = OrderedDict((k, self.tparams[k]) for k in grads.keys())
+            tparams.update(tparams_)
+        
+        tparams = OrderedDict((k, tparams[k]) for k in grads.keys())
+        self.logger.info('Total params: %s' % tparams.keys())
 
         lr = T.scalar(name='lr')
         f_grad, f_update = optimizer(
