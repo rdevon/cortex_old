@@ -129,7 +129,7 @@ class Trainer(object):
         optimizer = _ops[optimizer]
     
         if len(model_costs) == 0:
-            model_costs = (None, None)
+            model_costs = [(None, None)]
 
         grads = OrderedDict()
         tparams = OrderedDict()
