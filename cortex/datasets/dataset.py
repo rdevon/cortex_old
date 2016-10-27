@@ -144,9 +144,9 @@ class Dataset(object):
         attributes = dict(
             (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,)) if isinstance(a, np.ndarray)
             else (k, a)
-            for k, a in attributes.iteritems())
+            for k, a in attributes.items())
         attr_str = ''
-        for k, a in attributes.iteritems():
+        for k, a in attributes.items():
             attr_str += '\n\t%s: %s' % (k, a)
         s = ('<Dataset %s: %s>' % (self.__class__.__name__, attr_str))
         return s
@@ -180,7 +180,8 @@ class BasicDataset(Dataset):
     _viz = []
 
     def __init__(self, data, distributions=None, labels='labels', name=None,
-                balance=False, one_hot=True, transpose=None, **kwargs):
+                balance=False, one_hot=True, transpose=None, check_data=False,
+                **kwargs):
         '''Init function for BasicDataset.
 
         Args:
@@ -212,7 +213,7 @@ class BasicDataset(Dataset):
         if labels not in self.data.keys():
             labels = None
 
-        for k, v in self.data.iteritems():
+        for k, v in self.data.items():
             if k == labels and one_hot and len(v.shape) == 1:
                 v = make_one_hot(v)
             elif len(v.shape) == 1:
@@ -253,13 +254,34 @@ class BasicDataset(Dataset):
 
         self.finish_setup()
 
-        if self.shuffle:
-            self.randomize()
+        if check_data: self.check()
+        if self.shuffle: self.randomize()
 
         self.register()
 
     def finish_setup(self):
         return
+    
+    def check(self):
+        self.logger.info('Checking data for {}'.format(self.name))
+        for k in self.data.keys():
+            self.logger.info('Checking data `{}`'.format(k))
+            data = self.data[k]
+            dist = self.distributions[k]
+            dim = self.dims[k]
+            
+            mi = data.min()
+            ma = data.max()
+            mean = data.mean()
+            std = data.std()
+            
+            hasnan = np.any(np.isnan(data))
+            hasinf = np.any(np.isinf(data))
+            self.logger.info('Data stats: dist: {0}, dim: {1}, min: {2:.2e}, '
+                             'max: {3:.2e}, mean: {4:.2e}, std: {5:.2e}, '
+                             'has nans: {6}, has infs: {7}'.format(
+                                dist, dim, mi, ma, mean, std, hasnan, hasinf))
+        self.logger.info('Done checking data.')
 
     def register(self):
         from .. import _manager as manager
@@ -304,7 +326,7 @@ class BasicDataset(Dataset):
         dup_idx = np.unique(dup_idx)
 
         if len(dup_idx) > 0:
-            for k, v in self.data.iteritems():
+            for k, v in self.data.items():
                 self.data[k] = np.concatenate([self.data[k], self.data[k][dup_idx]])
 
         self.n_samples += len(dup_idx)
@@ -337,7 +359,7 @@ class BasicDataset(Dataset):
 
         rval = OrderedDict()
 
-        for k, v in self.data.iteritems():
+        for k, v in self.data.items():
             v = v[self.pos:self.pos+batch_size]
             if self.transpose is not None and k in self.transpose.keys():
                 v = v.transpose(self.transpose[k])
@@ -354,12 +376,12 @@ class BasicDataset(Dataset):
         attributes = dict(
             (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,)) if isinstance(a, np.ndarray)
             else (k, a)
-            for k, a in attributes.iteritems())
+            for k, a in attributes.items())
         attributes['data'] = dict(
             (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,))
-            for k, a in attributes['data'].iteritems())
+            for k, a in attributes['data'].items())
         attr_str = ''
-        for k, a in attributes.iteritems():
+        for k, a in attributes.items():
             attr_str += '\n\t%s: %s' % (k, a)
         s = ('<Dataset %s: %s>' % (self.__class__.__name__, attr_str))
         return s
@@ -383,7 +405,7 @@ class BasicDataset(Dataset):
         self.logger.debug('Forming tensors for dataset %s' % self.name)
         d = self.next(10)
         tensors = OrderedDict()
-        for k, v in d.iteritems():
+        for k, v in d.items():
             self.logger.info('Data mode `%s` has shape %s. '
                              '(tested with batch_size 10)' % (k, v.shape))
             if v.ndim == 1:

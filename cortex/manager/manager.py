@@ -115,6 +115,7 @@ class Manager(object):
         self.cost_functions = costs._costs
         self.stat_functions = costs._stats
         self.ops = _ops
+        self.monitor_grads = False
 
         self.reset()
 
@@ -320,7 +321,7 @@ class Manager(object):
             self.trainer.set_optimizer(profile=profile)
         self.monitor.add_section(
             'Times', ['Total time', '_delta_time/_delta_epoch'])
-        if monitor_grads:
+        if monitor_grads or self.monitor_grads:
             self.monitor.add_section(
                 'Grads', ['_grad_' + k for k in self.trainer.tparams])
         if archive_every is not None:

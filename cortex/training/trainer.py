@@ -97,7 +97,7 @@ class Trainer(object):
                 if self.u % freq != 0: continue
 
                 rval = f_grad(*inputs)
-                _grads = dict((k, v) for k, v in rval.iteritems()
+                _grads = dict((k, v) for k, v in rval.items()
                     if k.startswith('_grad_'))
                 grads.update(**_grads)
 
@@ -108,7 +108,7 @@ class Trainer(object):
 
             self.u += 1
 
-    def set_optimizer(self, cost=None, models=None, freq=None, profile=False):
+    def set_optimizer(self, *model_costs):
         '''Sets the parameter update functions with optimizer.
 
         Args:
@@ -127,44 +127,64 @@ class Trainer(object):
 
         session = self.session
         optimizer = _ops[optimizer]
+    
+        if len(model_costs) == 0:
+            model_costs = (None, None)
 
-        if cost is None:
-            self.logger.debug('Using global cost for models %s' % models)
-            cost = session.cost
-        else:
-            self.logger.debug('Using cost `%s` for models %s' % (cost, models))
-            if isinstance(cost, list):
-                cost_ = T.constant(0).astype(floatX)
-                for cost__ in cost:
-                    cost_ += session.costs[cost__]
-                cost = cost_
+        grads = OrderedDict()
+
+        for models, cost in model_costs:
+            
+            # Models
+            if models is None:
+                tparams = manager.tparams
             else:
-                cost = session.costs[cost]
+                tparams = OrderedDict()
+                if isinstance(models, str): models = [models]
+                for model in models:
+                    for k, v in manager.tparams.items():
+                        prefix = '.'.join(k.split('.')[:-1])
+                        if model == prefix: tparams[k] = v
+                        
+            # Theano parameters
+            tparams = OrderedDict((k, v)
+                for k, v in tparams.items()
+                if (v not in session.updates.keys()) and (k not in self.excludes))
+            self.tparams = list(set(self.tparams + tparams.keys()))
+            
+            # Costs
+            if cost is None:
+                self.logger.debug('Using global cost for models %s' % models)
+                cost = session.cost
+            else:
+                self.logger.debug('Using cost `%s` for models %s'
+                                  % (cost, models))
+                if isinstance(cost, list):
+                    cost_ = T.constant(0).astype(floatX)
+                    for cost__ in cost:
+                        cost_ += session.costs[cost__]
+                    cost = cost_
+                else:
+                    cost = session.costs[cost]
 
-        if models is None:
-            tparams = manager.tparams
-        else:
-            tparams = OrderedDict()
-            if isinstance(models, str): models = [models]
-            for model in models:
-                for k, v in manager.tparams.iteritems():
-                    prefix = '.'.join(k.split('.')[:-1])
-                    if model == prefix: tparams[k] = v
-        tparams = OrderedDict((k, v)
-            for k, v in tparams.iteritems()
-            if (v not in session.updates.keys()) and (k not in self.excludes))
-
-        self.logger.info('Computing gradients for params: %s' % tparams.keys())
-        grads = T.grad(
-            cost, wrt=tparams.values(), consider_constant=session.constants)
-        grads = OrderedDict((k, g) for k, g in zip(tparams.keys(), grads))
+            # Gradients
+            self.logger.info('Computing gradients for params: %s' % tparams.keys())
+            grads_ = T.grad(
+                cost, wrt=tparams.values(), consider_constant=session.constants)
+            grads_ = OrderedDict((k, g) for k, g in zip(tparams.keys(), grads))
+            for k, v in grads_.items():
+                if k in grads.keys():
+                    grads[k] += grads_[k]
+                else:
+                    grads[k] = grads_[k]
+                    
+        tparams = OrderedDict((k, self.tparams[k]) for k in grads.keys())
 
         lr = T.scalar(name='lr')
         f_grad, f_update = optimizer(
             lr, tparams, grads, session.inputs, session.cost,
-            extra_ups=session.updates, profile=profile, **optimizer_args)
+            extra_ups=session.updates, **optimizer_args)
 
         self.f_grads.append(f_grad)
         self.f_updates.append(f_update)
-        self.f_freqs.append(freq or 1)
-        self.tparams = list(set(self.tparams + tparams.keys()))
+        self.f_freqs.append(1)

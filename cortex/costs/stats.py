@@ -64,7 +64,7 @@ def variational_inference(X=None, conditional=None, posterior=None, prior=None,
     posterior_entropy = post_cell.entropy(P=posterior)
 
     nll_term = cond_cell.neg_log_prob(X, P=conditional)
-    log_p = nll_term[None, :, :] + kl_term
+    log_p = -nll_term[None, :, :] + kl_term
     lower_bound = -log_p.mean()
     nll = -log_mean_exp(log_p, axis=0).mean()
 

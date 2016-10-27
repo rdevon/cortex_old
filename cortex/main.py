@@ -29,6 +29,7 @@ import shutil
 import time
 
 
+import cortex
 from .utils import logger as cortex_logger
 from .utils.tools import _p, get_paths, resolve_path
 from .utils.extra import (
@@ -73,6 +74,9 @@ def set_experiment(args):
 
     verbosity = args.pop('verbosity', 1)
     autoname = args.pop('autoname')
+    monitor_grads = args.pop('monitor_grads')
+    if monitor_grads:
+        cortex._manager.monitor_grads = True
     cortex_logger.set_stream_logger(verbosity)
 
     if 'load_model' in args.keys():
