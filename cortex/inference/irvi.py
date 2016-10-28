@@ -21,14 +21,17 @@ class IRVI(Cell):
 
     '''
     _call_args = ['Y', 'Q0']
+    _args = ['pass_gradients']
     _sample_tensors = ['Qk']
 
-    def __init__(self, models=None, name='IRVI', **kwargs):
+    def __init__(self, models=None, name='IRVI', pass_gradients=False,
+                 **kwargs):
         '''Initialization function for IRVI.
 
         Args:
 
         '''
+        self.pass_gradients = pass_gradients
 
         super(IRVI, self).__init__(name=name, models=models, **kwargs)
 
@@ -123,16 +126,19 @@ class IRVI(Cell):
                                    n_steps, self.name + '_infer')
             updates.update(updates_i)
             Qs, i_costs, extras = self.unpack_infer(outs)
+            Qs_ = Qs
             extra = extras[0]
             Qs = T.concatenate([Q0[None, :, :], Qs], axis=0)
         elif n_steps == 1:
             inps = [epsilons[0]] + outputs_info[:-2] + non_seqs
             outs = self.step_infer(*inps)
             Q, i_cost, extra = self.unpack_infer(outs)
+            Qs_ = Q
             Qs = T.concatenate([Q0[None, :, :], Q[None, :, :]], axis=0)
             i_costs = [i_cost]
         elif n_steps == 0:
             Qs = Q0[None, :, :]
+            Qs_ = Q0.copy()
             extra = Q0
             i_costs = [T.constant(0.).astype(floatX)]
         
@@ -140,7 +146,13 @@ class IRVI(Cell):
         rval['Qk'] = Qs[-1]
         rval['Qs'] = Qs
         rval['i_costs'] = i_costs
-        rval.update(constants=[Qs], updates=updates)
+        
+        if self.pass_gradients:
+            constants = []
+        else:
+            constants = [Qs_]
+        
+        rval.update(constants=constants, updates=updates)
         return rval
 
     def _stats(self, Qs=None, i_costs=None, n_steps=None, epsilons=None,
@@ -172,16 +184,18 @@ class DeepIRVI(IRVI):
     '''
         
     _call_args = ['Y', 'Q0']
+    _args = ['pass_gradients']
     _sample_tensors = ['Qk']
 
-    def __init__(self, name='IRVI', **kwargs):
+    def __init__(self, name='IRVI', pass_gradients=False, **kwargs):
         '''Initialization function for DeepIRVI.
 
         Args:
 
         '''
 
-        super(DeepIRVI, self).__init__(name=name, **kwargs)
+        super(DeepIRVI, self).__init__(name=name, pass_gradients=pass_gradients,
+                                       **kwargs)
 
     def set_components(self, models=None, **kwargs):
         self.component_keys = models.keys()

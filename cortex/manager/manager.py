@@ -694,9 +694,11 @@ class Manager(object):
                 raise ValueError('Cell type %s does not support sampling'
                                  % C.__name__)
 
+        '''
         if dist_key is not None and dist_key not in C._sample_tensors:
             raise KeyError('Cell %s does not support sample tensor %s'
                            % (cell_name, dist_key))
+        '''
 
         s_name = _p(cell_name, name)
         if dist_key is not None: dist_key = arg

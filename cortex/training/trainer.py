@@ -108,7 +108,7 @@ class Trainer(object):
 
             self.u += 1
 
-    def set_optimizer(self, *model_costs):
+    def set_optimizer(self, *model_costs, **kwargs):
         '''Sets the parameter update functions with optimizer.
 
         Args:
@@ -120,6 +120,8 @@ class Trainer(object):
         from .. import _manager as manager
         optimizer = self.optimizer
         optimizer_args = self.optimizer_args or dict()
+        
+        grad_clip = kwargs.pop('grad_clip', None)
 
         if optimizer not in _ops.keys():
             raise KeyError('Optimizer `%s` not found, available: %s'
@@ -163,10 +165,20 @@ class Trainer(object):
                 if isinstance(cost, list):
                     cost_ = T.constant(0).astype(floatX)
                     for cost__ in cost:
-                        cost_ += session.costs[cost__]
+                        try:
+                            cost_ += session.costs[cost__]
+                        except KeyError as e:
+                            self.logger.error(
+                                'Cost `{}` not found, available: {}'.format(
+                                    cost__, session.costs.keys()))
                     cost = cost_
                 else:
-                    cost = session.costs[cost]
+                    try:
+                        cost = session.costs[cost]
+                    except KeyError as e:
+                        self.logger.error(
+                            'Cost `{}` not found, available: {}'.format(
+                                cost, session.costs.keys()))
 
             # Gradients
             self.logger.info('Computing gradients for params: %s' % tparams_.keys())
@@ -183,6 +195,9 @@ class Trainer(object):
         
         tparams = OrderedDict((k, tparams[k]) for k in grads.keys())
         self.logger.info('Total params: %s' % tparams.keys())
+        
+        if grad_clip is not None:
+            self.clip_grads(grads, **grad_clip)
 
         lr = T.scalar(name='lr')
         f_grad, f_update = optimizer(
@@ -192,3 +207,19 @@ class Trainer(object):
         self.f_grads.append(f_grad)
         self.f_updates.append(f_update)
         self.f_freqs.append(1)
+        
+    def clip_grads(self, grads, clip_type='minmax', clip_min=-1., clip_max=1.,
+                   clip_norm=1.):
+        self.logger.info('Clipping gradients with type {} min/max/norm '
+                         '(when applicable): {}/{}/{}'.format(
+                            clip_type, clip_min, clip_max, clip_norm))
+        for k in grads.keys():
+            if clip_type == 'minmax':
+                grads[k] = T.clip(grads[k], clip_min, clip_max)
+            elif clip_type == 'norm':
+                grads[k] = T.switch(
+                    T.gt((grads[k] ** 2).sum(), clip_norm),
+                    clip_norm * grads[k] / (grads[k] ** 2).sum(),
+                    grads[k])
+            else:
+                raise TypeError(clip_type)

@@ -165,7 +165,12 @@ class Session(object):
         if 'P' in kwargs.keys():
             P = kwargs.pop('P')
         elif dist_key is not None:
-            P = self.tensors[dist_key]
+            try:
+                P = self.tensors[dist_key]
+            except KeyError as e:
+                self.logger.error('Tensor `{}` not found, available: {}'.format(
+                    dist_key, self.tensors.keys()))
+                raise e
         else:
             P = None
 

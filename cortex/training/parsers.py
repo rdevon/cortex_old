@@ -54,7 +54,7 @@ def make_argument_parser_trainer():
                         help='Verbosity of the logging. (0, 1, 2)')
     return parser
 
-def make_argument_parser_test():
+def make_argument_parser_eval():
     '''Generic experiment parser for testing.
 
     Takes the experiment directory as the argument in command line.
@@ -64,11 +64,7 @@ def make_argument_parser_test():
 
     '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('experiment_dir', default=None)
-    parser.add_argument('-m', '--mode', default='valid',
-                        help='Dataset mode: valid, test, or train')
-    parser.add_argument('-b', '--best', action='store_true',
-                        help='Load best instead of last saved model.')
+    parser.add_argument('model_file', default=None)
     parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help='Verbosity of the logging. (0, 1, 2)')
     return parser
