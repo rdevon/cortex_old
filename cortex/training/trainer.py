@@ -209,11 +209,13 @@ class Trainer(object):
         self.f_freqs.append(1)
         
     def clip_grads(self, grads, clip_type='minmax', clip_min=-1., clip_max=1.,
-                   clip_norm=1.):
+                   clip_norm=1., clip_keys=None):
         self.logger.info('Clipping gradients with type {} min/max/norm '
                          '(when applicable): {}/{}/{}'.format(
                             clip_type, clip_min, clip_max, clip_norm))
         for k in grads.keys():
+            if clip_keys is not None and k not in clip_keys:
+                continue
             if clip_type == 'minmax':
                 grads[k] = T.clip(grads[k], clip_min, clip_max)
             elif clip_type == 'norm':
