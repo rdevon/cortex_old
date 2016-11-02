@@ -88,14 +88,28 @@ class Gaussian(Distribution):
 
     @staticmethod
     def kl_divergence(mu_p, log_sigma_p, mu_q, log_sigma_q):
-        log_sigma = T.maximum(log_sigma_p, _clip)
-        log_sigma_q = T.maximum(log_sigma_q, _clip)
+        log_sigma = T.maximum(log_sigma_p, self.clip)
+        log_sigma_q = T.maximum(log_sigma_q, self.clip)
 
         kl = log_sigma_q - log_sigma_p + 0.5 * (
             (T.exp(2 * log_sigma_p) + (mu_q - mu_p) ** 2) /
             T.exp(2 * log_sigma_q)
             - 1)
         return kl.sum(axis=kl.ndim-1)
+    
+    def step_neg_log_prob(self, X, *params):
+        '''Step negative log probability for scan.
+
+        Args:
+            x (T.tensor): input.
+            *params: theano shared variables.
+
+        Returns:
+            T.tensor: :math:`-\log p(x)`.
+
+        '''
+        P = self.get_prob(*params)
+        return self.f_neg_log_prob(X, P, clip=self.clip)
 
     def quantile(self, epsilon, P):
         mu, log_sigma = self.split_prob(P)

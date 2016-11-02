@@ -105,8 +105,7 @@ class Distribution(Cell):
                 raise TypeError('Required argument %s not provided for '
                                 'constructor of %s' % (req, C))
 
-        if conditional:
-            C = _conditionals[C.__name__]
+        if conditional: C = _conditionals[C.__name__]
 
         return C(*reqs.values(), **options)
 
