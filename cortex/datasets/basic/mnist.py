@@ -42,11 +42,11 @@ class MNIST(TwoDImageDataset):
         '''
         if source is None:
             raise TypeError('No source file provided')
-        
+
         self.source = source
 
         logger.info('Loading {name} ({mode}) from {source}'.format(
-            name=name, mode=mode, source=source))
+            name=name, mode=mode, source=resolve_path(source)))
 
         source = resolve_path(source)
 

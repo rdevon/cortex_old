@@ -41,7 +41,7 @@ class GDIR(IRVI):
         consider_constant = [y] + list(params)
         
         if self.prior.has_kl:
-            q_params = self.posterior.distribution.split_prob(q)
+            q_params = self.posterior.split_prob(q)
             KL_q_p = self.posterior.kl_divergence(
                 *(q_params + prior_params))[None, :]
         else:

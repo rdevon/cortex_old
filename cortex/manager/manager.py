@@ -67,6 +67,7 @@ def resolve_tensor_arg(arg, manager=None):
         C = None
     else:
         found = False
+        C = None
         for step in manager.steps:
             if '.'.join(arg.split('.')[:-1]) == step['name']:
                 name_, key = split_arg(arg)
@@ -231,25 +232,25 @@ class Manager(object):
         self.save_args = dict(
             cells=[], steps=[], costs=[], stats=[], samples=[], data=[])
         self.out_path = None
-        
+
     def get_cells(self):
         return self.cells
-    
+
     def get_cell_args(self):
         return self.cell_args
-    
+
     def get_datasets(self):
         return self.datasets
-    
+
     def get_tparams(self):
         return self.tparams
-    
+
     def get_trainer(self):
         return self.trainer
-    
+
     def get_evaluator(self):
         return self.evaluator
-    
+
     def get_visualizer(self):
         return self.visualizer
 

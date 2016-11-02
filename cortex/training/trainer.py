@@ -181,7 +181,7 @@ class Trainer(object):
                                 cost, session.costs.keys()))
 
             # Gradients
-            self.logger.info('Computing gradients for params: %s' % tparams_.keys())
+            self.logger.debug('Computing gradients for params: %s' % tparams_.keys())
             grads_ = T.grad(
                 cost, wrt=tparams_.values(), consider_constant=session.constants)
             grads_ = OrderedDict((k, g) for k, g in zip(tparams_.keys(), grads_))
@@ -194,7 +194,7 @@ class Trainer(object):
             tparams.update(tparams_)
         
         tparams = OrderedDict((k, tparams[k]) for k in grads.keys())
-        self.logger.info('Total params: %s' % tparams.keys())
+        self.logger.debug('Total params: %s' % tparams.keys())
         
         if grad_clip is not None:
             self.clip_grads(grads, **grad_clip)
@@ -210,7 +210,7 @@ class Trainer(object):
         
     def clip_grads(self, grads, clip_type='minmax', clip_min=-1., clip_max=1.,
                    clip_norm=1., clip_keys=None):
-        self.logger.info('Clipping gradients with type {} min/max/norm '
+        self.logger.debug('Clipping gradients with type {} min/max/norm '
                          '(when applicable): {}/{}/{}'.format(
                             clip_type, clip_min, clip_max, clip_norm))
         for k in grads.keys():

@@ -80,6 +80,7 @@ class RNNInitializer(Cell):
                 'dim_out': self.dim_out,
                 'dim_hs': [self.dim_in],
                 'dropout': 0.5,
+                'batch_normalization': True,
                 '_passed': ['dim_h', 'dim_hs', 'n_layers', 'h_act', 'dropout'],
                 '_required': {'out_act': 'tanh'}
             }

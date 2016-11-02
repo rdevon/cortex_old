@@ -25,7 +25,7 @@ class CIFAR(TwoDImageDataset):
         if source is None: raise TypeError('No source file provided')
 
         logger.info('Loading {name} ({mode}) from {source}'.format(
-            name=name, mode=mode, source=source))
+            name=name, mode=mode, source=resolve_path(source)))
 
         source = resolve_path(source)
 
@@ -36,7 +36,7 @@ class CIFAR(TwoDImageDataset):
                 [x for i, x in enumerate(X) if Y[i] in restrict_classes])
             Y = np.array(
                 [y for i, y in enumerate(Y) if Y[i] in restrict_classes])
-            
+
         data = {'input': X, 'labels': Y}
         distributions = {'input': 'gaussian', 'labels': 'multinomial'}
 
@@ -77,9 +77,10 @@ class CIFAR(TwoDImageDataset):
             X_r = X[:, :div]
             X_b = X[:, div:2*div]
             X_g = X[:, 2*div:]
-            X = (X_r + X_b + X_g) / 3.0
+            X = 0.299 * X_r + 0.587 * X_b + 0.114 * X_g
 
         X = X.astype('float32') / float(255)
+        X = (X - X.mean(0)) / X.std(0)
 
         return X, Y
 

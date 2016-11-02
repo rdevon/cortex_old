@@ -34,7 +34,7 @@ class DistributionMLP(Cell):
             'cell_type': '&distribution_type',
             '_required': {'conditional': True},
             '_passed': ['has_kl', 'neg_log_prob', 'kl_divergence',
-                        'simple_sample', 'entropy', 'quantile']
+                        'simple_sample', 'entropy', 'quantile', 'split_prob']
         },
     }
     _links = [('mlp.output', 'distribution.input')]
@@ -86,6 +86,16 @@ class DistributionMLP(Cell):
 
     def _feed(self, X, *params):
         inps = self.mlp.init_args(X)
+        outs = self.mlp._feed(*(inps + params))
+        Y = outs['output']
+        outs['output'] = self.distribution(Y)
+        outs['P'] = outs['output']
+        outs['P_center'] = self.distribution.get_center(outs['P'])
+        return outs
+    
+    def feed_batch(self, X, batch_size):
+        params = tuple(self.get_params())
+        inps = self.mlp.init_args(X, batch_size=batch_size)
         outs = self.mlp._feed(*(inps + params))
         Y = outs['output']
         outs['output'] = self.distribution(Y)

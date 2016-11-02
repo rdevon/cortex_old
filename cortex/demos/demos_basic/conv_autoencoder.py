@@ -6,7 +6,7 @@ import cortex
 from cortex.utils import logger as cortex_logger
 
 
-cortex_logger.set_stream_logger(2)
+cortex_logger.set_stream_logger(1)
 
 
 #cortex.prepare_data('MNIST', mode='train', source='$data/basic/mnist.pkl.gz')
@@ -19,7 +19,7 @@ cortex.prepare_data('CIFAR', name='data', mode='valid',
                     source='$data/basic/cifar-10-batches-py/')
 
 dropout = False
-bn = False
+bn = True
 
 cortex.prepare_cell('CNN2D', name='encoder',
                     input_shape=cortex._manager.datasets['data']['image_shape'],
@@ -28,6 +28,7 @@ cortex.prepare_cell('CNN2D', name='encoder',
                     n_filters=[128, 512],
                     dim_out=2048,
                     h_act='softplus', batch_normalization=bn, dropout=dropout)
+
 cortex.prepare_cell('RCNN2D', name='decoder', input_shape=(512, 8, 8),
                     filter_shapes=((5, 5), (5, 5)),
                     pool_sizes=((2, 2), (2, 2)),
@@ -48,12 +49,11 @@ cortex.add_step('visualization.random_set',
                  n_samples=10)
 
 cortex.build()
-cortex.profile()
 
 cortex.add_cost('squared_error', Y='data.input', Y_hat='decoder.output')
 
 train_session = cortex.create_session(batch_size=10)
-cortex.build_session(test=False)
+cortex.build_session(test=True)
 
 trainer = cortex.setup_trainer(
     train_session,

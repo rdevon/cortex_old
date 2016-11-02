@@ -37,7 +37,7 @@ class CNN2D(Cell):
         if out_act is None: out_act = h_act
         self.out_act = resolve_nonlinearity(out_act)
         self.border_modes = border_modes or (['full_and_trim'] * self.n_layers)
-
+        
         super(CNN2D, self).__init__(name=name, dim_hs=dim_hs,
                                     dim_out=dim_out, h_act=h_act,
                                     out_act=out_act, **kwargs)
@@ -60,8 +60,7 @@ class CNN2D(Cell):
                 dim_in=dim_in,
                 dim_out=dim_out,
                 dropout=kwargs.get('dropout', False),
-                batch_normalization=kwargs.get('batch_normalization', False)
-            )
+                batch_normalization=self.batch_normalization)
 
         return super(CNN2D, self).set_components(components=components, **kwargs)
     
@@ -120,6 +119,7 @@ class CNN2D(Cell):
             
         self.trims = []
 
+        im_x, im_y = self.input_shape[1:]
         for i in xrange(self.n_layers):
             dim_in = dim_ins[i]
             dim_out = dim_outs[i]
@@ -138,10 +138,13 @@ class CNN2D(Cell):
             weights.append(W)
             biases.append(b)
             if self.batch_normalization:
-                gamma = np.ones((dim_in,))
-                beta = np.zeros_like(gamma)
+                bn_shape = (dim_in * im_x * im_y,)
+                gamma = np.ones(bn_shape)
+                beta = np.zeros(bn_shape)
                 gammas.append(gamma)
                 betas.append(beta)
+            im_x = im_x // pool_size[0]
+            im_y = im_y // pool_size[1]
 
         self.params['weights'] = weights
         self.params['biases'] = biases
@@ -165,6 +168,7 @@ class CNN2D(Cell):
         return (X, batch_size)
 
     def feed(self, X, batch_size, *params):
+        print X, batch_size, params
         session = self.manager._current_session
         params = list(params)
 
@@ -206,10 +210,14 @@ class CNN2D(Cell):
                 
             filter_shape = (n_filters, input_shape[1]) + shape
             
+            outs.update(**{'X_%d' % l: X})
+            
             conv_out = T.nnet.conv2d(input=X, filters=W,
                                      filter_shape=filter_shape,
                                      input_shape=input_shape,
                                      border_mode=_border_mode)
+            
+            outs.update(**{'Ci_%d' % l: conv_out})
             
             if trim:
                 sx, sy = self.trims[l]
@@ -260,8 +268,10 @@ class CNN2D(Cell):
                 outs['Y'] = X
 
             input_shape = (batch_size, filter_shape[0], dim_x, dim_y)
-
+            
+        outs['Xo'] = X
         X = X.reshape((X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
+        outs['Xr'] = X
         
         if self.fully_connected is not None:
             ffn_outs = self.fully_connected._feed(X, *params)
@@ -351,8 +361,7 @@ class RCNN2D(CNN2D):
                 dim_in=dim_in,
                 dim_out=dim_out,
                 dropout=kwargs.get('dropout', False),
-                batch_normalization=kwargs.get('batch_normalization', False)
-            )
+                batch_normalization=self.batch_normalization)
 
         return super(CNN2D, self).set_components(components=components, **kwargs)
 
@@ -398,6 +407,52 @@ class RCNN2D(CNN2D):
             input_shape = (dim_x, dim_y)
 
         return dim_x * dim_y * n_filters[-1]
+    
+    def init_params(self, weight_scale=1e-3, dim_in=None):
+        self.params = OrderedDict()
+        dim_ins = [self.input_shape[0]] + self.n_filters[:-1]
+        dim_outs = self.n_filters
+
+        weights = []
+        biases = []
+        if self.batch_normalization:
+            gammas = []
+            betas = []
+            
+        self.trims = []
+
+        im_x, im_y = self.input_shape[1:]
+        for i in xrange(self.n_layers):
+            dim_in = dim_ins[i]
+            dim_out = dim_outs[i]
+            pool_size = self.pool_sizes[i]
+            dim_x, dim_y = self.filter_shapes[i]
+            border_mode = self.border_modes[i]
+            
+            fan_in = dim_in * dim_x * dim_y
+            fan_out = dim_out * dim_x * dim_y // np.prod(pool_size)
+            W_bound = np.sqrt(6. / (fan_in + fan_out))
+            W = self.rng.uniform(low=-W_bound, high=W_bound,
+                                 size=(dim_out, dim_in, dim_x, dim_y))
+            self.trims.append((int(np.floor(W.shape[2] / 2.)),
+                               int(np.floor(W.shape[3] / 2.))))
+            b = np.zeros((dim_out,))
+            weights.append(W)
+            biases.append(b)
+            if self.batch_normalization:
+                bn_shape = (dim_in * im_x * im_y,)
+                gamma = np.ones(bn_shape)
+                beta = np.zeros(bn_shape)
+                gammas.append(gamma)
+                betas.append(beta)
+            im_x = im_x * pool_size[0]
+            im_y = im_y * pool_size[1]
+
+        self.params['weights'] = weights
+        self.params['biases'] = biases
+        if self.batch_normalization:
+           self.params['gammas'] = gammas
+           self.params['betas'] = betas
 
     def feed(self, X, batch_size, *params):
         session = self.manager._current_session
@@ -447,6 +502,9 @@ class RCNN2D(CNN2D):
             return upsampled
 
         for l in xrange(self.n_layers):
+            W = params.pop(0)
+            b = params.pop(0)
+            
             if self.batch_normalization:
                 gamma = params.pop(0)
                 beta = params.pop(0)
@@ -456,9 +514,6 @@ class RCNN2D(CNN2D):
                     X.reshape((shape[0], shape[1] * shape[2] * shape[3])),
                     gamma, beta, session=session)
                 X = X.reshape(shape)
-
-            W = params.pop(0)
-            b = params.pop(0)
 
             shape = self.filter_shapes[l]
             pool_size = self.pool_sizes[l]

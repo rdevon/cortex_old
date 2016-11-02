@@ -141,17 +141,17 @@ class IRVI(Cell):
             Qs_ = Q0.copy()
             extra = Q0
             i_costs = [T.constant(0.).astype(floatX)]
-        
+
         rval['extra'] = extra
         rval['Qk'] = Qs[-1]
         rval['Qs'] = Qs
         rval['i_costs'] = i_costs
-        
+
         if self.pass_gradients:
             constants = []
         else:
             constants = [Qs_]
-        
+
         rval.update(constants=constants, updates=updates)
         return rval
 
@@ -160,15 +160,15 @@ class IRVI(Cell):
         rval = OrderedDict()
         rval['_delta_Q_mean'] = (Qs[-1] - Qs[0]).mean()
         rval['_delta_i_cost'] = i_costs[-1] - i_costs[0]
-        
+
         if isteps > 4:
             isteps = range(0, isteps, isteps // 4 + 1)
         else:
             isteps = range(isteps)
-        
+
         for i in isteps:
             try:
-                rval['i_cost({})'.format(i)] = i_costs[i]
+                rval['i_cost({0:02d})'.format(i)] = i_costs[i]
             except:
                 pass
         return rval
@@ -180,9 +180,9 @@ class DeepIRVI(IRVI):
     Will take a variety of methods as the refinement step (see DeepGDIR and DeepAIR).
     NOTE: this class will *not* perform inference by itself, but needs to be
     instantiated from one of the child classes.
-    
+
     '''
-        
+
     _call_args = ['Y', 'Q0']
     _args = ['pass_gradients']
     _sample_tensors = ['Qk']
@@ -199,14 +199,14 @@ class DeepIRVI(IRVI):
 
     def set_components(self, models=None, **kwargs):
         self.component_keys = models.keys()
-        
+
         def add_component(comp):
             if (not comp in self.manager.cells.keys() and
                 comp in self.manager.cell_args.keys()):
                 self.manager.build_cell(comp)
             elif comp not in self.manager.cell_args.keys():
                 raise ValueError('Cell `%s` not foud.' % comp)
-        
+
         for k, v in models.iteritems():
             if isinstance(v, (list, tuple)):
                 self.__dict__[k] = []
@@ -217,15 +217,15 @@ class DeepIRVI(IRVI):
                 add_component(v)
                 self.__dict__[k] = self.manager[v]
         return kwargs
-    
+
     def prepare_Qs(self, *Q0s):
         return concatenate(list(Q0s), axis=Q0s[0].ndim-1)
-    
+
     def init_args(self, Y, Q0, n_samples=None, n_steps=None, inference_rate=None):
         if (n_samples is None or n_steps is None):
             raise TypeError
         return (Y, Q0, n_samples, n_steps, inference_rate)
-    
+
     def _feed(self, Y, Q0, n_samples, n_steps, inference_rate, *params):
         '''Perform inference
 
@@ -241,13 +241,16 @@ class DeepIRVI(IRVI):
 
         '''
         updates = theano.OrderedUpdates()
+        batch_size = session.batch_size
+        if batch_size is not None:
+            session.batch_size = n_samples * batch_size
 
         # Set random variables.
         if n_steps > 0:
             epsilons = self.generate_random_variables((n_steps, n_samples), P=Q0)
         else:
             epsilons = self.generate_random_variables((n_samples,), P=Q0)
-        
+
         rval = OrderedDict()
         rval['Q0'] = Q0
         rval['epsilons'] = epsilons
@@ -292,4 +295,6 @@ class DeepIRVI(IRVI):
         rval['i_costs'] = i_costs
         rval.update(updates=updates)
         rval.update(constants=[Qs_])
+
+        session.batch_size = batch_size
         return rval
