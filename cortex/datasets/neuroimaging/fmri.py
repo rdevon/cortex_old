@@ -291,9 +291,6 @@ class FMRI(FMRI_IID):
             time_courses = None
 
         if time_courses is not None:
-            targets = (self.extras['targets'] - self.extras['targets'].mean()) / self.extras['targets'].std()
-            novels = (self.extras['novels'] - self.extras['novels'].mean()) / self.extras['novels'].std()
-
             if isinstance(time_courses, np.ndarray):
                 time_courses = {'tc': time_courses}
             elif isinstance(time_courses, list):
@@ -302,8 +299,10 @@ class FMRI(FMRI_IID):
             elif not isinstance(time_courses, dict):
                 raise TypeError('Time courses must be dict, list, or np.ndarray.')
 
-            time_courses['targets'] = targets
-            time_courses['novels'] = novels
+            if 'targets' in self.extras.keys():
+                time_courses['targets'] = self.extras['targets']
+            if 'novels' in self.extras.keys():
+                time_courses['novels'] = self.extras['novels']
 
             for k in time_courses.keys():
                 tc = time_courses[k]
