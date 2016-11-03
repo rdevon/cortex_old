@@ -400,6 +400,13 @@ class Manager(object):
 
         except KeyboardInterrupt:
             print 'Interrupting training...'
+        except RuntimeError as e:
+            for mode in eval_modes:
+                r = self.evaluator(data_mode=mode)
+                self.monitor.update(mode, **r)
+            self.monitor.display()
+            raise e
+        
         print 'Training completed.'
         if self.out_path is not None:
             self.save(path.join(self.out_path, 'last.npz'))
