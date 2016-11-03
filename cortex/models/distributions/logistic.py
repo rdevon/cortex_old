@@ -52,7 +52,7 @@ class Logistic(Distribution):
     is_continuous = True
     scale = 2
 
-    def __init__(self, dim, name='logistic', clip=-5, **kwargs):
+    def __init__(self, dim, name='logistic', clip=-10, **kwargs):
         self.f_sample = _logistic
         self.f_neg_log_prob = _neg_logistic_log_prob
         self.f_entropy = _logistic_entropy

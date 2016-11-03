@@ -6,9 +6,10 @@ from collections import OrderedDict
 import numpy as np
 import theano
 from theano import tensor as T
+from theano.tensor.nnet.bn import batch_normalization
 import warnings
 
-from .. import batch_normalization, Cell, dropout, norm_weight
+from .. import Cell, dropout, norm_weight
 from ...utils import concatenate, floatX
 
 
@@ -158,7 +159,17 @@ class MLP(Cell):
                 gamma = params.pop(0)
                 beta = params.pop(0)
                 self.logger.debug('Batch normalization on layer %d' % l)
-                X = batch_normalization(X, gamma, beta, session=session)
+                if X.ndim == 2:
+                    mean = X.mean(0, keepdims=True)
+                    std = X.std(0, keepdims=True)
+                elif X.ndim == 3:
+                    mean = X.mean((0, 1), keepdims=True)
+                    std = X.std((0, 1), keepdims=True)
+                else:
+                    raise ValueError()
+                std = T.sqrt(std ** 2 + 1e-6)
+                X = batch_normalization(inputs=X, gamma=gamma, beta=beta,
+                                        mean=mean, std=std, mode='high_mem')
 
             preact = T.dot(X, W) + b
 

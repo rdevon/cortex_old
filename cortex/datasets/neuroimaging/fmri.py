@@ -134,8 +134,8 @@ class FMRI_IID(mri_module.MRI):
                 self.logger.info('Detrending voxels...')
                 X = self.perform_detrend(X.transpose(1, 0, 2)).transpose(1, 0, 2)
 
-            X -= X.mean(axis=1, keepdims=True)
-            X /= np.sqrt(X.std(axis=1, keepdims=True) ** 2 + 1e-6)
+            X -= X.mean(axis=(1, 2), keepdims=True)
+            X /= np.sqrt(X.std(axis=(1, 2), keepdims=True) ** 2 + 1e-6)
             X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
             X -= X.mean(axis=0, keepdims=True)
             X /= X.std(axis=0, keepdims=True)
