@@ -23,6 +23,7 @@ def _neg_logistic_log_prob(x, p, clip=None, sum_probs=True):
     dim = p.shape[p.ndim-1] // 2
     mu = utils.slice(p, 0, dim)
     log_s = utils.slice(p, 1, dim)
+
     if clip is not None: clip = T.maximum(log_s, clip)
     g = (x - mu) / T.exp(log_s)
     energy = -g + log_s + 2 * T.log(1 + T.exp(g))
@@ -66,7 +67,7 @@ class Logistic(Distribution):
 
     def get_params(self):
         return [self.mu, self.log_s]
-    
+
     def step_neg_log_prob(self, X, *params):
         '''Step negative log probability for scan.
 
@@ -80,6 +81,21 @@ class Logistic(Distribution):
         '''
         P = self.get_prob(*params)
         return self.f_neg_log_prob(X, P, clip=self.clip)
+
+    def neg_log_prob(self, X, P=None, sum_probs=True):
+        '''Negative log probability.
+
+        Args:
+            x (T.tensor): input.
+            p (Optional[T.tensor]): probability.
+            sum_probs (bool): whether to sum the last axis.
+
+        Returns:
+            T.tensor: :math:`-\log p(x)`.
+
+        '''
+        if P is None: P = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(X, P, sum_probs=sum_probs, clip=self.clip)
 
     def quantile(self, epsilon, P):
         mu, log_s = self.split_prob(P)

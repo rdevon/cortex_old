@@ -96,7 +96,7 @@ class Gaussian(Distribution):
             T.exp(2 * log_sigma_q)
             - 1)
         return kl.sum(axis=kl.ndim-1)
-    
+
     def step_neg_log_prob(self, X, *params):
         '''Step negative log probability for scan.
 
@@ -110,6 +110,21 @@ class Gaussian(Distribution):
         '''
         P = self.get_prob(*params)
         return self.f_neg_log_prob(X, P, clip=self.clip)
+
+    def neg_log_prob(self, X, P=None, sum_probs=True):
+        '''Negative log probability.
+
+        Args:
+            x (T.tensor): input.
+            p (Optional[T.tensor]): probability.
+            sum_probs (bool): whether to sum the last axis.
+
+        Returns:
+            T.tensor: :math:`-\log p(x)`.
+
+        '''
+        if P is None: P = self.get_prob(*self.get_params())
+        return self.f_neg_log_prob(X, P, sum_probs=sum_probs, clip=self.clip)
 
     def quantile(self, epsilon, P):
         mu, log_sigma = self.split_prob(P)
@@ -171,7 +186,7 @@ class Gaussian(Distribution):
         b, _ = scan(step, [a], [None], [], a.shape[0])
         b = b.reshape((n_steps, n_steps, self.dim)).astype(floatX)
         return b
-    
+
 
 class GaussianUnitVariance(Distribution):
     '''Gaussian distribution.
