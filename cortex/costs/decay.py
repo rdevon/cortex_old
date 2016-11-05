@@ -11,7 +11,7 @@ from ..utils import floatX
 
 logger = logging.getLogger(__name__)
 
-def l1_decay(rate, *tparams):
+def l1_decay(rate, tparams):
     '''L1 decay.
 
     Args:
@@ -38,7 +38,7 @@ def l1_decay(rate, *tparams):
 
     return rval
 
-def l2_decay(rate, *tparams):
+def l2_decay(rate, tparams):
     '''L2 decay.
 
     Args:

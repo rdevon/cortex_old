@@ -34,40 +34,63 @@ class Visualizer(object):
             raise TypeError
 
         args, kwargs = self.session.resolve_op_args(args, kwargs)
+
+        tensors = []
+
+        def process_list(l):
+            l_ = []
+            for a in l:
+                if isinstance(a, (T.TensorVariable,
+                                  T.sharedvar.SharedVariable)):
+                    l_.append('&tensor_{}'.format(len(tensors)))
+                    tensors.append(a)
+                elif isinstance(a, list):
+                    l_.append(process_list(a))
+                elif isinstance(a, dict):
+                    keys = a.keys()
+                    values = a.values()
+                    values = process_list(values)
+                    l_.append(dict((k, v) for k, v in zip(keys, values)))
+                else:
+                    l_.append(a)
+            return l_
         
-        tensor_idx = [i for i, a in enumerate(args)
-                      if isinstance(a, (T.TensorVariable,
-                                        T.sharedvar.SharedVariable))]
-        nontensor_idx = [i for i in range(len(args)) if i not in tensor_idx]
-        tensor_keys = [k for k, v in kwargs.iteritems()
-                       if isinstance(v, (T.TensorVariable,
-                                         T.sharedvar.SharedVariable))]
-        nontensor_keys = [k for k in kwargs.keys() if k not in tensor_keys]
+        def unpack_list(l, tensors):
+            l_ = []
+            for a in l:
+                if isinstance(a, str) and '&tensor' in a:
+                    i = int(a[8:])
+                    l_.append(tensors[i])
+                elif isinstance(a, list):
+                    l_.append(unpack_list(a, tensors))
+                elif isinstance(a, dict):
+                    keys = a.keys()
+                    values = a.values()
+                    values = unpack_list(values, tensors)
+                    l_.append(dict((k, v) for k, v in zip(keys, values)))
+                else:
+                    l_.append(a)
+            return l_
+        
+        args_ = process_list(args)
+        kwargs_ = dict((k, v) for k, v
+            in zip(kwargs.keys(), process_list(kwargs.values())))
 
         f_viz = theano.function(
-            self.session.inputs,
-            [args[i] for i in tensor_idx] + [kwargs[k] for k in tensor_keys],
-            updates=self.session.updates, on_unused_input='ignore')
+            self.session.inputs, tensors, updates=self.session.updates,
+            on_unused_input='ignore')
 
         def viz(*inputs):
             ts = f_viz(*inputs)
-            t_args = ts[:len(tensor_idx)]
-            t_kwargs = dict(zip(tensor_keys, ts[len(tensor_idx):]))
-            new_args = []
-            t_i = 0
-            for i in range(len(args)):
-                if i in tensor_idx:
-                    new_args.append(t_args[t_i])
-                    t_i += 1
-                else:
-                    new_args.append(args[i])
-
-            kwargs.update(**t_kwargs)
+            args = unpack_list(args_, tensors)
+            values = unpack_list(kwargs_.values(), ts)
+            kwargs = dict((k, v) for k, v in zip(kwargs_.keys(), values))
+            
             if 'name' in kwargs.keys() and self.manager.out_path is not None:
                 name = kwargs.pop('name')
                 kwargs['out_file'] = path.join(self.manager.out_path, name + '.png')
 
-            return op(*new_args, **kwargs)
+            return op(*args, **kwargs)
 
         self.fs.append(viz)
         self.f_names.append(kwargs.get('name', 'Viz'))

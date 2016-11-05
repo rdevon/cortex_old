@@ -402,15 +402,17 @@ class MRI(NeuroimagingDataset):
         '''
         if load_niftis:
             try:
-                images, nifti_files, roi_dict = self.load_images(update_rois=update_rois, roi_dict=roi_dict)
+                images, nifti_files, roi_dict = self.load_images(
+                    update_rois=update_rois, roi_dict=roi_dict)
             except:
                 self.logger.warning('Loading nifti files failed. Creating new ones.')
                 load_niftis = False
         
         if not load_niftis:
             images, nifti_files, roi_dict = self.make_images(
-                x, roi_dict=roi_dict, update_rois=update_rois, set_global_norm=set_global_norm,
-                extra_mean=extra_mean, average=average)
+                x, roi_dict=roi_dict, update_rois=update_rois,
+                set_global_norm=set_global_norm, extra_mean=extra_mean,
+                average=average)
 
         if stats is None: stats = dict()
         if isinstance(global_norm, np.ndarray):

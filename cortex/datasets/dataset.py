@@ -277,10 +277,10 @@ class BasicDataset(Dataset):
             
             hasnan = np.any(np.isnan(data))
             hasinf = np.any(np.isinf(data))
-            self.logger.info('Data stats: dist: {0}, dim: {1}, min: {2:.2e}, '
-                             'max: {3:.2e}, mean: {4:.2e}, std: {5:.2e}, '
-                             'has nans: {6}, has infs: {7}'.format(
-                                dist, dim, mi, ma, mean, std, hasnan, hasinf))
+            self.logger.info('Data stats for `{0}`: dist: {1}, dim: {2}, '
+                             'min: {3:.2e}, max: {4:.2e}, mean: {5:.2e}, '
+                             'std: {6:.2e}, has nans: {7}, has infs: {8}'.format(
+                                k, dist, dim, mi, ma, mean, std, hasnan, hasinf))
         self.logger.info('Done checking data.')
 
     def register(self):

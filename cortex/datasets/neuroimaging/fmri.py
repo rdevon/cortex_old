@@ -39,6 +39,16 @@ class FMRI_IID(mri_module.MRI):
         self.detrend = detrend
         self.load_preprocessed = load_preprocessed
         super(FMRI_IID, self).__init__(name=name, **kwargs)
+        
+    def show_stats(self, X):
+        mean = X.mean(0)
+        std = X.std(0)
+        self.logger.info('Data statistics: temporal mean (mean/std/min/max) '
+                         'across voxels: {0}/{1}/{2}/{3}, temporal std '
+                         '(mean/std/min/max) across voxels: '
+                         '{4}/{5}/{6}/{7}: '.format(
+                            mean.mean(), mean.std(), mean.min(), mean.max(),
+                            std.mean(), std.std(), std.min(), std.max()))
 
     def get_data(self, source):
         '''Fetch the fMRI dataset.
@@ -129,6 +139,7 @@ class FMRI_IID(mri_module.MRI):
                 raise ValueError('X has incorrect shape. Should be 3 or 5 (got %d)'
                                  % len(X.shape))
             X = self._mask(X)
+            self.show_stats(X)
 
             if self.detrend:
                 self.logger.info('Detrending voxels...')
@@ -265,7 +276,8 @@ class FMRI(FMRI_IID):
             [self.extras['targets'][j:j+self.window] for i, j in idxs])
         novels = np.array(
             [self.extras['novels'][j:j+self.window] for i, j in idxs])
-        stim = np.concatenate([targets[:, None], novels[:, None]], axis=1).astype(floatX)
+        stim = np.concatenate(
+            [targets[:, None], novels[:, None]], axis=1).astype(floatX)
         stim_all = np.concatenate([self.extras['targets'][:, None],
                                    self.extras['novels'][:, None]], axis=1)
 
@@ -282,13 +294,8 @@ class FMRI(FMRI_IID):
         x = x.reshape((shape[0], shape[1],) + tuple(x.shape[1:]))
         self.temporal_mean = x.mean(axis=0)
 
-    def viz(self, x, time_course_keys=None, t_limit=None, **kwargs):
-        if time_course_keys is not None:
-            time_courses = dict()
-            for k in time_course_keys:
-                time_courses[k] = kwargs.pop(k)
-        else:
-            time_courses = None
+    def viz(self, time_courses=None, maps=None, t_limit=None, out_file=None,
+            **kwargs):
 
         if time_courses is not None:
             if isinstance(time_courses, np.ndarray):
@@ -317,7 +324,10 @@ class FMRI(FMRI_IID):
 
                 time_courses[k] = tc
 
-        super(FMRI, self).viz(x, time_courses=time_courses, **kwargs)
+        for k, v in maps.items():
+            out_file_ = out_file[:-3] + k + '.png'
+            super(FMRI, self).viz(v, time_courses=time_courses,
+                                  out_file=out_file_, **kwargs)
 
     def viz_mean(self, x, out_file=None, remove_niftis=True, roi_dict=None,
             stats=None, update_rois=True, global_norm=False, **kwargs):

@@ -215,89 +215,72 @@ class Session(object):
                 self.logger.info('Data shape: %s' % (d.shape,))
 
             raise e
-
-    def resolve_op_args(self, args, kwargs, constants=None):
+        
+    def resolve_list(self, args, constants=None):
         manager = self.manager
         tensors = self.tensors
-
-        if args is None: args = []
-        if kwargs is None: kwargs = {}
+        
         if constants is None: constants = []
         new_args = []
         for arg in args:
-            if arg in self.tensors.keys():
-                ten = tensors[arg]
-                if arg in constants:
-                    ten = ten.copy()
-                    tensors[arg + '(copy)'] = ten
-                    self.constants.append(ten)
-                new_args.append(ten)
-            elif is_tensor_arg(arg):
-                name, key, _ = resolve_tensor_arg(arg)
-                if name in manager.datasets.keys():
-                    dataset_tensor = manager.datasets[name]['tensors'][key]
-                    tensors[arg] = dataset_tensor
-                    self.inputs.append(dataset_tensor)
-                    self.datasets.append(name)
-                    self.input_keys.append(key)
-
-                if arg not in tensors.keys() and arg in manager.samples.keys():
-                    self.add_samples(**manager.samples[arg])
-                if arg in tensors.keys():
+            if isinstance(arg, list):
+                arg = resolve_list(arg, constants=constants)
+            elif isinstance(arg, dict):
+                arg = resolve_dict(arg, constants=constants)
+            else:
+                if arg not in tensors.keys():
+                    if arg in manager.samples.keys():
+                        # Samples
+                        self.add_samples(**manager.samples[arg])
+    
+                    elif is_tensor_arg(arg):
+                        # data
+                        name, key, _ = resolve_tensor_arg(arg)
+                        if name in manager.datasets.keys():
+                            dataset_tensor = manager.datasets[name]['tensors'][key]
+                            tensors[arg] = dataset_tensor
+                            self.inputs.append(dataset_tensor)
+                            self.datasets.append(name)
+                            self.input_keys.append(key)
+                            
+                        elif arg not in manager.cells.keys():
+                            # tparams
+                            arg_ = []
+                            for tpk, tparam in manager.tparams.iteritems():
+                                if arg in tpk: arg_.append(tparam)
+                            arg = arg_
+                            
+                        else:
+                            raise ValueError('Could not find tensor %s, found: %s'
+                                             % (arg, tensors.keys()))
+                
+                if arg in self.tensors.keys():
                     ten = tensors[arg]
                     if arg in constants:
                         ten = ten.copy()
                         tensors[arg + '(copy)'] = ten
                         self.constants.append(ten)
-                    new_args.append(ten)
-                elif arg not in manager.cells.keys():
-                    for tpk, tparam in manager.tparams.iteritems():
-                        if arg in tpk:
-                            new_args.append(tparam)
-                else:
-                    raise ValueError('Could not find tensor %s, found: %s'
-                                     % (arg, tensors.keys()))
-            else:
-                new_args.append(arg)
+                    arg = ten
+            
+            new_args.append(arg)
+                
         assert len(new_args) >= len(args), (args, new_args)
+        return new_args
+    
+    def resolve_dict(self, d, constants=None):
+        keys = d.keys()
+        values = d.values()
+        values = self.resolve_list(values)
+        return OrderedDict((k, v) for k, v in zip(keys, values))
 
-        new_kwargs = {}
-        for key, arg in kwargs.iteritems():
-            if arg in self.tensors.keys():
-                arg = self.tensors[arg]
-            elif is_tensor_arg(arg):
-                name, key_, _ = resolve_tensor_arg(arg)
-                if name in manager.datasets.keys():
-                    if arg not in tensors.keys():
-                        dataset_tensor = manager.datasets[name]['tensors'][key_]
-                        tensors[arg] = dataset_tensor
-                        self.inputs.append(dataset_tensor)
-                        self.datasets.append(name)
-                        self.input_keys.append(key_)
+    def resolve_op_args(self, args, kwargs, constants=None):
+        if args is None: args = []
+        if kwargs is None: kwargs = {}
+        
+        args = self.resolve_list(args, constants=constants)
+        kwargs = self.resolve_dict(kwargs, constants=constants)
 
-                if arg not in tensors.keys() and arg in manager.samples.keys():
-                    self.add_samples(**manager.samples[arg])
-
-                if arg in tensors.keys():
-                    arg = tensors[arg]
-                    if arg in constants:
-                        ten = ten.copy()
-                        tensors[arg + '(copy)'] = ten
-                        self.constants.append(ten)
-                        arg = ten
-                elif arg not in manager.cells.keys():
-                    for tpk, tparam in manager.tparams.iteritems():
-                        if arg in tpk:
-                            arg = tparam
-                            break
-                else:
-                    raise ValueError('Could not find tensor %s' % arg)
-
-            if key == 'inputs' and isinstance(arg, dict):
-                new_kwargs.update(**arg)
-            else:
-                new_kwargs[key] = arg
-        return new_args, new_kwargs
+        return args, kwargs
 
     def build(self, test=False):
         manager = self.manager
