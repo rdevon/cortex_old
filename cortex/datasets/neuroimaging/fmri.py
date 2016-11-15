@@ -35,9 +35,10 @@ class FMRI_IID(mri_module.MRI):
 
     '''
     def __init__(self, name='fmri_iid', detrend=False, load_preprocessed=True,
-                 **kwargs):
+                 variance_normalize_pca=True, **kwargs):
         self.detrend = detrend
         self.load_preprocessed = load_preprocessed
+        self.variance_normalize_pca = variance_normalize_pca
         super(FMRI_IID, self).__init__(name=name, **kwargs)
         
     def show_stats(self, X):
@@ -85,6 +86,12 @@ class FMRI_IID(mri_module.MRI):
         self.anat_file = resolve_path(anat_file)
         self.tmp_path = resolve_path(tmp_path)
         self.pca_file = resolve_path(pca_file)
+        
+        if self.pca_file == '#AUTO':
+            self.pca_file = path.join(
+                path.dirname(source), 'pca_c={0}_vn={1}_dt={2}'.format(
+                    self.pca_components, self.variance_normalize_pca,
+                    self.detrend))
 
         self.update_progress()
 
@@ -146,10 +153,16 @@ class FMRI_IID(mri_module.MRI):
                 X = self.perform_detrend(X.transpose(1, 0, 2)).transpose(1, 0, 2)
 
             X -= X.mean(axis=(1, 2), keepdims=True)
-            X /= np.sqrt(X.std(axis=(1, 2), keepdims=True) ** 2 + 1e-6)
+            X /= X.std(axis=(1, 2), keepdims=True)
             X = X.reshape((X.shape[0] * X.shape[1], X.shape[2]))
+            
             X -= X.mean(axis=0, keepdims=True)
-            X /= X.std(axis=0, keepdims=True)
+            if self.variance_normalize_pca:
+                self.logger.info('Variance normalizing voxels before PCA.')
+                X /= np.sqrt(X.std(axis=0, keepdims=True) ** 2 + 1e-7)
+            else:
+                self.logger.info('Not variance normalizing voxels before PCA.')
+            
             Y = Y.reshape((Y.shape[0] * Y.shape[1]))
         else:
             self.logger.info('Reloading preprocessed from {}'.format(preprocessed))

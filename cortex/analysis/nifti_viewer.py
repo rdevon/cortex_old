@@ -196,7 +196,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
     indices = [0]
     if time_courses is not None: x *= 2
     font = {'size': 10}
-    rc('font',**font)
+    rc('font', **font)
 
     if fig is None:
         fig = plt.figure(figsize=[iscale * y, (1.5 * iscale) * x / 2.5])
@@ -281,7 +281,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
                     tc = v[f]
                 ax.plot(tc + 2 * t, label=k)
             if i_ == 0:
-                ax.legend()
+                ax.legend(prop={'size':6})
 
     if out_file is not None:
         plt.savefig(out_file, facecolor=(bgcol, bgcol, bgcol))

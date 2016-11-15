@@ -69,6 +69,8 @@ class MRI(NeuroimagingDataset):
         '''
         if source is None:
             raise TypeError('`souce` argument must be provided')
+        
+        self.pca_components = pca_components
 
         self.logger = logging.getLogger('.'.join([self.__module__,
                                                   self.__class__.__name__]))
@@ -84,7 +86,6 @@ class MRI(NeuroimagingDataset):
 
         self.image_shape = self.mask.shape
         self.update_progress()
-        self.pca_components = pca_components
         self.variance_normalize = variance_normalize
 
         if self.pca_components:
