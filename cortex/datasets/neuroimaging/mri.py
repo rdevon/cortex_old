@@ -52,7 +52,7 @@ class MRI(NeuroimagingDataset):
     '''
 
     def __init__(self, source=None, name='mri', flip_signs=False,
-                 pca_components=0, incremental_pca=False, whiten=False,
+                 pca_components=0, incremental_pca=False, whiten_pca=False,
                  variance_normalize=False, distribution='gaussian', **kwargs):
         '''Init function for MRI.
 
@@ -71,6 +71,7 @@ class MRI(NeuroimagingDataset):
             raise TypeError('`souce` argument must be provided')
         
         self.pca_components = pca_components
+        self.whiten_pca = whiten_pca
 
         self.logger = logging.getLogger('.'.join([self.__module__,
                                                   self.__class__.__name__]))
@@ -89,7 +90,7 @@ class MRI(NeuroimagingDataset):
         self.variance_normalize = variance_normalize
 
         if self.pca_components:
-            X = self.apply_pca(X, incremental_pca, whiten=whiten).astype(floatX)
+            X = self.apply_pca(X, incremental_pca, whiten=self.whiten_pca).astype(floatX)
         self.update_progress()
         self.global_std = None
 

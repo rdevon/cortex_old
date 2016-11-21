@@ -89,9 +89,9 @@ class FMRI_IID(mri_module.MRI):
         
         if self.pca_file == '#AUTO':
             self.pca_file = path.join(
-                path.dirname(source), 'pca_c={0}_vn={1}_dt={2}'.format(
+                path.dirname(source), 'pca_c={0}_vn={1}_dt={2}_wt={3}'.format(
                     self.pca_components, self.variance_normalize_pca,
-                    self.detrend))
+                    self.detrend, self.whiten_pca))
 
         self.update_progress()
 
