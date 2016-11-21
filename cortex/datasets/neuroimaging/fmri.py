@@ -100,7 +100,7 @@ class FMRI_IID(mri_module.MRI):
 
         mask = np.load(mask_file)
         if not np.all(np.bitwise_or(mask == 0, mask == 1)):
-            raise ValueError("Mask has incorrect values.")
+            raise ValueError('Mask has incorrect values.')
         self.mask = mask
         self.update_progress()
 
@@ -285,20 +285,24 @@ class FMRI(FMRI_IID):
             [self.Y[i][j:j+self.window] for i, j in idxs]).transpose(1, 0, 2)
         y_l = y[0]
         x_c = self.X.transpose(1, 0, 2)
-        targets = np.array(
-            [self.extras['targets'][j:j+self.window] for i, j in idxs])
-        novels = np.array(
-            [self.extras['novels'][j:j+self.window] for i, j in idxs])
-        stim = np.concatenate(
-            [targets[:, None], novels[:, None]], axis=1).astype(floatX)
-        stim_all = np.concatenate([self.extras['targets'][:, None],
-                                   self.extras['novels'][:, None]], axis=1)
+        
+        rval = dict(input=x, labels=y, labels_t=y_l, x_total=x_c)
+        
+        if 'targets' in self.extras.keys():
+            targets = np.array(
+                [self.extras['targets'][j:j+self.window] for i, j in idxs])
+            novels = np.array(
+                [self.extras['novels'][j:j+self.window] for i, j in idxs])
+            stim = np.concatenate(
+                [targets[:, None], novels[:, None]], axis=1).astype(floatX)
+            stim_all = np.concatenate([self.extras['targets'][:, None],
+                                       self.extras['novels'][:, None]], axis=1)
+            rval.update(stim=stim, stim_all=stim_all)
 
         self.pos += batch_size
         if self.pos + batch_size > self.n_samples: self.pos = -1
 
-        return dict(input=x, labels=y, labels_t=y_l, x_total=x_c, stim=stim,
-                    stim_all=stim_all)
+        return rval
 
     def set_mean(self, x):
         shape = x.shape
@@ -307,8 +311,8 @@ class FMRI(FMRI_IID):
         x = x.reshape((shape[0], shape[1],) + tuple(x.shape[1:]))
         self.temporal_mean = x.mean(axis=0)
 
-    def viz(self, time_courses=None, maps=None, t_limit=None, out_file=None,
-            **kwargs):
+    def viz(self, time_courses=None, time_course_scales=None, maps=None,
+            t_limit=None, out_file=None, **kwargs):
 
         if time_courses is not None:
             if isinstance(time_courses, np.ndarray):
@@ -336,10 +340,19 @@ class FMRI(FMRI_IID):
                 if tc.ndim == 2: tc = tc.T
 
                 time_courses[k] = tc
+                
+            for k in time_course_scales.keys():
+                tcs = time_course_scales[k]
+                t_limit = t_limit or tcs.shape[0]
+                tcs /= tcs.max()
+                tcs = tcs[:t_limit]
+                if tcs.ndim == 2: tcs = tcs.T
+                time_course_scales[k] = tcs
 
         for k, v in maps.items():
             out_file_ = out_file[:-3] + k + '.png'
             super(FMRI, self).viz(v, time_courses=time_courses,
+                                  time_course_scales=time_course_scales,
                                   out_file=out_file_, **kwargs)
 
     def viz_mean(self, x, out_file=None, remove_niftis=True, roi_dict=None,

@@ -139,7 +139,8 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
     p.join()
 
 def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
-            stats=None, time_courses=None, y=10, global_std=None, clusters=None):
+            stats=None, time_courses=None, time_course_scales=None,
+            y=10, global_std=None, clusters=None):
     '''Saves a montage of nifti images.
 
     Args:
@@ -279,7 +280,13 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
                     tc = v
                 else:
                     tc = v[f]
-                ax.plot(tc + 2 * t, label=k)
+                tc = tc + 2 * t
+                ax.plot(tc, label=k)
+                if time_course_scales is not None and k in time_course_scales.keys():
+                    scale = time_course_scales[k]
+                    if scale.ndim > 1: scale = scale[f]
+                    ax.fill_between(np.arange(tc.shape[0]),
+                                    tc - scale, tc + scale, alpha=0.5)
             if i_ == 0:
                 ax.legend(prop={'size':6})
 

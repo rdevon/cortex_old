@@ -14,6 +14,7 @@ from theano import tensor as T
 from ..utils import floatX, intX
 from ..utils.tools import resolve_path
 from ..utils.extra import download_data, unzip
+from ..utils.logger import get_class_logger
 
 
 def fetch_basic_data():
@@ -96,9 +97,7 @@ class Dataset(object):
             dict: leftover keyword arguments.
 
         '''
-        if not hasattr(self, 'logger'):
-            self.logger = logging.getLogger(
-                '.'.join([self.__module__, self.__class__.__name__]))
+        if not hasattr(self, 'logger'): self.logger = get_class_logger(self)
         self.logger.debug('Forming dataset %r with name %s' % (
             self.__class__, name))
 

@@ -121,10 +121,13 @@ class Manager(object):
         self.reset()
 
     def set_path(self, out_path):
-        self.out_path = resolve_path(path.join('$outs', out_path))
-        if self.out_path is not None and not path.isdir(self.out_path):
-            self.logger.info('%s does not exist. Creating.' % self.out_path)
-            os.mkdir(self.out_path)
+        if path.isdir(out_path):
+            self.out_path = out_path
+        else:
+            self.out_path = resolve_path(path.join('$outs', out_path))
+            if self.out_path is not None and not path.isdir(self.out_path):
+                self.logger.info('%s does not exist. Creating.' % self.out_path)
+                os.mkdir(self.out_path)
 
     def save(self, out_file=None):
         def profile(d):

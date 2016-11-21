@@ -80,20 +80,31 @@ class Visualizer(object):
             self.session.inputs, tensors, updates=self.session.updates,
             on_unused_input='ignore')
 
-        def viz(*inputs):
+        def viz(*inputs, **extra_args):
             ts = f_viz(*inputs)
-            args = unpack_list(args_, tensors)
+            args = unpack_list(args_, ts)
             values = unpack_list(kwargs_.values(), ts)
             kwargs = dict((k, v) for k, v in zip(kwargs_.keys(), values))
+            kwargs.update(**extra_args)
             
             if 'name' in kwargs.keys() and self.manager.out_path is not None:
                 name = kwargs.pop('name')
                 kwargs['out_file'] = path.join(self.manager.out_path, name + '.png')
-
             return op(*args, **kwargs)
 
         self.fs.append(viz)
         self.f_names.append(kwargs.get('name', 'Viz'))
+        
+    def run(self, idx, inputs=None, data_mode=None, **extra_args):
+        self.session.reset_data(mode=data_mode)
+        n = self.session.get_dataset_size(mode=data_mode)
+        inputs = self.session.next_batch(mode=data_mode, batch_size=n)
+            
+        try:
+            return self.fs[idx](*inputs, **extra_args)
+        except IndexError:
+            raise IndexError('Visualization function index {} does not '
+                             'exist'.format(len(self.fs)))
 
     def __call__(self, data_mode=None, inputs=None):
         widgets = ['Visualizing (please wait): ', Bar()]

@@ -90,7 +90,12 @@ class DistributionMLP(Cell):
         Y = outs['output']
         outs['output'] = self.distribution(Y)
         outs['P'] = outs['output']
-        outs['P_center'] = self.distribution.get_center(outs['P'])
+        P = self.distribution.split_prob(outs['P'])
+        if len(P) == 1:
+            outs['P_center'] = P
+        elif len(P) == 2:
+            outs['P_center'] = P[0]
+            outs['P_scale'] = P[1]
         return outs
     
     def feed_batch(self, X, batch_size):

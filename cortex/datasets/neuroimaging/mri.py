@@ -361,6 +361,7 @@ class MRI(NeuroimagingDataset):
             dict: roi dictionary.
 
         '''
+        self.logger.debug('Image shape is {}'.format(x.shape))
         if roi_dict is None: roi_dict = dict()
         if x.ndim > 2:
             shape = x.shape[:-1]

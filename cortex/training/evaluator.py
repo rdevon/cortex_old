@@ -32,8 +32,9 @@ class Evaluator(object):
         self.best_epoch = 0
         self.valid_sign = valid_sign
         self.valid_stat = valid_stat
-        self.set_f_stats()
         self.batch_size = batch_size
+        
+        self.set_f_stats()
 
     def set_f_stats(self):
         stats = OrderedDict()

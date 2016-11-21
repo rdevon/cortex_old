@@ -84,6 +84,9 @@ class Session(object):
                 else:
                     self.logger.debug('Adding tensor `%s`' % key)
                     self.tensors[key] = v
+                
+                if isinstance(v, dict):
+                    self.add_tensors(v, key_prefix + '.' + k, what=what)
 
         if _p(key_prefix, 'outputs') not in self.tensors.keys():
             self.tensors[_p(key_prefix, 'outputs')] = dict()
@@ -199,6 +202,11 @@ class Session(object):
                     self.logger.info('Tensor `%s`(%i) for `%s` has shape %s '
                                  '(passes without error)'
                                  % (key, i, key_prefix, t__.shape))
+            elif isinstance(t_, dict):
+                for k, t__ in t_.items():
+                    self.logger.info('Tensor `%s`(%s) for `%s` has shape %s '
+                                 '(passes without error)'
+                                 % (key, k, key_prefix, t__.shape))
             else:
                 self.logger.info('Tensor `%s` for `%s` has shape %s '
                                  '(passes without error)'
@@ -224,9 +232,9 @@ class Session(object):
         new_args = []
         for arg in args:
             if isinstance(arg, list):
-                arg = resolve_list(arg, constants=constants)
+                arg = self.resolve_list(arg, constants=constants)
             elif isinstance(arg, dict):
-                arg = resolve_dict(arg, constants=constants)
+                arg = self.resolve_dict(arg, constants=constants)
             else:
                 if arg not in tensors.keys():
                     if arg in manager.samples.keys():

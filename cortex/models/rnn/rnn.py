@@ -219,7 +219,7 @@ class RNN(Cell):
         'input': 'dim_in',
         'output': 'dim_h'
     }
-    _test_order = ['input_net.Y', 'input_Y', 'H0', 'Xa', 'Xb', 'H', 'output']
+    _test_order = ['input_net.Y', 'input_Y', 'H0', 'H', 'output']
 
     def __init__(self, name='RNN', recurrence_type='RecurrentUnit', **kwargs):
         '''Init function for RNN.
