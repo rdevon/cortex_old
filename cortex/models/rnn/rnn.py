@@ -79,8 +79,8 @@ class RNNInitializer(Cell):
                 'dim_in': self.dim_in,
                 'dim_out': self.dim_out,
                 'dim_hs': [self.dim_in],
-                'dropout': 0.5,
-                'batch_normalization': True,
+                'dropout': 0.1,
+                'batch_normalization': False,
                 '_passed': ['dim_h', 'dim_hs', 'n_layers', 'h_act', 'dropout'],
                 '_required': {'out_act': 'tanh'}
             }
@@ -176,15 +176,15 @@ class RecurrentUnit(Cell):
         preact = T.dot(h_, W) + y
         h      = T.tanh(preact)
         h      = m * h + (1 - m) * h_
-        return h
+        return preact, h
 
     def _feed(self, X, M, H0, *params):
         n_steps = X.shape[0]
         seqs         = [M[:, :, None], X]
-        outputs_info = [H0]
+        outputs_info = [None, H0]
         non_seqs     = params
 
-        h, updates = theano.scan(
+        (preact, h), updates = theano.scan(
             self._recurrence,
             sequences=seqs,
             outputs_info=outputs_info,
@@ -192,7 +192,7 @@ class RecurrentUnit(Cell):
             name=self.name + '_recurrent_steps',
             n_steps=n_steps)
 
-        return OrderedDict(H=h, updates=updates)
+        return OrderedDict(H=h, H_preact=preact, updates=updates)
 
 
 class RNN(Cell):
@@ -208,7 +208,7 @@ class RNN(Cell):
         },
         'input_net': {
             'cell_type': 'MLP',
-            '_required': {'out_act': 'tanh'},
+            '_required': {'out_act': 'identity'},
         }
     }
     _links = [

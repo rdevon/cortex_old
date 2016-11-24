@@ -210,7 +210,7 @@ class Trainer(object):
         
     def clip_grads(self, grads, clip_type='minmax', clip_min=-1., clip_max=1.,
                    clip_norm=1., clip_keys=None):
-        self.logger.debug('Clipping gradients with type {} min/max/norm '
+        self.logger.info('Clipping gradients with type {} min/max/norm '
                          '(when applicable): {}/{}/{}'.format(
                             clip_type, clip_min, clip_max, clip_norm))
         for k in grads.keys():

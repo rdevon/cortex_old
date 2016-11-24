@@ -100,11 +100,7 @@ class Visualizer(object):
         n = self.session.get_dataset_size(mode=data_mode)
         inputs = self.session.next_batch(mode=data_mode, batch_size=n)
             
-        try:
-            return self.fs[idx](*inputs, **extra_args)
-        except IndexError:
-            raise IndexError('Visualization function index {} does not '
-                             'exist'.format(len(self.fs)))
+        return self.fs[idx](*inputs, **extra_args)
 
     def __call__(self, data_mode=None, inputs=None):
         widgets = ['Visualizing (please wait): ', Bar()]

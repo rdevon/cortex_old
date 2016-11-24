@@ -334,7 +334,7 @@ class FMRI(FMRI_IID):
                 if tc.ndim == 3: tc = tc.mean(1)
 
                 tc = tc - tc.mean(axis=0, keepdims=True)
-                tc = tc / tc.std(axis=0, keepdims=True)
+                tc = tc / np.sqrt(tc.std(axis=0, keepdims=True) ** 2 + 1e-7)
                 tc = tc[:t_limit]
 
                 if tc.ndim == 2: tc = tc.T

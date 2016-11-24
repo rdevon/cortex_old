@@ -100,7 +100,10 @@ class MRI(NeuroimagingDataset):
         super(MRI, self).__init__(data, distributions=distributions, name=name,
                                   **kwargs)
         self.X -= self.mean_image[None, :]
-        if self.variance_normalize: self.X /= self.var_image[None, :]
+        if self.variance_normalize:
+            self.X /= self.var_image[None, :]
+        else:
+            self.X /= self.variance
         self.data['input'] = self.X
         self.update_progress(finish=True)
 
@@ -340,7 +343,10 @@ class MRI(NeuroimagingDataset):
         return images, nifti_files
 
     def prepare_images(self, x):
-        if self.variance_normalize: x *= self.var_image[None, :]
+        if self.variance_normalize:
+            x *= self.var_image[None, :]
+        else:
+            x *= self.variance
         x += self.mean_image[None, :]
         if self.pca is not None and self.pca_components:
             x = self.pca.inverse_transform(x)

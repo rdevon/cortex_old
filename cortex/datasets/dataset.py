@@ -197,8 +197,7 @@ class BasicDataset(Dataset):
         '''
         if not isinstance(data, dict):
             raise ValueError('array argument must be a dict.')
-        if name is None:
-            name = data.keys()[0]
+        if name is None: name = data.keys()[0]
 
         super(BasicDataset, self).__init__(name=name, **kwargs)
         self.data = data
@@ -236,6 +235,7 @@ class BasicDataset(Dataset):
         if not hasattr(self, 'mean_image'):
             self.mean_image = self.X.mean(axis=0)
         self.var_image = self.X.std(axis=0)
+        self.variance = self.X.std()
         self.labels = labels
         self.data['input_centered'] = self.data['input'] - self.mean_image
         self.dims['input_centered'] = self.dims['input']

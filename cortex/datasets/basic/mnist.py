@@ -49,7 +49,6 @@ class MNIST(TwoDImageDataset):
             name=name, mode=mode, source=resolve_path(source)))
 
         source = resolve_path(source)
-
         X, Y = self.get_data(source, mode)
 
         if restrict_digits is not None:

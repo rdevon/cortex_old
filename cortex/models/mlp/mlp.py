@@ -186,7 +186,7 @@ class MLP(Cell):
                                 epsilon=epsilon)
             else:
                 X = self.out_act(preact)
-                if self.out_scale is not None: X *= self.out_scale
+                if self.out_scale is not None: X = X * self.out_scale
                 outs['Z'] = preact
                 outs['Y'] = X
                 outs['output'] = X

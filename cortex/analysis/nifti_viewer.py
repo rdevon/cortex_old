@@ -140,7 +140,7 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
 
 def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
             stats=None, time_courses=None, time_course_scales=None,
-            y=10, global_std=None, clusters=None):
+            y=10, global_std=None, clusters=None, title='Montage'):
     '''Saves a montage of nifti images.
 
     Args:
@@ -201,6 +201,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
 
     if fig is None:
         fig = plt.figure(figsize=[iscale * y, (1.5 * iscale) * x / 2.5])
+    fig.suptitle(title, fontsize=20)
     fig.set_facecolor((bgcol, bgcol, bgcol))
     plt.subplots_adjust(
         left=0.01, right=0.99, bottom=0.05, top=0.99, wspace=0.05, hspace=0.5)
@@ -261,7 +262,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
                      horizontalalignment='left',
                      color=(0, 0, 0))
 
-        pos = [(0.05, 0.05), (0.4, 0.05), (0.8, 0.05)]
+        pos = [(0.05, 0.05), (0.6, 0.05), (0.8, 0.05)]
         colors = ['purple', 'blue', 'green', 'red']
         for j, (k, vs) in enumerate(stats.iteritems()):
             v = vs[f]
