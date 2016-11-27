@@ -161,7 +161,7 @@ class DeepAIR(DeepIRVI):
                for i in range(len(qs))]
         qs = [T.clip(q, 1e-6, 1 - 1e-6) for q in qs]
         q = concatenate(qs, axis=1)
-        return q, cost, extra
+        return q, cost, hs[-1]
 
     def score(self, hs, y, qs, *params):
         prior_params = self.select_params('prior', *params)
@@ -182,7 +182,7 @@ class DeepAIR(DeepIRVI):
         w_tilde = norm_exp(log_p)
         cost = -log_p.mean()
         
-        return w_tilde, cost, w_tilde
+        return w_tilde, cost, hs[-1]
 
     def init_infer(self, q):
         return []

@@ -240,10 +240,10 @@ class DeepIRVI(IRVI):
             theano.OrderedUpdates: updates.
 
         '''
+        session = self.manager._current_session
         updates = theano.OrderedUpdates()
         batch_size = session.batch_size
-        if batch_size is not None:
-            session.batch_size = n_samples * batch_size
+        if batch_size is not None: session.batch_size = n_samples * batch_size
 
         # Set random variables.
         if n_steps > 0:
