@@ -91,6 +91,7 @@ class TwoDImageDataset(BasicDataset):
             transpose (bool): if True, then transpose images.
 
         '''
+        if isinstance(X, list): X = X[0]
         if len(X.shape) == 2:
             i_x, i_y = split_int_into_closest_two(X.shape[0])
             X = X.reshape((i_x, i_y, X.shape[1]))

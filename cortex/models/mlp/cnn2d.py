@@ -8,7 +8,7 @@ from theano import tensor as T
 from theano.tensor.nnet.bn import batch_normalization
 
 from . import resolve_nonlinearity
-from .. import batch_normalization, Cell, dropout, norm_weight
+from .. import Cell, dropout, norm_weight
 from ...utils import floatX
 
 
@@ -513,9 +513,11 @@ class RCNN2D(CNN2D):
                 beta = params.pop(0)
                 self.logger.debug('Batch normalization on layer %d' % l)
                 shape = X.shape
-                X = batch_normalization(
-                    X.reshape((shape[0], shape[1] * shape[2] * shape[3])),
-                    gamma, beta, session=session)
+                X = X.reshape((shape[0], shape[1] * shape[2] * shape[3]))
+                mean = X.mean(0, keepdims=True)
+                std = X.std(0, keepdims=True)
+                X = batch_normalization(inputs=X, gamma=gamma, beta=beta,
+                                        mean=mean, std=std)
                 X = X.reshape(shape)
 
             shape = self.filter_shapes[l]
