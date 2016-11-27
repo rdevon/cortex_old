@@ -92,7 +92,7 @@ class DistributionMLP(Cell):
         outs['P'] = outs['output']
         P = self.distribution.split_prob(outs['P'])
         if len(P) == 1:
-            outs['P_center'] = P
+            outs['P_center'] = P[0]
         elif len(P) == 2:
             outs['P_center'] = P[0]
             outs['P_scale'] = P[1]
