@@ -279,7 +279,11 @@ class Session(object):
         keys = d.keys()
         values = d.values()
         values = self.resolve_list(values)
-        return OrderedDict((k, v) for k, v in zip(keys, values))
+        rvals = OrderedDict((k, v) for k, v in zip(keys, values))
+        if 'inputs' in rvals.keys():
+            inps = rvals.pop('inputs')
+            rvals.update(**inps)
+        return rvals
 
     def resolve_op_args(self, args, kwargs, constants=None):
         if args is None: args = []

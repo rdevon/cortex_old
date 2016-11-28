@@ -228,8 +228,8 @@ class GaussianUnitVariance(Distribution):
     def viz(self, P0, P=None):
         if P is None: P = self.get_prob(*self.get_params())
 
-        y0_mu = self.split_prob(P0)
-        y_mu = self.split_prob(P)
+        y0_mu = P0
+        y_mu = P
         Py = y_mu - y0_mu
         return Py
 

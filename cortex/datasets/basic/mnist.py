@@ -24,7 +24,6 @@ class MNIST(TwoDImageDataset):
         image_shape (tuple): dimensions of original images.
 
     '''
-    _viz = ['classification_visualization']
 
     def __init__(self, source=None, restrict_digits=None, mode='train',
                  binarize=False, name='mnist', **kwargs):

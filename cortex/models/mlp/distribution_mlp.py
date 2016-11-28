@@ -93,6 +93,7 @@ class DistributionMLP(Cell):
         P = self.distribution.split_prob(outs['P'])
         if len(P) == 1:
             outs['P_center'] = P[0]
+            outs['P_scale'] = T.zeros_like(P[0])
         elif len(P) == 2:
             outs['P_center'] = P[0]
             outs['P_scale'] = P[1]
