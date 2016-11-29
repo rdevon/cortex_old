@@ -85,7 +85,8 @@ class RNNInitializer(Cell):
                 '_required': {'out_act': 'tanh'}
             }
         elif self.initialization == 'Averager':
-            init_args = {'dim_out': self.dim_out}
+            init_args = {'cell_type': 'Averager',
+                         'shape': (self.dim_out,)}
         else:
             raise TypeError()
 
@@ -114,7 +115,7 @@ class RNNInitializer(Cell):
 
         if self.initialization == 'MLP':
             Y = self.initializer(X)['Y']
-            cost = squared_error(H, Y)
+            cost = squared_error(H[:-1], Y[1:])
             return OrderedDict(cost=cost, constants=constants)
         elif self.initialization == 'Averager':
             updates = self.initializer(H)
@@ -134,7 +135,11 @@ class RNNInitializer(Cell):
             outs = self.initializer._feed(X, *params)
             outs['output'] = outs['Y']
         elif self.initialization == 'Averager':
-            outs = {'output': params[0]}
+            if X.ndim == 1:
+                y = params[0]
+            elif X.ndim == 2:
+                y = T.zeros((X.shape[0], params[0].shape[0])).astype(floatX) + params[0][None, :]
+            outs = {'output': y}
         return outs
 
 

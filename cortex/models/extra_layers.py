@@ -25,7 +25,7 @@ class Averager(Cell):
         self.shape = shape
         super(Averager, self).__init__(name)
 
-    def set_params(self):
+    def init_params(self):
         m = np.zeros(self.shape).astype(floatX)
         self.params = OrderedDict(m=m)
 

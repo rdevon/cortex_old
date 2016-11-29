@@ -143,7 +143,7 @@ class TwoDImageDataset(BasicDataset):
             idr = ImageDraw.Draw(image)
 
             try:
-                ImageFont.truetype('arial.ttf', font_size)
+                font = ImageFont.truetype('arial.ttf', font_size)
             except IOError:
                 try:
                     font = ImageFont.truetype(
