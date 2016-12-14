@@ -169,7 +169,6 @@ class CNN2D(Cell):
         return (X, batch_size)
 
     def feed(self, X, batch_size, *params):
-        print X, batch_size, params
         session = self.manager._current_session
         params = list(params)
 

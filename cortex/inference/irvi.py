@@ -100,7 +100,10 @@ class IRVI(Cell):
 
         '''
         Q0 = Q0.copy()
+        session = self.manager._current_session
         updates = theano.OrderedUpdates()
+        batch_size = session.batch_size
+        if batch_size is not None: session.batch_size = n_samples * batch_size
 
         # Set random variables.
         if n_steps > 0:
@@ -153,6 +156,7 @@ class IRVI(Cell):
             constants = [Qs_]
 
         rval.update(constants=constants, updates=updates)
+        session.batch_size = batch_size
         return rval
 
     def _stats(self, Qs=None, i_costs=None, n_steps=None, epsilons=None,

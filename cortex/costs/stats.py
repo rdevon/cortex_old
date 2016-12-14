@@ -17,6 +17,14 @@ def basic_stats(X=None):
     stats = OrderedDict(mean=mean, std=std, min=mi, max=ma)
     return stats
 
+def batch_stats(X=None, axis=0):
+    mean = X.mean(axis=axis).mean()
+    std = X.std(axis=axis).mean()
+    mi = X.min(axis=axis).mean()
+    ma = X.max(axis=axis).mean()
+    stats = OrderedDict(mean=mean, std=std, min=mi, max=ma)
+    return stats
+
 def cell_stats(cell):
     from .. import _manager as manager
     stats = OrderedDict()
@@ -79,4 +87,5 @@ def variational_inference(X=None, conditional=None, posterior=None, prior=None,
 _stats = {'logistic_regression': logistic_regression_stats,
           'variational_inference': variational_inference,
           'basic_stats': basic_stats,
+          'batch_stats': batch_stats,
           'cell_stats': cell_stats}

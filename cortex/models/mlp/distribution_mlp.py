@@ -28,7 +28,8 @@ class DistributionMLP(Cell):
             'cell_type': 'MLP',
             '_required': {'out_act': 'identity'},
             '_passed': ['dim_h', 'n_layers', 'dropout', 'weight_noise',
-                        'h_act', 'dim_hs', 'batch_normalization']
+                        'h_act', 'dim_hs', 'batch_normalization',
+                        'weight_normalization', 'bn_mean_only']
         },
         'distribution': {
             'cell_type': '&distribution_type',

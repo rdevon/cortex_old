@@ -43,7 +43,8 @@ class MLP(Cell):
     '''
     _required = ['dim_in', 'dim_out']
     _options = {'dropout': False, 'weight_noise': 0,
-                'batch_normalization': False}
+                'batch_normalization': False, 'bn_mean_only': False,
+                'weight_normalization': False}
     _args = ['dim_in', 'dim_out', 'dim_hs', 'h_act', 'out_act', 'out_scale', 'dropout']
     _dim_map = {
         'X': 'dim_in',
@@ -109,6 +110,9 @@ class MLP(Cell):
         if self.batch_normalization:
             gammas = []
             betas = []
+            
+        if self.weight_normalization:
+            gs = []
 
         for dim_in, dim_out in zip(dim_ins, dim_outs):
             W = norm_weight(dim_in, dim_out, scale=weight_scale, ortho=False)
@@ -120,18 +124,25 @@ class MLP(Cell):
                 beta = np.zeros_like(gamma)
                 gammas.append(gamma)
                 betas.append(beta)
+            if self.weight_normalization:
+                g = np.float32(1.)
+                gs.append(g)
 
         self.params['weights'] = weights
         self.params['biases'] = biases
         if self.batch_normalization:
            self.params['gammas'] = gammas
            self.params['betas'] = betas
+        if self.weight_normalization:
+            self.params['gs'] = gs
 
     def get_params(self):
+        param_list = [self.weights, self.biases]
         if self.batch_normalization:
-            params = zip(self.weights, self.biases, self.gammas, self.betas)
-        else:
-            params = zip(self.weights, self.biases)
+            param_list = param_list + [self.gammas, self.betas]
+        if self.weight_normalization:
+            param_list.append(self.gs)
+        params = zip(*param_list)
         params = [i for sl in params for i in sl]
         return super(MLP, self).get_params(params=params)
 
@@ -167,9 +178,16 @@ class MLP(Cell):
                     std = X.std((0, 1), keepdims=True)
                 else:
                     raise ValueError()
-                std = T.sqrt(std ** 2 + 1e-6)
+                if self.bn_mean_only:
+                    std = T.ones_like(std)
+                    gamma = T.ones_like(gamma) + 0. * gamma
+                else:                    
+                    std = T.sqrt(std ** 2 + 1e-6)
                 X = batch_normalization(inputs=X, gamma=gamma, beta=beta,
                                         mean=mean, std=std, mode='high_mem')
+            if self.weight_normalization:
+                g = params.pop(0)
+                W = g * W / (W ** 2).sum(axis=1, keepdims=True)
 
             preact = T.dot(X, W) + b
 
@@ -193,12 +211,6 @@ class MLP(Cell):
 
         assert len(params) == 0, params
         return outs
-    '''
-    def get_n_params(self):
-        n_params = self.n_params
-        if self.dropout and self.noise_switch(): n_params += self.n_layers - 1
-        return n_params
-    '''
 
     def _feed(self, X, *params):
         params = list(params)
@@ -221,10 +233,12 @@ class MLP(Cell):
 
     def get_epsilon_params(self, epsilons, *params):
         if self.dropout and self.noise_switch():
+            ppl = 2
             if self.batch_normalization:
-                ppl = 4
-            else:
-                ppl = 2
+                ppl += 2
+            if self.weight_normalization:
+                ppl += 1
+            
             new_params = []
             for l in xrange(self.n_layers - 1):
                 new_params += params[ppl*l:ppl*(l+1)]
