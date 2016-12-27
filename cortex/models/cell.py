@@ -106,6 +106,33 @@ def get_noise_switch():
         return NoiseSwitch()
     else:
         return NoiseSwitch._instance
+    
+    
+def step_method(inputs=None, options=None, outputs=None):
+    inputs = inputs or []
+    options = options or []
+    outputs = outputs or [] # Never default to lists or dicts, or changing them in function will change the defaults.
+    
+    def decorate(step):
+        def do_step(*args, **kwargs):
+            
+            if len(args) != len(inputs):
+                raise ValueError('Wrong number of inputs')
+            
+            for arg, input_ in zip(args, inputs):
+                pass
+                #<check dims or do some matching, make sure input_ actually exists>
+            for k in kwargs.keys():
+                if k not in options: raise ValueError('Unknown option')
+            
+            cortex.add_step(step, args=args, kwargs=kwargs) # registers the step and its arguments
+            for output in outputs:
+                cortex.add_tensor(output) # registers the dummy tensors so that other functions can use them, adds them to the namespace.
+            
+            return # doesn't actually return anything
+        
+        return do_step
+    return decorate
 
 
 class Cell(object):
@@ -135,7 +162,7 @@ class Cell(object):
 
     noise_switch = get_noise_switch()
 
-    def __init__(self, name='layer_proto', inits=None, excludes=None, **kwargs):
+    def __init__(self, name='cell_proto', inits=None, excludes=None, **kwargs):
         '''Init function for Cell.
 
         Args:
@@ -179,9 +206,6 @@ class Cell(object):
                 self.n_component_params += component.total_params
         self.total_params = self.n_params + self.n_component_params
         self.set_tparams()
-
-#    def total_params(self):
-#        return self.get_n_params() + self.n_component_params
 
     def set_options(self, **kwargs):
         for k, v in self._options.iteritems():

@@ -9,14 +9,14 @@ import logging
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from .. import BasicDataset, Dataset
+from .. import Dataset
 from ...utils import concatenate, scan, _rng
 from ...utils.maths import split_int_into_closest_two
 from ...utils.tools import resolve_path
 from ...utils.vis_utils import tile_raster_images
 
 
-class TwoDImageDataset(BasicDataset):
+class TwoDImageDataset(Dataset):
     def __init__(self, data, image_shape=None, greyscale=True, **kwargs):
         if image_shape is None: raise TypeError('`image_shape` not set.')
 

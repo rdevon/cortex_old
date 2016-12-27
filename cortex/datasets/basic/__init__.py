@@ -10,8 +10,8 @@ __all__ = ['twodimage']
 from twodimage import *
 
 logger = logging.getLogger(__name__)
-from . import caltech, cifar, dummy, euclidean, mnist, svhn, uci
-_modules = [caltech, cifar, dummy, euclidean, mnist, svhn, uci]
+from . import mnist
+_modules = [mnist]
 _classes = {}
 for module in _modules:
     if not hasattr(module, '_classes'):

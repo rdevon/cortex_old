@@ -55,9 +55,9 @@ class MLP(Cell):
     }
     _weights = ['weights']
 
-    def __init__(self, dim_in, dim_out, dim_h=None, n_layers=None, dim_hs=None,
-                 h_act='sigmoid', out_act=None, out_scale=None, name='MLP',
-                 **kwargs):
+    def __init__(self, dim_in=None, dim_out=None, dim_h=None, n_layers=None,
+                 dim_hs=None, h_act='sigmoid', out_act=None, out_scale=None,
+                 name='MLP', **kwargs):
         '''Init function for MLP.
 
         Args:
@@ -82,9 +82,13 @@ class MLP(Cell):
         self.h_act = resolve_nonlinearity(h_act)
         self.out_scale = out_scale
 
-        # Various means to get the hidden layers.
-        if dim_hs is None and dim_h is None and n_layers is None:
-            dim_hs = []
+        self.dim_hs = dim_hs
+        self.n_layers = len(dim_hs) + 1
+        super(MLP, self).__init__(name=name, **kwargs)
+
+    def build(self, weight_scale=1e-3):
+        if self.dim_hs is None and self.dim_h is None and self.n_layers is None:
+            self.dim_hs = []
         elif dim_hs is None and dim_h is None:
             dim_hs = [dim_out] * (n_layers - 1)
         elif dim_hs is None:
@@ -95,13 +99,6 @@ class MLP(Cell):
             assert len(dim_hs) == n_layers
         elif dim_hs is None and n_layers is None:
             dim_hs = []
-
-        self.dim_hs = dim_hs
-        self.n_layers = len(dim_hs) + 1
-        super(MLP, self).__init__(name=name, **kwargs)
-
-    def init_params(self, weight_scale=1e-3):
-        self.params = OrderedDict()
 
         dim_ins = [self.dim_in] + self.dim_hs
         dim_outs = self.dim_hs + [self.dim_out]
@@ -146,6 +143,27 @@ class MLP(Cell):
         params = [i for sl in params for i in sl]
         return super(MLP, self).get_params(params=params)
 
+    #@step_method(inputs=['X'], outputs=['Z', 'Y', 'output'],
+    #            requires_params=True)
+    def _feed(self, X, *params):
+        params = list(params)
+        if self.dropout and self.noise_switch():
+            if X.ndim == 1:
+                size = tuple()
+            elif X.ndim == 2:
+                size = (X.shape[0],)
+            elif X.ndim == 3:
+                size = (X.shape[0], X.shape[1])
+            elif X.ndim == 4:
+                size = (X.shape[0], X.shape[1], X.shape[2])
+            else:
+                raise TypeError
+
+            epsilons = self.dropout_epsilons(size)
+            params = self.get_epsilon_params(epsilons, *params)
+
+        return self.feed(X, *params)
+    
     def feed(self, X, *params):
         '''feed forward MLP.
 
@@ -211,25 +229,6 @@ class MLP(Cell):
 
         assert len(params) == 0, params
         return outs
-
-    def _feed(self, X, *params):
-        params = list(params)
-        if self.dropout and self.noise_switch():
-            if X.ndim == 1:
-                size = tuple()
-            elif X.ndim == 2:
-                size = (X.shape[0],)
-            elif X.ndim == 3:
-                size = (X.shape[0], X.shape[1])
-            elif X.ndim == 4:
-                size = (X.shape[0], X.shape[1], X.shape[2])
-            else:
-                raise TypeError
-
-            epsilons = self.dropout_epsilons(size)
-            params = self.get_epsilon_params(epsilons, *params)
-
-        return self.feed(X, *params)
 
     def get_epsilon_params(self, epsilons, *params):
         if self.dropout and self.noise_switch():

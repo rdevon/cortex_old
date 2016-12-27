@@ -6,7 +6,6 @@ from collections import OrderedDict
 import copy
 from glob import glob
 from inspect import getsource
-import logging
 import numpy as np
 import os
 from os import path
@@ -16,80 +15,122 @@ import theano
 from theano import tensor as T
 import time
 
-from .. import costs
-from .. import datasets
-from .. import inference
-from .. import models
-from ..utils.tools import _p, resolve_path, print_section
-from ..training import Evaluator, Trainer, Visualizer
-from ..training.monitor import BasicMonitor
+from . import costs
+from . import datasets
+from . import inference
+from . import models
+from . import namespaces
+from . import utils
+from .utils.tools import _p, resolve_path, print_section
+from .training import Evaluator, Trainer, Visualizer
+from .training.monitor import BasicMonitor
 
+_current_session = None
+logger = utils.logger.logger
+objects = namespaces.ObjectNamespace() # Namespace for objects
+tensors = namespaces.TensorNamespace()
+_parameters = None
+data = {} # dictionary for data
 
-def get_manager():
-    if Manager._instance is None:
-        return Manager()
-    else:
-        return Manager._instance
+def add_data_mode(mode, **kwargs):
+    global data
+    if mode in data.keys():
+        raise ValueError('Mode `{}` already created.'.format(mode))
+    logger.info('Creating data mode {0} with args {1}.'.format(mode, kwargs))
+    data[mode] = datasets.DataIterator(**kwargs)
+    
+def set_data_args(mode, **kwargs):
+    global data
+    if mode not in data.keys():
+        raise ValueError('Mode `{}` not yet created.'.format(mode))
+    logger.info('Setting data mode {0} args {1}.'.format(mode, kwargs))
 
-def _resolve_class(cell_type, classes):
+def save(out_file):
+    '''Save models to .npz file
+    
+    Args:
+        out_file (str): Output file path.
+        
+    '''
+    
+    def profile(d):
+        if isinstance(d, dict):
+            for k, v in d.items():
+                print 'name', k, '----------------'
+                if isinstance(v, (list, tuple, dict)):
+                    profile(v)
+                else:
+                    print '--type:', type(v)
+        elif isinstance(d, (list, tuple, dict)):
+            for i, v in enumerate(d):
+                print '----', i, '----------------'
+                if isinstance(v, (list, tuple, dict)):
+                    profile(v)
+                else:
+                    print '--type:', type(v)
+        else:
+            print '--type:', type(d)
+
+    out_file = resolve_path(out_file)
+    logger.info('Saving to %s' % out_file)
+    d = dict((k, v.get_value()) for k, v in self.tparams.iteritems())
+    d.update(**self.save_args)
     try:
-        C = classes[cell_type]
-    except KeyError:
-        raise KeyError('Unexpected cell subclass `%s`, '
-                       'available classes: %s. If this class was loaded '
-                       'manually as part of another model, you must reload it '
-                       'before loading model.'
-                       % (cell_type, classes.keys()))
-    return C
+        np.savez(out_file, **d)
+    except TypeError as e:
+        profile(d)
+        raise e
 
-def split_arg(arg, idx=-1):
-    s = arg.split('.')
-    name = '.'.join(s[:idx])
-    arg = '.'.join(s[idx:])
-    return name, arg
+def load(in_file):
+    '''Loads a model into cortex.
+    
+    Args:
+        in_file (str): Input file .npz file.
+    
+    '''
+    
+    if isinstance(in_file, str):
+        in_file = resolve_path(in_file)
+        logger.info('Loading from %s' % in_file)
+    params = np.load(in_file)
+    d = dict()
+    for k in params.keys():
+        try:
+            d[k] = params[k].item()
+        except ValueError:
+            d[k] = params[k]
 
-def resolve_tensor_arg(arg, manager=None):
-    if manager is None: manager = get_manager()
-    if not is_tensor_arg(arg):
-        raise TypeError('Arg %s is not a tensor argument.' % arg)
-    cell_args = manager.cell_args
-    if arg.split('.')[0] in manager.datasets.keys():
-        name_, key = split_arg(arg)
-        C = None
-    elif '.'.join(arg.split('.')[:-1]) in manager.nodes.keys():
-        name_, key = split_arg(arg)
-        C = manager.nodes[name_]
-    elif '.'.join(arg.split('.')[:-1]) in cell_args.keys():
-        name_, key = split_arg(arg)
-        C = manager.resolve_class(cell_args[name_]['cell_type'])
-    elif '.'.join(arg.split('.')[:-1]) in _ops.keys():
-        name_, key = split_arg(arg)
-        C = None
-    else:
-        found = False
-        C = None
-        for step in manager.steps:
-            if '.'.join(arg.split('.')[:-1]) == step['name']:
-                name_, key = split_arg(arg)
-                cell_name = step.get('cell_name')
-                if cell_name is not None:
-                    C = manager.resolve_class(cell_args[cell_name]['cell_type'])
-                found = True
-                break
-        if not found:
-            raise KeyError('Cell or data %s not found. Found cells %s and data %s'
-                           % (arg, manager.cells.keys(), manager.datasets.keys()))
-    return name_, key, C
-
-def is_tensor_arg(arg):
-    manager = get_manager()
-    if arg in manager.nodes.keys():
-        return True
-    if not isinstance(arg, str) or '.' not in arg:
-        return False
-    if '/' in arg:
-        return False
-    return True
+    reset()
+    for dataset, kwargs, split in d.pop('data'):
+        if split:
+            self.prepare_data_split(dataset, **kwargs)
+        else:
+            self.prepare_data(dataset, **kwargs)
+    for name, kwargs in d.pop('cells'):
+        self.cell_args[name] = kwargs
+    for op, args, kwargs, op_args in d.pop('steps'):
+        if op_args is not None:
+            op = op(**op_args)
+        elif 'lambda' in op:
+            op = eval(op)
+        self.add_step(op, *args, **kwargs)
+    for arg, shape, name, kwargs in d.pop('samples'):
+        self.prepare_samples(arg, shape, name=name, **kwargs)
+    for op, args, kwargs in d.pop('costs'):
+        if 'lambda' in op: op = eval(op)
+        self.add_cost(op, *args, **kwargs)
+    for op, args, kwargs in d.pop('stats'):
+        if 'lambda' in op: op = eval(op)
+        self.add_stat(op, *args, **kwargs)
+    for k, v in d.iteritems():
+        self.tparams[k] = theano.shared(v, name=k)
+        
+def reset(self):
+    '''Resets cortex variables.
+    
+    '''
+    global cells, datasets, _data, tensors, _parameters
+    pass
 
 
 class Manager(object):
@@ -100,7 +141,6 @@ class Manager(object):
 
     '''
     _instance = None
-    _current_session = None
 
     def __init__(self):
         if Manager._instance is not None:
@@ -129,72 +169,6 @@ class Manager(object):
                 self.logger.info('%s does not exist. Creating.' % self.out_path)
                 os.mkdir(self.out_path)
 
-    def save(self, out_file=None):
-        def profile(d):
-            if isinstance(d, dict):
-                for k, v in d.items():
-                    print 'name', k, '----------------'
-                    if isinstance(v, (list, tuple, dict)):
-                        profile(v)
-                    else:
-                        print '--type:', type(v)
-            elif isinstance(d, (list, tuple, dict)):
-                for i, v in enumerate(d):
-                    print '----', i, '----------------'
-                    if isinstance(v, (list, tuple, dict)):
-                        profile(v)
-                    else:
-                        print '--type:', type(v)
-            else:
-                print '--type:', type(d)
-
-        out_file = resolve_path(out_file)
-        self.logger.info('Saving to %s' % out_file)
-        d = dict((k, v.get_value()) for k, v in self.tparams.iteritems())
-        d.update(**self.save_args)
-        try:
-            np.savez(out_file, **d)
-        except TypeError as e:
-            profile(d)
-            raise e
-
-    def load(self, in_file):
-        if isinstance(in_file, str):
-            in_file = resolve_path(in_file)
-            self.logger.info('Loading from %s' % in_file)
-        params = np.load(in_file)
-        d = dict()
-        for k in params.keys():
-            try:
-                d[k] = params[k].item()
-            except ValueError:
-                d[k] = params[k]
-
-        self.reset()
-        for dataset, kwargs, split in d.pop('data'):
-            if split:
-                self.prepare_data_split(dataset, **kwargs)
-            else:
-                self.prepare_data(dataset, **kwargs)
-        for name, kwargs in d.pop('cells'):
-            self.cell_args[name] = kwargs
-        for op, args, kwargs, op_args in d.pop('steps'):
-            if op_args is not None:
-                op = op(**op_args)
-            elif 'lambda' in op:
-                op = eval(op)
-            self.add_step(op, *args, **kwargs)
-        for arg, shape, name, kwargs in d.pop('samples'):
-            self.prepare_samples(arg, shape, name=name, **kwargs)
-        for op, args, kwargs in d.pop('costs'):
-            if 'lambda' in op: op = eval(op)
-            self.add_cost(op, *args, **kwargs)
-        for op, args, kwargs in d.pop('stats'):
-            if 'lambda' in op: op = eval(op)
-            self.add_stat(op, *args, **kwargs)
-        for k, v in d.iteritems():
-            self.tparams[k] = theano.shared(v, name=k)
-
     # General methods
     def add_cell_class(self, name, C):
         self.classes[name] = C
@@ -214,48 +188,6 @@ class Manager(object):
         cell_id = '.'.join(l[:-1])
         arg = l[-1]
         return cell_id, arg
-
-    def reset(self):
-        self.cells = OrderedDict()
-        self.cell_args = OrderedDict()
-        self.datasets = {}
-        self.nodes = {}
-        self.links = []
-
-        self.steps = []
-        self.costs = {}
-        self.stats = {}
-        self.samples = {}
-
-        self.tparams = {}
-        self.reset_sessions()
-        self.trainer = None
-        self.evaluator = None
-        self.visualizer = None
-        self.save_args = dict(
-            cells=[], steps=[], costs=[], stats=[], samples=[], data=[])
-        self.out_path = None
-
-    def get_cells(self):
-        return self.cells
-
-    def get_cell_args(self):
-        return self.cell_args
-
-    def get_datasets(self):
-        return self.datasets
-
-    def get_tparams(self):
-        return self.tparams
-
-    def get_trainer(self):
-        return self.trainer
-
-    def get_evaluator(self):
-        return self.evaluator
-
-    def get_visualizer(self):
-        return self.visualizer
 
     def resolve_class(self, cell_type, classes=None):
         if classes is None:

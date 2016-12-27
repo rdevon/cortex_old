@@ -11,6 +11,8 @@ from os import path
 import random
 from theano import tensor as T
 
+from ..base import Base
+from .. import namespaces
 from ..utils import floatX, intX
 from ..utils.tools import resolve_path
 from ..utils.extra import download_data, unzip
@@ -31,10 +33,11 @@ def make_one_hot(Y, n_classes=None):
     '''Makes integer label data into one-hot.
 
     Args:
-        Y (numpy.array): N x 1 array of integers.
+        Y (numpy.ndarray): N x 1 array of integers.
+        n_classes (Optional[int]): Number of classes.
 
     Returns:
-        numpy.array: N x n_labels array of ones and zeros.
+        numpy.ndarray: N x n_labels array of ones and zeros.
 
     '''
     if n_classes is None:
@@ -47,7 +50,8 @@ def make_one_hot(Y, n_classes=None):
         reshape = Y.shape
         Y = Y.reshape((Y.shape[0] * Y.shape[1]))
     elif Y.ndim > 2:
-        raise TypeError('`make_one_hot` supports 1 or 2 dims, (%d)' % Y.ndim)
+        raise TypeError('`make_one_hot` supports 1 or 2 dims, ({})'.format(
+            Y.ndim))
     else:
         reshape = None
 
@@ -59,72 +63,97 @@ def make_one_hot(Y, n_classes=None):
             raise ValueError('Class list is missing elements')
         O[idx, i] = 1.;
 
-    if reshape is not None:
-        O = O.reshape(reshape + (n_classes,))
+    if reshape is not None: O = O.reshape(reshape + (n_classes,))
     return O
 
 
-class Dataset(object):
-    '''Base dataset iterator class.
+class DataIterator(object):
+    '''Dataset iterator class.
+    
+    Iterates through the data.
 
     Attributes:
-        batch_size (int): batch size for the iterator.
-        shuffle (bool): shuffle the dataset after each epoch.
-        inf (bool): reset the dataset after iterating through who set.
-        name (str): name of the dataset.
         pos (int): current position of the iterator.
-        stop (int): stop the dataset at this index when loading.
         mode (str): usually train, test, valid.
-        dims (dict): dictionary of data dimensions.
-        distributions (dict): dictionary of strings. See `models.distributions`
-            for details.
 
     '''
-    def __init__(self, shuffle=True, inf=False, name='dataset',
-                 mode=None, stop=None, **kwargs):
+    def __init__(self, mode=None, stop=None, shuffle=False):
         '''Init function for Dataset
 
         Args:
-            shuffle (bool): shuffle the dataset after each epoch.
             inf (bool): reset the dataset after iterating through who set.
-            name (str): name of the dataset.
-            pos (int): current position of the iterator.
-            stop (int): stop the dataset at this index when loading.
             mode (str): usually train, test, valid.
-            **kwargs: keyword arguments not used
-
-        Returns:
-            dict: leftover keyword arguments.
 
         '''
-        if not hasattr(self, 'logger'): self.logger = get_class_logger(self)
-        self.logger.debug('Forming dataset %r with name %s' % (
-            self.__class__, name))
 
-        self.shuffle = shuffle
-        self.inf = inf
-        self.name = name
         self.pos = 0
-        self.stop = stop
         self.mode = mode
-        self.dims = dict()
-        self.distributions = dict()
-
-        return kwargs
-
-    def randomize(self):
-        '''Randomize the dataset.
-
-        '''
-        return
+        self.n_samples = None
+        self.stop = stop
+        self.shuffle = shuffle
+        self._data = {}
+        self.idx = None
+                
+    def set_args(self, **kwargs):
+        for k, v in kwargs.items():
+            if k in ['stop', 'shuffle']:
+                setattr(self, k, v)
+            else:
+                msg = '`{0}` object has no attribute `{1}`'
+                raise AttributeError(msg.format(type(self).__name__, k))
 
     def reset(self):
         '''Reset the dataset post-epoch.
 
         '''
         self.pos = 0
-        if self.shuffle:
-            self.randomize()
+        if self.shuffle: self.randomize()
+        
+    def hard_reset(self):
+        self.pos = 0
+        self._data = {}
+        
+    def randomize(self):
+        '''Randomizes the dataset
+
+        '''
+        n_samples = self.stop or self.n_samples
+        self.idx = np.random.permutation(np.arange(0, n_samples, 1))
+        
+    def add(self, ds_name, k, v):
+        name = '{0}_{1}'.format(ds_name, k)
+        if name in self._data.keys():
+            raise ValueError('`{0}` already in mode `{1}`'.format(
+                name, self.mode))
+        self._data[name] = v
+
+    def next(self, batch_size):
+        '''Draws the next batch of data samples.
+
+        Arguments:
+            batch_size (int).
+
+        Returns:
+            dict: Dictionary of data.
+
+        '''
+        self.idx = self.idx or range(self.n_samples)
+        n_samples = len(self.idx)
+
+        if self.pos == -1:
+            self.reset()
+            raise StopIteration
+
+        rval = OrderedDict()
+
+        for k, v in self._data.items():
+            v = v[self.idx][self.pos:self.pos+batch_size]
+            rval[k] = v
+
+        self.pos += batch_size
+        if self.pos + batch_size > n_samples: self.pos = -1
+
+        return rval
 
     def __iter__(self):
         '''Iterator.
@@ -132,140 +161,185 @@ class Dataset(object):
         '''
         return self
 
-    def save_images(self, *args):
-        '''Save images.
-
-        '''
-        pass
-
     def __str__(self):
         attributes = self.__dict__
         attributes = dict(
-            (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,)) if isinstance(a, np.ndarray)
+            (k, '<numpy.ndarray: \{shape: {}\}>'.format(a.shape))
+            if isinstance(a, np.ndarray)
             else (k, a)
             for k, a in attributes.items())
         attr_str = ''
         for k, a in attributes.items():
-            attr_str += '\n\t%s: %s' % (k, a)
-        s = ('<Dataset %s: %s>' % (self.__class__.__name__, attr_str))
+            attr_str += '\n\t{0}: {1}'.format(k, a)
+        s = ('<Dataset {}: {}>'.format(self.__class__.__name__, attr_str))
         return s
+    
 
-    def get_dim(self, key):
-        dim_map = {
-            'input': self.dims[self.name],
-            'input_centered': self.dims[self.name]
-        }
-        dim_map.update(**self.dims)
-
-        return dim_map[key]
-
-
-class BasicDataset(Dataset):
+class Dataset(Base):
     '''
     Dataset with numpy arrays as inputs. No visualization available.
 
     Arrays must be a dictionary of name/numpy array key/value pairs.
 
     Attributes:
-        data (dict): dictionary of numpy.array.
+        batch_size (int): batch size for the iterator.
         n_samples (int): number of data samples.
         X (numpy.array): primary data.
         Y (Optional[numpy.array]): If not None, lables.
         mean_image (numpy.array): mean image of primary data.
         balance (bool): replicate samples to balance the dataset.
+        dims (dict): dictionary of data dimensions.
+        distributions (dict): dictionary of strings. See `models.distributions`
+            for details.
 
     '''
-    _has_split = False
-    _viz = []
+    
+    distributions = None
 
-    def __init__(self, data, distributions=None, labels='labels', name=None,
-                balance=False, one_hot=True, transpose=None, check_data=False,
-                **kwargs):
+    def __init__(self, source=None, modes=None, labels='labels',
+                 name=None, one_hot=True, **kwargs):
         '''Init function for BasicDataset.
 
         Args:
-            data (dict): Dictionary of np.array. Keys are data name, value is
-                the actual data.
-            distributions (dict): See `models.distributions` for more details.
-            labels (str): key for the labels.
+            source (str): Path to source file or directory.
+            modes (Optional[list]): List of modes to load.
             name: (Optional[str]): Name of the dataset. Should be one of the
                 keys in data.
             balance (bool): replicate samples to balance the dataset.
             one_hot (bool): convert labels to one-hot.
-            **kwargs: extra arguments to pass to Dataset constructor.
+            **kwargs: extra arguments to pass to `get_data`.
 
         '''
-        if not isinstance(data, dict):
-            raise ValueError('array argument must be a dict.')
-        if name is None: name = data.keys()[0]
+        modes = modes or ['train']
+        if not isinstance(modes, list): modes = [modes]
+        super(Dataset, self).__init__(name=name)
+        self.logger.debug('Forming dataset {0} with name {1}'.format(
+            self.__class__, name))
+        
+        if self.distributions is None:
+            raise ValueError('Dataset class {} has unset distributions'.format(
+                self.__class__))
+        if source is None: raise TypeError('No source file provided')
+        
+        self.source = resolve_path(source)
+        self.dims = {}
+        self.shapes = {}
+        self.dtypes = {}
+        self._data = {}
+        self._n_samples = {}
 
-        super(BasicDataset, self).__init__(name=name, **kwargs)
-        self.data = data
-        self.n_samples = None
+        self.logger.info('Loading {name} ({modes}) from {source} with '
+                         'arguments {kwargs}'.format(
+            name=name, modes=modes, source=self.source, kwargs=kwargs))
+        
+        for mode in modes:
+            self.fetch_data(mode, **kwargs)
+            
+        self.make_tensors()
+
+    def todo(self):
         self.balance = balance
-        self.transpose = transpose
 
-        if distributions is not None:
-            self.distributions.update(**distributions)
-
-        if labels not in self.data.keys():
-            labels = None
-
-        for k, v in self.data.items():
-            if k == labels and one_hot and len(v.shape) == 1:
-                v = make_one_hot(v)
-            elif len(v.shape) == 1:
-                v = v[:, None]
-            if self.stop is not None:
-                v = v[:self.stop]
-            self.data[k] = v
-
-            if self.n_samples is None:
-                self.n_samples = v.shape[0]
-            else:
-                if v.shape[0] != self.n_samples:
-                    raise ValueError('All input arrays must have the same'
-                                    'number of samples (shape[0]), '
-                                    '(%d vs %d)' % (self.n_samples, v.shape[0]))
-            self.dims[k] = v.shape[-1]
-            if not k in self.distributions.keys():
-                self.distributions[k] = 'binomial'
-
-        self.X = self.data['input']
-        if not hasattr(self, 'mean_image'):
-            self.mean_image = self.X.mean(axis=0)
+        if not hasattr(self, 'mean_image'): self.mean_image = self.X.mean(axis=0)
         self.var_image = self.X.std(axis=0)
         self.variance = self.X.std()
-        self.labels = labels
-        self.data['input_centered'] = self.data['input'] - self.mean_image
-        self.dims['input_centered'] = self.dims['input']
-        self.distributions['input_centered'] = self.distributions['input']
 
         if self.labels is not None:
             self.label_nums = self.data[labels].sum(axis=0)
             self.label_props = self.label_nums / float(self.n_samples)
-
-            if self.balance:
-                self.balance_labels()
-
-            if self.labels in self.data.keys():
-                self.Y = self.data[labels]
-
-        self.finish_setup()
+            if self.balance: self.balance_labels()
+            if self.labels in self.data.keys(): self.Y = self.data[labels]
 
         if check_data: self.check()
-        if self.shuffle: self.randomize()
-
-        self.register()
+        
+    def load_extras(self, **kwargs):
+        pass
+    
+    def load_data(self, mode, **kwargs):
+        if mode not in self.manager.data.keys():
+            self.manager.add_data_mode(mode)
+            
+        for k, v in kwargs.items():
+            if self._n_samples.get(mode, None) is None:
+                self._n_samples[mode] = v.shape[0]
+            elif v.shape[0] != self._n_samples[mode]:
+                raise ValueError('All input arrays must have the same'
+                                 'number of samples (shape[0]), '
+                                 '({0} vs {1})'.format(self._n_samples[mode],
+                                                     v.shape[0]))
+            if k in self._data.keys() and mode in self._data[k]:
+                raise ValueError('Data `{0}` already exists for mode `{1}`. '
+                                 'Cannot overwrite'.format(k, mode))
+            elif k not in self._data.keys():
+                self._data[k] = {}
+            if self.dims.get(k, None) is not None:
+                if self.dims[k] != v.shape[-1]:
+                    raise ValueError('Dimensions of `{0}` does not match '
+                                     '({1} vs {2})'.format(k, v.shape[-1],
+                                                           self.dims[k]))
+            else:
+                self.dims[k] = v.shape[-1]
+            if self.shapes.get(k, None) is not None:
+                if self.shapes[k] != v.shape[1:]:
+                    raise ValueError('Shapes of `{0}` does not match '
+                                     '({1} vs {2})'.format(k, v.shape[1:],
+                                                           self.shapes[k]))
+            else:
+                self.shapes[k] = v.shape[1:]
+            if self.dtypes.get(k, None) is not None:
+                if self.dtypes[k] != v.dtype:
+                    raise ValueError('Data type of `{0}` does not match '
+                                     '({1} vs {2})'.format(k, v.dtyle,
+                                                           self.dtyles[k]))
+            else:
+                self.dtypes[k] = v.dtype
+            self._data[k][mode] = v
+            self.manager.data[mode].add(self.name, k, v)
+            
+    def load_labels(self, mode, one_hot=True, **kwargs):
+        for k, v in kwargs.items():
+            if one_hot: kwargs[k] = make_one_hot(v)
+        self.load_data(mode, **kwargs)
 
     def finish_setup(self):
         return
-    
+
+    def copy(self):
+        return copy.deepcopy(self)
+
+    def balance(self):
+        '''Balance the dataset.
+
+        '''
+        self.logger.debug('Balancing dataset %s' % self.name)
+        label_nums = self.data[self.labels].sum(axis=0)
+        max_num = int(max(label_nums))
+
+        dup_idx = []
+        for i, label in enumerate(self.data[self.labels].T):
+            l_sum = label.sum()
+            if l_sum == max_num: continue
+            idx = np.where(label == 1)[0].tolist()
+
+            dup_idx = [idx[j] for j in range(max_num - len(idx))]
+            self.logger.debug('Balancing label %d by duplicating %d samples'
+                             % (i, len(dup_idx)))
+
+        dup_idx = np.unique(dup_idx)
+
+        if len(dup_idx) > 0:
+            for k, v in self.data.items():
+                self.data[k] = np.concatenate([self.data[k], self.data[k][dup_idx]])
+
+        self.n_samples += len(dup_idx)
+        self.label_nums = self.data[self.labels].sum(axis=0)
+        self.label_props = self.label_nums / float(self.n_samples)
+        
     def check(self):
         self.logger.info('Checking data for {}'.format(self.name))
         for k in self.data.keys():
             self.logger.info('Checking data `{}`'.format(k))
-            data = self.data[k]
+            data = self._data[k]
             dist = self.distributions[k]
             dim = self.dims[k]
             
@@ -282,98 +356,11 @@ class BasicDataset(Dataset):
                                 k, dist, dim, mi, ma, mean, std, hasnan, hasinf))
         self.logger.info('Done checking data.')
 
-    def register(self):
-        from .. import _manager as manager
-
-        datasets = manager.datasets
-        if self.name in datasets.keys():
-            if self.mode in datasets[self.name].keys():
-                self.logger.warn(
-                    'Dataset with name `%s` and mode `%s` already found: '
-                    'overwriting. Use `cortex.manager.remove_dataset` to avoid '
-                    'this warning' % (self.name, self.mode))
-            datasets[self.name][self.mode] = self
-        else:
-            d = {('%s' % self.mode):self}
-            datasets[self.name] = d
-            datasets[self.name]['dims'] = self.dims
-            datasets[self.name]['distributions'] = self.distributions
-            datasets[self.name]['tensors'] = self.make_tensors()
-
-    def copy(self):
-        return copy.deepcopy(self)
-
-    def balance_labels(self):
-        '''Balance the dataset.
-
-        '''
-        self.logger.debug('Balancing dataset %s' % self.name)
-        label_nums = self.data[self.labels].sum(axis=0)
-        max_num = int(max(label_nums))
-
-        dup_idx = []
-        for i, label in enumerate(self.data[self.labels].T):
-            l_sum = label.sum()
-            if l_sum == max_num:
-                continue
-            idx = np.where(label == 1)[0].tolist()
-
-            dup_idx = [idx[j] for j in range(max_num - len(idx))]
-            self.logger.debug('Balancing label %d by duplicating %d samples'
-                             % (i, len(dup_idx)))
-
-        dup_idx = np.unique(dup_idx)
-
-        if len(dup_idx) > 0:
-            for k, v in self.data.items():
-                self.data[k] = np.concatenate([self.data[k], self.data[k][dup_idx]])
-
-        self.n_samples += len(dup_idx)
-
-        self.label_nums = self.data[self.labels].sum(axis=0)
-        self.label_props = self.label_nums / float(self.n_samples)
-
-    def randomize(self):
-        '''Randomizes the dataset
-
-        '''
-        rnd_idx = np.random.permutation(np.arange(0, self.n_samples, 1))
-        for k in self.data.keys():
-            self.data[k] = self.data[k][rnd_idx]
-
-    def next(self, batch_size):
-        '''Draws the next batch of data samples.
-
-        Arguments:
-            batch_size (int).
-
-        Returns:
-            dict: Dictionary of data.
-
-        '''
-
-        if self.pos == -1:
-            self.reset()
-            raise StopIteration
-
-        rval = OrderedDict()
-
-        for k, v in self.data.items():
-            v = v[self.pos:self.pos+batch_size]
-            if self.transpose is not None and k in self.transpose.keys():
-                v = v.transpose(self.transpose[k])
-            rval[k] = v
-
-        self.pos += batch_size
-        if self.pos + batch_size > self.n_samples:
-            self.pos = -1
-
-        return rval
-
     def __str__(self):
         attributes = self.__dict__
         attributes = dict(
-            (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,)) if isinstance(a, np.ndarray)
+            (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,))
+            if isinstance(a, np.ndarray)
             else (k, a)
             for k, a in attributes.items())
         attributes['data'] = dict(
@@ -385,50 +372,39 @@ class BasicDataset(Dataset):
         s = ('<Dataset %s: %s>' % (self.__class__.__name__, attr_str))
         return s
 
-    def set_link_value(self, key):
-        k_, name = key.split('.')
-        if name in self.data.keys():
-            if k_ == 'dim':
-                return self.dims[name]
-            elif k_ == 'distribution':
-                return self.distributions[name]
-            else:
-                raise KeyError
-        else:
-            raise KeyError
-
     def make_tensors(self):
         '''Forms the tensors from the dataset
 
         '''
         self.logger.debug('Forming tensors for dataset %s' % self.name)
-        d = self.next(10)
+        
         tensors = OrderedDict()
-        for k, v in d.items():
-            self.logger.info('Data mode `%s` has shape %s. '
-                             '(tested with batch_size 10)' % (k, v.shape))
-            if v.ndim == 1:
-                C = T.vector
-            elif v.ndim == 2:
-                C = T.matrix
-            elif v.ndim == 3:
-                C = T.tensor3
-            else:
-                raise ValueError('Data dim over 3 not supported.')
+        
+        dim_dict = {1: T.vector, 2: T.matrix, 3: T.tensor3}
+        
+        for k, shape in self.shapes.items():
+            self.logger.info('Data mode `{0}` has shape {1}.'.format(k, shape))
+            try:
+                C = dim_dict[len(shape)+1]
+            except KeyError:
+                raise ValueError(
+                    'Data dim over 3 not supported (got {}).'.format(
+                        len(shape)+1))
 
-            if v.dtype == floatX:
-                dtype = floatX
-            elif v.dtype == intX:
-                dtype = intX
-            else:
-                raise ValueError('dtype %s not supported' % v.dtype)
+            dtype = self.dtypes[k]
+            if dtype not in [floatX, intX]:
+                raise ValueError('dtype {} not supported'.format(dtype))
 
             X = C(self.name + '.' + k, dtype=dtype)
             tensors[k] = X
-        self.logger.debug('Dataset has the following tensors: %s with types %s'
-                          % (tensors, [inp.dtype for inp in tensors.values()]))
-        self.reset()
-        return tensors
+            
+            if self.name not in self.manager.tensors:
+                self.manager.tensors[self.name] = namespaces.TensorNamespace()
+            if k not in self.manager.tensors[self.name]:
+                self.manager.tensors[self.name][k] = X
+        self.logger.debug('Dataset has the following tensors: {0} with types '
+                          '{1}'.format(tensors,
+                                       [inp.dtype for inp in tensors.values()]))
+        
 
-
-_classes = {'BasicDataset': BasicDataset}
+_classes = {'Dataset': Dataset}
