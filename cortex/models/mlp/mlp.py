@@ -101,7 +101,7 @@ class MLP(Cell):
         super(MLP, self).__init__(name=name, **kwargs)
 
     def init_params(self, weight_scale=1e-3):
-        self.params = OrderedDict()
+        super(MLP, self).init_params()
 
         dim_ins = [self.dim_in] + self.dim_hs
         dim_outs = self.dim_hs + [self.dim_out]
