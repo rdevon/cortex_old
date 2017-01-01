@@ -69,7 +69,7 @@ class MRI(NeuroimagingDataset):
         '''
         if source is None:
             raise TypeError('`souce` argument must be provided')
-        
+
         self.pca_components = pca_components
         self.whiten_pca = whiten_pca
 
@@ -108,6 +108,7 @@ class MRI(NeuroimagingDataset):
         self.update_progress(finish=True)
 
     def apply_pca(self, X, incremental_pca, whiten=False):
+        if whiten: self.logger.info('Using whitening')
         X -= X.mean(axis=0)
         if self.pca is None:
             if incremental_pca:
@@ -416,7 +417,7 @@ class MRI(NeuroimagingDataset):
             except:
                 self.logger.warning('Loading nifti files failed. Creating new ones.')
                 load_niftis = False
-        
+
         if not load_niftis:
             images, nifti_files, roi_dict = self.make_images(
                 x, roi_dict=roi_dict, update_rois=update_rois,
@@ -436,7 +437,7 @@ class MRI(NeuroimagingDataset):
                 glob(path.join(self.tmp_path, 'tmp_image_*.nii.gz')))
             for f in nifti_files:
                 if f is not None: os.remove(f)
-                
+
         nifti_viewer.montage(images, self.anat_file, roi_dict,
                              out_file=resolve_path(out_file), stats=stats,
                              global_std=global_std, **kwargs)
