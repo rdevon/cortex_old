@@ -343,6 +343,12 @@ class MRI(NeuroimagingDataset):
         return images, nifti_files
 
     def prepare_images(self, x):
+        if x.ndim > 2:
+            shape = x.shape[:-1]
+            x = x.reshape((reduce(lambda x, y: x * y, shape), x.shape[-1]))
+        else:
+            shape = None
+            
         if self.variance_normalize:
             x *= self.var_image[None, :]
         else:
@@ -350,6 +356,8 @@ class MRI(NeuroimagingDataset):
         x += self.mean_image[None, :]
         if self.pca is not None and self.pca_components:
             x = self.pca.inverse_transform(x)
+            
+        if shape is not None: x = x.reshape(shape + (x.shape[-1],))
         return x
 
     def make_images(self, x, roi_dict=None, update_rois=True,
@@ -370,13 +378,8 @@ class MRI(NeuroimagingDataset):
         '''
         self.logger.debug('Image shape is {}'.format(x.shape))
         if roi_dict is None: roi_dict = dict()
-        if x.ndim > 2:
-            shape = x.shape[:-1]
-            x = x.reshape((reduce(lambda x, y: x * y, shape), x.shape[-1]))
-        else:
-            shape = None
+        
         x = self.prepare_images(x)
-        if shape is not None: x = x.reshape(shape + (x.shape[-1],))
         if average is not None: x = x.mean(average)
 
         if extra_mean is not None: x -= extra_mean
@@ -414,7 +417,8 @@ class MRI(NeuroimagingDataset):
                 images, nifti_files, roi_dict = self.load_images(
                     update_rois=update_rois, roi_dict=roi_dict)
             except:
-                self.logger.warning('Loading nifti files failed. Creating new ones.')
+                self.logger.warning(
+                    'Loading nifti files failed. Creating new ones.')
                 load_niftis = False
         
         if not load_niftis:

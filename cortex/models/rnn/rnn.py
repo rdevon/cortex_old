@@ -390,6 +390,135 @@ class GenRNN(RNN):
 
     def get_center(self, P):
         return self.output_net.distribution.get_center(P)
+    
+    
+class GenRNNwithContext(RNN):
+    _required = ['distribution_type']
+    _components = copy.deepcopy(RNN._components)
+    _components.update(**
+        {
+            'output_net': {
+                'cell_type': 'DistributionMLP',
+                'distribution_type': '&distribution_type'
+            },
+            'context_net': {
+                'cell_type': 'MLP',
+                '_required': {'out_act': 'identity'},
+            }
+        })
+    _links = RNN._links[:]
+    _links += [
+        ('output_net.samples', 'input_net.input'),
+        ('output_net.input', 'RU.output'),
+        ('context_net.output', 'RU.input')]
+    _dim_map = copy.deepcopy(RNN._dim_map)
+    _dim_map.update(**{
+        'output': 'dim_in',
+        'P': 'dim_in',
+        'samples': 'dim_in'
+    })
+    _dist_map = {'P': 'distribution_type'}
+    _costs = {
+        'nll': '_cost',
+        'negative_log_likelihood': '_cost'}
+
+    def __init__(self, distribution_type, name='GenRNN', **kwargs):
+        self.distribution_type = distribution_type
+        super(GenRNNwithContext, self).__init__(name=name, **kwargs)
+        
+    def init_args(self, X, C, M=None):
+        if M is None: M = T.ones((X.shape[0], X.shape[1])).astype(floatX)
+        return (X, C, M)
+
+    def _feed(self, X, C, M, *params):
+        ru_params = self.select_params('RU', *params)
+        initializer_params = self.select_params('initializer', *params)
+        context_params = self.select_params('context_net', *params)
+        
+        outs = self.feed_in(X, *params)
+        outs_init = self.initializer._feed(X[0], *initializer_params)
+        outs.update(**dict((_p('initializer', k), v)
+            for k, v in outs_init.iteritems()))
+        outs['H0'] = outs_init['output']
+        input_Y = outs['input_Y']
+        input_Y += self.context_net._feed(C, *context_params)['output']
+
+        outs.update(**self.RU(input_Y, M, outs['H0']))
+        H = outs['H'][-1]
+        if self.dropout and self.noise_switch():
+            H = dropout(H, T.tanh, self.dropout, self.trng)
+        outs['output'] = H
+        
+        output_params = self.select_params('output_net', *params)
+        outs_out_net = self.output_net._feed(H, *output_params)
+        outs.update(
+            **dict((_p('output_net', k), v)
+                for k, v in outs_out_net.iteritems()))
+        outs['P'] = outs[_p('output_net', 'P')]
+        return outs
+
+    def _cost(self, X=None, P=None):
+        if P is None:
+            session = self.manager.get_session()
+            P = session.tensors[_p(self.name, 'P')]
+        nll = self.output_net.distribution.neg_log_prob(X[1:], P=P[:-1])
+        return nll.sum(axis=0).mean()
+
+    # Step functions -----------------------------------------------------------
+    def _step_sample(self, X, H, epsilon, C, *params):
+        '''Returns preact for sampling step.
+
+        '''
+        ru_params = self.select_params('RU', *params)
+        input_params = self.select_params('input_net', *params)
+        initializer_params = self.select_params('initializer', *params)
+        output_params = self.select_params('output_net', *params)
+        context_params = self.select_params('context_net', *params)
+
+        Y = self.input_net._feed(X, *input_params)['output']
+        Y += self.context_net._feed(C, *context_params)['output']
+        H = self.RU._recurrence(1, Y, H, *ru_params)
+        P_ = self.output_net._feed(H, *output_params)['output']
+        X_ = self.output_net._sample(epsilon, P=P_)
+
+        return H, X_, P_
+
+    def generate_random_variables(self, shape, P=None):
+        if P is None:
+            P = T.zeros((self.output_net.mlp.dim_out,)).astype(floatX)
+        return self.output_net.generate_random_variables(shape, P=P)
+
+    def _sample(self, epsilon, C, X0=None, H0=None, P=None):
+        '''Samples from an initial state.
+
+        Args:
+            x0 (Optional[T.tensor]): initial input state.
+            h0 (Optional[T.tensor]): initial recurrent state.
+            n_samples (Optional[int]): if no x0 or h0, used to initial batch.
+                Number of chains.
+            n_steps (int): number of sampling steps.
+
+        Returns:
+            OrderedDict: dictionary of results. hiddens, probabilities, and preacts.
+            theano.OrderedUpdates: updates.
+
+        '''
+        if X0 is None: X0 = self.output_net.simple_sample(epsilon.shape[1], P=0.5)
+        if H0 is None: H0 = self.initializer(X0)['output']
+
+        seqs = [epsilon]
+        outputs_info = [X0, H0, None]
+        non_seqs = [C] + list(self.get_params())
+
+        (H, X, P), updates = scan(
+            self._step_sample, seqs, outputs_info, non_seqs, epsilon.shape[0],
+            name=self.name+'_sampling')
+
+        return OrderedDict(samples=X, P=P, H=H, updates=updates)
+
+    def get_center(self, P):
+        return self.output_net.distribution.get_center(P)
+    
 
 _classes = {'RNNInitializer': RNNInitializer,
             'RecurrentUnit': RecurrentUnit,
