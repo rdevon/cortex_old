@@ -7,7 +7,7 @@ import numpy as np
 from theano import tensor as T
 
 from . import Distribution, _clip
-from ...utils import floatX
+from ...utils import floatX, intX, scan
 
 
 def _softmax(x):
@@ -53,10 +53,43 @@ class Multinomial(Distribution):
         z = np.zeros((self.dim,)).astype(floatX)
         self.params = OrderedDict(z=z)
 
-    def quantile(self, epsilon, P):
-        return self.trng.multinomial(pvals=P, size=P.shape).astype(floatX)
+    def quantile(self, E, P):
+        assert E.ndim == (P.ndim - 1)
+        if P.ndim == 2:
+            shape = None
+        elif P.ndim == 3:
+            shape = P.shape
+            P = P.reshape((P.shape[0] * P.shape[1], P.shape[2]))
+            E = E.reshape((E.shape[0] * E.shape[1],))
+        elif P.ndim == 4:
+            shape = P.shape
+            P = P.reshape((P.shape[0] * P.shape[1] * P.shape[2], P.shape[3]))
+            E = E.reshape((E.shape[0] * E.shape[1] * E.shape[2],))
+        else:
+            raise NotImplementedError()
+        
+        P_e = T.tile(P[:, :, None], P.shape[1])
+        
+        def step(A):
+            return T.triu(A)
+        
+        tria, _ = scan(step, [P_e], [None], [], P_e.shape[0])
+        sums = tria.sum(axis=1)
+        
+        # This may not make sense, but we add the upper trangular rows to get
+        # each action's cumulative, then subtract epsilon. We want the
+        # lowest non-negative number.
+        diff = sums - E[:, None]
+        diff = T.switch(T.le(diff, 0.), diff.max() + 1., diff).astype(floatX)
+        S = diff.argmin(axis=1).astype(intX)
+        S = T.extra_ops.to_one_hot(S, P.shape[-1])
+        #S = self.trng.multinomial(pvals=P).astype(floatX)
+        if shape is not None: S = S.reshape(shape)
+        return S
+    
+    def generate_random_variables(self, shape, P=None):
+        return self.random_variables(shape)
 
-    @classmethod
     def random_variables(self, size):
         return self.trng.uniform(size, dtype=floatX)
 

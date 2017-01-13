@@ -41,6 +41,7 @@ class Evaluator(object):
         stats.update(**self.session.stats)
         stats.update(**self.session.costs)
         stats['total_cost'] = self.session.cost
+        print stats.keys()
         self.f_stats = theano.function(self.session.inputs, stats,
                                        on_unused_input='ignore')
 

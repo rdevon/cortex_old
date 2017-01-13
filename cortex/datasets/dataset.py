@@ -180,7 +180,7 @@ class BasicDataset(Dataset):
 
     def __init__(self, data, distributions=None, labels='labels', name=None,
                 balance=False, one_hot=True, transpose=None, check_data=False,
-                **kwargs):
+                process_centered=True, **kwargs):
         '''Init function for BasicDataset.
 
         Args:
@@ -214,6 +214,8 @@ class BasicDataset(Dataset):
         for k, v in self.data.items():
             if k == labels and one_hot and len(v.shape) == 1:
                 v = make_one_hot(v)
+            elif distributions[k] == 'multinomial':
+                v = make_one_hot(v)
             elif len(v.shape) == 1:
                 v = v[:, None]
             if self.stop is not None:
@@ -237,9 +239,10 @@ class BasicDataset(Dataset):
         self.var_image = self.X.std(axis=0)
         self.variance = self.X.std()
         self.labels = labels
-        self.data['input_centered'] = self.data['input'] - self.mean_image
-        self.dims['input_centered'] = self.dims['input']
-        self.distributions['input_centered'] = self.distributions['input']
+        if process_centered:
+            self.data['input_centered'] = self.data['input'] - self.mean_image
+            self.dims['input_centered'] = self.dims['input']
+            self.distributions['input_centered'] = self.distributions['input']
 
         if self.labels is not None:
             self.label_nums = self.data[labels].sum(axis=0)
@@ -421,7 +424,7 @@ class BasicDataset(Dataset):
             elif v.dtype == intX:
                 dtype = intX
             else:
-                raise ValueError('dtype %s not supported' % v.dtype)
+                raise ValueError('dtype %s not supported (%s)' % (v.dtype, k))
 
             X = C(self.name + '.' + k, dtype=dtype)
             tensors[k] = X

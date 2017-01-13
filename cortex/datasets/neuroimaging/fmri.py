@@ -15,7 +15,7 @@ import random
 import theano
 import yaml
 
-from ...analysis.mri import rois
+from ...analysis import rois
 from .. import Dataset, make_one_hot
 from . import mri as mri_module
 from ...analysis import nifti_viewer

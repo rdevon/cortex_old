@@ -209,11 +209,12 @@ class RNN(Cell):
         },
         'RU': {
             'cell_type': '&recurrence_type',
-            '_passed': ['weight_noise']
+            '_passed': ['weight_noise', 'dim_h']
         },
         'input_net': {
             'cell_type': 'MLP',
             '_required': {'out_act': 'identity'},
+            '_passed': ['dim_in']
         }
     }
     _links = [
@@ -403,6 +404,7 @@ class GenRNNwithContext(RNN):
             },
             'context_net': {
                 'cell_type': 'MLP',
+                'dim_in': '&c_dim',
                 '_required': {'out_act': 'identity'},
             }
         })
@@ -422,8 +424,9 @@ class GenRNNwithContext(RNN):
         'nll': '_cost',
         'negative_log_likelihood': '_cost'}
 
-    def __init__(self, distribution_type, name='GenRNN', **kwargs):
+    def __init__(self, distribution_type, c_dim=None, name='GenRNN', **kwargs):
         self.distribution_type = distribution_type
+        self.c_dim = c_dim
         super(GenRNNwithContext, self).__init__(name=name, **kwargs)
         
     def init_args(self, X, C, M=None):
@@ -465,7 +468,7 @@ class GenRNNwithContext(RNN):
         return nll.sum(axis=0).mean()
 
     # Step functions -----------------------------------------------------------
-    def _step_sample(self, X, H, epsilon, C, *params):
+    def _step_sample(self, epsilon, H, X, C, *params):
         '''Returns preact for sampling step.
 
         '''
@@ -475,9 +478,8 @@ class GenRNNwithContext(RNN):
         output_params = self.select_params('output_net', *params)
         context_params = self.select_params('context_net', *params)
 
-        Y = self.input_net._feed(X, *input_params)['output']
-        Y += self.context_net._feed(C, *context_params)['output']
-        H = self.RU._recurrence(1, Y, H, *ru_params)
+        Y = self.input_net._feed(X, *input_params)['output'] + C
+        H = self.RU._recurrence(1, Y, H, *ru_params)[1]
         P_ = self.output_net._feed(H, *output_params)['output']
         X_ = self.output_net._sample(epsilon, P=P_)
 
@@ -488,7 +490,7 @@ class GenRNNwithContext(RNN):
             P = T.zeros((self.output_net.mlp.dim_out,)).astype(floatX)
         return self.output_net.generate_random_variables(shape, P=P)
 
-    def _sample(self, epsilon, C, X0=None, H0=None, P=None):
+    def _sample(self, epsilon, Z, X0=None, H0=None):
         '''Samples from an initial state.
 
         Args:
@@ -505,16 +507,17 @@ class GenRNNwithContext(RNN):
         '''
         if X0 is None: X0 = self.output_net.simple_sample(epsilon.shape[1], P=0.5)
         if H0 is None: H0 = self.initializer(X0)['output']
+        C = self.context_net(Z)['output']
 
         seqs = [epsilon]
-        outputs_info = [X0, H0, None]
+        outputs_info = [H0, X0, None]
         non_seqs = [C] + list(self.get_params())
 
         (H, X, P), updates = scan(
             self._step_sample, seqs, outputs_info, non_seqs, epsilon.shape[0],
             name=self.name+'_sampling')
 
-        return OrderedDict(samples=X, P=P, H=H, updates=updates)
+        return OrderedDict(samples=X, P=P, H=H, C=C, updates=updates)
 
     def get_center(self, P):
         return self.output_net.distribution.get_center(P)
@@ -522,5 +525,6 @@ class GenRNNwithContext(RNN):
 
 _classes = {'RNNInitializer': RNNInitializer,
             'RecurrentUnit': RecurrentUnit,
+            'GenRNNwithContext': GenRNNwithContext,
             'RNN': RNN,
             'GenRNN': GenRNN}
