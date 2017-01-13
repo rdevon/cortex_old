@@ -18,12 +18,13 @@ cortex.prepare_data('MNIST', mode='valid', source='$data/basic/mnist.pkl.gz')
 
 cortex.prepare_cell('gaussian', name='noise', dim=100)
 cortex.prepare_cell('DistributionMLP', name='discriminator',
-                    distribution_type='binomial', dim_hs=[500, 200],
-                    h_act='softplus', dim=1, dropout=0.5)
+                    distribution_type='binomial', dim_hs=[200],
+                    h_act='softplus', dim=1, dropout=0.1)
 cortex.add_step('discriminator', 'mnist.input', name='real')
 cortex.prepare_cell('MLP', name='generator', out_act='sigmoid',
                     dim_hs=[200, 500], h_act='softplus',
-                    batch_normalization=True)
+                    batch_normalization=True, weight_normalization=False,
+                    bn_mean_only=False)
 cortex.prepare_samples('noise', batch_size)
 
 cortex.add_step('generator', 'noise.samples')
@@ -52,7 +53,7 @@ trainer = cortex.setup_trainer(
     train_session,
     optimizer='rmsprop',
     epochs=1000,
-    learning_rate=0.001,
+    learning_rate=0.1,
     batch_size=100,
 )
 
@@ -74,6 +75,6 @@ monitor = cortex.setup_monitor(valid_session, modes=['train', 'valid'])
 visualizer = cortex.setup_visualizer(valid_session)
 visualizer.add('mnist.viz',
                X='generator.Y',
-               out_file='$outs/GAN_test.png')
+               name='GAN_test.png')
 
 cortex.train(monitor_grads=True)

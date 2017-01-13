@@ -6,6 +6,7 @@ import cortex
 from cortex.utils import logger as cortex_logger
 
 
+cortex.set_path('demo_AE')
 cortex_logger.set_stream_logger(2)
 
 

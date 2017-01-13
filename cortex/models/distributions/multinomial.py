@@ -54,17 +54,27 @@ class Multinomial(Distribution):
         self.params = OrderedDict(z=z)
 
     def quantile(self, E, P):
-        assert E.ndim == (P.ndim - 1), (E.ndim, P.ndim)
-        if P.ndim == 2:
+        Pdim = P.ndim
+        if Pdim == 2:
             shape = None
-        elif P.ndim == 3:
+            if P.ndim == (E.ndim + 1):
+                fshape = P.shape
+            else:
+                fshape = (E.shape[0], P.shape[0], P.shape[1])
+        elif Pdim == 3:
             shape = P.shape
+            if P.ndim == (E.ndim + 1):
+                fshape = shape
+            else:
+                fshape = (E.shape[0], P.shape[0], P.shape[1], P.shape[2])
             P = P.reshape((P.shape[0] * P.shape[1], P.shape[2]))
-            E = E.reshape((E.shape[0] * E.shape[1],))
-        elif P.ndim == 4:
+        elif Pdim == 4:
             shape = P.shape
+            if P.ndim == (E.ndim + 1):
+                fshape = shape
+            else:
+                fshape = (E.shape[0], P.shape[0], P.shape[1], P.shape[2], P.shape[3])
             P = P.reshape((P.shape[0] * P.shape[1] * P.shape[2], P.shape[3]))
-            E = E.reshape((E.shape[0] * E.shape[1] * E.shape[2],))
         else:
             raise NotImplementedError()
         
@@ -79,12 +89,21 @@ class Multinomial(Distribution):
         # This may not make sense, but we add the upper trangular rows to get
         # each action's cumulative, then subtract epsilon. We want the
         # lowest non-negative number.
-        diff = sums - E[:, None]
+        
+        if shape is not None:
+            sums = sums.reshape(shape)
+        
+        if sums.ndim == E.ndim:
+            sums = T.shape_padleft(sums)
+        E = T.shape_padright(E)
+            
+        diff = sums - E
+        diff = diff.flatten()
+        diff = diff.reshape((diff.shape[0] // P.shape[-1], P.shape[-1]))
         diff = T.switch(T.le(diff, 0.), diff.max() + 1., diff).astype(floatX)
         S = diff.argmin(axis=1).astype(intX)
         S = T.extra_ops.to_one_hot(S, P.shape[-1])
-        #S = self.trng.multinomial(pvals=P).astype(floatX)
-        if shape is not None: S = S.reshape(shape)
+        S = S.reshape(fshape)
         return S
     
     def generate_random_variables(self, shape, P=None):
