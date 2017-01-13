@@ -481,8 +481,14 @@ class Manager(object):
         self.cell_args[name] = cell_args
 
     def remove_cell(self, key):
-        del self.cells[key]
-        del self.cell_args[key]
+        try:
+            del self.cells[key]
+        except KeyError:
+            pass
+        try:
+            del self.cell_args[key]
+        except KeyError:
+            pass
 
     # Methods for building graph -----------------------------------------------
     def test_op_args(self, op, args, kwargs):

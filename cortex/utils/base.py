@@ -84,15 +84,22 @@ def scan(f_scan, seqs, outputs_info, non_seqs, n_steps, name='scan',
         theano.OrderedUpdates: updates.
 
     '''
-    return theano.scan(
-        f_scan,
-        sequences=seqs,
-        outputs_info=outputs_info,
-        non_sequences=non_seqs,
-        name=name,
-        n_steps=n_steps,
-        strict=strict
-    )
+    if not isinstance(n_steps, int) or n_steps > 1:
+        return theano.scan(
+            f_scan,
+            sequences=seqs,
+            outputs_info=outputs_info,
+            non_sequences=non_seqs,
+            name=name,
+            n_steps=n_steps,
+            strict=strict
+        )
+    else:
+        outputs_info = [o for o in outputs_info if o is not None]
+        if n_steps == 0:
+            return outputs_info
+        elif n_steps == 1:
+            return f_scan(*(seqs + outputs_info + non_seqs))
 
 def tslice(_x, n, dim):
     '''Slice a tensor into 2 along last axis.

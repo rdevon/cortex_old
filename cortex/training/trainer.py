@@ -182,8 +182,14 @@ class Trainer(object):
 
             # Gradients
             self.logger.debug('Computing gradients for params: %s' % tparams_.keys())
-            grads_ = T.grad(
-                cost, wrt=tparams_.values(), consider_constant=session.constants)
+            try:
+                grads_ = T.grad(
+                    cost, wrt=tparams_.values(), consider_constant=session.constants)
+            except theano.gradient.DisconnectedInputError:
+                self.logger.error('DisconnectedInputError')
+                for k, v in tparams_.items():
+                    self.logger.info('Trying {}'.format(k))
+                    T.grad(cost, wrt=v, consider_constant=session.constants)
             grads_ = OrderedDict((k, g) for k, g in zip(tparams_.keys(), grads_))
             for k, v in grads_.items():
                 if k in grads.keys():

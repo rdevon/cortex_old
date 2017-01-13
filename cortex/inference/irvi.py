@@ -42,7 +42,7 @@ class IRVI(Cell):
                 v in self.manager.cell_args.keys()):
                 self.manager.build_cell(v)
             elif v not in self.manager.cell_args.keys():
-                raise ValueError('Cell `%s` not foud.' % v)
+                raise ValueError('Cell `%s` not found.' % v)
             self.__dict__[k] = self.manager[v]
         return kwargs
 

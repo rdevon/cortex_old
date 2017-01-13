@@ -3,10 +3,12 @@
 '''
 
 import numpy as np
+import progressbar
 import re
 
-from .. import BasicDataset
+from .. import BasicDataset, make_one_hot
 from ...utils import floatX, intX, pi, _rng
+from ...utils.tools import resolve_path
 
 
 class WMT(BasicDataset):
@@ -18,27 +20,133 @@ class WMT(BasicDataset):
         quot='"'
     )
     
-    def __init__(self):
-        pass
-    
-    def get_data(self, source):
+    def __init__(self, tokens=None, source=None, name='WMT', max_words=1000,
+                 **kwargs):
+        self.source = source
+
+        source = resolve_path(source)
+        if tokens is None:
+            tokens = self.tokenize(source)
+        self.tokens = tokens
+        self.process_tokens(max_words)
+        
+        X, M, M_p = self.get_data(source)
+        
+        data = {'input': X, 'mask': M, 'mask_padded': M_p}
+        distributions = {'input': 'multinomial', 'mask': 'binomial',
+                         'mask_padded': 'binomial'}
+
+        super(WMT, self).__init__(data, distributions=distributions,
+                                  process_centered=False, name=name, **kwargs)
+        
+    def process_tokens(self, max_words):
+        word_list = sorted(self.tokens, key=self.tokens.get, reverse=True)
+        self.token_map = {'<bos>': 0, '<eos>': 1, '<UNK>': 2}
+        self.r_token_map = {0: '<bos>', 1: '<eos>', 2: '<UNK>'}
+        for i, word in enumerate(word_list[:max_words]):
+            self.token_map[word] = i + 3
+            self.r_token_map[i + 3] = word
+        
+    def tokenize(self, source):
+        tokens = {}
+        lines = 0
         with open(source) as f:
-            x = f.read()
+            for line in f:
+                lines += 1
+        
+        with open(source) as f:
+            widgets = ['Tokenizing', progressbar.Bar()]
+            pbar = progressbar.ProgressBar(widgets=widgets, maxval=lines).start()
+            i = 0
+            for line in f:
+                words = line[:-2].split(' ')
+                for word in words:
+                    word = word.lower()
+                    if word in tokens:
+                        tokens[word] += 1
+                    else:
+                        tokens[word] = 1
+                i += 1
+                pbar.update(i)
+            print
+                
+        return tokens
+    
+    def string_to_ints(self, s):
+        words = s.split(' ')
+        tokens = [0] + [self.token_map.get(w, 2) for w in words] + [1]
+        return tokens
+    
+    def ints_to_string(self, tokens, remove_pads=True, axis=0):
+        if tokens.ndim > 1:
+            t_idx = range(tokens.ndim)
+            t_idx = t_idx + [t_idx.pop(axis)]
+            r_idx = [t_idx[:len(t_idx)-1].index(i)
+                     for i in range(len(t_idx))
+                     if i in t_idx[:len(t_idx)-1]]
+            tokens = tokens.transpose(t_idx)
+            shape = tokens.shape
+            tokens = tokens.reshape(
+                (reduce(lambda x, y: x * y, shape[:-1])), shape[-1])
+        else:
+            shape = None
             
-        sp_chars = np.unique(re.findall(r'&[^&;]*;', x)).tolist()
-        sp_chars = [s[1:-1] for s in sp_chars]
+        sentences = []
+        for i in xrange(tokens.shape[0]):
+            t_ = tokens[i].tolist()
+            try:
+                bos_idx = t_.index(0)
+            except ValueError:
+                bos_idx = 0
+            
+            try:
+                eos_idx = t_.index(1)
+            except ValueError:
+                try:
+                    eos_idx = t_.index(-1)
+                except ValueError:
+                    eos_idx = len(t_)
+                    
+            t_ = t_[bos_idx:eos_idx]
+            words = [self.r_token_map[t] for t in t_]
+            sentences.append(' '.join(words))
+        sentences = np.array(sentences)
         
-        for sp_char in sp_chars:
-            c = sp_map.get(sp_char, None)
-            if c is not None:
-                pass
-            if sp_char.startswith('#'):
-                c = chr(int(sp_char[1:]))
-            else:
-                raise ValueError(
-                    'Cannot handle special character {}'.format(sp_char))
-            x = x.replace(sp_char, c)
+        if shape is not None:
+            sentences = sentences.reshape((shape[:-1]))
+            sentences = sentences.transpose(r_idx)
         
-        x_enc = [ord(c) for c in x]
+        return sentences
+    
+    def get_data(self, source, max_length=100):
+        max_length_ = 0
+        lines = 0
+        with open(source) as f:
+            for line in f:
+                lines += 1
+                
+        X = np.zeros((lines, max_length)).astype(intX) - 1
+        M = np.zeros_like(X)
+        M_p = np.zeros_like(X)
         
-        x_
+        with open(source) as f:
+            widgets = ['Processing', progressbar.Bar()]
+            pbar = progressbar.ProgressBar(widgets=widgets, maxval=lines).start()
+            i = 0
+            for line in f:
+                tokenized_line = self.string_to_ints(line[:-2])
+                max_length_ = max(max_length_, len(tokenized_line))
+                l = min(max_length, len(tokenized_line))
+                X[i, :l] = tokenized_line[:l]
+                M[i, :l] = np.ones(l)
+                M_p[i, 1:l-1] = np.ones(l-2)
+                i += 1
+                pbar.update(i)
+            print
+        X = X[:, :max_length_]
+        M = M[:, :max_length_]
+        M_p = M_p[:, :max_length_]
+            
+        return X.astype(intX), M.astype(floatX), M_p.astype(floatX)
+    
+_classes = {'WMT': WMT}
