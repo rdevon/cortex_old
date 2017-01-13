@@ -8,7 +8,7 @@ from theano import tensor as T
 import cortex
 from cortex.utils import logger as cortex_logger
 
-
+cortex.set_path('demo_GAN')
 cortex_logger.set_stream_logger(2)
 
 batch_size=100
