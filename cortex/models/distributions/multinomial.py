@@ -54,7 +54,7 @@ class Multinomial(Distribution):
         self.params = OrderedDict(z=z)
 
     def quantile(self, E, P):
-        assert E.ndim == (P.ndim - 1)
+        assert E.ndim == (P.ndim - 1), (E.ndim, P.ndim)
         if P.ndim == 2:
             shape = None
         elif P.ndim == 3:
@@ -88,9 +88,23 @@ class Multinomial(Distribution):
         return S
     
     def generate_random_variables(self, shape, P=None):
+        shape = tuple(shape)
+        if P is None:
+            pass
+        elif P.ndim == 1:
+            shape = shape
+        elif P.ndim == 2:
+            shape = shape + (P.shape[0],)
+        elif P.ndim == 3:
+            shape = shape + (P.shape[0], P.shape[1], )
+        elif P.ndim == 4:
+            shape = shape + (P.shape[0], P.shape[1], P.shape[2])
+        else:
+            raise ValueError(P.ndim)
         return self.random_variables(shape)
 
     def random_variables(self, size):
-        return self.trng.uniform(size, dtype=floatX)
+        S = self.trng.uniform(size, dtype=floatX)
+        return S
 
 _classes = {'multinomial': Multinomial}

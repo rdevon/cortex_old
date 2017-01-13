@@ -140,6 +140,8 @@ class RNNInitializer(Cell):
             elif X.ndim == 2:
                 y = T.zeros((X.shape[0], params[0].shape[0])).astype(floatX) + params[0][None, :]
             outs = {'output': y}
+        elif self.initialization is None:
+            outs = {'output': T.zeros((X.shape[0], self.dim_out)).astype(floatX)}
         return outs
 
 
