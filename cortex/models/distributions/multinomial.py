@@ -77,18 +77,14 @@ class Multinomial(Distribution):
             P = P.reshape((P.shape[0] * P.shape[1] * P.shape[2], P.shape[3]))
         else:
             raise NotImplementedError()
-        
-        #P_e = T.tile(P[:, :, None], P.shape[1])
+    
         def step(i, P):
-            A = T.ones((P.shape[-1],))
+            A = T.zeros((P.shape[-1],))
             A = T.set_subtensor(A[:i], 1.).astype(floatX)
             return (P * A[None, :]).sum(-1)
         
         sums, _ = scan(step, [T.arange(P.shape[-1])], [None], [P], P.shape[-1])
         sums = sums.T
-        
-        #tria, _ = scan(step, [P_e], [None], [], P_e.shape[0])
-        #sums = tria.sum(axis=1)
         
         # This may not make sense, but we add the upper trangular rows to get
         # each action's cumulative, then subtract epsilon. We want the
