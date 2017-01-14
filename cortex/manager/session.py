@@ -328,6 +328,17 @@ class Session(object):
     def get_dataset_size(self, mode=None):
         dataset_names = self.get_dataset_names()
         n = None
+        if len(dataset_names) == 0:
+            try:
+                k = self.manager.datasets.keys()[0]
+                dataset = self.manager.datasets[k]
+            except:
+                raise ValueError('No datasets found')
+            try:
+                n = dataset['train'].n_samples
+            except:
+                raise ValueError('This was a hack.')
+                
         for name in dataset_names:
             dataset = self.manager.datasets[name]
             if mode is None:
@@ -357,6 +368,17 @@ class Session(object):
         dataset_names = self.get_dataset_names()
 
         try:
+            if len(dataset_names) == 0:
+                try:
+                    k = self.manager.datasets.keys()[0]
+                    dataset = self.manager.datasets[k]
+                except:
+                    raise ValueError('No datasets found')
+                try:
+                    dataset['train'].next(batch_size)
+                except KeyError:
+                    raise ValueError('This was a hack.')
+                self.data_pos = dataset['train'].pos
             for name in dataset_names:
                 dataset = self.manager.datasets[name]
                 if mode is None:
@@ -378,6 +400,8 @@ class Session(object):
                         raise ValueError('Dataset position mismatch. (%d vs %d)'
                                          % (self.data_pos, dataset[m].pos))
         except StopIteration:
+            if len(dataset_names) == 0:
+                dataset['train'].reset()
             for name in dataset_names:
                 if mode is None:
                     ms = dataset.keys()
@@ -394,15 +418,20 @@ class Session(object):
         for name, key in zip(self.datasets, self.input_keys):
             batch = batches[name]
             data.append(batch[key])
-
         if self.data_pos == -1:
             self.data_pos = self.get_dataset_size(mode=mode)
-
         return data
 
     def reset_data(self, mode=None):
         dataset_names = self.get_dataset_names()
 
+        if len(dataset_names) == 0:
+            try:
+                k = self.manager.datasets.keys()[0]
+                dataset = self.manager.datasets[k]
+            except:
+                raise ValueError('No datasets found')
+            dataset['train'].reset()
         for name in dataset_names:
             dataset = self.manager.datasets[name]
             if mode is None:

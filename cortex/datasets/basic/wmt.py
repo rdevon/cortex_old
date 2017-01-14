@@ -35,9 +35,11 @@ class WMT(BasicDataset):
         data = {'input': X, 'mask': M, 'mask_padded': M_p}
         distributions = {'input': 'multinomial', 'mask': 'binomial',
                          'mask_padded': 'binomial'}
+        transpose = {'input': (1, 0, 2), 'mask': (1, 0), 'mask_padded': (1, 0)}
 
         super(WMT, self).__init__(data, distributions=distributions,
-                                  process_centered=False, name=name, **kwargs)
+                                  process_centered=False, name=name,
+                                  transpose=transpose, **kwargs)
         
     def process_tokens(self, max_words):
         word_list = sorted(self.tokens, key=self.tokens.get, reverse=True)
@@ -148,5 +150,10 @@ class WMT(BasicDataset):
         M_p = M_p[:, :max_length_]
             
         return X.astype(intX), M.astype(floatX), M_p.astype(floatX)
+    
+    def viz(self, X=None, P=None):
+        X = np.argmax(X, axis=-1)[0][:, :, 0]
+        lines = self.ints_to_string(X, axis=1)
+        print lines
     
 _classes = {'WMT': WMT}

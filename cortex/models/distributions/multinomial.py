@@ -79,7 +79,7 @@ class Multinomial(Distribution):
             raise NotImplementedError()
     
         def step(i, P):
-            A = T.ones((P.shape[-1],))
+            A = T.zeros((P.shape[-1],))
             A = T.set_subtensor(A[:i], 1.).astype(floatX)
             return (P * A[None, :]).sum(-1)
         
