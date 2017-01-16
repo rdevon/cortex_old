@@ -9,7 +9,7 @@ import cortex
 from cortex.utils import logger as cortex_logger
 
 cortex.set_path('demo_GAN')
-cortex_logger.set_stream_logger(2)
+cortex_logger.set_stream_logger(1)
 
 batch_size=100
 
@@ -60,7 +60,7 @@ trainer = cortex.setup_trainer(
 trainer.set_optimizer(models=['discriminator.mlp'], cost='discriminator_cost')
 trainer.set_optimizer(models=['generator'],
                       cost='generator_cost.negative_log_likelihood',
-                      freq=10)
+                      freq=10, optimizer='adam')
 
 valid_session = cortex.create_session(noise=False)
 cortex.build_session()
@@ -75,6 +75,6 @@ monitor = cortex.setup_monitor(valid_session, modes=['train', 'valid'])
 visualizer = cortex.setup_visualizer(valid_session)
 visualizer.add('mnist.viz',
                X='generator.Y',
-               name='GAN_test.png')
+               name='GAN_test')
 
 cortex.train(monitor_grads=True)

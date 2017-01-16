@@ -20,7 +20,8 @@ _nonlinearity_dict = dict(
     fast_sigmoid=T.nnet.ultra_fast_sigmoid,
     tanh=T.tanh,
     softplus=T.nnet.softplus,
-    relu=T.nnet.relu
+    relu=T.nnet.relu,
+    leaky_relu=lambda x: T.nnet.relu(x, alpha=0.01)
 )
 
 def resolve_nonlinearity(key):
