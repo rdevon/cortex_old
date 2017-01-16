@@ -39,8 +39,8 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads)]
 
-    f_grad_shared = theano.function(
-        inp, cost, extra_outs=extra_outs, updates=gsup+extra_ups, profile=profile)
+    f_grad_shared = make_f_grad_shared(
+        inp, cost, grads, extra_outs, zgup+rg2up+extra_ups, profile=profile)
 
     b1 = 0.9
     b2 = 0.999
