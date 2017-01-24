@@ -20,10 +20,13 @@ class WMT(BasicDataset):
         quot='"'
     )
     
+    omit = [' ', '', '.', ',', '!', ':', ';', ')', '(', '<', '>', '"', '%', '&quot;', '&apos;s', '&apos;', '&apos;d', '-', '&apos;m', '&apos;t', '&quot']
+    
     def __init__(self, tokens=None, source=None, name='WMT', max_words=1000,
-                 **kwargs):
+                 max_length=20, **kwargs):
         self.source = source
-
+        self.max_length = max_length
+    
         source = resolve_path(source)
         if tokens is None:
             tokens = self.tokenize(source)
@@ -50,6 +53,7 @@ class WMT(BasicDataset):
             self.r_token_map[i + 3] = word
         
     def tokenize(self, source):
+        max_length = self.max_length
         tokens = {}
         lines = 0
         with open(source) as f:
@@ -62,12 +66,16 @@ class WMT(BasicDataset):
             i = 0
             for line in f:
                 words = line[:-2].split(' ')
-                for word in words:
-                    word = word.lower()
-                    if word in tokens:
-                        tokens[word] += 1
-                    else:
-                        tokens[word] = 1
+                words = [w for w in words if w not in self.omit]
+                if len(words) > max_length:
+                    continue
+                else:
+                    for word in words:
+                        word = word.lower()
+                        if word in tokens:
+                            tokens[word] += 1
+                        else:
+                            tokens[word] = 1
                 i += 1
                 pbar.update(i)
             print
@@ -76,6 +84,7 @@ class WMT(BasicDataset):
     
     def string_to_ints(self, s):
         words = s.split(' ')
+        words = [w.lower() for w in words if w not in self.omit]
         tokens = [0] + [self.token_map.get(w, 2) for w in words] + [1]
         return tokens
     
@@ -100,9 +109,8 @@ class WMT(BasicDataset):
                 bos_idx = t_.index(0)
             except ValueError:
                 bos_idx = 0
-            
             try:
-                eos_idx = t_.index(1)
+                eos_idx = t_.index(1) + 1
             except ValueError:
                 try:
                     eos_idx = t_.index(-1)
@@ -120,14 +128,15 @@ class WMT(BasicDataset):
         
         return sentences
     
-    def get_data(self, source, max_length=100):
+    def get_data(self, source):
+        max_length = self.max_length
         max_length_ = 0
         lines = 0
         with open(source) as f:
             for line in f:
                 lines += 1
                 
-        X = np.zeros((lines, max_length)).astype(intX) - 1
+        X = np.zeros((lines, max_length+2)).astype(intX) + 2# - 1
         M = np.zeros_like(X)
         M_p = np.zeros_like(X)
         
@@ -138,22 +147,45 @@ class WMT(BasicDataset):
             for line in f:
                 tokenized_line = self.string_to_ints(line[:-2])
                 max_length_ = max(max_length_, len(tokenized_line))
-                l = min(max_length, len(tokenized_line))
-                X[i, :l] = tokenized_line[:l]
-                M[i, :l] = np.ones(l)
-                M_p[i, 1:l-1] = np.ones(l-2)
-                i += 1
-                pbar.update(i)
+                l = len(tokenized_line)
+                if l > max_length + 2:
+                    continue
+                else:                    
+                    X[i, :l] = tokenized_line[:l]
+                    M[i, :l] = np.ones(l)
+                    M_p[i, 1:l-1] = np.ones(l-2)
+                    i += 1
+                    pbar.update(i)
             print
-        X = X[:, :max_length_]
-        M = M[:, :max_length_]
-        M_p = M_p[:, :max_length_]
+        print('Found {} sentences'.format(i))
+        X = X[:i, :max_length_]
+        M = M[:i, :max_length_]
+        M_p = M_p[:i, :max_length_]
             
         return X.astype(intX), M.astype(floatX), M_p.astype(floatX)
     
-    def viz(self, X=None, P=None):
-        X = np.argmax(X, axis=-1)[0][:, :, 0]
-        lines = self.ints_to_string(X, axis=1)
+    def viz(self, X=None, X_s=None, P=None, M=None, X_t=None, P_t=None):
+        #print X.shape
+        X = np.argmax(X, axis=-1)[:, :20]
+        X_s = np.argmax(X_s, axis=-1)
+        M = M[:, :20]
+        #print X.shape
+        #print P[:, :, 0]
+        #print P.shape
+        #print P[:, :, 0].sum(axis=-1)
+        #print M.shape
+        #print M[:, 0]
+        #print P[0, -1, 0]
+        #print P_t[:, 0, :]
+        #print np.argmax(X_t[:, 0], axis=-1)
+        #print X_t.shape
+        #print P_t.shape
+        #print X
+        lines = self.ints_to_string(X, axis=0)
+        print 'Sampled:'
         print lines
+        lines_s = self.ints_to_string(X_s, axis=0)
+        print 'Real:'
+        print lines_s
     
 _classes = {'WMT': WMT}

@@ -141,11 +141,14 @@ class Session(object):
             data = self.next_batch(batch_size=batch_size)
             if what in ['cost', 'stat']:
                 for k, o in out.iteritems():
-                    self.logger.info('Testing stat (%s) with batchsize %d'
-                                     % (k, batch_size))
-                    f = theano.function(self.inputs, o, updates=self.updates,
-                                        on_unused_input='ignore')
-                    t_ = self.test(data, f, key=k, key_prefix=name, cell=cell)
+                    if k in ['updates', 'constants']:
+                        continue
+                    else:
+                        self.logger.info('Testing stat (%s) with batchsize %d'
+                                         % (k, batch_size))
+                        f = theano.function(self.inputs, o, updates=self.updates,
+                                            on_unused_input='ignore')
+                        t_ = self.test(data, f, key=k, key_prefix=name, cell=cell)
             else:
                 for key in test_order:
                     if key in ['updates', 'constants']:

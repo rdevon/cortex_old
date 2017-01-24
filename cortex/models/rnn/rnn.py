@@ -13,7 +13,7 @@ from .. import Cell, dropout, norm_weight, ortho_weight
 from ..extra_layers import Averager
 from .. import mlp as mlp_module
 from ...costs import squared_error
-from ...utils import concatenate, floatX, pi, scan
+from ...utils import concatenate, floatX, intX, pi, scan
 from ...utils.tools import _p
 
 def unpack(rnn_args, **model_args):
@@ -227,7 +227,7 @@ class RNN(Cell):
         'input': 'dim_in',
         'output': 'dim_h'
     }
-    _test_order = ['input_net.Y', 'input_Y', 'H0', 'H', 'output']
+    #_test_order = ['input_net.Y', 'input_Y', 'H0', 'H', 'output']
 
     def __init__(self, name='RNN', recurrence_type='RecurrentUnit', **kwargs):
         '''Init function for RNN.
@@ -239,9 +239,9 @@ class RNN(Cell):
         self.recurrence_type = recurrence_type
         super(RNN, self).__init__(name=name, **kwargs)
 
-    def init_args(self, X, M=None):
+    def init_args(self, X, M=None, reverse=False):
         if M is None: M = T.ones((X.shape[0], X.shape[1])).astype(floatX)
-        return (X, M)
+        return (X, M, reverse)
     
     def set_components(self, components=None, **kwargs):
         if components is None:
@@ -276,7 +276,10 @@ class RNN(Cell):
             outs['input_Y'] = outs[_p('input_net', 'Y')]
         return outs
 
-    def _feed(self, X, M, *params):
+    def _feed(self, X, M, reverse, *params):
+        if reverse:
+            X = X[::-1]
+            M = M[::-1]
         ru_params = self.select_params('RU', *params)
         initializer_params = self.select_params('initializer', *params)
         
@@ -293,6 +296,7 @@ class RNN(Cell):
         outs['output'] = H
 
         return outs
+    
 
 class GenRNN(RNN):
     _required = ['distribution_type']
@@ -323,8 +327,8 @@ class GenRNN(RNN):
         self.distribution_type = distribution_type
         super(GenRNN, self).__init__(name=name, **kwargs)
 
-    def _feed(self, X, M, *params):
-        outs = super(GenRNN, self)._feed(X, M, *params)
+    def _feed(self, X, M, reverse, *params):
+        outs = super(GenRNN, self)._feed(X, M, reverse, *params)
         H = outs['H']
         output_params = self.select_params('output_net', *params)
         outs_out_net = self.output_net._feed(H, *output_params)
@@ -431,28 +435,51 @@ class GenRNNwithContext(RNN):
         self.c_dim = c_dim
         super(GenRNNwithContext, self).__init__(name=name, **kwargs)
         
-    def init_args(self, X, C, M=None):
+    def feed_in(self, X, C, *params):
+        input_params = self.select_params('input_net', *params)
+        outs = self.input_net._feed(X, *input_params)
+        outs = OrderedDict((_p('input_net', k), v)
+            for k, v in outs.iteritems())
+        if self.aux_net is not None:
+            aux_params = self.select_params('aux_net', *params)
+            outs_a = self.aux_net._feed(X, *aux_params)
+            outs_a = OrderedDict((_p('aux_net', k), v)
+            for k, v in outs_a.iteritems())
+            outs.update(**outs_a)
+            outs['input_Y'] = concatenate(
+                [outs[_p('aux_net', 'Y')],
+                 outs[_p('input_net', 'Y')] + C],
+                axis=X.ndim-1)
+        else:
+            outs['input_Y'] = outs[_p('input_net', 'Y') + C]
+        return outs
+        
+    def init_args(self, X, C, M=None, reverse=False):
         if M is None: M = T.ones((X.shape[0], X.shape[1])).astype(floatX)
-        return (X, C, M)
+        return (X, C, M, reverse)
 
-    def _feed(self, X, C, M, *params):
+    def _feed(self, X, C, M, reverse, *params):
+        if reverse:
+            X = X[::-1]
+            M = M[::-1]
         ru_params = self.select_params('RU', *params)
         initializer_params = self.select_params('initializer', *params)
         context_params = self.select_params('context_net', *params)
         
-        outs = self.feed_in(X, *params)
+        C = self.context_net._feed(C, *context_params)['output']
+        if C.ndim > X.ndim:
+            C = C[None, :, :]
+        outs = self.feed_in(X, C, *params)
         outs_init = self.initializer._feed(X[0], *initializer_params)
         outs.update(**dict((_p('initializer', k), v)
             for k, v in outs_init.iteritems()))
         outs['H0'] = outs_init['output']
         input_Y = outs['input_Y']
-        input_Y += self.context_net._feed(C, *context_params)['output']
+        outs['C'] = C
 
         outs.update(**self.RU(input_Y, M, outs['H0']))
-        H = outs['H'][-1]
-        if self.dropout and self.noise_switch():
-            H = dropout(H, T.tanh, self.dropout, self.trng)
-        outs['output'] = H
+        H = outs['H']
+        outs['output'] = H[-1]
         
         output_params = self.select_params('output_net', *params)
         outs_out_net = self.output_net._feed(H, *output_params)
@@ -481,10 +508,14 @@ class GenRNNwithContext(RNN):
         context_params = self.select_params('context_net', *params)
 
         Y = self.input_net._feed(X, *input_params)['output'] + C
-        H = self.RU._recurrence(1, Y, H, *ru_params)[1]
+        if self.aux_net is not None:
+            aux_params = self.select_params('aux_net', *params)
+            Y_a = self.aux_net._feed(X, *aux_params)['output']
+            H = self.RU._recurrence(1, Y_a, Y, H, *ru_params)[1]
+        else:
+            H = self.RU._recurrence(1, Y, H, *ru_params)[1]
         P_ = self.output_net._feed(H, *output_params)['output']
         X_ = self.output_net._sample(epsilon, P=P_)
-
         return H, X_, P_
 
     def generate_random_variables(self, shape, P=None):
@@ -492,7 +523,7 @@ class GenRNNwithContext(RNN):
             P = T.zeros((self.output_net.mlp.dim_out,)).astype(floatX)
         return self.output_net.generate_random_variables(shape, P=P)
 
-    def _sample(self, epsilon, Z, X0=None, H0=None):
+    def _sample(self, epsilon, Z, X0=None, H0=None, terminal=None):
         '''Samples from an initial state.
 
         Args:
@@ -518,8 +549,30 @@ class GenRNNwithContext(RNN):
         (H, X, P), updates = scan(
             self._step_sample, seqs, outputs_info, non_seqs, epsilon.shape[0],
             name=self.name+'_sampling')
+        
+        H = concatenate([H0[None, :, :], H])
+        X = concatenate([X0[None, :, :], X])
+        P = concatenate([X0[None, :, :], P])
+        
+        if terminal is None:
+            M = T.ones((X.shape[0], X.shape[1])).astype(floatX)
+        else:
+            def mask(x, flag, terminal):
+                y = T.argmax(x, axis=-1)
+                flag_ = T.switch(T.eq(y, terminal), 1, 0).astype(intX)
+                flag_ = T.switch(T.bitwise_or(flag_, flag), 1, 0).astype(intX)
+                return flag_, (1 - flag).astype(floatX)
+            
+            (F, M), updates_m = scan(
+                mask, [X], [T.zeros((X0.shape[0],)).astype(intX), None], [terminal],
+                X.shape[0])
+            updates.update(updates_m)
 
-        return OrderedDict(samples=X, P=P, H=H, C=C, updates=updates)
+        return OrderedDict(samples=X, P=P, H=H, C=C, M=M, updates=updates)
+    
+    def simple_sample(self, shape, Z, X0=None, H0=None, terminal=None):
+        epsilon = self.generate_random_variables(shape)
+        return self._sample(epsilon, Z, X0=X0, H0=H0, terminal=terminal)
 
     def get_center(self, P):
         return self.output_net.distribution.get_center(P)

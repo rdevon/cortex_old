@@ -4,6 +4,8 @@ Module for AOD analysis functions
 '''
 
 import numpy as np
+import os
+from os import path
 from scipy.stats import (kendalltau, linregress, mannwhitneyu, ttest_1samp,
                          ttest_ind, ttest_rel)
 import statsmodels.api as sm
@@ -98,9 +100,13 @@ class AODAnalyzer(Analyzer):
         
     def build(self):
         super(AODAnalyzer, self).build()
+        nifti_out_path = path.join(self.session.manager.out_path, 'niftis')
+        if not path.isdir(nifti_out_path):
+            os.mkdir(nifti_out_path)
         self.visualizer.add('data.make_images',
                             self.spatial_map_key,
-                            set_global_norm=True)
+                            set_global_norm=True,
+                            out_path=nifti_out_path)
         
         self.visualizer.add('data.viz', maps='ica_viz.maps',
                             time_courses='ica_viz.tcs',
@@ -132,7 +138,7 @@ class AODAnalyzer(Analyzer):
         self.logger.info('Setting features')
         labels = self.set_labels()
         for i, l in enumerate(labels):
-            self.features[i] = dict(name=l)
+            self.features[i] = dict(name=l, on=True)
         
     def run(self):
         self.logger.info('Running analysis')
@@ -196,26 +202,30 @@ class AODAnalyzer(Analyzer):
             td += [tc_name, '', 'diff_{}'.format(tc_name), '']
         table = [td, ['ID', 'Label'] + ['Targets', 'Novels'] * (2 * len(self.stats))]
         for i, feature in self.features.items():
-            td = [i, feature['name']]
-            for tc_name in self.stats.keys():
-                stats = self.stats[tc_name]
-                
-                for sname in stats.keys():
-                    asp = fdr_dict[tc_name][sname]
-                    stat = stats[sname]['p'][i]
-                    td.append('%.1e' % stat if (i in asp and stat < min_p)
-                              else '')
+            if feature['on']:
+                td = [i, feature['name']]
+                for tc_name in self.stats.keys():
+                    stats = self.stats[tc_name]
                     
-                for sname in stats.keys():
-                    asp = diff_dict[tc_name][sname]
-                    stat = stats[sname]['pu'][i]
-                    td.append('%.1e' % stat if (i in asp and stat < min_p)
-                              else '')
+                    for sname in stats.keys():
+                        asp = fdr_dict[tc_name][sname]
+                        stat = stats[sname]['p'][i]
+                        td.append('%.1e' % stat if (i in asp and stat < min_p)
+                                  else '')
+                        
+                    for sname in stats.keys():
+                        asp = diff_dict[tc_name][sname]
+                        stat = stats[sname]['pu'][i]
+                        td.append('%.1e' % stat if (i in asp and stat < min_p)
+                                  else '')
                     
             if not all([t == '' for t in td[2:]]):
                 table.append(td)
         
         print tabulate(table, headers='firstrow', tablefmt=tablefmt)
+        
+    def save_niftis(self):
+        pass
         
     def save_maps(self, task_sig=0.01, min_p=10e-7):
         self.logger.info('Saving maps')

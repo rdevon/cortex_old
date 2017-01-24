@@ -207,6 +207,9 @@ class Manager(object):
 
     def add_stat_function(self, name, f):
         self.stat_functions[name] = f
+        
+    def add_op(self, name, f):
+        self.ops[name] = f
 
     @staticmethod
     def split_ref(ref):
