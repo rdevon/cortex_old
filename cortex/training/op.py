@@ -33,26 +33,25 @@ def make_f_grad_shared(inp, cost, grads, extra_outs, updates, profile=False):
     return f_grad_shared
 
 def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
-         exclude_params=set([]), profile=False):
+         exclude_params=set([]), profile=False,
+         b1 = 0.9, b2 = 0.999, eps = 1e-8):
+    logger.info('ADAM with b1 %.5f, b2 %.2f, and eps %.2f' % (b1, b2, eps))
+    
     gshared = [theano.shared(p.get_value() * 0., name='%s_grad'%k)
                for k, p in tparams.iteritems()]
 
-    gsup = [(gs, g) for gs, g in zip(gshared, grads)]
+    gsup = [(gs, g) for gs, g in zip(gshared, grads.values())]
 
-    f_grad_shared = theano.function(
-        inp, cost, extra_outs=extra_outs, updates=gsup+extra_ups, profile=profile)
-
-    b1 = 0.9
-    b2 = 0.999
-    eps = 1e-8
-
+    f_grad_shared = make_f_grad_shared(
+        inp, cost, grads, extra_outs, gsup+extra_ups, profile=profile)
+    
     updates = OrderedDict()
 
     i = theano.shared(np.float32(0.))
     i_t = i + 1.
-    fix1 = b1**(i_t)
-    fix2 = b2**(i_t)
-    lr_t = lr * T.sqrt(1-fix2) / (1-fix1)
+    fix1 = b1 ** (i_t)
+    fix2 = b2 ** (i_t)
+    lr_t = lr * T.sqrt(1 - fix2) / (1 - fix1)
 
     for p, g in zip(tparams.values(), gshared):
         m = theano.shared(p.get_value() * 0.)
@@ -65,9 +64,9 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
         updates[v] =  v_t
         if p.name not in exclude_params:
             updates[p] = p_t
-
+            
     for k, updated_param in updates.items():
-        if 'W' in str(k):
+        if 'weights' in str(k):
             col_norms = T.sqrt(T.sqr(updated_param).sum(axis=0))
             desired_norms = T.clip(col_norms, 0, 1.9365)
             ratio = (desired_norms / (1e-8 + col_norms))
@@ -165,7 +164,7 @@ def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
     '''
     logger.info('Stochastic gradient descent.')
     gshared = [theano.shared((p.get_value() * 0.).astype(floatX),
-        name='%s_grad'%k) for k, p in tparams.iteritems()]
+        name='%s_grad' % k) for k, p in tparams.iteritems()]
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads.values())]
     f_grad_shared = make_f_grad_shared(inp, cost, grads, extra_outs,

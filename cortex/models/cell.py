@@ -61,7 +61,8 @@ def dropout(x, act, rate, trng, epsilon=None):
         elif act in [T.nnet.sigmoid, T.nnet.softplus, T.nnet.relu]:
             x = x * epsilon / (1 - rate)
         else:
-            raise NotImplementedError('No dropout for %s yet' % activ)
+            logger.warn('No dropout for %s yet, will assume zero (0)' % act)
+            x = x * epsilon / (1 - rate)
         return x
 
 def batch_normalization(x, gamma, beta, epsilon=1e-5, session=None):

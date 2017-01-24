@@ -118,8 +118,8 @@ class Trainer(object):
 
         '''
         from .. import _manager as manager
-        optimizer = self.optimizer
-        optimizer_args = self.optimizer_args or dict()
+        optimizer = kwargs.pop('optimizer', None) or self.optimizer
+        optimizer_args = kwargs.pop('optimizer_args', None) or self.optimizer_args or dict()
         
         grad_clip = kwargs.pop('grad_clip', None)
 
