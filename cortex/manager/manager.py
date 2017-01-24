@@ -576,7 +576,10 @@ class Manager(object):
 
                     for arg, key in zip(args, arg_keys):
                         if (key in C._dim_map.keys() and is_tensor_arg(arg)):
-                            self.match_dims(arg, '.'.join([cell_name, key]))
+                            try:
+                                self.match_dims(arg, '.'.join([cell_name, key]))
+                            except ValueError:
+                                self.logger.warning('Dim matching failed (proceeding)')
             op_args = None
         else:
             try:

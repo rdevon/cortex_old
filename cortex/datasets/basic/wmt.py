@@ -20,12 +20,13 @@ class WMT(BasicDataset):
         quot='"'
     )
     
-    omit = [' ', '', '.', ',', '!', ':', ';', ')', '(', '<', '>', '"', '%', '&quot;', '&apos;s', '&apos;', '&apos;d', '-', '&apos;m', '&apos;t', '&quot']
+    omit = []#[' ', '', '.', ',', '!', ':', ';', ')', '(', '<', '>', '"', '%', '&quot;', '&apos;s', '&apos;', '&apos;d', '-', '&apos;m', '&apos;t', '&quot']
     
-    def __init__(self, tokens=None, source=None, name='WMT', max_words=1000,
-                 max_length=20, **kwargs):
+    def __init__(self, tokens=None, source=None, character_level=False,
+                 name='WMT', max_words=1000, max_length=20, **kwargs):
         self.source = source
         self.max_length = max_length
+        self.character_level = character_level
     
         source = resolve_path(source)
         if tokens is None:
@@ -65,13 +66,17 @@ class WMT(BasicDataset):
             pbar = progressbar.ProgressBar(widgets=widgets, maxval=lines).start()
             i = 0
             for line in f:
-                words = line[:-2].split(' ')
+                if self.character_level:
+                    words = list(line[:-1])
+                else:
+                    words = line[:-1].split(' ')
                 words = [w for w in words if w not in self.omit]
                 if len(words) > max_length:
                     continue
                 else:
                     for word in words:
-                        word = word.lower()
+                        if not self.character_level:
+                            word = word.lower()
                         if word in tokens:
                             tokens[word] += 1
                         else:
@@ -83,8 +88,12 @@ class WMT(BasicDataset):
         return tokens
     
     def string_to_ints(self, s):
-        words = s.split(' ')
-        words = [w.lower() for w in words if w not in self.omit]
+        if self.character_level:
+            words = list(s)
+            words = [w for w in words if w not in self.omit]
+        else:
+            words = s.split(' ')
+            words = [w.lower() for w in words if w not in self.omit]
         tokens = [0] + [self.token_map.get(w, 2) for w in words] + [1]
         return tokens
     
@@ -119,7 +128,10 @@ class WMT(BasicDataset):
                     
             t_ = t_[bos_idx:eos_idx]
             words = [self.r_token_map[t] for t in t_]
-            sentences.append(' '.join(words))
+            if self.character_level:
+                sentences.append(''.join(words))
+            else:
+                sentences.append(' '.join(words))
         sentences = np.array(sentences)
         
         if shape is not None:
@@ -145,7 +157,7 @@ class WMT(BasicDataset):
             pbar = progressbar.ProgressBar(widgets=widgets, maxval=lines).start()
             i = 0
             for line in f:
-                tokenized_line = self.string_to_ints(line[:-2])
+                tokenized_line = self.string_to_ints(line[:-1])
                 max_length_ = max(max_length_, len(tokenized_line))
                 l = len(tokenized_line)
                 if l > max_length + 2:
