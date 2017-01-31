@@ -358,7 +358,7 @@ class GenRNN(RNN):
         return nll.sum(axis=0).mean()
 
     # Step functions -----------------------------------------------------------
-    def _step_sample(self, X, H, epsilon, *params):
+    def _step_sample(self, epsilon, H, X, *params):
         '''Returns preact for sampling step.
 
         '''
@@ -368,10 +368,14 @@ class GenRNN(RNN):
         output_params = self.select_params('output_net', *params)
 
         Y = self.input_net._feed(X, *input_params)['output']
-        H = self.RU._recurrence(1, Y, H, *ru_params)[-1]
+        if self.aux_net is not None:
+            aux_params = self.select_params('aux_net', *params)
+            Y_a = self.aux_net._feed(X, *aux_params)['output']
+            H = self.RU._recurrence(1, Y_a, Y, H, *ru_params)[1]
+        else:
+            H = self.RU._recurrence(1, Y, H, *ru_params)[1]
         P_ = self.output_net._feed(H, *output_params)['output']
         X_ = self.output_net._sample(epsilon, P=P_)
-
         return H, X_, P_
 
     def generate_random_variables(self, shape, P=None):
@@ -398,14 +402,21 @@ class GenRNN(RNN):
         if H0 is None: H0 = self.initializer(X0)['output']
 
         seqs = [epsilon]
-        outputs_info = [X0, H0, None]
-        non_seqs = self.get_params()
+        outputs_info = [H0, X0, None]
+        non_seqs = list(self.get_params())
 
         (H, X, P), updates = scan(
             self._step_sample, seqs, outputs_info, non_seqs, epsilon.shape[0],
             name=self.name+'_sampling')
-
-        return OrderedDict(samples=X, P=P, H=H, updates=updates)
+        rval = OrderedDict()
+        rval['epsilon'] = epsilon
+        rval['H0'] = H0
+        rval.update(samples=X, P=P, H=H, updates=updates)
+        return rval
+    
+    def simple_sample(self, shape, X0=None, H0=None):
+        epsilon = self.generate_random_variables(shape, P=X0)
+        return self._sample(epsilon, X0=X0, H0=H0)
 
     def get_center(self, P):
         return self.output_net.distribution.get_center(P)

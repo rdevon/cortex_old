@@ -47,7 +47,7 @@ class Evaluator(object):
     def __call__(self, data_mode=None):
         widgets = ['Testing (%s set): ' % data_mode, Percentage(),
                    ' (', Timer(), ')']
-        self.session.reset_data(mode=data_mode, batch_size=self.batch_size)
+        self.session.reset_data(mode=data_mode)
         n = self.session.get_dataset_size(mode=data_mode)
         pbar    = ProgressBar(widgets=widgets, maxval=n).start()
         results = OrderedDict()
@@ -82,7 +82,7 @@ class Evaluator(object):
                 logging.error(k)
                 logging.error(v)
                 raise e
-        self.session.reset_data(mode=data_mode, batch_size=self.batch_size)
+        self.session.reset_data(mode=data_mode)
 
         return results
 

@@ -430,6 +430,7 @@ class Manager(object):
     def prepare_data(self, dataset, **kwargs):
         if issubclass(dataset, datasets.BasicDataset):
             C = dataset
+            dataset = C.__name__
         elif isinstance(dataset, str):
             C = _resolve_class(dataset, self.dataset_classes)
         else:

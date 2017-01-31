@@ -131,13 +131,13 @@ class Session(object):
         self.add_tensors(out, key_prefix=name, what=what)
 
         if test:
-            self.reset_data()
+            batch_size = self.batch_size or 10
+            self.reset_data(batch_size=batch_size)
             if cell is None or (cell is not None and cell._test_order is None):
                 test_order = out.keys()
             else:
                 test_order = cell._test_order
 
-            batch_size = self.batch_size or 10
             data = self.next_batch(batch_size=batch_size)
             if what in ['cost', 'stat']:
                 for k, o in out.iteritems():
@@ -425,6 +425,8 @@ class Session(object):
         return data
 
     def reset_data(self, mode=None, batch_size=None):
+        if batch_size is None:
+            batch_size = self.batch_size
         dataset_names = self.get_dataset_names()
 
         if len(dataset_names) == 0:
