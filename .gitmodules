@@ -1,0 +1,3 @@
+[submodule "cortex/dev"]
+	path = cortex/dev
+	url = git@github.com:rdevon/cortex-dev.git

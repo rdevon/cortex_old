@@ -104,7 +104,7 @@ class Dataset(object):
         self.shuffle = shuffle
         self.inf = inf
         self.name = name
-        self.pos = None
+        self.pos = 0
         self.stop = stop
         self.mode = mode
         self.dims = dict()
@@ -118,7 +118,7 @@ class Dataset(object):
         '''
         return
 
-    def reset(self):
+    def reset(self, batch_size=None):
         '''Reset the dataset post-epoch.
 
         '''
@@ -437,7 +437,6 @@ class BasicDataset(Dataset):
             'Dataset has the following tensors: %s with types %s'
             % (tensors, [inp.dtype for inp in tensors.values()]))
         self.reset()
-        self.pos = None
         return tensors
 
 

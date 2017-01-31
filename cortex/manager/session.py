@@ -393,13 +393,12 @@ class Session(object):
                         m = ms[0]
                 else:
                     m = mode
-
                 batch = dataset[m].next(batch_size)
                 batches[name] = batch
                 if name == dataset_names[0]:
                     self.data_pos = dataset[m].pos
                 else:
-                    if self.data_pos != -1 and self.data_pos != dataset[m].pos:
+                    if self.data_pos is not None and self.data_pos != dataset[m].pos:
                         raise ValueError('Dataset position mismatch. (%d vs %d)'
                                          % (self.data_pos, dataset[m].pos))
         except StopIteration:
@@ -421,11 +420,11 @@ class Session(object):
         for name, key in zip(self.datasets, self.input_keys):
             batch = batches[name]
             data.append(batch[key])
-        if self.data_pos == -1:
+        if self.data_pos is None:
             self.data_pos = self.get_dataset_size(mode=mode)
         return data
 
-    def reset_data(self, mode=None):
+    def reset_data(self, mode=None, batch_size=None):
         dataset_names = self.get_dataset_names()
 
         if len(dataset_names) == 0:
@@ -447,5 +446,5 @@ class Session(object):
             else:
                 m = mode
 
-            dataset[m].reset()
+            dataset[m].reset(batch_size=batch_size)
         self.data_pos = 0

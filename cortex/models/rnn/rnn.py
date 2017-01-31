@@ -328,6 +328,18 @@ class GenRNN(RNN):
         super(GenRNN, self).__init__(name=name, **kwargs)
 
     def _feed(self, X, M, reverse, *params):
+        '''Feeds through the RNN.
+        
+        Args:
+            X (TensorVariable): input chain.
+            M (TensorVariable): mask for the input.
+            reverse (bool): reverse the chain.
+            params (list): list of Shared Variables (parameters).
+            
+        Returns:
+            dict: TensorVariables of outputs.
+        
+        '''
         outs = super(GenRNN, self)._feed(X, M, reverse, *params)
         H = outs['H']
         output_params = self.select_params('output_net', *params)

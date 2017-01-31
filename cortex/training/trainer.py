@@ -64,7 +64,7 @@ class Trainer(object):
     def next_epoch(self, n_epochs=1):
         t0 = time.time()
 
-        self.session.reset_data(mode=self.data_mode)
+        self.session.reset_data(mode=self.data_mode, batch_size=self.batch_size)
         n = self.session.get_dataset_size(mode=self.data_mode)
         self.start_pbar(n)
 
@@ -89,7 +89,8 @@ class Trainer(object):
                     return grads
                 else:
                     self.start_pbar(n)
-                    self.session.reset_data(mode=self.data_mode)
+                    self.session.reset_data(mode=self.data_mode,
+                                            batch_size=self.batch_size)
             self.epoch_pbar.update(self.session.data_pos)
 
             for f_grad, f_update, freq in zip(

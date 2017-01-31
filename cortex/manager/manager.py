@@ -428,7 +428,12 @@ class Manager(object):
 
     # Data methods -------------------------------------------------------------
     def prepare_data(self, dataset, **kwargs):
-        C = _resolve_class(dataset, self.dataset_classes)
+        if issubclass(dataset, datasets.BasicDataset):
+            C = dataset
+        elif isinstance(dataset, str):
+            C = _resolve_class(dataset, self.dataset_classes)
+        else:
+            raise TypeError(dataset)
         C(**kwargs)
         self.save_args['data'].append((dataset, kwargs, False))
 
