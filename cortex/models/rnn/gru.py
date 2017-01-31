@@ -70,7 +70,7 @@ class GRU(Cell):
         h = T.tanh(preactx)
         h = u * h + (1. - u) * h_
         h = m * h + (1 - m) * h_
-        return h
+        return preact, h
 
     def _feed(self, X, M, H0, *params):
         n_steps = X.shape[0]

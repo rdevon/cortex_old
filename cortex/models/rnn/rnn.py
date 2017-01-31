@@ -352,7 +352,7 @@ class GenRNN(RNN):
         output_params = self.select_params('output_net', *params)
 
         Y = self.input_net._feed(X, *input_params)['output']
-        H = self.RU._recurrence(1, Y, H, *ru_params)
+        H = self.RU._recurrence(1, Y, H, *ru_params)[-1]
         P_ = self.output_net._feed(H, *output_params)['output']
         X_ = self.output_net._sample(epsilon, P=P_)
 

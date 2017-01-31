@@ -104,7 +104,7 @@ class Dataset(object):
         self.shuffle = shuffle
         self.inf = inf
         self.name = name
-        self.pos = 0
+        self.pos = None
         self.stop = stop
         self.mode = mode
         self.dims = dict()
@@ -123,8 +123,7 @@ class Dataset(object):
 
         '''
         self.pos = 0
-        if self.shuffle:
-            self.randomize()
+        if self.shuffle: self.randomize()
 
     def __iter__(self):
         '''Iterator.
@@ -257,6 +256,8 @@ class BasicDataset(Dataset):
         self.finish_setup()
 
         if check_data: self.check()
+        self.idx = range(self.n_samples)
+        self.r_idx = range(self.n_samples)
         if self.shuffle: self.randomize()
 
         self.register()
@@ -340,9 +341,8 @@ class BasicDataset(Dataset):
         '''Randomizes the dataset
 
         '''
-        rnd_idx = np.random.permutation(np.arange(0, self.n_samples, 1))
-        for k in self.data.keys():
-            self.data[k] = self.data[k][rnd_idx]
+        self.idx = np.random.permutation(np.arange(0, self.n_samples, 1)).tolist()
+        self.r_idx = [self.idx.index(i) for i in range(self.n_samples)]
 
     def next(self, batch_size):
         '''Draws the next batch of data samples.
@@ -355,28 +355,30 @@ class BasicDataset(Dataset):
 
         '''
 
-        if self.pos == -1:
+        if self.pos == None:
             self.reset()
             raise StopIteration
 
         rval = OrderedDict()
 
+        idx = [self.idx[p] for p in range(self.pos, self.pos + batch_size)]
         for k, v in self.data.items():
-            v = v[self.pos:self.pos+batch_size]
+            v = v[idx]
             if self.transpose is not None and k in self.transpose.keys():
                 v = v.transpose(self.transpose[k])
             rval[k] = v
 
         self.pos += batch_size
         if self.pos + batch_size > self.n_samples:
-            self.pos = -1
+            self.pos = None
 
         return rval
 
     def __str__(self):
         attributes = self.__dict__
         attributes = dict(
-            (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,)) if isinstance(a, np.ndarray)
+            (k, '<numpy.ndarray: {shape: %s}>' % (a.shape,))
+            if isinstance(a, np.ndarray)
             else (k, a)
             for k, a in attributes.items())
         attributes['data'] = dict(
@@ -405,7 +407,10 @@ class BasicDataset(Dataset):
 
         '''
         self.logger.debug('Forming tensors for dataset %s' % self.name)
-        d = self.next(10)
+        try:
+            d = d or self.next(10)
+        except StopIteration:
+            d = d or self.next(10)
         tensors = OrderedDict()
         for k, v in d.items():
             self.logger.info('Data mode `%s` has shape %s. '
@@ -428,9 +433,11 @@ class BasicDataset(Dataset):
 
             X = C(self.name + '.' + k, dtype=dtype)
             tensors[k] = X
-        self.logger.debug('Dataset has the following tensors: %s with types %s'
-                          % (tensors, [inp.dtype for inp in tensors.values()]))
+        self.logger.debug(
+            'Dataset has the following tensors: %s with types %s'
+            % (tensors, [inp.dtype for inp in tensors.values()]))
         self.reset()
+        self.pos = None
         return tensors
 
 
