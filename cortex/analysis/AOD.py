@@ -4,11 +4,14 @@ Module for AOD analysis functions
 '''
 
 import numpy as np
+import os
+from os import path
 from scipy.stats import (kendalltau, linregress, mannwhitneyu, ttest_1samp,
                          ttest_ind, ttest_rel)
 import statsmodels.api as sm
 from tabulate import tabulate
 import theano
+import yaml
 
 from .analyzer import Analyzer
 
@@ -88,19 +91,25 @@ def do_fdr_correct(p, has_dependence=False, sig=0.01):
         
 
 class AODAnalyzer(Analyzer):
-    def __init__(self, spatial_map_key, time_course_key, run=False, **kwargs):
+    def __init__(self, spatial_map_key, time_course_key, run=False,
+                 label_file=None, **kwargs):
         self.spatial_map_key = spatial_map_key
         self.time_course_key = time_course_key
         self.roi_dict = None
         self.stats = {}
         super(AODAnalyzer, self).__init__(**kwargs)
-        if run: self.run()
+        if run:
+            self.run(label_file=label_file)
         
     def build(self):
         super(AODAnalyzer, self).build()
+        nifti_out_path = path.join(self.session.manager.out_path, 'niftis')
+        if not path.isdir(nifti_out_path):
+            os.mkdir(nifti_out_path)
         self.visualizer.add('data.make_images',
                             self.spatial_map_key,
-                            set_global_norm=True)
+                            set_global_norm=True,
+                            out_path=nifti_out_path)
         
         self.visualizer.add('data.viz', maps='ica_viz.maps',
                             time_courses='ica_viz.tcs',
@@ -121,24 +130,37 @@ class AODAnalyzer(Analyzer):
         _, _, roi_dict = self.visualizer.run(-2, inputs=inputs, data_mode=self.mode)
         self.roi_dict = roi_dict
         
-    def set_labels(self):
-        labels = [self.roi_dict[k]['top_clust']['rois'][0]
-                  if len(self.roi_dict[k]['top_clust']['rois']) > 0 else 'UNK'
-                  for k in self.roi_dict.keys()]
+    def get_feature_info(self, label_file=None):
+        if label_file is not None:
+            with open(label_file, 'r') as f:
+                f_info = yaml.load(f)
+        else:
+            labels = [self.roi_dict[k]['top_clust']['rois']
+                      if len(self.roi_dict[k]['top_clust']['rois']) > 0 else ['?']
+                      for k in self.roi_dict.keys()]
+            labels = [l[0] if len(l) == 1 else l for l in labels]
+            f_info = dict((k, dict(labels=l, is_on=True)) for k, l in enumerate(labels))
+                    
+        return f_info
                 
-        return labels
-                
-    def set_features(self):
+    def set_features(self, label_file=None):
         self.logger.info('Setting features')
-        labels = self.set_labels()
-        for i, l in enumerate(labels):
-            self.features[i] = dict(name=l)
+        f_info = self.get_feature_info(label_file=label_file)
+        for k, v in f_info.items():
+            labels = v['labels']
+            if isinstance(labels, list):
+                name = labels[0]
+            else:
+                name = labels
+                labels = [labels]
+            self.features[k] = dict(name=name, labels=labels,
+                                    is_on=v.get('is_on', True), stats={})
         
-    def run(self):
+    def run(self, label_file=None):
         self.logger.info('Running analysis')
         inputs = self.get_data()
         self.make_roi_dict(inputs)
-        self.set_features()
+        self.set_features(label_file=label_file)
         
         self.logger.info('Getting time courses')
         tcs = self.f_tcs(*inputs)
@@ -161,7 +183,7 @@ class AODAnalyzer(Analyzer):
                 self.stats[k][sname] = dict(p=p, t=t, u=u, pu=pu)
                 
                 for j in xrange(t.shape[0]):
-                    self.features[j].update(
+                    self.features[j]['stats'].update(
                         **{'{}_{}_t'.format(k, sname): t[j],
                            '{}_{}_p'.format(k, sname): p[j],
                            '{}_{}_u'.format(k, sname): u[j],
@@ -196,26 +218,30 @@ class AODAnalyzer(Analyzer):
             td += [tc_name, '', 'diff_{}'.format(tc_name), '']
         table = [td, ['ID', 'Label'] + ['Targets', 'Novels'] * (2 * len(self.stats))]
         for i, feature in self.features.items():
-            td = [i, feature['name']]
-            for tc_name in self.stats.keys():
-                stats = self.stats[tc_name]
-                
-                for sname in stats.keys():
-                    asp = fdr_dict[tc_name][sname]
-                    stat = stats[sname]['p'][i]
-                    td.append('%.1e' % stat if (i in asp and stat < min_p)
-                              else '')
+            if feature['is_on']:
+                td = [i, feature['name']]
+                for tc_name in self.stats.keys():
+                    stats = self.stats[tc_name]
                     
-                for sname in stats.keys():
-                    asp = diff_dict[tc_name][sname]
-                    stat = stats[sname]['pu'][i]
-                    td.append('%.1e' % stat if (i in asp and stat < min_p)
-                              else '')
+                    for sname in stats.keys():
+                        asp = fdr_dict[tc_name][sname]
+                        stat = stats[sname]['p'][i]
+                        td.append('%.1e' % stat if (i in asp and stat < min_p)
+                                  else '')
+                        
+                    for sname in stats.keys():
+                        asp = diff_dict[tc_name][sname]
+                        stat = stats[sname]['pu'][i]
+                        td.append('%.1e' % stat if (i in asp and stat < min_p)
+                                  else '')
                     
             if not all([t == '' for t in td[2:]]):
                 table.append(td)
         
         print tabulate(table, headers='firstrow', tablefmt=tablefmt)
+        
+    def save_niftis(self):
+        pass
         
     def save_maps(self, task_sig=0.01, min_p=10e-7):
         self.logger.info('Saving maps')

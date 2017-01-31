@@ -69,7 +69,7 @@ class GRU(Cell):
         preactx = T.dot(h_, Urb) * r + y_i
         h = T.tanh(preactx)
         h = u * h + (1. - u) * h_
-        h = m * h + (1 - m) * h_
+        h = m * h + (1. - m) * h_
         return preact, h
 
     def _feed(self, X, M, H0, *params):
@@ -78,10 +78,10 @@ class GRU(Cell):
         Xa = slice2(X, 0, 2 * X.shape[X.ndim-1] // 3)
         Xb = slice2(X, 2 * X.shape[X.ndim-1] // 3, X.shape[X.ndim-1])
         seqs         = [M[:, :, None], Xa, Xb]
-        outputs_info = [H0]
+        outputs_info = [None, H0]
         non_seqs     = params
 
-        h, updates = theano.scan(
+        (p, h), updates = theano.scan(
             self._recurrence,
             sequences=seqs,
             outputs_info=outputs_info,
@@ -89,6 +89,6 @@ class GRU(Cell):
             name=self.name + '_recurrent_steps',
             n_steps=n_steps)
 
-        return OrderedDict(Xa=Xa, Xb=Xb, H=h, updates=updates)
+        return OrderedDict(Xa=Xa, Xb=Xb, H=h, preacts=p, updates=updates)
     
 _classes = {'GRU': GRU}

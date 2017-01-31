@@ -80,7 +80,7 @@ class Multinomial(Distribution):
     
         def step(i, P):
             A = T.zeros((P.shape[-1],))
-            A = T.set_subtensor(A[:i], 1.).astype(floatX)
+            A = T.set_subtensor(A[:i+1], 1.).astype(floatX)
             return (P * A[None, :]).sum(-1)
         
         sums, _ = scan(step, [T.arange(P.shape[-1])], [None], [P], P.shape[-1])

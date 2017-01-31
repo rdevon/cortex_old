@@ -69,7 +69,7 @@ class MRI(NeuroimagingDataset):
         '''
         if source is None:
             raise TypeError('`souce` argument must be provided')
-        
+
         self.pca_components = pca_components
         self.whiten_pca = whiten_pca
 
@@ -108,6 +108,7 @@ class MRI(NeuroimagingDataset):
         self.update_progress(finish=True)
 
     def apply_pca(self, X, incremental_pca, whiten=False):
+        if whiten: self.logger.info('Using whitening')
         X -= X.mean(axis=0)
         if self.pca is None:
             if incremental_pca:
@@ -300,7 +301,7 @@ class MRI(NeuroimagingDataset):
         image = Image.from_image(base_nifti, data=X)
         return image
 
-    def save_niftis(self, X, save=True):
+    def save_niftis(self, X, save=True, out_path=None):
         '''Save nifti files from array.
 
         Args:
@@ -311,8 +312,9 @@ class MRI(NeuroimagingDataset):
             list: list of output files for images.
 
         '''
+        out_path = out_path or self.tmp_path
         nifti_files = sorted(
-            glob(path.join(self.tmp_path, 'tmp_image_*.nii.gz')))
+            glob(path.join(out_path, 'tmp_image_*.nii.gz')))
         for f in nifti_files:
             if f is not None: os.remove(f)
 
@@ -324,7 +326,7 @@ class MRI(NeuroimagingDataset):
             image = self.make_image(x, base_nifti)
             images.append(image)
             if save:
-                out_file = path.join(self.tmp_path, 'tmp_image_%d.nii.gz' % i)
+                out_file = path.join(out_path, 'tmp_image_%d.nii.gz' % i)
                 nipy.save_image(image, out_file)
             else:
                 out_file = None
@@ -333,8 +335,9 @@ class MRI(NeuroimagingDataset):
 
         return images, out_files
 
-    def load_niftis(self):
-        nifti_files = sorted(glob(path.join(self.tmp_path, 'tmp_image_*.nii.gz')))
+    def load_niftis(self, out_path=None):
+        out_path = out_path or self.tmp_path
+        nifti_files = sorted(glob(path.join(out_path, 'tmp_image_*.nii.gz')))
         if len(nifti_files) == 0: raise ValueError
 
         images = []
@@ -361,7 +364,8 @@ class MRI(NeuroimagingDataset):
         return x
 
     def make_images(self, x, roi_dict=None, update_rois=True,
-                    set_global_norm=False, extra_mean=None, average=None):
+                    set_global_norm=False, extra_mean=None, average=None,
+                    out_path=None):
         '''Forms images.
 
         Args:
@@ -385,7 +389,8 @@ class MRI(NeuroimagingDataset):
         if extra_mean is not None: x -= extra_mean
         if set_global_norm: self.global_std = x.std(axis=1)
         x = self._unmask(x)
-        images, nifti_files = self.save_niftis(x, save=update_rois)
+        images, nifti_files = self.save_niftis(x, save=update_rois,
+                                               out_path=out_path)
 
         if update_rois: roi_dict.update(**rois.main(nifti_files))
         return images, nifti_files, roi_dict
@@ -420,7 +425,7 @@ class MRI(NeuroimagingDataset):
                 self.logger.warning(
                     'Loading nifti files failed. Creating new ones.')
                 load_niftis = False
-        
+
         if not load_niftis:
             images, nifti_files, roi_dict = self.make_images(
                 x, roi_dict=roi_dict, update_rois=update_rois,
@@ -440,7 +445,7 @@ class MRI(NeuroimagingDataset):
                 glob(path.join(self.tmp_path, 'tmp_image_*.nii.gz')))
             for f in nifti_files:
                 if f is not None: os.remove(f)
-                
+
         nifti_viewer.montage(images, self.anat_file, roi_dict,
                              out_file=resolve_path(out_file), stats=stats,
                              global_std=global_std, **kwargs)

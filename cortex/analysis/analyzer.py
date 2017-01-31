@@ -21,11 +21,10 @@ class Analyzer(object):
         self.visualizer = visualizer
         self.session = session
         self.mode = mode
-        if build: self.build()
-        
         if out_path is None:
             out_path = path.join(path.dirname(model_file), 'analysis')
         cortex.set_path(out_path)
+        if build: self.build()
         
     def add_step(k, **kwargs):
         cortex.add_step(k, **kwargs)
