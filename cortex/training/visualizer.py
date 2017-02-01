@@ -17,6 +17,7 @@ class Visualizer(object):
         self.session = session
         self.manager = get_manager()
         self.fs = []
+        self.n_args = []
         self.batch_size = batch_size
         self.logger = get_class_logger(self)
         self.f_names = []
@@ -92,6 +93,7 @@ class Visualizer(object):
                 kwargs['out_file'] = path.join(self.manager.out_path, name + '.png')
             return op(*args, **kwargs)
 
+        self.n_args.append(len(self.session.inputs))
         self.fs.append(viz)
         self.f_names.append(kwargs.get('name', 'Viz'))
         
@@ -114,8 +116,9 @@ class Visualizer(object):
             inputs = self.session.next_batch(mode=data_mode, batch_size=batch_size)
         pbar = ProgressBar(widgets=widgets, maxval=len(self.fs)).start()
         for i, f in enumerate(self.fs):
-            self.logger.debug('Visualizer function `%s`' % self.f_names[i])
-            f(*inputs)
+            self.logger.debug('Visualizer function `{0} wit {1} args`'.format(
+                self.f_names[i], self.n_args[i]))
+            f(*(inputs[:self.n_args[i]]))
             pbar.update(i)
         pbar.update(i + 1)
         print
