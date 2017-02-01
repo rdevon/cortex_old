@@ -32,7 +32,7 @@ setup(
     keywords='deep learning neuroimaging',
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
     install_requires=[
-        'nibabel', 'nipy', 'scikit-learn==0.17.0', 'scipy>0.17.1',
+        'nibabel', 'nipy', 'scikit-learn', 'scipy',
         'python-igraph', 'Pillow', 'terminaltables', 'matplotlib',
         'nilearn', 'colorclass', 'pyyaml', 'progressbar', 'mpld3', 'jinja2'],
     entry_points={
