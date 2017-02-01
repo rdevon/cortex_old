@@ -408,9 +408,9 @@ class BasicDataset(Dataset):
         '''
         self.logger.debug('Forming tensors for dataset %s' % self.name)
         try:
-            d = d or self.next(10)
+            d = self.next(10)
         except StopIteration:
-            d = d or self.next(10)
+            d = self.next(10)
         tensors = OrderedDict()
         for k, v in d.items():
             self.logger.info('Data mode `%s` has shape %s. '
