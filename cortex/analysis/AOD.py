@@ -169,6 +169,7 @@ class AODAnalyzer(Analyzer):
             tcs = {self.time_course_key: tcs}
         elif isinstance(tcs, list):
             tcs = dict((k, v) for k, v in zip(self.time_course_key, tcs))
+        self.tcs = tcs
         
         hc = np.where(self.Y[:, 0] == 1)[0].tolist()
         sz = np.where(self.Y[:, 1] == 1)[0].tolist()
@@ -188,6 +189,25 @@ class AODAnalyzer(Analyzer):
                            '{}_{}_p'.format(k, sname): p[j],
                            '{}_{}_u'.format(k, sname): u[j],
                            '{}_{}_pu'.format(k, sname): pu[j]})
+                    
+    def make_fnc(self, tc, idx=None, sig=0.05, thr=0., has_dependence=False,
+                 use_average=False, clusters=None, omit_off=True, **kwargs):
+        tc = self.tcs[tc]
+        
+        if idx is None: idx = range(tc.shape[1])
+        if omit_off:
+            c_idx = [k for k in self.features.keys() if self.features[k]['is_on']]
+            tc = tc[:, :, c_idx]
+        cc = np.array([np.corrcoef(tc[:, i].T) - np.eye(tc.shape[2]) for i in idx])
+        cc_av = cc.mean(0)
+        tt, tp = ttest_1samp(cc, 0, axis=0)
+        k, mask = do_fdr_correct(tp, has_dependence=has_dependence, sig=sig)
+        tt_sig = tt * mask
+    
+        if use_average:
+            return cc_av
+        else:
+            return tt_sig
         
     def make_table(self, task_sig=0.01, min_p=10e-7, tablefmt='plain'):
         fdr_dict = dict()

@@ -355,7 +355,7 @@ class BasicDataset(Dataset):
 
         '''
 
-        if self.pos == None:
+        if self.pos is None:
             self.reset()
             raise StopIteration
 
