@@ -119,9 +119,9 @@ class Trainer(object):
 
         '''
         from .. import _manager as manager
-        optimizer = kwargs.pop('optimizer', None) or self.optimizer
-        optimizer_args = kwargs.pop('optimizer_args', None) or self.optimizer_args or dict()
-        
+        optimizer = kwargs.pop('optimizer', self.optimizer) 
+        optimizer_args = kwargs.pop('optimizer_args', self.optimizer_args) or dict()
+        freq = kwargs.pop('freq', 1)
         grad_clip = kwargs.pop('grad_clip', None)
 
         if optimizer not in _ops.keys():
@@ -137,8 +137,7 @@ class Trainer(object):
         grads = OrderedDict()
         tparams = OrderedDict()
 
-        for models, cost in model_costs:
-            
+        for models, cost in model_costs: 
             # Models
             if models is None:
                 tparams_ = manager.tparams
@@ -147,8 +146,7 @@ class Trainer(object):
                 if isinstance(models, str): models = [models]
                 for model in models:
                     for k, v in manager.tparams.items():
-                        prefix = '.'.join(k.split('.')[:-1])
-                        if model == prefix: tparams_[k] = v
+                        if model in k: tparams_[k] = v
                         
             # Theano parameters
             tparams_ = OrderedDict((k, v)
@@ -213,7 +211,7 @@ class Trainer(object):
 
         self.f_grads.append(f_grad)
         self.f_updates.append(f_update)
-        self.f_freqs.append(1)
+        self.f_freqs.append(freq)
         
     def clip_grads(self, grads, clip_type='minmax', clip_min=-1., clip_max=1.,
                    clip_norm=1., clip_keys=None):

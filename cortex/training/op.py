@@ -16,12 +16,22 @@ from ..utils import tools
 
 logger = logging.getLogger(__name__)
 
-def make_f_grad_shared(inp, cost, grads, extra_outs, updates, profile=False):
+def make_f_grad_shared(inp, cost, grads, extra_outs, updates, profile=False,
+                       clips=None):
     grad_dict = OrderedDict(('_grad_' + k, g.mean())
         for k, g in grads.iteritems())
     outs = OrderedDict(cost=cost)
     outs.update(**grad_dict)
     outs.update(**extra_outs)
+    
+    if clips is not None:
+        for k, v in clips.items():
+            k_, kname = next(((k, k.name) for k in updates.keys()), None)
+            if k in kname:
+                if '_grad' in k:
+                    k = k[:-5]
+                logger.info('Clipping {0} between -{1} and {1}'.format(k, v))
+                updates[k_] = T.clip(updates[k_], -v, v)
 
     f_grad_shared = theano.function(
         inp,
@@ -33,7 +43,7 @@ def make_f_grad_shared(inp, cost, grads, extra_outs, updates, profile=False):
     return f_grad_shared
 
 def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
-         exclude_params=set([]), profile=False,
+         exclude_params=set([]), profile=False, clips=None,
          b1 = 0.9, b2 = 0.999, eps = 1e-8):
     logger.info('ADAM with b1 %.5f, b2 %.2f, and eps %.2f' % (b1, b2, eps))
     
@@ -43,7 +53,8 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
     gsup = [(gs, g) for gs, g in zip(gshared, grads.values())]
 
     f_grad_shared = make_f_grad_shared(
-        inp, cost, grads, extra_outs, gsup+extra_ups, profile=profile)
+        inp, cost, grads, extra_outs, gsup+extra_ups, profile=profile,
+        clips=clips)
     
     updates = OrderedDict()
 
@@ -81,7 +92,7 @@ def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
     return f_grad_shared, f_update
 
 def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
-             exclude_params=set([]), profile=False):
+             exclude_params=set([]), profile=False, clips=None):
     '''Adadelta.
 
     '''
@@ -98,7 +109,8 @@ def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
         for rg2, g in zip(running_grads2, grads.values())]
 
     f_grad_shared = make_f_grad_shared(
-        inp, cost, grads, extra_outs, zgup+rg2up+extra_ups, profile=profile)
+        inp, cost, grads, extra_outs, zgup+rg2up+extra_ups, profile=profile,
+        clips=clips)
 
     updir = [-T.sqrt(ru2 + 1e-6) / T.sqrt(rg2 + 1e-6) * zg
              for zg, ru2, rg2 in zip(zipped_grads, running_up2, running_grads2)]
@@ -116,7 +128,7 @@ def adadelta(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
 def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
             exclude_params=set([]),
             relaxation=1e-4, momentum=0.9, coefficient=0.95,
-            profile=False):
+            profile=False, clips=None):
     '''RMSProp.
 
     '''
@@ -139,7 +151,8 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
         for rg2, g in zip(running_grads2, grads.values())]
 
     f_grad_shared = make_f_grad_shared(
-        inp, cost, grads, extra_outs, zgup+rgup+rg2up+extra_ups, profile=profile)
+        inp, cost, grads, extra_outs, zgup+rgup+rg2up+extra_ups,
+        profile=profile, clips=clips)
 
     updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k)
              for k, p in tparams.iteritems()]
@@ -158,7 +171,7 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
     return f_grad_shared, f_update
 
 def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
-        exclude_params=set([]), profile=False):
+        exclude_params=set([]), profile=False, clips=None):
     '''Stochastic gradient descent.
 
     '''
@@ -167,8 +180,9 @@ def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
         name='%s_grad' % k) for k, p in tparams.iteritems()]
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads.values())]
-    f_grad_shared = make_f_grad_shared(inp, cost, grads, extra_outs,
-                                       gsup+extra_ups, profile=profile)
+    f_grad_shared = make_f_grad_shared(
+        inp, cost, grads, extra_outs, gsup+extra_ups, profile=profile,
+        clips=clips)
 
     pup = [(p, p - lr * g) for p, g in zip(tools.itemlist(tparams), gshared)
         if p.name not in exclude_params]

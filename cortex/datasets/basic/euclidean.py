@@ -82,7 +82,7 @@ class Euclidean(BasicDataset):
                 X += f
             X = np.clip(X, 0, 1)
 
-        rs = np.arange(0, 0.7, 0.001)
+        rs = np.arange(0, 0., 0.001)
         theta = 2 * np.pi * rs / r
         y = rs * np.sin(theta) + 0.5
         x = -rs * np.cos(theta) + 0.5
@@ -103,13 +103,22 @@ class Euclidean(BasicDataset):
             [[(0, 0), (1, 1)], [(0, 1), (1, 0)]], colors='k')
         return X
 
-    def make_modes(self, X, r=0.3, N=5, G=0.01):
+    def make_modes(self, X, r=0.3, N=5, scale=0.03, placement='random'):
         modes = [2 * np.pi * n / N for n in range(N)]
+        
+        if placement == 'circle':
+            displacements = [np.array(
+                [(r * np.cos(mode)), (r * np.sin(mode))]).astype(floatX)
+                             for mode in modes]
+            
+        elif placement == 'random':
+            displacements = [np.array(
+                [_rng.uniform(-0.5, 0.5), _rng.uniform(-0.5, 0.5)]).astype(floatX)
+                             for mode in modes]
         X = np.concatenate([_rng.normal(
-            loc=0.5, scale=0.05,
-            size=(X.shape[0] // N, X.shape[1])).astype(floatX) + np.array(
-            [(r * np.cos(mode)), (r * np.sin(mode))]).astype(floatX)[None, :]
-                            for mode in modes])
+            loc=0., scale=scale,
+            size=(X.shape[0] // N, X.shape[1])).astype(floatX) + d[None, :]
+                            for d in displacements])
         return X
 
     def make_bullseye(self, X, r=0.3, G=0.08):
@@ -132,6 +141,14 @@ class Euclidean(BasicDataset):
     def get_data(self, n_points, dims):
         x = _rng.uniform(size=(n_points, dims)).astype(floatX)
         return x
+    
+    def viz(self, X=None, out_file=None, density=False):
+        print 'mean', X.mean(0)
+        print 'std', X.std(0)
+        print 'max', X.max(0)
+        print 'min', X.min(0)
+        print X.shape
+        self.save_images(X, out_file, density=density)
 
     def save_images(self, X, imgfile, density=False):
         ax = plt.axes()
@@ -151,7 +168,7 @@ class Euclidean(BasicDataset):
 
 
         ax.text(x[0], y[0], str('start'), transform=ax.transAxes)
-        ax.axis([-0.2, 1.2, -0.2, 1.2])
+        ax.axis([-.7, .7, -.7, .7])
         fig = plt.gcf()
 
         plt.savefig(imgfile)
