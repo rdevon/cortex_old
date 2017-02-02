@@ -67,7 +67,6 @@ class Trainer(object):
         self.session.reset_data(mode=self.data_mode, batch_size=self.batch_size)
         n = self.session.get_dataset_size(mode=self.data_mode)
         self.start_pbar(n)
-
         start_epoch = self.epoch
         grads = OrderedDict()
 

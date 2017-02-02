@@ -342,8 +342,7 @@ class BasicDataset(Dataset):
 
         '''
         self.idx = np.random.permutation(np.arange(0, self.n_samples, 1)).tolist()
-        self.r_idx = [self.idx.index(i) for i in range(self.n_samples)]
-
+        
     def next(self, batch_size):
         '''Draws the next batch of data samples.
 

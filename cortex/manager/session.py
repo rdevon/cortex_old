@@ -6,6 +6,7 @@ import logging
 import pprint
 import theano
 from theano import tensor as T
+import time
 
 from . import get_manager, is_tensor_arg, resolve_tensor_arg
 from ..models import get_noise_switch
@@ -447,6 +448,5 @@ class Session(object):
                     m = ms[0]
             else:
                 m = mode
-
             dataset[m].reset(batch_size=batch_size)
         self.data_pos = 0
