@@ -179,7 +179,7 @@ class BasicDataset(Dataset):
 
     def __init__(self, data, distributions=None, labels='labels', name=None,
                 balance=False, one_hot=True, transpose=None, check_data=False,
-                process_centered=True, **kwargs):
+                process_centered=True, idx_ref=None, **kwargs):
         '''Init function for BasicDataset.
 
         Args:
@@ -256,8 +256,12 @@ class BasicDataset(Dataset):
         self.finish_setup()
 
         if check_data: self.check()
-        self.idx = range(self.n_samples)
-        self.r_idx = range(self.n_samples)
+        
+        self.idx_ref = idx_ref
+        if self.idx_ref is None:
+            if not hasattr(self, 'idx'): self.idx = range(self.n_samples)
+        else:
+            self.idx = self.manager.datasets[self.idx_ref][self.mode].idx
         if self.shuffle: self.randomize()
 
         self.register()
@@ -341,7 +345,9 @@ class BasicDataset(Dataset):
         '''Randomizes the dataset
 
         '''
-        self.idx = np.random.permutation(np.arange(0, self.n_samples, 1)).tolist()
+        if self.idx_ref is None:
+            self.idx = np.random.permutation(
+                np.arange(0, self.n_samples, 1)).tolist()
         
     def next(self, batch_size):
         '''Draws the next batch of data samples.

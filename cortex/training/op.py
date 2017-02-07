@@ -26,8 +26,8 @@ def make_f_grad_shared(inp, cost, grads, extra_outs, updates, profile=False,
     
     if clips is not None:
         for k, v in clips.items():
-            k_, kname = next(((k, k.name) for k in updates.keys()), None)
-            if k in kname:
+            k_ = next((k_ for k_ in updates.keys() if k_.name == k), None)
+            if k_ is not None:
                 if '_grad' in k:
                     k = k[:-5]
                 logger.info('Clipping {0} between -{1} and {1}'.format(k, v))

@@ -3,6 +3,7 @@ Module for AOD analysis functions
 
 '''
 
+import igraph
 import numpy as np
 import os
 from os import path
@@ -88,6 +89,48 @@ def do_fdr_correct(p, has_dependence=False, sig=0.01):
     mask[p_argsort[:k]] = 1.
     if shape is not None: mask = mask.reshape(shape)
     return k, mask
+
+def group(mat, thr=.2, do_abs=False):
+    if do_abs: mat = abs(mat)
+    max_weight = abs(mat).max()
+    #thr *= max_weight
+    idx = range(mat.shape[0])
+    wheres = np.where(mat > thr)
+
+    edgelist = []
+    weights = []
+
+    for x, y in zip(wheres[0], wheres[1]):
+        if x < y:
+            edgelist.append((x, y))
+            weights.append((mat[x, y]))
+
+    if len(weights) > 0:
+        weights /= np.std(weights)
+    else:
+        return range(mat.shape[0]), [[i] for i in idx]
+
+    g = igraph.Graph(edgelist, directed=False)
+    g.vs['label'] = idx
+    cls = g.community_multilevel(return_levels=True, weights=weights)
+    cl = list(cls[0])
+
+    clusters = []
+    n_clusters = len(cl)
+    for i in idx:
+        found = False
+        for j, cluster in enumerate(cl):
+            if i in cluster:
+                clusters.append(j)
+                found = True
+                break
+
+        if not found:
+            clusters.append(n_clusters)
+            n_clusters += 1
+
+    clusters = np.array(clusters).astype('int64')
+    return clusters, cl
         
 
 class AODAnalyzer(Analyzer):
@@ -208,6 +251,15 @@ class AODAnalyzer(Analyzer):
             return cc_av
         else:
             return tt_sig
+        
+    def save_map(self, idx=None, order=None, clusters=None, omit_off=True):
+        inputs = self.get_data()
+        if clusters is None and order is None:
+            order = [k for k in self.features.keys() if self.features[k]['is_on']]
+        labels = [self.features[k]['labels'] for k in self.features.keys()]
+        self.visualizer.run(
+            -1, inputs=inputs, data_mode=self.mode,
+            name='maps', order=order, clusters=clusters, labels=labels)
         
     def make_table(self, task_sig=0.01, min_p=10e-7, tablefmt='plain'):
         fdr_dict = dict()

@@ -224,7 +224,7 @@ class FMRI(FMRI_IID):
             **kwargs: keyword arguments for initializaiton.
 
         '''
-        self.idx = None
+        self.idx_set = False
         self.window = window
         self.stride = stride
 
@@ -247,7 +247,7 @@ class FMRI(FMRI_IID):
                          for i in j]
         self.idx = zip(subject_idx_e, scan_idx_e)
         self.n_samples = len(self.idx)
-
+        
     def slice_data(self, idx):
         super(FMRI, self).slice_data(idx)
         self.set_idx()

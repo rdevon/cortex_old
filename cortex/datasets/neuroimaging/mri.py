@@ -402,7 +402,7 @@ class MRI(NeuroimagingDataset):
 
     def viz(self, x, out_file=None, remove_niftis=True, roi_dict=None, extra_mean=None,
             stats=None, update_rois=True, global_norm=False, set_global_norm=False,
-            average=None, load_niftis=False, **kwargs):
+            average=None, load_niftis=False, labels=None, **kwargs):
         '''Saves images from array.
 
         Args:
@@ -448,7 +448,7 @@ class MRI(NeuroimagingDataset):
 
         nifti_viewer.montage(images, self.anat_file, roi_dict,
                              out_file=resolve_path(out_file), stats=stats,
-                             global_std=global_std, **kwargs)
+                             global_std=global_std, labels=labels, **kwargs)
 
     def viz_slice(self, x, out_file=None, **kwargs):
         x = x.copy()
