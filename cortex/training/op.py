@@ -16,22 +16,12 @@ from ..utils import tools
 
 logger = logging.getLogger(__name__)
 
-def make_f_grad_shared(inp, cost, grads, extra_outs, updates, profile=False,
-                       clips=None):
+def make_f_grad_shared(inp, cost, grads, extra_outs, updates, profile=False):
     grad_dict = OrderedDict(('_grad_' + k, g.mean())
         for k, g in grads.iteritems())
     outs = OrderedDict(cost=cost)
     outs.update(**grad_dict)
     outs.update(**extra_outs)
-    
-    if clips is not None:
-        for k, v in clips.items():
-            k_ = next((k_ for k_ in updates.keys() if k_.name == k), None)
-            if k_ is not None:
-                if '_grad' in k:
-                    k = k[:-5]
-                logger.info('Clipping {0} between -{1} and {1}'.format(k, v))
-                updates[k_] = T.clip(updates[k_], -v, v)
 
     f_grad_shared = theano.function(
         inp,
@@ -41,6 +31,18 @@ def make_f_grad_shared(inp, cost, grads, extra_outs, updates, profile=False,
         on_unused_input='ignore')
 
     return f_grad_shared
+
+def clip_params(updates, **kwargs):
+    if isinstance(updates, list):
+        updates = dict(updates)
+    for k, v in kwargs.items():
+        k_ = next((k_ for k_ in updates.keys() if k_.name == k), None)
+        if k_ is not None:
+            if '_grad' in k:
+                k = k[:-5]
+            logger.info('Clipping {0} between -{1} and {1}'.format(k, v))
+            updates[k_] = T.clip(updates[k_], -v, v)
+    return [(k, v) for k, v in updates.items()]
 
 def adam(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
          exclude_params=set([]), profile=False, clips=None,
@@ -152,7 +154,7 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
 
     f_grad_shared = make_f_grad_shared(
         inp, cost, grads, extra_outs, zgup+rgup+rg2up+extra_ups,
-        profile=profile, clips=clips)
+        profile=profile)
 
     updir = [theano.shared(p.get_value() * np.float32(0.), name='%s_updir'%k)
              for k, p in tparams.iteritems()]
@@ -162,6 +164,9 @@ def rmsprop(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
     param_up = [(p, p + udn[1])
         for p, udn in zip(tools.itemlist(tparams), updir_new)
         if p.name not in exclude_params]
+
+    if clips is not None:
+        param_up = clip_params(param_up, **clips)
 
     if not isinstance(lr, list): lr = [lr]
     f_update = theano.function(
@@ -181,11 +186,13 @@ def sgd(lr, tparams, grads, inp, cost, extra_ups=[], extra_outs={},
 
     gsup = [(gs, g) for gs, g in zip(gshared, grads.values())]
     f_grad_shared = make_f_grad_shared(
-        inp, cost, grads, extra_outs, gsup+extra_ups, profile=profile,
-        clips=clips)
+        inp, cost, grads, extra_outs, gsup+extra_ups, profile=profile)
 
     pup = [(p, p - lr * g) for p, g in zip(tools.itemlist(tparams), gshared)
         if p.name not in exclude_params]
+    
+    if clips is not None:
+        pup = clip_params(pup, **clips)
 
     if not isinstance(lr, list): lr = [lr]
     f_update = theano.function(lr, [], updates=pup, profile=profile)

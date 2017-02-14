@@ -348,6 +348,8 @@ class FMRI(FMRI_IID):
                 tcs = tcs[:t_limit]
                 if tcs.ndim == 2: tcs = tcs.T
                 time_course_scales[k] = tcs
+        if isinstance(maps, np.ndarray):
+            maps = dict(maps=maps)
 
         for k, v in maps.items():
             out_file_ = out_file[:-3] + k + '.png'

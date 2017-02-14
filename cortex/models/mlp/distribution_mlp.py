@@ -107,7 +107,13 @@ class DistributionMLP(Cell):
         Y = outs['output']
         outs['output'] = self.distribution(Y)
         outs['P'] = outs['output']
-        outs['P_center'] = self.distribution.get_center(outs['P'])
+        P = self.distribution.split_prob(outs['P'])
+        if len(P) == 1:
+            outs['P_center'] = P[0]
+            outs['P_scale'] = T.zeros_like(P[0])
+        elif len(P) == 2:
+            outs['P_center'] = P[0]
+            outs['P_scale'] = P[1]
         return outs
 
     def _cost(self, X=None, P=None):

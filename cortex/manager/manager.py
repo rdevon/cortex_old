@@ -600,7 +600,6 @@ class Manager(object):
             if name is None: name = op.__name__
 
         #self.test_op_args(op, args, kwargs)
-
         self.steps.append(dict(
             cell_name=cell_name, name=name, op=op, constants=constants,
             args=args, kwargs=kwargs))

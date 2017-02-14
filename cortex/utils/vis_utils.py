@@ -9,11 +9,14 @@ image from a set of samples or weights.
 import numpy
 
 
-def scale_to_unit_interval(ndar, eps=1e-8):
+def scale_to_unit_interval(ndar, eps=1e-6):
     ''' Scales all values in the ndarray ndar to be between 0 and 1 '''
     ndar = ndar.copy()
     ndar -= ndar.min()
-    ndar *= 1.0 / (ndar.max() + eps)
+    try:
+        ndar *= 1.0 / (ndar.max() + eps)
+    except FloatingPointError:
+        pass
     return ndar
 
 

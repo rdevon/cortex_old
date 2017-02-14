@@ -27,7 +27,8 @@ class Trainer(object):
 
     def __init__(self, session, name='trainer', data_mode='train',
                  optimizer=None, epochs=None, batch_size=None,
-                 learning_rate=None, optimizer_args=None, costs=None,
+                 learning_rate=None, learning_rate_decay=None,
+                 optimizer_args=None, costs=None,
                  models=None, excludes=None):
         if optimizer is None: raise TypeError('`optimizer` not set')
         if epochs is None: raise TypeError('`epochs` not set')
@@ -38,6 +39,7 @@ class Trainer(object):
         self.logger = get_class_logger(self)
         self.session = session
         self.learning_rate = learning_rate
+        self.learning_rate_decay = learning_rate_decay
         self.epoch = 0
         self.epochs = epochs
         self.batch_size = batch_size
@@ -63,6 +65,12 @@ class Trainer(object):
 
     def next_epoch(self, n_epochs=1):
         t0 = time.time()
+        if self.learning_rate_decay is not None:
+            self.logger.info('Training with {0} learning rate ({1} decay)'.format(
+                self.learning_rate, self.learning_rate_decay))
+        else:
+            self.logger.info('Training with {0} learning rate'.format(
+                self.learning_rate))
 
         self.session.reset_data(mode=self.data_mode, batch_size=self.batch_size)
         n = self.session.get_dataset_size(mode=self.data_mode)
@@ -78,7 +86,8 @@ class Trainer(object):
                 t1 = time.time()
                 self.training_time += t1 - t0
                 t0 = time.time()
-
+                if self.learning_rate_decay is not None:
+                    self.learning_rate *= self.learning_rate_decay
                 self.epoch += 1
                 if self.epoch >= self.epochs:
                     print
@@ -90,7 +99,10 @@ class Trainer(object):
                     self.start_pbar(n)
                     self.session.reset_data(mode=self.data_mode,
                                             batch_size=self.batch_size)
-            self.epoch_pbar.update(self.session.data_pos)
+            if self.session.data_pos == -1:
+                self.epoch_pbar.update(n)
+            else:
+                self.epoch_pbar.update(self.session.data_pos)
 
             for f_grad, f_update, freq in zip(
                 self.f_grads, self.f_updates, self.f_freqs):

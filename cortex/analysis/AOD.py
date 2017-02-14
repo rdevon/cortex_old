@@ -35,20 +35,28 @@ def rename_rois(labels):
 def get_betas(tcs, stim, idx):
     betas = []
     stim = sm.add_constant(stim)
-    for c in xrange(tcs.shape[2]):
-        c_betas = []
-        for s in idx:
-            model = sm.OLS(tcs[:, s, c], stim)
-            results = model.fit()
-            c_betas.append(results.params[1])
-        betas.append(c_betas)
+    for s in idx:
+        model = sm.OLS(tcs[:, s], stim)
+        results = model.fit()
+        betas.append(results.params[1:])
     betas = np.array(betas)
-    return betas
+    return betas.transpose(1, 2, 0)
 
 def get_task_relatedness(tcs, stim, idx=None):
     if idx is None: idx = range(tcs.shape[1])
     betas = get_betas(tcs, stim, idx)
-    t, p = ttest_1samp(betas[:, idx], 0, axis=1)
+    
+    if betas.ndim == 2:
+        t, p = ttest_1samp(betas[:, idx], 0, axis=1)
+    elif betas.ndim == 3:
+        ts = []
+        ps = []
+        for betas_ in betas:
+            t, p = ttest_1samp(betas_[:, idx], 0, axis=1)
+            ts.append(t)
+            ps.append(p)
+        t = np.array(ts)
+        p = np.array(ps)
     return t, p
 
 def get_task_difference(tcs, stim, idx1, idx2, use_mw=True):
@@ -220,18 +228,20 @@ class AODAnalyzer(Analyzer):
         self.logger.info('T-tests')
         for k, v in tcs.items():
             self.stats[k] = {}
-            for sname, stim in zip(
-                ['targets', 'novels'], [self.targets, self.novels]):
-                t, p = get_task_relatedness(v, stim)
-                u, pu = get_task_difference(v, stim, hc, sz)
-                self.stats[k][sname] = dict(p=p, t=t, u=u, pu=pu)
-                
-                for j in xrange(t.shape[0]):
+            stim = np.concatenate([self.targets[:, None], self.novels[:, None]],
+                axis=1)
+            t, p = get_task_relatedness(v, stim)
+            u, pu = get_task_difference(v, stim, hc, sz)
+            
+            for sname, t_, p_, u_, pu_ in zip(['targets', 'novels'], t, p, t, p):
+                self.stats[k][sname] = dict(p=p_, t=t_, u=u_, pu=pu_)
+                    
+                for j in xrange(t_.shape[0]):
                     self.features[j]['stats'].update(
-                        **{'{}_{}_t'.format(k, sname): t[j],
-                           '{}_{}_p'.format(k, sname): p[j],
-                           '{}_{}_u'.format(k, sname): u[j],
-                           '{}_{}_pu'.format(k, sname): pu[j]})
+                        **{'{}_{}_t'.format(k, sname): t_[j],
+                            '{}_{}_p'.format(k, sname): p_[j],
+                            '{}_{}_u'.format(k, sname): u_[j],
+                            '{}_{}_pu'.format(k, sname): pu_[j]})
                     
     def make_fnc(self, tc, idx=None, sig=0.05, thr=0., has_dependence=False,
                  use_average=False, clusters=None, omit_off=True, **kwargs):
@@ -252,16 +262,17 @@ class AODAnalyzer(Analyzer):
         else:
             return tt_sig
         
-    def save_map(self, idx=None, order=None, clusters=None, omit_off=True):
+    def save_map(self, idx=None, order=None, clusters=None, omit_off=True, map_idx=-1):
         inputs = self.get_data()
         if clusters is None and order is None:
             order = [k for k in self.features.keys() if self.features[k]['is_on']]
         labels = [self.features[k]['labels'] for k in self.features.keys()]
         self.visualizer.run(
-            -1, inputs=inputs, data_mode=self.mode,
+            map_idx, inputs=inputs, data_mode=self.mode,
             name='maps', order=order, clusters=clusters, labels=labels)
         
-    def make_table(self, task_sig=0.01, min_p=10e-7, tablefmt='plain'):
+    def make_table(self, task_sig=0.01, min_p=10e-7, tablefmt='plain',
+                   group_diffs=False):
         fdr_dict = dict()
         diff_dict = dict()
         
@@ -277,18 +288,24 @@ class AODAnalyzer(Analyzer):
                 asp = np.argsort(p)[:K]
                 fdr[sname] = asp
                 
-                pu = stats[sname]['pu']
-                K, mask = do_fdr_correct(pu, sig=task_sig)
-                asp = np.argsort(pu)[:K]
-                diff[sname] = asp
+                if group_diffs:
+                    pu = stats[sname]['pu']
+                    K, mask = do_fdr_correct(pu, sig=task_sig)
+                    asp = np.argsort(pu)[:K]
+                    diff[sname] = asp
                 
             fdr_dict[tc_name] = fdr
             diff_dict[tc_name] = diff
     
         td = ['', '']
         for tc_name in self.stats.keys():
-            td += [tc_name, '', 'diff_{}'.format(tc_name), '']
-        table = [td, ['ID', 'Label'] + ['Targets', 'Novels'] * (2 * len(self.stats))]
+            if group_diffs:
+                td += [tc_name, '', 'diff_{}'.format(tc_name), '']
+                table = [td, ['ID', 'Label'] + ['Targets', 'Novels'] * (2 * len(self.stats))]
+            else:
+                td += [tc_name, '']
+                table = [td, ['ID', 'Label'] + ['Targets', 'Novels'] * len(self.stats)]
+        
         for i, feature in self.features.items():
             if feature['is_on']:
                 td = [i, feature['name']]
@@ -301,14 +318,15 @@ class AODAnalyzer(Analyzer):
                         td.append('%.1e' % stat if (i in asp and stat < min_p)
                                   else '')
                         
-                    for sname in stats.keys():
-                        asp = diff_dict[tc_name][sname]
-                        stat = stats[sname]['pu'][i]
-                        td.append('%.1e' % stat if (i in asp and stat < min_p)
-                                  else '')
+                    if group_diffs:
+                        for sname in stats.keys():
+                            asp = diff_dict[tc_name][sname]
+                            stat = stats[sname]['pu'][i]
+                            td.append('%.1e' % stat if (i in asp and stat < min_p)
+                                      else '')
                     
-            if not all([t == '' for t in td[2:]]):
-                table.append(td)
+                if not all([t == '' for t in td[2:]]):
+                    table.append(td)
         
         print tabulate(table, headers='firstrow', tablefmt=tablefmt)
         

@@ -12,32 +12,77 @@ from .. import Cell, dropout, norm_weight
 from ...utils import floatX
 
 
+def get_output_shape(input_shape, filter_shape, stride, pool=1, pad=0):
+    if pad == 'valid':
+        output_shape = input_shape - filter_shape + 1
+    elif pad == 'full':
+        output_shape = input_shape + filter_shape - 1
+    elif pad == 'full_and_trim':
+        output_shape = input_shape
+    elif pad == 'half':
+        output_shape = input_shape + ((filter_shape + 1) % 2)
+    elif isinstance(pad, int):
+        output_shape = input_shape + 2 * pad - filter_shape + 1
+    else:
+        raise NotImplementedError(pad)
+
+    output_shape = (output_shape + stride - 1) // stride
+    output_shape = output_shape // pool
+    
+    return output_shape
+
+def get_input_shape(output_shape, filter_shape, stride, pool=1, pad=0):
+    output_shape = output_shape * pool
+
+    if pad == 'valid':
+        pad = 0
+    elif pad == 'full':
+        pad = filter_size - 1
+    elif pad == 'full_and_trim':
+        return (output_shape - 1) * stride
+    elif isinstance(pad, int):
+        pass
+    else:
+        raise NotImplementedError(pad)
+    
+    input_shape = (output_shape - 1) * stride - 2 * pad + filter_shape
+    
+    return input_shape
+
+
 class CNN2D(Cell):
-    _required = ['input_shape', 'n_filters', 'filter_shapes', 'pool_sizes']
+    _required = ['input_shape', 'n_filters', 'filter_shapes']
     _options = {'dropout': False, 'weight_noise': 0,
                 'batch_normalization': False}
-    _args = ['input_shape', 'n_filters', 'filter_shapes', 'pool_sizes',
-             'h_act']
+    _args = ['input_shape', 'n_filters', 'filter_shapes', 'pools', 'pads',
+             'strides', 'h_act']
     _dim_map = {'output': None}
     _components = {'fully_connected': None}
 
-    def __init__(self, input_shape, n_filters, filter_shapes, pool_sizes,
-                 h_act='sigmoid', out_act=None, name='CNN2D', border_modes=None,
-                 dim_hs=None, dim_out=None, **kwargs):
+    def __init__(self,
+                 input_shape, n_filters, filter_shapes,
+                 pools=None, strides=None, pads=None,
+                 h_act='sigmoid', out_act=None, 
+                 dim_hs=None, dim_out=None,
+                 name='CNN2D', **kwargs):
         if not(len(n_filters) == len(filter_shapes)):
             raise TypeError(
             '`filter_shapes` and `n_filters` must have the same length')
 
         if out_act is None: out_act = h_act
-        self.input_shape = input_shape
-        self.filter_shapes = filter_shapes
-        self.n_filters = n_filters
-        self.n_layers = len(self.n_filters)
-        self.pool_sizes = pool_sizes
+        self.n_layers = len(n_filters)
         self.h_act = resolve_nonlinearity(h_act)
         if out_act is None: out_act = h_act
         self.out_act = resolve_nonlinearity(out_act)
-        self.border_modes = border_modes or (['full_and_trim'] * self.n_layers)
+
+        self.input_shape = input_shape
+        
+        self.filter_shapes = filter_shapes
+        self.n_filters = n_filters
+        
+        self.pools = pools or [(1, 1) for _ in range(self.n_layers)]
+        self.strides = strides or [(1, 1) for _ in range(self.n_layers)]
+        self.pads = pads or ['full_and_trim' for _ in range(self.n_layers)]
         
         super(CNN2D, self).__init__(name=name, dim_hs=dim_hs,
                                     dim_out=dim_out, h_act=h_act,
@@ -51,7 +96,7 @@ class CNN2D(Cell):
             dim_in = self.set_link_value(
                 'output', input_shape=self.input_shape,
                 filter_shapes=self.filter_shapes, n_filters=self.n_filters,
-                pool_sizes=self.pool_sizes, border_modes=self.border_modes)
+                pools=self.pools, strides=self.strides, pads=self.pads)
             dim_hs = dim_hs or []
             components['fully_connected'] = OrderedDict(
                 cell_type='MLP',
@@ -67,8 +112,8 @@ class CNN2D(Cell):
     
     @classmethod
     def set_link_value(C, key, input_shape=None, filter_shapes=None,
-                       n_filters=None, pool_sizes=None, border_modes=None,
-                       **kwargs):
+                       n_filters=None, pools=None, strides=None,
+                       pads=None, **kwargs):
 
         if key not in ['output']:
             return super(CNN2D, C).set_link_value(link, key)
@@ -76,34 +121,24 @@ class CNN2D(Cell):
         if n_filters is None: raise ValueError('n_filters')
         if input_shape is None: raise ValueError('input_shape')
         if filter_shapes is None: raise ValueError('filter_shapes')
-        if pool_sizes is None: raise ValueError('pool_sizes')
+        if pools is None: raise ValueError('pools')
+        if pads is None: raise ValueError('pads')
+        if strides is None: raise ValueError('strides')
+        
         n_layers = len(n_filters)
-        if border_modes is None: border_modes = ['full'] * n_layers
-        if not(n_layers == len(filter_shapes) == len(pool_sizes) ==
-               len(border_modes)):
+        if not(n_layers == len(filter_shapes) == len(pools) ==
+               len(strides) == len(pads)):
             raise TypeError('All list inputs must have the same length')
 
-        input_shape = input_shape[1:]
+        dim_x, dim_y = input_shape[1:]
 
-        for filter_shape, pool_size, border_mode in zip(
-            filter_shapes, pool_sizes, border_modes):
-            if border_mode == 'valid':
-                dim_x = input_shape[0] - filter_shape[0] + 1
-                dim_y = input_shape[1] - filter_shape[1] + 1
-            elif border_mode == 'full':
-                dim_x = input_shape[0] + filter_shape[0] - 1
-                dim_y = input_shape[1] + filter_shape[1] - 1
-            elif border_mode == 'full_and_trim':
-                dim_x, dim_y = input_shape[:2]
-            elif border_mode == 'half':
-                dim_x = input_shape[0] + ((filter_shape[0] + 1) % 2)
-                dim_y = input_shape[1] + ((filter_shape[1] + 1) % 2)
-            else:
-                raise NotImplementedError(border_mode)
-
-            dim_x = dim_x // pool_size[0]
-            dim_y = dim_y // pool_size[1]
-            input_shape = (dim_x, dim_y)
+        for filter_shape, pool, stride, pad in zip(
+            filter_shapes, pools, strides, pads):
+            if isinstance(pad, str): pad = (pad, pad)
+            dim_x, dim_y = tuple(get_output_shape(i, f, s, p, pa)
+                                 for i, f, s, p, pa
+                                 in zip((dim_x, dim_y), filter_shape, stride, pool,
+                                        pad))
 
         return dim_x * dim_y * n_filters[-1]
 
@@ -124,12 +159,13 @@ class CNN2D(Cell):
         for i in xrange(self.n_layers):
             dim_in = dim_ins[i]
             dim_out = dim_outs[i]
-            pool_size = self.pool_sizes[i]
+            pool = self.pools[i]
             dim_x, dim_y = self.filter_shapes[i]
-            border_mode = self.border_modes[i]
+            stride = self.strides[i]
+            pad = self.pads[i]
             
             fan_in = dim_in * dim_x * dim_y
-            fan_out = dim_out * dim_x * dim_y // np.prod(pool_size)
+            fan_out = dim_out * dim_x * dim_y // np.prod(pool)
             W_bound = np.sqrt(6. / (fan_in + fan_out))
             W = self.rng.uniform(low=-W_bound, high=W_bound,
                                  size=(dim_out, dim_in, dim_x, dim_y))
@@ -144,8 +180,12 @@ class CNN2D(Cell):
                 beta = np.zeros(bn_shape)
                 gammas.append(gamma)
                 betas.append(beta)
-            im_x = im_x // pool_size[0]
-            im_y = im_y // pool_size[1]
+                
+            if isinstance(pad, str): pad = (pad, pad)
+            im_x, im_y = tuple(get_output_shape(i, f, s, p, pa)
+                               for i, f, s, p, pa
+                               in zip((im_x, im_y), (dim_x, dim_y), stride,
+                                      pool, pad))
 
         self.params['weights'] = weights
         self.params['biases'] = biases
@@ -184,6 +224,8 @@ class CNN2D(Cell):
         outs = OrderedDict(X=X)
         outs['input'] = X
 
+        dim_x = input_shape[2]
+        dim_y = input_shape[3]
         for l in xrange(self.n_layers):
             W = params.pop(0)
             b = params.pop(0)
@@ -200,14 +242,16 @@ class CNN2D(Cell):
                 X = X.reshape(shape)
 
             shape = self.filter_shapes[l]
-            pool_size = self.pool_sizes[l]
+            pool = self.pools[l]
             n_filters = self.n_filters[l]
-            border_mode = self.border_modes[l]
-            if border_mode == 'full_and_trim':
-                _border_mode = 'full'
+            pad = self.pads[l]
+            stride = self.strides[l]
+            
+            if pad == 'full_and_trim':
+                _pad = 'full'
                 trim = True
             else:
-                _border_mode = border_mode
+                _pad = pad
                 trim = False
                 
             filter_shape = (n_filters, input_shape[1]) + shape
@@ -217,32 +261,21 @@ class CNN2D(Cell):
             conv_out = T.nnet.conv2d(input=X, filters=W,
                                      filter_shape=filter_shape,
                                      input_shape=input_shape,
-                                     border_mode=_border_mode)
+                                     subsample=stride,
+                                     border_mode=_pad,
+                                     filter_flip=True)
             
             outs.update(**{'Ci_%d' % l: conv_out})
             
             if trim:
                 sx, sy = self.trims[l]
                 conv_out = conv_out[:, :, sx:-sx, sy:-sy]
-            
-            if border_mode == 'valid':
-                dim_x = input_shape[2] - shape[0] + 1
-                dim_y = input_shape[3] - shape[1] + 1
-            elif border_mode == 'full':
-                dim_x = input_shape[2] + shape[0] - 1
-                dim_y = input_shape[3] + shape[1] - 1
-            elif border_mode == 'full_and_trim':
-                dim_x, dim_y = input_shape[2:]
-            elif border_mode == 'half':
-                dim_x = input_shape[2] + ((shape[0] + 1) % 2)
-                dim_y = input_shape[3] + ((shape[1] + 1) % 2)
-            else:
-                raise NotImplementedError(border_mode)
 
-            pool_out = T.signal.pool.pool_2d(input=conv_out, ds=pool_size,
-                                             ignore_border=True)
-            dim_x = dim_x // pool_size[0]
-            dim_y = dim_y // pool_size[1]
+            if pool != (1, 1):
+                pool_out = T.signal.pool.pool_2d(input=conv_out, ds=pool,
+                                                 ignore_border=True)
+            else:
+                pool_out = conv_out
 
             outs.update(**{
                 ('C_%d' % l): conv_out,
@@ -268,6 +301,12 @@ class CNN2D(Cell):
                 X = self.out_act(preact)
                 outs['Z'] = preact
                 outs['Y'] = X
+            
+            if isinstance(_pad, str): _pad = (_pad, _pad)
+            dim_x, dim_y = tuple(get_output_shape(i, f, s, p, pa)
+                                 for i, f, s, p, pa
+                                 in zip([dim_x, dim_y], shape, stride,
+                                    pool, _pad))
 
             input_shape = (batch_size, filter_shape[0], dim_x, dim_y)
             
@@ -315,22 +354,15 @@ class CNN2D(Cell):
     def dropout_epsilons(self, size, input_shape):
         epsilons = []
         
-        for filter_shape, pool_size, border_mode, n_filter in zip(
-            self.filter_shapes, self.pool_sizes, self.border_modes, self.n_filters):
-            if border_mode == 'valid':
-                dim_x = input_shape[0] - filter_shape[0] + 1
-                dim_y = input_shape[1] - filter_shape[1] + 1
-            elif border_mode == 'full':
-                dim_x = input_shape[0] + filter_shape[0] - 1
-                dim_y = input_shape[1] + filter_shape[1] - 1
-            elif border_mode == 'half':
-                dim_x = input_shape[0] + ((filter_shape[0] + 1) % 2)
-                dim_y = input_shape[1] + ((filter_shape[1] + 1) % 2)
-            else:
-                raise NotImplementedError(border_mode)
-
-            dim_x = dim_x // pool_size[0]
-            dim_y = dim_y // pool_size[1]
+        for filter_shape, pool, pad, stride, n_filter in zip(
+            self.filter_shapes, self.pools, self.pads, self.strides, self.n_filters):
+            
+            if isinstance(pad, str): pad = (pad, pad)
+            dim_x, dim_y = tuple(get_output_shape(i, f, s, p, pa)
+                                 for i, f, s, p, pa
+                                 in zip(input_shape[1:], filter_shape, stride, pool,
+                                        pad))
+            
             input_shape = (dim_x, dim_y)
             shape = size + (n_filter, dim_x, dim_y)
             eps = self.trng.binomial(shape, p=1-self.dropout, n=1, dtype=floatX)
@@ -340,12 +372,10 @@ class CNN2D(Cell):
 
 
 class RCNN2D(CNN2D):
-    def __init__(self, input_shape, n_filters, filter_shapes, pool_sizes,
-                 border_modes=None, dim_in=None, name='RCNN2D', **kwargs):
-        n_layers = len(n_filters)
-        border_modes = border_modes or (['full_and_trim'] * n_layers)
+    def __init__(self,
+                 input_shape, n_filters, filter_shapes,
+                 dim_in=None, name='RCNN2D', **kwargs):
         super(RCNN2D, self).__init__(input_shape, n_filters, filter_shapes,
-                                     pool_sizes, border_modes=border_modes,
                                      dim_in=dim_in, name=name, **kwargs)
         
     def set_components(self, components=None, dim_hs=None, dim_in=None,
@@ -369,8 +399,8 @@ class RCNN2D(CNN2D):
 
     @classmethod
     def set_link_value(C, key, input_shape=None, filter_shapes=None,
-                       n_filters=None, pool_sizes=None, border_modes=None,
-                       **kwargs):
+                       n_filters=None, pools=None, strides=None,
+                       pads=None, **kwargs):
 
         if key not in ['output']:
             return super(RCNN2D, C).set_link_value(link, key)
@@ -378,34 +408,24 @@ class RCNN2D(CNN2D):
         if n_filters is None: raise ValueError('n_filters')
         if input_shape is None: raise ValueError('input_shape')
         if filter_shapes is None: raise ValueError('filter_shapes')
-        if pool_sizes is None: raise ValueError('pool_sizes')
+        if pools is None: raise ValueError('pools')
+        if pads is None: raise ValueError('pads')
+        if strides is None: raise ValueError('strides')
+        
         n_layers = len(n_filters)
-        if border_modes is None: border_modes = ['full'] * n_layers
-        if not(n_layers == len(filter_shapes) == len(pool_sizes) ==
-               len(border_modes)):
+        if not(n_layers == len(filter_shapes) == len(pools) ==
+               len(strides) == len(pads)):
             raise TypeError('All list inputs must have the same length')
 
         input_shape = input_shape[1:]
 
-        for filter_shape, pool_size, border_mode in zip(
-            filter_shapes, pool_sizes, border_modes):
-
-            dim_x = input_shape[0] * pool_size[0]
-            dim_y = input_shape[1] * pool_size[1]
-
-            if border_mode == 'valid':
-                dim_x = dim_x - filter_shape[0] + 1
-                dim_y = dim_y - filter_shape[1] + 1
-            elif border_mode == 'full':
-                dim_x = dim_x + filter_shape[0] - 1
-                dim_y = dim_y + filter_shape[1] - 1
-            elif border_mode == 'full_and_trim':
-                dim_x, dim_y = input_shape[:2]
-            elif border_mode == 'half':
-                dim_x = dim_x + ((filter_shape[0] + 1) % 2)
-                dim_y = dim_y + ((filter_shape[1] + 1) % 2)
-            else:
-                raise NotImplementedError(border_mode)
+        for filter_shape, pool, stride, pad in zip(
+            filter_shapes, pools, strides, pads):
+            if isinstance(pad, str): pad = (pad, pad)
+            dim_x, dim_y = tuple(get_input_shape(i, f, s, p, pa)
+                                 for i, f, s, p, pa
+                                 in zip(input_shape, filter_shape, stride, pool,
+                                        pad))
             input_shape = (dim_x, dim_y)
 
         return dim_x * dim_y * n_filters[-1]
@@ -427,12 +447,13 @@ class RCNN2D(CNN2D):
         for i in xrange(self.n_layers):
             dim_in = dim_ins[i]
             dim_out = dim_outs[i]
-            pool_size = self.pool_sizes[i]
+            pool = self.pools[i]
             dim_x, dim_y = self.filter_shapes[i]
-            border_mode = self.border_modes[i]
+            stride = self.strides[i]
+            pad = self.pads[i]
             
             fan_in = dim_in * dim_x * dim_y
-            fan_out = dim_out * dim_x * dim_y // np.prod(pool_size)
+            fan_out = dim_out * dim_x * dim_y // np.prod(pool)
             W_bound = np.sqrt(6. / (fan_in + fan_out))
             W = self.rng.uniform(low=-W_bound, high=W_bound,
                                  size=(dim_out, dim_in, dim_x, dim_y))
@@ -447,8 +468,12 @@ class RCNN2D(CNN2D):
                 beta = np.zeros(bn_shape)
                 gammas.append(gamma)
                 betas.append(beta)
-            im_x = im_x * pool_size[0]
-            im_y = im_y * pool_size[1]
+                
+            if isinstance(pad, str): pad = (pad, pad)
+            im_x, im_y = tuple(get_input_shape(i, f, s, p, pa)
+                               for i, f, s, p, pa
+                               in zip([im_x, im_y], [dim_x, dim_y], stride,
+                                      pool, pad))
 
         self.params['weights'] = weights
         self.params['biases'] = biases
@@ -459,6 +484,7 @@ class RCNN2D(CNN2D):
     def feed(self, X, batch_size, *params):
         session = self.manager._current_session
         params = list(params)
+        assert batch_size is not None
         
         if X.ndim == 2:
             reshape = None
@@ -503,6 +529,8 @@ class RCNN2D(CNN2D):
 
             return upsampled
 
+        dim_x = input_shape[2]
+        dim_y = input_shape[3]
         for l in xrange(self.n_layers):
             W = params.pop(0)
             b = params.pop(0)
@@ -520,50 +548,46 @@ class RCNN2D(CNN2D):
                 X = X.reshape(shape)
 
             shape = self.filter_shapes[l]
-            pool_size = self.pool_sizes[l]
+            pool = self.pools[l]
             n_filters = self.n_filters[l]
-            border_mode = self.border_modes[l]
+            pad = self.pads[l]
+            stride = self.strides[l]
 
             filter_shape = (n_filters, input_shape[1]) + shape
 
-            if pool_size != (1, 1):
-                unpool_out = depool(X, pool_size, outs, l)
+            if pool != (1, 1):
+                unpool_out = depool(X, pool, outs, l)
             else:
                 unpool_out = X
 
-            dim_x = input_shape[2] * pool_size[0]
-            dim_y = input_shape[3] * pool_size[1]
-            input_shape = (input_shape[0], input_shape[1], dim_x, dim_y)
+            input_shape = (input_shape[0], input_shape[1],
+                           input_shape[2] * pool[0], input_shape[3] * pool[1])
             
-            if border_mode == 'full_and_trim':
-                _border_mode = 'full'
+            if pad == 'full_and_trim':
+                _pad = 'full'
                 trim = True
             else:
-                _border_mode = border_mode
+                _pad = pad
                 trim = False
 
-            conv_out = T.nnet.conv2d(input=unpool_out, filters=W,
-                                     filter_shape=filter_shape,
-                                     input_shape=input_shape,
-                                     border_mode=_border_mode)
+            _filter_shape = [filter_shape[1], filter_shape[0], filter_shape[2], filter_shape[3]]
+            _W = W.transpose(1, 0, 2, 3)
+            if isinstance(_pad, str): _pad = (_pad, _pad)
+            dim_x, dim_y = tuple(get_input_shape(i, f, s, p, pa)
+                                 for i, f, s, p, pa
+                                 in zip([dim_x, dim_y], shape, stride,
+                                    pool, _pad))
+
+            input_shape = (batch_size, filter_shape[0], dim_x, dim_y)
+            conv_out = T.nnet.abstract_conv.conv2d_grad_wrt_inputs(
+                unpool_out, _W,
+                filter_shape=_filter_shape,
+                input_shape=input_shape,
+                border_mode=_pad, subsample=stride, filter_flip=True)
             
             if trim:
                 sx, sy = self.trims[l]
                 conv_out = conv_out[:, :, sx:-sx, sy:-sy]
-
-            if border_mode == 'valid':
-                dim_x = dim_x - shape[0] + 1
-                dim_y = dim_y - shape[1] + 1
-            elif border_mode == 'full':
-                dim_x = dim_x + shape[0] - 1
-                dim_y = dim_y + shape[1] - 1
-            elif border_mode == 'full_and_trim':
-                dim_x, dim_y = input_shape[2:]
-            elif border_mode == 'half':
-                dim_x = dim_x + ((shape[0] + 1) % 2)
-                dim_y = dim_y + ((shape[1] + 1) % 2)
-            else:
-                raise NotImplementedError(border_mode)
 
             outs['P_%d' % l] = unpool_out
             outs['C_%d' % l] = conv_out
@@ -589,14 +613,33 @@ class RCNN2D(CNN2D):
                 outs['Z'] = preact
                 outs['Y'] = X
 
-            input_shape = (batch_size, filter_shape[0], dim_x, dim_y)
-
-        X = X.reshape((X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
+        outs['Xo'] = X
+        X = X.reshape((X.shape[0], filter_shape[0] * dim_x * dim_y))
+        outs['Xr'] = X
         if reshape is not None:
             X = X.reshape((reshape[0], reshape[1], X.shape[1]))
         outs['output'] = X
 
         return outs
+    
+    def dropout_epsilons(self, size, input_shape):
+        epsilons = []
+        
+        for filter_shape, pool, pad, stride, n_filter in zip(
+            self.filter_shapes, self.pools, self.pads, self.strides, self.n_filters):
+            
+            if isinstance(pad, str): pad = (pad, pad)
+            dim_x, dim_y = tuple(get_input_shape(i, f, s, p, pa)
+                                 for i, f, s, p, pa
+                                 in zip(input_shape[1:], filter_shape, stride, pool,
+                                        pad))
+            
+            input_shape = (dim_x, dim_y)
+            shape = size + (n_filter, dim_x, dim_y)
+            eps = self.trng.binomial(shape, p=1-self.dropout, n=1, dtype=floatX)
+            epsilons.append(eps)
+
+        return epsilons
     
 
 _classes = {'CNN2D': CNN2D, 'RCNN2D': RCNN2D}

@@ -69,7 +69,11 @@ class Evaluator(object):
                     except AttributeError:
                         pass
                 update_dict_of_lists(results, **r)
-                pbar.update(self.session.data_pos)
+                
+                if self.session.data_pos == -1:
+                    pbar.update(n)
+                else:
+                    pbar.update(self.session.data_pos)
 
             except StopIteration:
                 print
