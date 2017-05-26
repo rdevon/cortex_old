@@ -16,6 +16,8 @@ from ..utils.tools import resolve_path
 from ..utils.extra import download_data, unzip
 from ..utils.logger import get_class_logger
 
+print copy.__file__
+
 
 def fetch_basic_data():
     '''Fetch the basic dataset for demos.

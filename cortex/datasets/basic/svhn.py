@@ -2,6 +2,7 @@
 Street view house numbers truncated dataset
 '''
 
+import numpy as np
 from os import path
 from scipy import io
 
@@ -34,18 +35,22 @@ class SVHN(cifar.CIFAR):
         
         X = X.reshape((X.shape[0] * X.shape[1], X.shape[2], X.shape[3])).transpose(2, 1, 0)
         
-        X_r = X[:, 0]
-        X_g = X[:, 1]
-        X_b = X[:, 2]
+        X_r = X[:, 2]
+        X_g = X[:, 0]
+        X_b = X[:, 1]
         
         if greyscale:
             X = 0.299 * X_r + 0.587 * X_b + 0.114 * X_g
         else:
             X = np.concatenate([X_r, X_b, X_g], axis=1)
 
-        X = X.astype('float32') / float(255)
-        X = (X - X.mean(0)) / X.std(0)
+        X = X - X.min(axis=0)
+        X = X / X.max(axis=0)
 
-        return X, Y.astype('int64')
+        #X = X.astype('float32') / float(255)
+        X = 2 * X - 1.
+        #X = (X - X.mean(0)) / X.std(0)
+
+        return X.astype(floatX), Y.astype('int64')
 
 _classes = {'SVHN': SVHN}

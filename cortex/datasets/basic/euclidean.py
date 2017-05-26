@@ -143,11 +143,6 @@ class Euclidean(BasicDataset):
         return x
     
     def viz(self, X=None, out_file=None, density=False):
-        print 'mean', X.mean(0)
-        print 'std', X.std(0)
-        print 'max', X.max(0)
-        print 'min', X.min(0)
-        print X.shape
         self.save_images(X, out_file, density=density)
 
     def save_images(self, X, imgfile, density=False):

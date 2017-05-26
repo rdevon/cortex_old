@@ -16,7 +16,7 @@ def plot_fnc(fnc, idx=None, groups=None, transform=None, labels=None,
 
     if idx is None:
         idx = [i for idx in groups for i in idx]
-    if labels is not None and len(labels) == len(idx):
+    if labels is not None:
         labels = [labels[i] for i in idx]
     else:
         labels = None

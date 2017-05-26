@@ -25,8 +25,11 @@ logger = logging.getLogger(__name__)
 profile = False
 
 # For getting terminal column width
-_, _columns = os.popen('stty size', 'r').read().split()
-_columns = int(_columns)
+try:
+    _, _columns = os.popen('stty size', 'r').read().split()
+    _columns = int(_columns)
+except ValueError:
+    _columns = 1
 
 def print_section(s):
     '''For printing sections to scripts nicely.

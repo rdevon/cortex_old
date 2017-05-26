@@ -11,6 +11,7 @@ import numpy as np
 import os
 from os import path
 import pprint
+import progressbar
 from progressbar import (
     Bar,
     Percentage,
@@ -26,7 +27,7 @@ from .ni_dataset import NeuroimagingDataset
 from ...analysis import nifti_viewer, rois
 from ...utils import floatX
 from ...utils.tools import resolve_path
-
+print progressbar.__version__
 
 np.seterr(all='raise')
 

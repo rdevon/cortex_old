@@ -140,7 +140,8 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
 
 def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
             stats=None, time_courses=None, time_course_scales=None,
-            y=10, global_std=None, clusters=None, labels=None, title='Montage'):
+            y=10, global_std=None, clusters=None, labels=None, sign_flip=None,
+            flip_sm_only=True, title='Montage'):
     '''Saves a montage of nifti images.
 
     Args:
@@ -228,6 +229,9 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
         assert coords is not None
 
         feat = weights[:, :, :, f]
+        
+        if sign_flip is not None:
+            feat *= sign_flip[f]
 
         if global_std is not None:
             feat /= global_std[f]
@@ -239,6 +243,8 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
 
         if clusters is not None:
             pos = 0
+            poss = []
+            conds = []
             for cluster in clusters:
                 if f in cluster:
                     if (pos % y + len(cluster)) > y:
@@ -248,10 +254,16 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
                 else:
                     if (pos % y + len(cluster)) > y:
                         pos += len(cluster) + y - (pos % y)
+                        if (pos % y != 0):
+                            pos += 1
+                        conds.append(0)
                     elif (pos % y + len(cluster)) == y:
                         pos += len(cluster)
+                        conds.append(1)
                     else:
                         pos += len(cluster) + 1 # y - len(cluster)
+                        conds.append(2)
+                poss.append(pos)
         else:
             pos = i
 
@@ -259,6 +271,7 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
             j = 2 * y * (pos // y) + (pos % y) + 1
         else:
             j = pos + 1
+        #print pos, j, poss, conds
         ax = fig.add_subplot(x, y, j)
 
         try:
@@ -281,7 +294,11 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
                  horizontalalignment='center',
                  color=(texcol, texcol, texcol))
         for j, r in enumerate(ls):
-            plt.text(0.05, -0.15 * (.5 + j), r[:35],
+            if j < 4:
+                l_pos = 0.05, -0.15 * (.5 + j)
+            else:
+                l_pos = 0.6, -0.15 * (.5 + j - 4)
+            plt.text(l_pos[0], l_pos[1], r[:35],
                      transform=ax.transAxes,
                      horizontalalignment='left',
                      color=(0, 0, 0))
@@ -299,12 +316,15 @@ def montage(nifti, anat, roi_dict, thr=2, fig=None, out_file=None, order=None,
         if time_courses is not None:
             j = y * (2 * (pos // y) + 1) + (pos % y) + 1
             ax = fig.add_subplot(x, y, j)
+            ax.get_yaxis().set_ticks([])
             n_tc = len(time_courses)
             for t, (k, v) in enumerate(time_courses.iteritems()):
                 if v.ndim == 1:
                     tc = v
                 else:
                     tc = v[f]
+                if sign_flip is not None and not flip_sm_only:
+                    tc = tc * sign_flip[f]
                 tc = tc + 2 * t
                 ax.plot(tc, label=k)
                 if time_course_scales is not None and k in time_course_scales.keys():
@@ -355,8 +375,8 @@ def slice_montage(weights, thr=2, fig=None, out_file=None, order=None, y=8):
         plt.show()
     plt.close()
 
-def unfolded_movie(niftis, files, anat, x=20, out_file=None, image_max=None,
-                   image_std=None, stimulus=None, tmax=60, horizontal=False,
+def unfolded_movie(niftis, files, anat, x=5, out_file=None, image_max=None,
+                   image_std=None, stimulus=None, tmax=30, horizontal=False,
                    global_tcs=False, global_norm=False, **responses):
     if isinstance(anat, str): anat = load_image(anat)
 

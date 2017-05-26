@@ -7,7 +7,7 @@ import igraph
 import numpy as np
 import os
 from os import path
-from scipy.stats import (kendalltau, linregress, mannwhitneyu, ttest_1samp,
+from scipy.stats import (describe, kendalltau, linregress, mannwhitneyu, ttest_1samp,
                          ttest_ind, ttest_rel)
 import statsmodels.api as sm
 from tabulate import tabulate
@@ -15,7 +15,6 @@ import theano
 import yaml
 
 from .analyzer import Analyzer
-
 
 def rename_rois(labels):
     for i in xrange(len(labels)):
@@ -71,7 +70,17 @@ def get_task_difference(tcs, stim, idx1, idx2, use_mw=True):
         t = utests[:, 0]
         p = utests[:, 1]
     else:
-        t, p = ttest_ind(betas[:, idx1], betas[:, idx2], axis=1)
+        if betas.ndim == 2:
+            t, p = ttest_ind(betas[:, idx1], betas[:, idx2], axis=1)
+        elif betas.ndim == 3:
+            ts = []
+            ps = []
+            for betas_ in betas:
+                t, p = ttest_ind(betas_[:, idx1], betas_[:, idx2], axis=1)
+                ts.append(t)
+                ps.append(p)
+            t = np.array(ts)
+            p = np.array(ps)
     return t, p
 
 def do_fdr_correct(p, has_dependence=False, sig=0.01):
@@ -98,7 +107,7 @@ def do_fdr_correct(p, has_dependence=False, sig=0.01):
     if shape is not None: mask = mask.reshape(shape)
     return k, mask
 
-def group(mat, thr=.2, do_abs=False):
+def group(mat, thr=.2, do_abs=False, sort=False):
     if do_abs: mat = abs(mat)
     max_weight = abs(mat).max()
     #thr *= max_weight
@@ -122,6 +131,8 @@ def group(mat, thr=.2, do_abs=False):
     g.vs['label'] = idx
     cls = g.community_multilevel(return_levels=True, weights=weights)
     cl = list(cls[0])
+    if sort:
+        cl = sorted(cl, key=len)[::-1]
 
     clusters = []
     n_clusters = len(cl)
@@ -143,10 +154,12 @@ def group(mat, thr=.2, do_abs=False):
 
 class AODAnalyzer(Analyzer):
     def __init__(self, spatial_map_key, time_course_key, run=False,
-                 label_file=None, **kwargs):
+                 label_file=None, sign_flip=False, **kwargs):
         self.spatial_map_key = spatial_map_key
         self.time_course_key = time_course_key
         self.roi_dict = None
+        self.images = None
+        self.sign_flip = sign_flip
         self.stats = {}
         super(AODAnalyzer, self).__init__(**kwargs)
         if run:
@@ -165,7 +178,7 @@ class AODAnalyzer(Analyzer):
         self.visualizer.add('data.viz', maps='ica_viz.maps',
                             time_courses='ica_viz.tcs',
                             time_course_scales='ica_viz.tc_scales', t_limit=50,
-                            y=12)
+                            y=7, title='')
         
         self.f_tcs = theano.function(self.session.inputs,
                                      self.tensors[self.time_course_key],
@@ -178,8 +191,10 @@ class AODAnalyzer(Analyzer):
     def make_roi_dict(self, inputs=None):
         self.logger.info('Making ROI dictionary')
         if inputs is None: inputs = self.get_data()
-        _, _, roi_dict = self.visualizer.run(-2, inputs=inputs, data_mode=self.mode)
+        images, niftis, roi_dict = self.visualizer.run(0, inputs=inputs, data_mode=self.mode)
         self.roi_dict = roi_dict
+        self.images = images
+        self.niftis = niftis
         
     def get_feature_info(self, label_file=None):
         if label_file is not None:
@@ -204,6 +219,12 @@ class AODAnalyzer(Analyzer):
             else:
                 name = labels
                 labels = [labels]
+            if self.sign_flip is not None:
+                for i, (l, sf) in enumerate(zip(labels, self.sign_flip)):
+                    if sf == -1:
+                        l_ = l.replace('+', '%tmp')
+                        l_ = l_.replace('-', '+')
+                        l_ = l_.replace('%tmp', '-')
             self.features[k] = dict(name=name, labels=labels,
                                     is_on=v.get('is_on', True), stats={})
         
@@ -211,6 +232,19 @@ class AODAnalyzer(Analyzer):
         self.logger.info('Running analysis')
         inputs = self.get_data()
         self.make_roi_dict(inputs)
+        
+        if self.sign_flip:
+            a = np.array([self.images[i].get_data()
+                          for i in range(len(self.images))]).reshape((60, -1))
+            self.sign_flip = (2 * (describe((a - a.mean(axis=0)) / a.std(), axis=1).skewness > 0) - 1)
+            self.visualizer.add('data.viz', maps='ica_viz.maps',
+                                time_courses='ica_viz.tcs',
+                                time_course_scales='ica_viz.tc_scales', t_limit=50,
+                                y=7, title='', sign_flip=self.sign_flip)
+            
+        else:
+            self.sign_flip = None
+            
         self.set_features(label_file=label_file)
         
         self.logger.info('Getting time courses')
@@ -220,6 +254,13 @@ class AODAnalyzer(Analyzer):
             tcs = {self.time_course_key: tcs}
         elif isinstance(tcs, list):
             tcs = dict((k, v) for k, v in zip(self.time_course_key, tcs))
+            
+        if self.sign_flip is not None:
+            for k, v in tcs.items():
+                if k == 'Scale':
+                    continue
+                tcs[k] = v * np.array(self.sign_flip)[None, None, :]
+            
         self.tcs = tcs
         
         hc = np.where(self.Y[:, 0] == 1)[0].tolist()
@@ -231,9 +272,9 @@ class AODAnalyzer(Analyzer):
             stim = np.concatenate([self.targets[:, None], self.novels[:, None]],
                 axis=1)
             t, p = get_task_relatedness(v, stim)
-            u, pu = get_task_difference(v, stim, hc, sz)
+            u, pu = get_task_difference(v, stim, hc, sz, use_mw=False)
             
-            for sname, t_, p_, u_, pu_ in zip(['targets', 'novels'], t, p, t, p):
+            for sname, t_, p_, u_, pu_ in zip(['targets', 'novels'], t, p, u, pu):
                 self.stats[k][sname] = dict(p=p_, t=t_, u=u_, pu=pu_)
                     
                 for j in xrange(t_.shape[0]):
@@ -272,7 +313,7 @@ class AODAnalyzer(Analyzer):
             name='maps', order=order, clusters=clusters, labels=labels)
         
     def make_table(self, task_sig=0.01, min_p=10e-7, tablefmt='plain',
-                   group_diffs=False):
+                   group_diffs=False, omit_empty_columns=True):
         fdr_dict = dict()
         diff_dict = dict()
         
@@ -297,14 +338,15 @@ class AODAnalyzer(Analyzer):
             fdr_dict[tc_name] = fdr
             diff_dict[tc_name] = diff
     
-        td = ['', '']
-        for tc_name in self.stats.keys():
-            if group_diffs:
+        td = ['', '']        
+        if group_diffs:
+            for tc_name in self.stats.keys():
                 td += [tc_name, '', 'diff_{}'.format(tc_name), '']
-                table = [td, ['ID', 'Label'] + ['Targets', 'Novels'] * (2 * len(self.stats))]
-            else:
+            table = [td, ['ID', 'Label'] + ['Targets', 'Novels'] * (2 * len(self.stats))]
+        else:
+            for tc_name in self.stats.keys():
                 td += [tc_name, '']
-                table = [td, ['ID', 'Label'] + ['Targets', 'Novels'] * len(self.stats)]
+            table = [td, ['ID', 'Label'] + ['Targets', 'Novels'] * len(self.stats)]
         
         for i, feature in self.features.items():
             if feature['is_on']:
@@ -327,6 +369,13 @@ class AODAnalyzer(Analyzer):
                     
                 if not all([t == '' for t in td[2:]]):
                     table.append(td)
+                    
+        if omit_empty_columns:
+            for j in range(len(table[0]))[::-1]:
+                column = [table[i][j] for i in range(len(table))[2:]]
+                if all([c == '' for c in column]):
+                    for i in range(len(table)):
+                        table[i].pop(j)
         
         print tabulate(table, headers='firstrow', tablefmt=tablefmt)
         

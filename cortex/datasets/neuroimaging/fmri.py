@@ -417,8 +417,9 @@ class FMRI(FMRI_IID):
                              out_file=resolve_path(out_file), stats=stats,
                              global_std=global_std, **kwargs)
 
-    def viz_unfold(self, x, out_file=None, remove_niftis=True, **kwargs):
+    def viz_unfold(self, x, c=0, out_file=None, remove_niftis=True, **kwargs):
         if len(x.shape) == 3:
+            x = x[:, :, c]
             shape = x.shape
             x = x.reshape((shape[0] * shape[1], shape[2]))
         else:
@@ -437,8 +438,6 @@ class FMRI(FMRI_IID):
         nifti_viewer.unfolded_movie(
             images, nifti_files, self.anat_file, out_file=out_file,
             image_max=image_max, image_std=image_std,
-            stimulus=dict(targets=self.extras['targets'],
-                          novels=self.extras['novels']),
             **kwargs)
         if remove_niftis:
             for f in nifti_files:
