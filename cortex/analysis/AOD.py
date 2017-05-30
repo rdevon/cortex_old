@@ -165,8 +165,8 @@ class AODAnalyzer(Analyzer):
         if run:
             self.run(label_file=label_file)
         
-    def build(self):
-        super(AODAnalyzer, self).build()
+    def build(self, test=False):
+        super(AODAnalyzer, self).build(test=test)
         nifti_out_path = path.join(self.session.manager.out_path, 'niftis')
         if not path.isdir(nifti_out_path):
             os.mkdir(nifti_out_path)

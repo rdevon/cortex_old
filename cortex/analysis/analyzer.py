@@ -11,8 +11,10 @@ from ..utils.logger import get_class_logger
 
 class Analyzer(object):
     def __init__(self, session=None, model_file=None, visualizer=None,
-                 mode='test', build=True, out_path=None, **extra_classes):
+                 mode='test', build=True, out_path=None, test=False,
+                 **extra_classes):
         self.logger = get_class_logger(self)
+        self.logger.info('Analyzing file {}'.format(model_file))
         
         for k, v in extra_classes.items():
             cortex.add_cell_class(k, v)
@@ -24,16 +26,16 @@ class Analyzer(object):
         if out_path is None:
             out_path = path.join(path.dirname(model_file), 'analysis')
         cortex.set_path(out_path)
-        if build: self.build()
+        if build: self.build(test=test)
         
     def add_step(k, **kwargs):
         cortex.add_step(k, **kwargs)
         
-    def build(self):
+    def build(self, test=False):
         if self.session is None:            
             cortex.build()
             self.session = cortex.create_session(noise=False)
-            cortex.build_session()
+            cortex.build_session(test=test)
         if self.visualizer is None:
             self.visualizer = cortex.setup_visualizer(self.session)
         self.tensors = self.session.tensors
